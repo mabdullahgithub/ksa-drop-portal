@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\OrderController;
+use App\Http\Controllers\Api\ProductController;
 use App\Http\Controllers\EmailSettingsController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\PermissionController;
@@ -49,6 +50,17 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::post('/{order}/fulfillment-status', [OrderController::class, 'updateFulfillmentStatus'])->middleware('permission:edit orders')->name('api.orders.fulfillment-status');
         Route::post('/{order}/financial-status', [OrderController::class, 'updateFinancialStatus'])->middleware('permission:edit orders')->name('api.orders.financial-status');
         Route::post('/bulk-update', [OrderController::class, 'bulkUpdate'])->middleware('permission:edit orders')->name('api.orders.bulk-update');
+    });
+
+    // Inventory / Products API
+    Route::prefix('api/products')->group(function () {
+        Route::get('/', [ProductController::class, 'index'])->middleware('permission:view inventory')->name('api.products.index');
+        Route::get('/statistics', [ProductController::class, 'statistics'])->middleware('permission:view inventory')->name('api.products.statistics');
+        Route::get('/filter-options', [ProductController::class, 'filterOptions'])->middleware('permission:view inventory')->name('api.products.filter-options');
+        Route::get('/export', [ProductController::class, 'export'])->middleware('permission:view inventory')->name('api.products.export');
+        Route::post('/import', [ProductController::class, 'import'])->middleware('permission:edit inventory')->name('api.products.import');
+        Route::get('/{product}', [ProductController::class, 'show'])->middleware('permission:view inventory')->name('api.products.show');
+        Route::put('/{product}', [ProductController::class, 'update'])->middleware('permission:edit inventory')->name('api.products.update');
     });
 
     // Settings

@@ -118,6 +118,7 @@ export function OrdersImportDialog({
       const response = await fetch('/api/orders/import', {
         method: 'POST',
         headers: {
+          'Accept': 'application/json',
           'X-CSRF-TOKEN':
             document
               .querySelector('meta[name="csrf-token"]')
@@ -129,7 +130,13 @@ export function OrdersImportDialog({
       clearInterval(progressInterval)
       setProgress(100)
 
-      const data = await response.json()
+      const text = await response.text()
+      let data: any
+      try {
+        data = JSON.parse(text)
+      } catch {
+        data = { success: false, message: `Server error (${response.status}): unexpected response format` }
+      }
 
       if (response.ok && data.success) {
         setResult(data)

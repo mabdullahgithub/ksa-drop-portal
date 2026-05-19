@@ -1,11 +1,4 @@
-import { PackageSearch } from 'lucide-react'
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card'
+import { useState } from 'react'
 import { ConfigDrawer } from '@/components/config-drawer'
 import { Header } from '@/components/layout/header'
 import { NotificationsDropdown } from '@/components/layout/notifications-dropdown'
@@ -13,11 +6,27 @@ import { Main } from '@/components/layout/main'
 import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
+import { InventoryDialogs } from './components/inventory-dialogs'
+import { InventoryPrimaryButtons } from './components/inventory-primary-buttons'
+import { InventoryProvider, useInventoryContext } from './components/inventory-provider'
+import { InventoryTable } from './components/inventory-table'
+import { InventoryCardView } from './components/inventory-card-view'
+import { InventoryFilters } from './components/inventory-filters'
+import { InventoryStats } from './components/inventory-stats'
+import { useProducts } from '@/hooks/useProducts'
 
-export function Inventory() {
+function InventoryContent() {
+  const { products, meta, loading, filters, updateFilters, refresh } = useProducts({
+    per_page: 20,
+    sort_by: 'created_at',
+    sort_order: 'desc',
+  })
+  const [tableInstance, setTableInstance] = useState<any>(null)
+  const { viewMode } = useInventoryContext()
+
   return (
     <>
-      <Header>
+      <Header fixed>
         <Search className='me-auto' />
         <ThemeSwitch />
         <NotificationsDropdown />
@@ -25,36 +34,55 @@ export function Inventory() {
         <ProfileDropdown />
       </Header>
 
-      <Main fixed>
-        <div className='mb-4'>
-          <h1 className='text-2xl font-bold tracking-tight'>Inventory</h1>
-          <p className='text-muted-foreground'>
-            Manage all your products and inventory
-          </p>
+      <Main className='flex flex-1 flex-col gap-4'>
+        <div className='flex flex-wrap items-end justify-between gap-2'>
+          <div>
+            <h2 className='text-2xl font-bold tracking-tight'>Inventory</h2>
+            <p className='text-muted-foreground text-sm'>
+              Manage your products and track stock levels.
+            </p>
+          </div>
+          <InventoryPrimaryButtons onImportSuccess={refresh} />
         </div>
 
-        <Card>
-          <CardHeader>
-            <div className='flex items-center gap-2'>
-              <PackageSearch className='h-5 w-5' />
-              <CardTitle>Product Inventory</CardTitle>
-            </div>
-            <CardDescription>
-              View and manage your product inventory here
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className='flex flex-col items-center justify-center py-12 text-center'>
-              <PackageSearch className='h-16 w-16 text-muted-foreground/50 mb-4' />
-              <h3 className='text-lg font-semibold mb-2'>No products yet</h3>
-              <p className='text-sm text-muted-foreground max-w-md'>
-                Admin will be able to add products and manage inventory here.
-                The inventory management features will be available soon.
-              </p>
-            </div>
-          </CardContent>
-        </Card>
+        <InventoryStats />
+
+        <InventoryFilters
+          filters={filters}
+          onFiltersChange={updateFilters}
+          table={viewMode === 'table' ? tableInstance : undefined}
+        />
+
+        {viewMode === 'table' ? (
+          <InventoryTable
+            data={products}
+            meta={meta}
+            loading={loading}
+            onPageChange={(page) => updateFilters({ page })}
+            onPageSizeChange={(pageSize) => updateFilters({ per_page: pageSize, page: 1 })}
+            onSortChange={(sortBy, sortOrder) => updateFilters({ sort_by: sortBy, sort_order: sortOrder, page: 1 })}
+            onTableReady={setTableInstance}
+          />
+        ) : (
+          <InventoryCardView
+            data={products}
+            meta={meta}
+            loading={loading}
+            onPageChange={(page) => updateFilters({ page })}
+            onPageSizeChange={(pageSize) => updateFilters({ per_page: pageSize, page: 1 })}
+          />
+        )}
       </Main>
+
+      <InventoryDialogs />
     </>
+  )
+}
+
+export function Inventory() {
+  return (
+    <InventoryProvider>
+      <InventoryContent />
+    </InventoryProvider>
   )
 }

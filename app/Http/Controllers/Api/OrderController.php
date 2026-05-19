@@ -470,7 +470,7 @@ class OrderController extends Controller
     public function import(Request $request)
     {
         $request->validate([
-            'file' => 'required|file|mimes:csv,txt|max:10240', // 10MB max
+            'file' => 'required|file|mimes:csv,txt|max:51200', // 50MB max
         ]);
 
         $file = $request->file('file');
@@ -515,15 +515,13 @@ class OrderController extends Controller
                         continue;
                     }
 
-                    // Ensure row has same number of columns as headers
-                    if (count($row) !== count($headers)) {
-                        $invalidRows++;
-                        $errors[] = [
-                            'row' => $totalRows,
-                            'reason' => 'Column count mismatch',
-                            'details' => 'Expected ' . count($headers) . ' columns, got ' . count($row)
-                        ];
-                        continue;
+                    // Pad or trim row to match header count so array_combine never fails
+                    $headerCount = count($headers);
+                    $rowCount = count($row);
+                    if ($rowCount < $headerCount) {
+                        $row = array_pad($row, $headerCount, '');
+                    } elseif ($rowCount > $headerCount) {
+                        $row = array_slice($row, 0, $headerCount);
                     }
 
                     // Map CSV columns to database fields
@@ -590,7 +588,7 @@ class OrderController extends Controller
                     'order_number' => $orderNumber,
                     'customer_name' => $data['Billing Name'] ?? $data['Shipping Name'] ?? null,
                     'customer_email' => $data['Email'] ?? null,
-                    'customer_phone' => $data['Billing Phone'] ?? $data['Shipping Phone'] ?? null,
+                    'customer_phone' => $data['Phone'] ?? $data['Billing Phone'] ?? $data['Shipping Phone'] ?? null,
                     'financial_status' => strtolower($data['Financial Status'] ?? 'pending'),
                     'fulfillment_status' => strtolower($data['Fulfillment Status'] ?? 'unfulfilled'),
                     'accepts_marketing' => strtolower($data['Accepts Marketing'] ?? 'no') === 'yes',
