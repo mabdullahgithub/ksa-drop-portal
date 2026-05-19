@@ -9,6 +9,7 @@ import {
 } from '@/components/ui/table'
 import { type Product } from '@/types/product'
 import { inventoryColumns as columns } from './inventory-columns'
+import { InventoryBulkActions } from './inventory-bulk-actions'
 import { InventoryPagination } from './inventory-pagination'
 import { InventoryTableSkeleton } from './inventory-skeleton'
 
@@ -121,6 +122,8 @@ export function InventoryTable({
           onPageSizeChange={onPageSizeChange}
         />
       )}
+
+      <InventoryBulkActions table={table} />
     </div>
   )
 }
