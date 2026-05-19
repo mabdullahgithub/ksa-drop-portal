@@ -1,16 +1,11 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import {
   type ColumnFiltersState,
-  type PaginationState,
   type SortingState,
+  type Updater,
   type VisibilityState,
   flexRender,
   getCoreRowModel,
-  getFacetedRowModel,
-  getFacetedUniqueValues,
-  getFilteredRowModel,
-  getPaginationRowModel,
-  getSortedRowModel,
   useReactTable,
 } from '@tanstack/react-table'
 import { cn } from '@/lib/utils'
@@ -22,26 +17,53 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { DataTablePagination, DataTableToolbar } from '@/components/data-table'
-import { priorities, statuses } from '../data/data'
-import { type Order } from '../data/schema'
+import { type Order } from '@/types/order'
 import { DataTableBulkActions } from './data-table-bulk-actions'
 import { ordersColumns as columns } from './orders-columns'
+import { OrdersPagination } from './orders-pagination'
+import { OrdersTableSkeleton } from './orders-skeleton'
 
-type DataTableProps = {
+type OrdersTableProps = {
   data: Order[]
+  meta?: {
+    current_page: number
+    total: number
+    per_page: number
+    last_page: number
+    from: number
+    to: number
+  } | null
+  loading?: boolean
+  onRefresh?: () => void
+  onPageChange?: (page: number) => void
+  onPageSizeChange?: (pageSize: number) => void
+  onSortChange?: (sortBy: string, sortOrder: 'asc' | 'desc') => void
+  onTableReady?: (table: any) => void
 }
 
-export function OrdersTable({ data }: DataTableProps) {
+export function OrdersTable({
+  data,
+  meta,
+  loading,
+  onPageChange,
+  onPageSizeChange,
+  onSortChange,
+  onTableReady,
+}: OrdersTableProps) {
   const [rowSelection, setRowSelection] = useState({})
   const [sorting, setSorting] = useState<SortingState>([])
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
-  const [globalFilter, setGlobalFilter] = useState('')
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
-  const [pagination, setPagination] = useState<PaginationState>({
-    pageIndex: 0,
-    pageSize: 10,
-  })
+
+  const handleSortingChange = (updater: Updater<SortingState>) => {
+    const newSorting = typeof updater === 'function' ? updater(sorting) : updater
+    setSorting(newSorting)
+    if (onSortChange && newSorting.length > 0) {
+      onSortChange(newSorting[0].id, newSorting[0].desc ? 'desc' : 'asc')
+    } else if (onSortChange && newSorting.length === 0) {
+      onSortChange('created_at', 'desc')
+    }
+  }
 
   const table = useReactTable({
     data,
@@ -51,70 +73,44 @@ export function OrdersTable({ data }: DataTableProps) {
       columnVisibility,
       rowSelection,
       columnFilters,
-      globalFilter,
-      pagination,
     },
     enableRowSelection: true,
     onRowSelectionChange: setRowSelection,
-    onSortingChange: setSorting,
+    onSortingChange: handleSortingChange,
     onColumnVisibilityChange: setColumnVisibility,
-    globalFilterFn: (row, _columnId, filterValue) => {
-      const id = String(row.getValue('id')).toLowerCase()
-      const title = String(row.getValue('title')).toLowerCase()
-      const customer = String(row.getValue('customer')).toLowerCase()
-      const searchValue = String(filterValue).toLowerCase()
-
-      return (
-        id.includes(searchValue) ||
-        title.includes(searchValue) ||
-        customer.includes(searchValue)
-      )
-    },
-    getCoreRowModel: getCoreRowModel(),
-    getFilteredRowModel: getFilteredRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
-    getSortedRowModel: getSortedRowModel(),
-    getFacetedRowModel: getFacetedRowModel(),
-    getFacetedUniqueValues: getFacetedUniqueValues(),
-    onPaginationChange: setPagination,
-    onGlobalFilterChange: setGlobalFilter,
     onColumnFiltersChange: setColumnFilters,
+    getCoreRowModel: getCoreRowModel(),
+    manualPagination: true,
+    manualSorting: true,
+    pageCount: meta?.last_page || 0,
   })
 
+  // Notify parent when table is ready
+  useEffect(() => {
+    if (onTableReady) {
+      onTableReady(table)
+    }
+  }, [table, onTableReady])
+
+  if (loading) {
+    return <OrdersTableSkeleton />
+  }
+
   return (
-    <div
-      className={cn(
-        'max-sm:has-[div[role="toolbar"]]:mb-16',
-        'flex flex-1 flex-col gap-4'
-      )}
-    >
-      <DataTableToolbar
-        table={table}
-        searchPlaceholder='Filter by title, ID or customer...'
-        filters={[
-          {
-            columnId: 'status',
-            title: 'Status',
-            options: statuses,
-          },
-          {
-            columnId: 'priority',
-            title: 'Priority',
-            options: priorities,
-          },
-        ]}
-      />
-      <div className='overflow-hidden rounded-md border'>
+    <div className='space-y-3'>
+      {/* Table */}
+      <div className='overflow-hidden rounded-md border border-muted/50'>
         <Table className='min-w-xl'>
           <TableHeader>
             {table.getHeaderGroups().map((headerGroup) => (
-              <TableRow key={headerGroup.id}>
+              <TableRow key={headerGroup.id} className='border-b border-muted/50 hover:bg-transparent'>
                 {headerGroup.headers.map((header) => {
                   return (
                     <TableHead
                       key={header.id}
                       colSpan={header.colSpan}
                       className={cn(
+                        'h-8 py-1.5 text-xs font-medium',
                         header.column.columnDef.meta?.className,
                         header.column.columnDef.meta?.thClassName
                       )}
@@ -137,11 +133,13 @@ export function OrdersTable({ data }: DataTableProps) {
                 <TableRow
                   key={row.id}
                   data-state={row.getIsSelected() && 'selected'}
+                  className='border-b border-muted/50 h-9'
                 >
                   {row.getVisibleCells().map((cell) => (
                     <TableCell
                       key={cell.id}
                       className={cn(
+                        'py-1.5 text-xs',
                         cell.column.columnDef.meta?.className,
                         cell.column.columnDef.meta?.tdClassName
                       )}
@@ -160,14 +158,23 @@ export function OrdersTable({ data }: DataTableProps) {
                   colSpan={columns.length}
                   className='h-24 text-center'
                 >
-                  No results.
+                  No orders found.
                 </TableCell>
               </TableRow>
             )}
           </TableBody>
         </Table>
       </div>
-      <DataTablePagination table={table} className='mt-auto' />
+
+      {/* Pagination */}
+      {meta && (
+        <OrdersPagination
+          meta={meta}
+          onPageChange={onPageChange!}
+          onPageSizeChange={onPageSizeChange}
+        />
+      )}
+
       <DataTableBulkActions table={table} />
     </div>
   )

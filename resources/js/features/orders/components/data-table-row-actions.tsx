@@ -1,24 +1,33 @@
 import { DotsHorizontalIcon } from '@radix-ui/react-icons'
 import { type Row } from '@tanstack/react-table'
-import { Trash2 } from 'lucide-react'
+import { Eye, Package, DollarSign, Tag } from 'lucide-react'
+import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
   DropdownMenuSeparator,
-  DropdownMenuShortcut,
   DropdownMenuSub,
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { labels } from '../data/data'
-import { orderSchema } from '../data/schema'
-import { useOrders } from './orders-provider'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { type Order } from '@/types/order'
+import { useOrdersContext } from './orders-provider'
 import { usePermissions } from '@/hooks/use-permissions'
+import { useOrderMutations } from '@/hooks/useOrders'
+import { toast } from 'sonner'
 
 type DataTableRowActionsProps<TData> = {
   row: Row<TData>
@@ -27,72 +36,162 @@ type DataTableRowActionsProps<TData> = {
 export function DataTableRowActions<TData>({
   row,
 }: DataTableRowActionsProps<TData>) {
-  const order = orderSchema.parse(row.original)
-
-  const { setOpen, setCurrentRow } = useOrders()
+  const order = row.original as Order
+  const { setOpen, setCurrentRow } = useOrdersContext()
   const { can } = usePermissions()
+  const { updateFulfillmentStatus, updateFinancialStatus, updateOrder } = useOrderMutations()
+  const [showTagDialog, setShowTagDialog] = useState(false)
+  const [tagInput, setTagInput] = useState(order.tags?.join(', ') || '')
 
+  const canView = can('view orders')
   const canEdit = can('edit orders')
-  const canDelete = can('delete orders')
 
-  // Don't show menu if user has no permissions
-  if (!canEdit && !canDelete) {
+  const handleStatusUpdate = async (status: string) => {
+    const success = await updateFulfillmentStatus(order.id, status)
+    if (success) {
+      toast.success('Order status updated')
+      window.location.reload()
+    } else {
+      toast.error('Failed to update status')
+    }
+  }
+
+  const handleFinancialUpdate = async (status: string) => {
+    const success = await updateFinancialStatus(order.id, status)
+    if (success) {
+      toast.success('Payment status updated')
+      window.location.reload()
+    } else {
+      toast.error('Failed to update status')
+    }
+  }
+
+  const handleUpdateTags = async () => {
+    const tags = tagInput.split(',').map(tag => tag.trim()).filter(tag => tag)
+
+    const success = await updateOrder(order.id, { tags })
+    if (success) {
+      toast.success('Tags updated')
+      setShowTagDialog(false)
+      window.location.reload()
+    } else {
+      toast.error('Failed to update tags')
+    }
+  }
+
+  if (!canView) {
     return null
   }
 
   return (
-    <DropdownMenu modal={false}>
-      <DropdownMenuTrigger asChild>
-        <Button
-          variant='ghost'
-          className='flex h-8 w-8 p-0 data-[state=open]:bg-muted'
-        >
-          <DotsHorizontalIcon className='h-4 w-4' />
-          <span className='sr-only'>Open menu</span>
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align='end' className='w-40'>
-        {canEdit && (
-          <>
-            <DropdownMenuItem
-              onClick={() => {
-                setCurrentRow(order)
-                setOpen('update')
-              }}
-            >
-              Edit
-            </DropdownMenuItem>
-            <DropdownMenuItem disabled>Duplicate</DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuSub>
-              <DropdownMenuSubTrigger>Labels</DropdownMenuSubTrigger>
-              <DropdownMenuSubContent>
-                <DropdownMenuRadioGroup value={order.label}>
-                  {labels.map((label) => (
-                    <DropdownMenuRadioItem key={label.value} value={label.value}>
-                      {label.label}
-                    </DropdownMenuRadioItem>
-                  ))}
-                </DropdownMenuRadioGroup>
-              </DropdownMenuSubContent>
-            </DropdownMenuSub>
-          </>
-        )}
-        {canEdit && canDelete && <DropdownMenuSeparator />}
-        {canDelete && (
+    <>
+      <DropdownMenu modal={false}>
+        <DropdownMenuTrigger asChild>
+          <Button
+            variant='ghost'
+            className='flex h-8 w-8 p-0 data-[state=open]:bg-muted'
+          >
+            <DotsHorizontalIcon className='h-4 w-4' />
+            <span className='sr-only'>Open menu</span>
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align='end' className='w-48'>
           <DropdownMenuItem
             onClick={() => {
               setCurrentRow(order)
-              setOpen('delete')
+              setOpen('view')
             }}
           >
-            Delete
-            <DropdownMenuShortcut>
-              <Trash2 size={16} />
-            </DropdownMenuShortcut>
+            <Eye className='mr-2 h-4 w-4' />
+            View Details
           </DropdownMenuItem>
-        )}
-      </DropdownMenuContent>
-    </DropdownMenu>
+
+          {canEdit && (
+            <>
+              <DropdownMenuSeparator />
+
+              <DropdownMenuItem onClick={() => setShowTagDialog(true)}>
+                <Tag className='mr-2 h-4 w-4' />
+                Manage Tags
+              </DropdownMenuItem>
+
+              <DropdownMenuSeparator />
+
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger>
+                  <Package className='mr-2 h-4 w-4' />
+                  Fulfillment Status
+                </DropdownMenuSubTrigger>
+                <DropdownMenuSubContent>
+                  <DropdownMenuItem onClick={() => handleStatusUpdate('pending')}>
+                    Pending
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleStatusUpdate('unfulfilled')}>
+                    Unfulfilled
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleStatusUpdate('fulfilled')}>
+                    Fulfilled
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleStatusUpdate('cancelled')}>
+                    Cancelled
+                  </DropdownMenuItem>
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
+
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger>
+                  <DollarSign className='mr-2 h-4 w-4' />
+                  Payment Status
+                </DropdownMenuSubTrigger>
+                <DropdownMenuSubContent>
+                  <DropdownMenuItem onClick={() => handleFinancialUpdate('pending')}>
+                    Pending
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleFinancialUpdate('paid')}>
+                    Paid
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleFinancialUpdate('partially_refunded')}>
+                    Partially Refunded
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleFinancialUpdate('refunded')}>
+                    Refunded
+                  </DropdownMenuItem>
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
+            </>
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      {/* Manage Tags Dialog */}
+      <Dialog open={showTagDialog} onOpenChange={setShowTagDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Manage Tags</DialogTitle>
+            <DialogDescription>
+              Add or update tags for order {order.order_number}. Separate multiple tags with commas.
+            </DialogDescription>
+          </DialogHeader>
+          <div className='py-4'>
+            <Label htmlFor='order-tags'>Tags</Label>
+            <Input
+              id='order-tags'
+              placeholder='urgent, vip, priority'
+              value={tagInput}
+              onChange={(e) => setTagInput(e.target.value)}
+              className='mt-2'
+            />
+          </div>
+          <DialogFooter>
+            <Button variant='outline' onClick={() => setShowTagDialog(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleUpdateTags}>
+              Save Tags
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   )
 }

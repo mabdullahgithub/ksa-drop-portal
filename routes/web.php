@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\OrderController;
 use App\Http\Controllers\EmailSettingsController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\PermissionController;
@@ -35,6 +36,20 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/api/notifications/{id}/read', [NotificationController::class, 'markAsRead'])->name('api.notifications.read');
     Route::post('/api/notifications/read-all', [NotificationController::class, 'markAllAsRead'])->name('api.notifications.read-all');
     Route::delete('/api/notifications/{id}', [NotificationController::class, 'destroy'])->name('api.notifications.destroy');
+
+    // Orders API
+    Route::prefix('api/orders')->group(function () {
+        Route::get('/', [OrderController::class, 'index'])->middleware('permission:view orders')->name('api.orders.index');
+        Route::get('/statistics', [OrderController::class, 'statistics'])->middleware('permission:view orders')->name('api.orders.statistics');
+        Route::get('/filter-options', [OrderController::class, 'filterOptions'])->middleware('permission:view orders')->name('api.orders.filter-options');
+        Route::get('/export', [OrderController::class, 'export'])->middleware('permission:view orders')->name('api.orders.export');
+        Route::post('/import', [OrderController::class, 'import'])->middleware('permission:edit orders')->name('api.orders.import');
+        Route::get('/{order}', [OrderController::class, 'show'])->middleware('permission:view orders')->name('api.orders.show');
+        Route::put('/{order}', [OrderController::class, 'update'])->middleware('permission:edit orders')->name('api.orders.update');
+        Route::post('/{order}/fulfillment-status', [OrderController::class, 'updateFulfillmentStatus'])->middleware('permission:edit orders')->name('api.orders.fulfillment-status');
+        Route::post('/{order}/financial-status', [OrderController::class, 'updateFinancialStatus'])->middleware('permission:edit orders')->name('api.orders.financial-status');
+        Route::post('/bulk-update', [OrderController::class, 'bulkUpdate'])->middleware('permission:edit orders')->name('api.orders.bulk-update');
+    });
 
     // Settings
     Route::get('/settings', [SettingsController::class, 'profile'])->name('settings');

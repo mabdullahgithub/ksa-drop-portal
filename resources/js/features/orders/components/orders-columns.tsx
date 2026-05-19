@@ -2,9 +2,17 @@ import { type ColumnDef } from '@tanstack/react-table'
 import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
 import { DataTableColumnHeader } from '@/components/data-table'
-import { labels, priorities, statuses } from '../data/data'
-import { type Order } from '../data/schema'
+import { type Order } from '@/types/order'
 import { DataTableRowActions } from './data-table-row-actions'
+import { format } from 'date-fns'
+
+const statusVariants: Record<string, 'default' | 'secondary' | 'destructive' | 'outline'> = {
+  success: 'default',
+  warning: 'secondary',
+  info: 'outline',
+  error: 'destructive',
+  default: 'outline',
+}
 
 export const ordersColumns: ColumnDef<Order>[] = [
   {
@@ -32,43 +40,59 @@ export const ordersColumns: ColumnDef<Order>[] = [
     enableHiding: false,
   },
   {
-    accessorKey: 'id',
+    accessorKey: 'order_number',
     header: ({ column }) => (
-      <DataTableColumnHeader column={column} title='Order' />
+      <DataTableColumnHeader column={column} title='Order #' />
     ),
-    cell: ({ row }) => <div className='w-24'>{row.getValue('id')}</div>,
-    enableSorting: false,
+    cell: ({ row }) => (
+      <div className='w-20 font-medium'>{row.getValue('order_number')}</div>
+    ),
+    enableSorting: true,
     enableHiding: false,
   },
   {
-    accessorKey: 'title',
+    accessorKey: 'customer_name',
     header: ({ column }) => (
-      <DataTableColumnHeader column={column} title='Title' />
+      <DataTableColumnHeader column={column} title='Customer' />
     ),
     meta: {
-      className: 'ps-1 max-w-0 w-1/3',
+      className: 'ps-1 max-w-0 w-1/4',
       tdClassName: 'ps-4',
     },
     cell: ({ row }) => {
-      const label = labels.find((label) => label.value === row.original.label)
+      const name = row.getValue('customer_name') as string | null
+      const phone = row.original.customer_phone
 
       return (
-        <div className='flex space-x-2'>
-          {label && <Badge variant='outline'>{label.label}</Badge>}
-          <span className='truncate font-medium'>{row.getValue('title')}</span>
+        <div className='flex flex-col gap-0'>
+          <span className='truncate font-medium'>{name || 'N/A'}</span>
+          {phone && (
+            <span className='text-[10px] text-muted-foreground truncate' dir='ltr'>
+              {phone}
+            </span>
+          )}
         </div>
       )
     },
   },
   {
-    accessorKey: 'customer',
+    accessorKey: 'customer_email',
     header: ({ column }) => (
-      <DataTableColumnHeader column={column} title='Customer' />
+      <DataTableColumnHeader column={column} title='Email' />
     ),
-    meta: { className: 'ps-1', tdClassName: 'ps-4' },
-    cell: ({ row }) => (
-      <span className='truncate'>{row.getValue('customer')}</span>
-    ),
+    meta: {
+      className: 'ps-1',
+      tdClassName: 'ps-4',
+    },
+    cell: ({ row }) => {
+      const email = row.getValue('customer_email') as string | null
+      return (
+        <span className='text-muted-foreground truncate max-w-[180px] block'>
+          {email || '-'}
+        </span>
+      )
+    },
+    enableHiding: true,
   },
   {
     accessorKey: 'total',
@@ -77,36 +101,30 @@ export const ordersColumns: ColumnDef<Order>[] = [
     ),
     meta: { className: 'ps-1', tdClassName: 'ps-4' },
     cell: ({ row }) => {
-      const amount = parseFloat(row.getValue('total'))
-      const formatted = new Intl.NumberFormat('en-US', {
-        style: 'currency',
-        currency: 'USD',
-      }).format(amount)
-      return <span className='font-medium'>{formatted}</span>
+      const total = parseFloat(row.original.total)
+      const currency = row.original.currency
+      return (
+        <span className='font-semibold'>
+          {currency} {total.toFixed(2)}
+        </span>
+      )
     },
+    enableSorting: true,
   },
   {
-    accessorKey: 'status',
+    accessorKey: 'fulfillment_status',
     header: ({ column }) => (
-      <DataTableColumnHeader column={column} title='Status' />
+      <DataTableColumnHeader column={column} title='Fulfillment' />
     ),
     meta: { className: 'ps-1', tdClassName: 'ps-4' },
     cell: ({ row }) => {
-      const status = statuses.find(
-        (status) => status.value === row.getValue('status')
-      )
-
-      if (!status) {
-        return null
-      }
+      const status = row.getValue('fulfillment_status') as string
+      const color = row.original.status_color
 
       return (
-        <div className='flex w-28 items-center gap-2'>
-          {status.icon && (
-            <status.icon className='size-4 text-muted-foreground' />
-          )}
-          <span>{status.label}</span>
-        </div>
+        <Badge variant={statusVariants[color]} className='capitalize text-[10px] py-0 h-4 px-1.5'>
+          {status}
+        </Badge>
       )
     },
     filterFn: (row, id, value) => {
@@ -114,32 +132,73 @@ export const ordersColumns: ColumnDef<Order>[] = [
     },
   },
   {
-    accessorKey: 'priority',
+    accessorKey: 'financial_status',
     header: ({ column }) => (
-      <DataTableColumnHeader column={column} title='Priority' />
+      <DataTableColumnHeader column={column} title='Payment' />
     ),
-    meta: { className: 'ps-1', tdClassName: 'ps-3' },
+    meta: { className: 'ps-1', tdClassName: 'ps-4' },
     cell: ({ row }) => {
-      const priority = priorities.find(
-        (priority) => priority.value === row.getValue('priority')
-      )
-
-      if (!priority) {
-        return null
-      }
+      const status = row.getValue('financial_status') as string
+      const color = row.original.financial_status_color
 
       return (
-        <div className='flex items-center gap-2'>
-          {priority.icon && (
-            <priority.icon className='size-4 text-muted-foreground' />
-          )}
-          <span>{priority.label}</span>
-        </div>
+        <Badge variant={statusVariants[color]} className='capitalize text-[10px] py-0 h-4 px-1.5'>
+          {status}
+        </Badge>
       )
     },
     filterFn: (row, id, value) => {
       return value.includes(row.getValue(id))
     },
+  },
+  {
+    accessorKey: 'payment_method',
+    header: ({ column }) => (
+      <DataTableColumnHeader column={column} title='Method' />
+    ),
+    meta: { className: 'ps-1', tdClassName: 'ps-4' },
+    cell: ({ row }) => {
+      const method = row.getValue('payment_method') as string | null
+      return (
+        <span className='truncate max-w-[120px] block text-[11px]'>
+          {method || 'N/A'}
+        </span>
+      )
+    },
+    enableHiding: true,
+  },
+  {
+    accessorKey: 'shipping_country',
+    header: ({ column }) => (
+      <DataTableColumnHeader column={column} title='Country' />
+    ),
+    meta: { className: 'ps-1', tdClassName: 'ps-4' },
+    cell: ({ row }) => {
+      const country = row.getValue('shipping_country') as string | null
+      return (
+        <span className='text-[11px]'>
+          {country || '-'}
+        </span>
+      )
+    },
+    enableHiding: true,
+  },
+  {
+    accessorKey: 'created_at',
+    header: ({ column }) => (
+      <DataTableColumnHeader column={column} title='Date' />
+    ),
+    meta: { className: 'ps-1', tdClassName: 'ps-4' },
+    cell: ({ row }) => {
+      const date = row.getValue('created_at') as string
+      return (
+        <span className='text-[11px] text-muted-foreground'>
+          {format(new Date(date), 'MMM dd, yyyy')}
+        </span>
+      )
+    },
+    enableSorting: true,
+    enableHiding: true,
   },
   {
     id: 'actions',

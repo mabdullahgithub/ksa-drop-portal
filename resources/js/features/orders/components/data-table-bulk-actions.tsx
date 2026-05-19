@@ -1,8 +1,7 @@
 import { useState } from 'react'
 import { type Table } from '@tanstack/react-table'
-import { Trash2, CircleArrowUp, ArrowUpDown, Download } from 'lucide-react'
+import { Package, DollarSign, Tag, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
-import { sleep } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -11,14 +10,23 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import { DataTableBulkActions as BulkActionsToolbar } from '@/components/data-table'
-import { priorities, statuses } from '../data/data'
-import { type Order } from '../data/schema'
-import { OrdersMultiDeleteDialog } from './orders-multi-delete-dialog'
+import { type Order } from '@/types/order'
+import { useOrderMutations } from '@/hooks/useOrders'
 
 type DataTableBulkActionsProps<TData> = {
   table: Table<TData>
@@ -27,46 +35,102 @@ type DataTableBulkActionsProps<TData> = {
 export function DataTableBulkActions<TData>({
   table,
 }: DataTableBulkActionsProps<TData>) {
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const selectedRows = table.getFilteredSelectedRowModel().rows
+  const { bulkUpdate } = useOrderMutations()
+  const [showTagDialog, setShowTagDialog] = useState(false)
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false)
+  const [tagInput, setTagInput] = useState('')
 
-  const handleBulkStatusChange = (status: string) => {
-    const selectedOrders = selectedRows.map((row) => row.original as Order)
-    toast.promise(sleep(2000), {
-      loading: 'Updating status...',
-      success: () => {
-        table.resetRowSelection()
-        return `Status updated to "${status}" for ${selectedOrders.length} order${selectedOrders.length > 1 ? 's' : ''}.`
-      },
-      error: 'Error',
-    })
-    table.resetRowSelection()
+  const handleBulkFulfillmentChange = async (status: string) => {
+    const selectedOrders = selectedRows.map((row) => (row.original as Order).id)
+
+    toast.promise(
+      bulkUpdate({
+        order_ids: selectedOrders,
+        action: 'update_fulfillment',
+        fulfillment_status: status,
+      }),
+      {
+        loading: 'Updating fulfillment status...',
+        success: () => {
+          table.resetRowSelection()
+          window.location.reload()
+          return `Updated ${selectedOrders.length} order${selectedOrders.length > 1 ? 's' : ''}`
+        },
+        error: 'Failed to update orders',
+      }
+    )
   }
 
-  const handleBulkPriorityChange = (priority: string) => {
-    const selectedOrders = selectedRows.map((row) => row.original as Order)
-    toast.promise(sleep(2000), {
-      loading: 'Updating priority...',
-      success: () => {
-        table.resetRowSelection()
-        return `Priority updated to "${priority}" for ${selectedOrders.length} order${selectedOrders.length > 1 ? 's' : ''}.`
-      },
-      error: 'Error',
-    })
-    table.resetRowSelection()
+  const handleBulkFinancialChange = async (status: string) => {
+    const selectedOrders = selectedRows.map((row) => (row.original as Order).id)
+
+    toast.promise(
+      bulkUpdate({
+        order_ids: selectedOrders,
+        action: 'update_financial',
+        financial_status: status,
+      }),
+      {
+        loading: 'Updating payment status...',
+        success: () => {
+          table.resetRowSelection()
+          window.location.reload()
+          return `Updated ${selectedOrders.length} order${selectedOrders.length > 1 ? 's' : ''}`
+        },
+        error: 'Failed to update orders',
+      }
+    )
   }
 
-  const handleBulkExport = () => {
-    const selectedOrders = selectedRows.map((row) => row.original as Order)
-    toast.promise(sleep(2000), {
-      loading: 'Exporting orders...',
-      success: () => {
-        table.resetRowSelection()
-        return `Exported ${selectedOrders.length} order${selectedOrders.length > 1 ? 's' : ''} to CSV.`
-      },
-      error: 'Error',
-    })
-    table.resetRowSelection()
+  const handleAddTags = async () => {
+    const selectedOrders = selectedRows.map((row) => (row.original as Order).id)
+    const tags = tagInput.split(',').map(tag => tag.trim()).filter(tag => tag)
+
+    if (tags.length === 0) {
+      toast.error('Please enter at least one tag')
+      return
+    }
+
+    toast.promise(
+      bulkUpdate({
+        order_ids: selectedOrders,
+        action: 'add_tags',
+        tags,
+      }),
+      {
+        loading: 'Adding tags...',
+        success: () => {
+          table.resetRowSelection()
+          setShowTagDialog(false)
+          setTagInput('')
+          window.location.reload()
+          return `Added tags to ${selectedOrders.length} order${selectedOrders.length > 1 ? 's' : ''}`
+        },
+        error: 'Failed to add tags',
+      }
+    )
+  }
+
+  const handleBulkDelete = async () => {
+    const selectedOrders = selectedRows.map((row) => (row.original as Order).id)
+
+    toast.promise(
+      bulkUpdate({
+        order_ids: selectedOrders,
+        action: 'cancel',
+      }),
+      {
+        loading: 'Cancelling orders...',
+        success: () => {
+          table.resetRowSelection()
+          setShowDeleteDialog(false)
+          window.location.reload()
+          return `Cancelled ${selectedOrders.length} order${selectedOrders.length > 1 ? 's' : ''}`
+        },
+        error: 'Failed to cancel orders',
+      }
+    )
   }
 
   return (
@@ -80,31 +144,28 @@ export function DataTableBulkActions<TData>({
                   variant='outline'
                   size='icon'
                   className='size-8'
-                  aria-label='Update status'
-                  title='Update status'
+                  aria-label='Update fulfillment'
+                  title='Update fulfillment'
                 >
-                  <CircleArrowUp />
-                  <span className='sr-only'>Update status</span>
+                  <Package className='h-4 w-4' />
+                  <span className='sr-only'>Update fulfillment</span>
                 </Button>
               </DropdownMenuTrigger>
             </TooltipTrigger>
             <TooltipContent>
-              <p>Update status</p>
+              <p>Update fulfillment</p>
             </TooltipContent>
           </Tooltip>
           <DropdownMenuContent sideOffset={14}>
-            {statuses.map((status) => (
-              <DropdownMenuItem
-                key={status.value}
-                defaultValue={status.value}
-                onClick={() => handleBulkStatusChange(status.value)}
-              >
-                {status.icon && (
-                  <status.icon className='size-4 text-muted-foreground' />
-                )}
-                {status.label}
-              </DropdownMenuItem>
-            ))}
+            <DropdownMenuItem onClick={() => handleBulkFulfillmentChange('pending')}>
+              Pending
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => handleBulkFulfillmentChange('unfulfilled')}>
+              Unfulfilled
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => handleBulkFulfillmentChange('fulfilled')}>
+              Fulfilled
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
 
@@ -116,31 +177,28 @@ export function DataTableBulkActions<TData>({
                   variant='outline'
                   size='icon'
                   className='size-8'
-                  aria-label='Update priority'
-                  title='Update priority'
+                  aria-label='Update payment'
+                  title='Update payment'
                 >
-                  <ArrowUpDown />
-                  <span className='sr-only'>Update priority</span>
+                  <DollarSign className='h-4 w-4' />
+                  <span className='sr-only'>Update payment</span>
                 </Button>
               </DropdownMenuTrigger>
             </TooltipTrigger>
             <TooltipContent>
-              <p>Update priority</p>
+              <p>Update payment</p>
             </TooltipContent>
           </Tooltip>
           <DropdownMenuContent sideOffset={14}>
-            {priorities.map((priority) => (
-              <DropdownMenuItem
-                key={priority.value}
-                defaultValue={priority.value}
-                onClick={() => handleBulkPriorityChange(priority.value)}
-              >
-                {priority.icon && (
-                  <priority.icon className='size-4 text-muted-foreground' />
-                )}
-                {priority.label}
-              </DropdownMenuItem>
-            ))}
+            <DropdownMenuItem onClick={() => handleBulkFinancialChange('pending')}>
+              Pending
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => handleBulkFinancialChange('paid')}>
+              Paid
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => handleBulkFinancialChange('refunded')}>
+              Refunded
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
 
@@ -149,17 +207,17 @@ export function DataTableBulkActions<TData>({
             <Button
               variant='outline'
               size='icon'
-              onClick={() => handleBulkExport()}
+              onClick={() => setShowTagDialog(true)}
               className='size-8'
-              aria-label='Export orders'
-              title='Export orders'
+              aria-label='Add tags'
+              title='Add tags'
             >
-              <Download />
-              <span className='sr-only'>Export orders</span>
+              <Tag className='h-4 w-4' />
+              <span className='sr-only'>Add tags</span>
             </Button>
           </TooltipTrigger>
           <TooltipContent>
-            <p>Export orders</p>
+            <p>Add tags</p>
           </TooltipContent>
         </Tooltip>
 
@@ -168,26 +226,70 @@ export function DataTableBulkActions<TData>({
             <Button
               variant='destructive'
               size='icon'
-              onClick={() => setShowDeleteConfirm(true)}
+              onClick={() => setShowDeleteDialog(true)}
               className='size-8'
-              aria-label='Delete selected orders'
-              title='Delete selected orders'
+              aria-label='Cancel orders'
+              title='Cancel orders'
             >
-              <Trash2 />
-              <span className='sr-only'>Delete selected orders</span>
+              <Trash2 className='h-4 w-4' />
+              <span className='sr-only'>Cancel orders</span>
             </Button>
           </TooltipTrigger>
           <TooltipContent>
-            <p>Delete selected orders</p>
+            <p>Cancel orders</p>
           </TooltipContent>
         </Tooltip>
       </BulkActionsToolbar>
 
-      <OrdersMultiDeleteDialog
-        open={showDeleteConfirm}
-        onOpenChange={setShowDeleteConfirm}
-        table={table}
-      />
+      {/* Add Tags Dialog */}
+      <Dialog open={showTagDialog} onOpenChange={setShowTagDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add Tags</DialogTitle>
+            <DialogDescription>
+              Add tags to {selectedRows.length} selected order{selectedRows.length > 1 ? 's' : ''}. Separate multiple tags with commas.
+            </DialogDescription>
+          </DialogHeader>
+          <div className='py-4'>
+            <Label htmlFor='tags'>Tags</Label>
+            <Input
+              id='tags'
+              placeholder='urgent, vip, priority'
+              value={tagInput}
+              onChange={(e) => setTagInput(e.target.value)}
+              className='mt-2'
+            />
+          </div>
+          <DialogFooter>
+            <Button variant='outline' onClick={() => setShowTagDialog(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleAddTags}>
+              Add Tags
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Cancel Orders</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to cancel {selectedRows.length} selected order{selectedRows.length > 1 ? 's' : ''}? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant='outline' onClick={() => setShowDeleteDialog(false)}>
+              Cancel
+            </Button>
+            <Button variant='destructive' onClick={handleBulkDelete}>
+              Cancel Orders
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   )
 }
