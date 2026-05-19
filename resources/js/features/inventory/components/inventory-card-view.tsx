@@ -6,6 +6,7 @@ import { type Product } from '@/types/product'
 import { useInventoryContext } from './inventory-provider'
 import { InventoryCardsSkeleton } from './inventory-skeleton'
 import { InventoryPagination } from './inventory-pagination'
+import { ProductActions } from './inventory-row-actions'
 
 const statusVariant: Record<string, 'default' | 'secondary' | 'destructive' | 'outline'> = {
   active: 'default',
@@ -95,11 +96,16 @@ export function InventoryCardView({ data, meta, loading, onPageChange, onPageSiz
               </div>
 
               <CardContent className='p-3 space-y-1.5'>
-                <div>
-                  <p className='text-xs font-semibold leading-tight line-clamp-2'>{product.title}</p>
-                  {product.vendor && (
-                    <p className='text-[10px] text-muted-foreground mt-0.5'>{product.vendor}</p>
-                  )}
+                <div className='flex items-start justify-between gap-1'>
+                  <div className='min-w-0'>
+                    <p className='text-xs font-semibold leading-tight line-clamp-2'>{product.title}</p>
+                    {product.vendor && (
+                      <p className='text-[10px] text-muted-foreground mt-0.5'>{product.vendor}</p>
+                    )}
+                  </div>
+                  <div onClick={(e) => e.stopPropagation()} className='shrink-0 -mr-1 -mt-1'>
+                    <ProductActions product={product} />
+                  </div>
                 </div>
 
                 <div className='flex items-center justify-between gap-1'>

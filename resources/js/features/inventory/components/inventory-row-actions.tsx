@@ -20,10 +20,11 @@ import { usePermissions } from '@/hooks/use-permissions'
 import { EditProductDialog } from './edit-product-dialog'
 import { toast } from 'sonner'
 
-type Props<TData> = { row: Row<TData> }
+interface ProductActionsProps {
+  product: Product
+}
 
-export function InventoryRowActions<TData>({ row }: Props<TData>) {
-  const product = row.original as Product
+export function ProductActions({ product }: ProductActionsProps) {
   const { setOpen, setCurrentRow } = useInventoryContext()
   const { updateProduct } = useProductMutations()
   const { can } = usePermissions()
@@ -140,4 +141,10 @@ export function InventoryRowActions<TData>({ row }: Props<TData>) {
       )}
     </>
   )
+}
+
+type Props<TData> = { row: Row<TData> }
+
+export function InventoryRowActions<TData>({ row }: Props<TData>) {
+  return <ProductActions product={row.original as Product} />
 }
