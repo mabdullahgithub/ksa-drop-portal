@@ -97,15 +97,48 @@ export function useClientProductMutations() {
     }
   }
 
-  const verifyProduct = async (clientId: number, productId: number): Promise<boolean> => {
+  const reviewProduct = async (
+    clientId: number,
+    productId: number,
+    action: 'verify' | 'reject' | 'pending',
+    images?: File[],
+    rejectionReason?: string,
+    isOutOfStock?: boolean
+  ): Promise<boolean> => {
     setLoading(true)
     try {
-      const response = await fetch(`/api/clients/${clientId}/products/${productId}/verify`, {
+      const body = new FormData()
+      body.append('action', action)
+      if (rejectionReason) body.append('rejection_reason', rejectionReason)
+      body.append('is_out_of_stock', isOutOfStock ? '1' : '0')
+      if (images && images.length > 0) {
+        images.forEach((f) => body.append('images[]', f))
+      }
+
+      const response = await fetch(`/api/clients/${clientId}/products/${productId}/review`, {
         method: 'PATCH',
-        headers: {
-          'Accept': 'application/json',
-          'X-CSRF-TOKEN': getCsrfToken(),
-        },
+        headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': getCsrfToken() },
+        body,
+      })
+      if (!response.ok) throw new Error('Failed')
+      return true
+    } catch {
+      return false
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const verifyProduct = async (clientId: number, productId: number, images?: File[]): Promise<boolean> => {
+    return reviewProduct(clientId, productId, 'verify', images)
+  }
+
+  const deleteProductImage = async (clientId: number, productId: number, imageId: number): Promise<boolean> => {
+    setLoading(true)
+    try {
+      const response = await fetch(`/api/clients/${clientId}/products/${productId}/images/${imageId}`, {
+        method: 'DELETE',
+        headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': getCsrfToken() },
       })
       if (!response.ok) throw new Error('Failed')
       return true
@@ -135,5 +168,5 @@ export function useClientProductMutations() {
     }
   }
 
-  return { loading, addProduct, updateProduct, verifyProduct, deleteProduct }
+  return { loading, addProduct, updateProduct, reviewProduct, verifyProduct, deleteProduct, deleteProductImage }
 }

@@ -13,6 +13,7 @@ use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\RoleController;
 use App\Http\Controllers\SettingsController;
 use App\Http\Controllers\TeamController;
+use App\Http\Controllers\ConnectorController;
 use App\Http\Controllers\UserRoleController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -35,6 +36,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/inventory', fn () => Inertia::render('Inventory'))->middleware('permission:view inventory')->name('inventory');
     Route::get('/orders', fn () => Inertia::render('Orders'))->middleware('permission:view orders')->name('orders');
     Route::get('/apps', fn () => Inertia::render('Apps'))->middleware('permission:view apps')->name('apps');
+
+    // Connectors API
+    Route::get('/api/connectors', [ConnectorController::class, 'index'])->middleware('permission:view apps')->name('api.connectors.index');
+    Route::patch('/api/connectors/{connector}/toggle', [ConnectorController::class, 'toggle'])->middleware('permission:edit apps')->name('api.connectors.toggle');
     Route::get('/chats', fn () => Inertia::render('Chats'))->name('chats');
     Route::get('/users', fn () => Inertia::render('Users'))->name('users');
 
@@ -77,7 +82,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::post('/{client}/products', [ClientController::class, 'storeProduct'])->middleware('permission:edit client')->name('api.clients.products.store');
         Route::put('/{client}/products/{product}', [ClientController::class, 'updateProduct'])->middleware('permission:edit client')->name('api.clients.products.update');
         Route::patch('/{client}/products/{product}/verify', [ClientController::class, 'verifyProduct'])->middleware('permission:edit client')->name('api.clients.products.verify');
+        Route::patch('/{client}/products/{product}/review', [ClientController::class, 'reviewProduct'])->middleware('permission:edit client')->name('api.clients.products.review');
         Route::delete('/{client}/products/{product}', [ClientController::class, 'destroyProduct'])->middleware('permission:delete client')->name('api.clients.products.destroy');
+        Route::delete('/{client}/products/{product}/images/{image}', [ClientController::class, 'destroyProductImage'])->middleware('permission:edit client')->name('api.clients.products.images.destroy');
     });
 
     // Inventory / Products API
@@ -171,6 +178,7 @@ Route::prefix('portal')->middleware(['auth', 'verified', 'role:client'])->group(
     Route::post('/api/inventory', [PortalController::class, 'storeInventory'])->name('portal.api.inventory.store');
     Route::put('/api/inventory/{product}', [PortalController::class, 'updateInventory'])->name('portal.api.inventory.update');
     Route::delete('/api/inventory/{product}', [PortalController::class, 'destroyInventory'])->name('portal.api.inventory.destroy');
+    Route::delete('/api/inventory/{product}/images/{image}', [PortalController::class, 'destroyInventoryImage'])->name('portal.api.inventory.images.destroy');
     Route::get('/api/products', [PortalController::class, 'products'])->name('portal.api.products');
     Route::get('/api/products/filter-options', [PortalController::class, 'productFilterOptions'])->name('portal.api.products.filter-options');
     Route::get('/api/products/{product}', [PortalController::class, 'productShow'])->name('portal.api.products.show');

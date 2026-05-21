@@ -6,10 +6,13 @@ use App\Http\Controllers\Controller;
 use App\Mail\Clients\WelcomeClientMail;
 use App\Models\Client;
 use App\Models\ClientProduct;
+use App\Models\ClientProductImage;
 use App\Models\User;
+use Illuminate\Support\Facades\Storage;
 use App\Notifications\ClientCreatedNotification;
 use App\Notifications\ClientStatusChangedNotification;
 use App\Notifications\ProductVerifiedNotification;
+use App\Notifications\ProductRejectedNotification;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -336,7 +339,10 @@ class ClientController extends Controller
 
         $perPage = $request->get('per_page', 15);
 
-        return response()->json($query->paginate($perPage));
+        $paginator = $query->paginate($perPage);
+        $paginator->getCollection()->load('images');
+
+        return response()->json($paginator);
     }
 
     public function storeProduct(Request $request, Client $client)
@@ -391,24 +397,93 @@ class ClientController extends Controller
         ]);
     }
 
-    public function verifyProduct(Request $request, Client $client, ClientProduct $product)
+    public function reviewProduct(Request $request, Client $client, ClientProduct $product)
     {
         if ($product->client_id !== $client->id) {
             abort(404);
         }
 
-        $product->update([
-            'verification_status' => 'verified',
-            'verified_at' => now(),
-            'verified_by' => auth()->id(),
+        $request->validate([
+            'action'           => 'required|in:verify,reject,pending',
+            'rejection_reason' => 'nullable|string|max:1000',
+            'is_out_of_stock'  => 'nullable|boolean',
+            'images'           => 'nullable|array|max:10',
+            'images.*'         => 'image|max:5120',
         ]);
 
-        $product->client->user?->notify(new ProductVerifiedNotification($product->fresh()));
+        $action = $request->input('action');
+        $isOutOfStock = (bool) $request->input('is_out_of_stock', false);
+
+        if ($action === 'verify') {
+            $product->update([
+                'verification_status' => 'verified',
+                'verified_at'         => now(),
+                'verified_by'         => auth()->id(),
+                'rejection_reason'    => null,
+                'is_out_of_stock'     => $isOutOfStock,
+            ]);
+
+            if ($request->hasFile('images')) {
+                $nextPosition = ($product->images()->max('position') ?? 0) + 1;
+                foreach ($request->file('images') as $file) {
+                    $path = $file->store("client-products/{$product->id}", 'public');
+                    $product->images()->create(['path' => $path, 'position' => $nextPosition++]);
+                }
+            }
+
+            try {
+                $product->client->user?->notify(new ProductVerifiedNotification($product->fresh()));
+            } catch (\Throwable) {}
+
+        } elseif ($action === 'reject') {
+            $product->update([
+                'verification_status' => 'rejected',
+                'rejection_reason'    => $request->input('rejection_reason'),
+                'verified_at'         => null,
+                'verified_by'         => null,
+                'is_out_of_stock'     => $isOutOfStock,
+            ]);
+
+            try {
+                $product->client->user?->notify(new ProductRejectedNotification($product->fresh()));
+            } catch (\Throwable) {}
+
+        } else {
+            // keep pending
+            $product->update([
+                'verification_status' => 'pending',
+                'rejection_reason'    => null,
+                'verified_at'         => null,
+                'verified_by'         => null,
+                'is_out_of_stock'     => $isOutOfStock,
+            ]);
+        }
 
         return response()->json([
-            'message' => 'Product verified successfully',
-            'product' => $product->fresh(),
+            'message' => 'Product reviewed successfully',
+            'product' => $product->fresh()->load('images'),
         ]);
+    }
+
+    public function verifyProduct(Request $request, Client $client, ClientProduct $product)
+    {
+        return $this->reviewProduct(
+            tap($request, fn ($r) => $r->merge(['action' => 'verify'])),
+            $client,
+            $product
+        );
+    }
+
+    public function destroyProductImage(Client $client, ClientProduct $product, ClientProductImage $image)
+    {
+        if ($product->client_id !== $client->id || $image->client_product_id !== $product->id) {
+            abort(404);
+        }
+
+        Storage::disk('public')->delete($image->path);
+        $image->delete();
+
+        return response()->json(['message' => 'Image deleted']);
     }
 
     public function destroyProduct(Client $client, ClientProduct $product)

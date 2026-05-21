@@ -49,7 +49,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { ConfigDrawer } from '@/components/config-drawer'
 import { Header } from '@/components/layout/header'
 import { NotificationsDropdown } from '@/components/layout/notifications-dropdown'
 import { Main } from '@/components/layout/main'
@@ -80,6 +79,7 @@ function ClientDetailContent({ client }: ClientDetailPageProps) {
   const { updateStatus, deleteClient, loading } = useClientMutations()
   const [editOpen, setEditOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
+  const initialTab = new URLSearchParams(window.location.search).get('tab') ?? 'overview'
 
   const statusColorMap: Record<string, string> = {
     active: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
@@ -121,7 +121,6 @@ function ClientDetailContent({ client }: ClientDetailPageProps) {
         <Search className='me-auto' />
         <ThemeSwitch />
         <NotificationsDropdown />
-        <ConfigDrawer />
         <ProfileDropdown />
       </Header>
 
@@ -289,7 +288,7 @@ function ClientDetailContent({ client }: ClientDetailPageProps) {
         </div>
 
         {/* Tabs */}
-        <Tabs defaultValue='overview'>
+        <Tabs defaultValue={client.is_fulfilment ? initialTab : 'overview'}>
           <TabsList>
             <TabsTrigger value='overview'>Overview</TabsTrigger>
             {client.is_fulfilment && (

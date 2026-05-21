@@ -9,7 +9,6 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { ConfigDrawer } from '@/components/config-drawer'
 import { Header } from '@/components/layout/header'
 import { NotificationsDropdown } from '@/components/layout/notifications-dropdown'
 import { Main } from '@/components/layout/main'
@@ -91,7 +90,6 @@ export function PortalOrders() {
         <Search className='me-auto' />
         <ThemeSwitch />
         <NotificationsDropdown />
-        <ConfigDrawer />
         <ProfileDropdown />
       </Header>
 

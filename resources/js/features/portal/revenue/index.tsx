@@ -1,7 +1,6 @@
 import { DollarSign, TrendingUp, Percent, Calendar } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { ConfigDrawer } from '@/components/config-drawer'
 import { Header } from '@/components/layout/header'
 import { NotificationsDropdown } from '@/components/layout/notifications-dropdown'
 import { Main } from '@/components/layout/main'
@@ -26,7 +25,6 @@ export function PortalRevenue() {
         <Search className='me-auto' />
         <ThemeSwitch />
         <NotificationsDropdown />
-        <ConfigDrawer />
         <ProfileDropdown />
       </Header>
 

@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Client;
 use App\Models\ClientProduct;
+use App\Models\ClientProductImage;
 use App\Models\User;
 use App\Notifications\ProductSubmittedNotification;
 use Illuminate\Http\Request;
@@ -101,7 +102,11 @@ class PortalController extends Controller
         }
 
         if ($request->has('verification_status') && $request->verification_status !== 'all') {
-            $query->where('verification_status', $request->verification_status);
+            if ($request->verification_status === 'out_of_stock') {
+                $query->where('is_out_of_stock', true);
+            } else {
+                $query->where('verification_status', $request->verification_status);
+            }
         }
 
         $sortBy = $request->get('sort_by', 'created_at');
@@ -110,7 +115,10 @@ class PortalController extends Controller
 
         $perPage = $request->get('per_page', 15);
 
-        return response()->json($query->paginate($perPage));
+        $paginator = $query->paginate($perPage);
+        $paginator->getCollection()->load('images');
+
+        return response()->json($paginator);
     }
 
     public function products(Request $request)
@@ -416,6 +424,8 @@ class PortalController extends Controller
             'quantity'    => 'required|integer|min:0',
             'unit_price'  => 'nullable|numeric|min:0',
             'notes'       => 'nullable|string',
+            'images'      => 'nullable|array|max:10',
+            'images.*'    => 'image|max:5120',
         ]);
 
         $productCode = ClientProduct::generateProductCode($client);
@@ -430,14 +440,24 @@ class PortalController extends Controller
             'notes'        => $validated['notes'] ?? null,
         ]);
 
-        // Notify admins and superadmins that a product needs verification
-        User::role(['admin', 'superadmin'])->each(
-            fn ($adminUser) => $adminUser->notify(new ProductSubmittedNotification($product, $client))
-        );
+        if ($request->hasFile('images')) {
+            foreach ($request->file('images') as $position => $file) {
+                $path = $file->store("client-products/{$product->id}", 'public');
+                $product->images()->create(['path' => $path, 'position' => $position + 1]);
+            }
+        }
+
+        try {
+            User::role(['admin', 'superadmin'])->each(
+                fn ($adminUser) => $adminUser->notify(new ProductSubmittedNotification($product, $client))
+            );
+        } catch (\Exception $e) {
+            // Notification failure should not block product creation
+        }
 
         return response()->json([
             'message' => 'Product added successfully',
-            'product' => $product,
+            'product' => $product->load('images'),
         ], 201);
     }
 
@@ -454,20 +474,54 @@ class PortalController extends Controller
         }
 
         $validated = $request->validate([
-            'name'        => 'sometimes|string|max:255',
-            'sku'         => 'nullable|string|max:100',
-            'description' => 'nullable|string',
-            'quantity'    => 'sometimes|integer|min:0',
-            'unit_price'  => 'nullable|numeric|min:0',
-            'notes'       => 'nullable|string',
+            'name'             => 'sometimes|string|max:255',
+            'sku'              => 'nullable|string|max:100',
+            'description'      => 'nullable|string',
+            'quantity'         => 'sometimes|integer|min:0',
+            'unit_price'       => 'nullable|numeric|min:0',
+            'notes'            => 'nullable|string',
+            'images'           => 'nullable|array|max:10',
+            'images.*'         => 'image|max:5120',
+            'remove_image_ids' => 'nullable|array',
+            'remove_image_ids.*' => 'integer',
         ]);
 
         $product->update($validated);
 
+        if (!empty($validated['remove_image_ids'])) {
+            $toDelete = $product->images()->whereIn('id', $validated['remove_image_ids'])->get();
+            foreach ($toDelete as $img) {
+                Storage::disk('public')->delete($img->path);
+                $img->delete();
+            }
+        }
+
+        if ($request->hasFile('images')) {
+            $nextPosition = ($product->images()->max('position') ?? 0) + 1;
+            foreach ($request->file('images') as $file) {
+                $path = $file->store("client-products/{$product->id}", 'public');
+                $product->images()->create(['path' => $path, 'position' => $nextPosition++]);
+            }
+        }
+
         return response()->json([
             'message' => 'Product updated successfully',
-            'product' => $product->fresh(),
+            'product' => $product->fresh()->load('images'),
         ]);
+    }
+
+    public function destroyInventoryImage(ClientProduct $product, ClientProductImage $image)
+    {
+        $client = $this->resolveFulfilmentClient();
+
+        if ($product->client_id !== $client->id || $image->client_product_id !== $product->id) {
+            abort(403);
+        }
+
+        Storage::disk('public')->delete($image->path);
+        $image->delete();
+
+        return response()->json(['message' => 'Image deleted']);
     }
 
     public function destroyInventory(ClientProduct $product)

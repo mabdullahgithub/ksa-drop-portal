@@ -3,7 +3,6 @@ import { usePage } from '@inertiajs/react'
 import { ShoppingCart, DollarSign, Package, Clock, Info, Truck, RotateCcw, Banknote, Warehouse, Phone, Receipt, Tag } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { ConfigDrawer } from '@/components/config-drawer'
 import { Header } from '@/components/layout/header'
 import { NotificationsDropdown } from '@/components/layout/notifications-dropdown'
 import { Main } from '@/components/layout/main'
@@ -97,7 +96,6 @@ export function PortalDashboard() {
         <Search className='me-auto' />
         <ThemeSwitch />
         <NotificationsDropdown />
-        <ConfigDrawer />
         <ProfileDropdown />
       </Header>
 

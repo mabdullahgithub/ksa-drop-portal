@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { toast } from 'sonner'
-import { Search as SearchIcon, CheckCircle, Clock, Plus, Lock, Pencil, Trash2, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
+import { Search as SearchIcon, CheckCircle, Clock, Plus, Lock, Pencil, Trash2, ArrowUpDown, ArrowUp, ArrowDown, PackageX } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -37,7 +37,6 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { DotsHorizontalIcon } from '@radix-ui/react-icons'
-import { ConfigDrawer } from '@/components/config-drawer'
 import { Header } from '@/components/layout/header'
 import { NotificationsDropdown } from '@/components/layout/notifications-dropdown'
 import { Main } from '@/components/layout/main'
@@ -46,6 +45,7 @@ import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
 import { usePortalInventory, usePortalInventoryMutations } from '@/hooks/usePortal'
 import { PortalProductFormDialog } from './portal-product-form-dialog'
+import type { ClientProductImage } from '@/types/client'
 
 interface PortalProduct {
   id: number
@@ -56,7 +56,9 @@ interface PortalProduct {
   quantity: number
   unit_price: string | null
   notes: string | null
-  verification_status: 'pending' | 'verified'
+  verification_status: 'pending' | 'verified' | 'rejected'
+  is_out_of_stock: boolean
+  images: ClientProductImage[]
   created_at: string
 }
 
@@ -130,7 +132,6 @@ export function PortalInventory() {
         <Search className='me-auto' />
         <ThemeSwitch />
         <NotificationsDropdown />
-        <ConfigDrawer />
         <ProfileDropdown />
       </Header>
 
@@ -158,13 +159,15 @@ export function PortalInventory() {
               />
             </div>
             <Select value={statusFilter} onValueChange={handleStatusFilter}>
-              <SelectTrigger className='w-36'>
+              <SelectTrigger className='w-40'>
                 <SelectValue placeholder='Status' />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value='all'>All Statuses</SelectItem>
                 <SelectItem value='pending'>Pending</SelectItem>
                 <SelectItem value='verified'>Verified</SelectItem>
+                <SelectItem value='rejected'>Rejected</SelectItem>
+                <SelectItem value='out_of_stock'>Out of Stock</SelectItem>
               </SelectContent>
             </Select>
             <Select
@@ -261,24 +264,43 @@ export function PortalInventory() {
                             : '—'}
                         </TableCell>
                         <TableCell>
-                          {isPending ? (
-                            <Badge
-                              variant='outline'
-                              className='bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400 text-xs'
-                              title='Awaiting admin verification'
-                            >
-                              <Clock className='mr-1 h-3 w-3' />
-                              Pending
-                            </Badge>
-                          ) : (
-                            <Badge
-                              variant='outline'
-                              className='bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 text-xs'
-                            >
-                              <CheckCircle className='mr-1 h-3 w-3' />
-                              Verified
-                            </Badge>
-                          )}
+                          <div className='flex flex-wrap gap-1'>
+                            {product.verification_status === 'verified' ? (
+                              <Badge
+                                variant='outline'
+                                className='bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 text-xs'
+                              >
+                                <CheckCircle className='mr-1 h-3 w-3' />
+                                Verified
+                              </Badge>
+                            ) : product.verification_status === 'rejected' ? (
+                              <Badge
+                                variant='outline'
+                                className='bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400 text-xs'
+                              >
+                                <Lock className='mr-1 h-3 w-3' />
+                                Rejected
+                              </Badge>
+                            ) : (
+                              <Badge
+                                variant='outline'
+                                className='bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400 text-xs'
+                                title='Awaiting admin verification'
+                              >
+                                <Clock className='mr-1 h-3 w-3' />
+                                Pending
+                              </Badge>
+                            )}
+                            {product.is_out_of_stock && (
+                              <Badge
+                                variant='outline'
+                                className='bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400 text-xs'
+                              >
+                                <PackageX className='mr-1 h-3 w-3' />
+                                Out of Stock
+                              </Badge>
+                            )}
+                          </div>
                         </TableCell>
                         <TableCell className='text-sm text-muted-foreground'>
                           {new Date(product.created_at).toLocaleDateString()}

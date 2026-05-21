@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { toast } from 'sonner'
-import { Plus, CheckCircle, Clock, ShieldCheck, Pencil, Trash2, AlertTriangle, RefreshCw } from 'lucide-react'
+import { Plus, CheckCircle, Clock, ShieldCheck, XCircle, Pencil, Trash2, AlertTriangle, RefreshCw, PackageX } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -32,6 +32,7 @@ import { DotsHorizontalIcon } from '@radix-ui/react-icons'
 import { usePermissions } from '@/hooks/use-permissions'
 import { useClientProducts, useClientProductMutations } from '@/hooks/useClientProducts'
 import { ClientProductFormDialog } from './client-product-form-dialog'
+import { ClientProductVerifyDialog } from './client-product-verify-dialog'
 import type { Client, ClientProduct } from '@/types/client'
 
 interface ClientInventoryTabProps {
@@ -43,19 +44,23 @@ export function ClientInventoryTab({ client }: ClientInventoryTabProps) {
   // Client product routes are gated on 'edit client' / 'delete client' — match that here
   const canEdit = can('edit client')
   const { products, loading, error, refresh } = useClientProducts(client.id)
-  const { loading: mutating, verifyProduct, deleteProduct } = useClientProductMutations()
+  const { loading: mutating, reviewProduct, deleteProduct } = useClientProductMutations()
 
   const [formOpen, setFormOpen] = useState(false)
   const [editingProduct, setEditingProduct] = useState<ClientProduct | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<ClientProduct | null>(null)
+  const [verifyTarget, setVerifyTarget] = useState<ClientProduct | null>(null)
 
-  const handleVerify = async (product: ClientProduct) => {
-    const ok = await verifyProduct(client.id, product.id)
+  const handleReview = async (action: 'verify' | 'reject' | 'pending', images: File[], rejectionReason: string, isOutOfStock: boolean) => {
+    if (!verifyTarget) return
+    const ok = await reviewProduct(client.id, verifyTarget.id, action, images, rejectionReason, isOutOfStock)
     if (ok) {
-      toast.success(`"${product.name}" verified`)
+      const labels = { verify: 'verified', reject: 'rejected', pending: 'kept pending' }
+      toast.success(`"${verifyTarget.name}" ${labels[action]}`)
+      setVerifyTarget(null)
       refresh()
     } else {
-      toast.error('Failed to verify product')
+      toast.error('Failed to update product status')
     }
   }
 
@@ -158,17 +163,30 @@ export function ClientInventoryTab({ client }: ClientInventoryTabProps) {
                     {product.unit_price ? `SAR ${parseFloat(product.unit_price).toFixed(2)}` : '—'}
                   </TableCell>
                   <TableCell>
-                    {product.verification_status === 'verified' ? (
-                      <Badge variant='outline' className='bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 text-xs'>
-                        <CheckCircle className='mr-1 h-3 w-3' />
-                        Verified
-                      </Badge>
-                    ) : (
-                      <Badge variant='outline' className='bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400 text-xs'>
-                        <Clock className='mr-1 h-3 w-3' />
-                        Pending
-                      </Badge>
-                    )}
+                    <div className='flex flex-wrap gap-1'>
+                      {product.verification_status === 'verified' ? (
+                        <Badge variant='outline' className='bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 text-xs'>
+                          <CheckCircle className='mr-1 h-3 w-3' />
+                          Verified
+                        </Badge>
+                      ) : product.verification_status === 'rejected' ? (
+                        <Badge variant='outline' className='bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400 text-xs'>
+                          <XCircle className='mr-1 h-3 w-3' />
+                          Rejected
+                        </Badge>
+                      ) : (
+                        <Badge variant='outline' className='bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400 text-xs'>
+                          <Clock className='mr-1 h-3 w-3' />
+                          Pending
+                        </Badge>
+                      )}
+                      {product.is_out_of_stock && (
+                        <Badge variant='outline' className='bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400 text-xs'>
+                          <PackageX className='mr-1 h-3 w-3' />
+                          Out of Stock
+                        </Badge>
+                      )}
+                    </div>
                   </TableCell>
                   {canEdit && (
                     <TableCell>
@@ -183,12 +201,10 @@ export function ClientInventoryTab({ client }: ClientInventoryTabProps) {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align='end' className='w-44'>
-                          {product.verification_status === 'pending' && (
-                            <DropdownMenuItem onClick={() => handleVerify(product)}>
-                              <ShieldCheck className='mr-2 h-4 w-4' />
-                              Verify
-                            </DropdownMenuItem>
-                          )}
+                          <DropdownMenuItem onClick={() => setVerifyTarget(product)}>
+                            <ShieldCheck className='mr-2 h-4 w-4' />
+                            Review &amp; Verify
+                          </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => openEdit(product)}>
                             <Pencil className='mr-2 h-4 w-4' />
                             Edit
@@ -218,6 +234,14 @@ export function ClientInventoryTab({ client }: ClientInventoryTabProps) {
         open={formOpen}
         onOpenChange={setFormOpen}
         onSuccess={refresh}
+      />
+
+      <ClientProductVerifyDialog
+        product={verifyTarget}
+        open={!!verifyTarget}
+        onOpenChange={(o) => { if (!o) setVerifyTarget(null) }}
+        onConfirm={handleReview}
+        loading={mutating}
       />
 
       <AlertDialog open={!!deleteTarget} onOpenChange={(open) => { if (!open) setDeleteTarget(null) }}>

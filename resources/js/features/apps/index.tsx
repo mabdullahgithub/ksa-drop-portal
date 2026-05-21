@@ -1,6 +1,5 @@
 import { type ChangeEvent, useState } from 'react'
-import { SlidersHorizontal, ArrowUpAZ, ArrowDownAZ } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { SlidersHorizontal, ArrowUpAZ, ArrowDownAZ, ChevronDown, Loader2 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import {
   Select,
@@ -9,8 +8,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { Separator } from '@/components/ui/separator'
-import { ConfigDrawer } from '@/components/config-drawer'
 import { Header } from '@/components/layout/header'
 import { NotificationsDropdown } from '@/components/layout/notifications-dropdown'
 import { Main } from '@/components/layout/main'
@@ -18,48 +22,26 @@ import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
 import { usePermissions } from '@/hooks/use-permissions'
-import { apps } from './data/apps'
+import { useConnectors, type Connector } from '@/hooks/useConnectors'
+import { IconShopify, IconJnt } from '@/assets/brand-icons'
+import { cn } from '@/lib/utils'
 
-type AppType = 'all' | 'connected' | 'notConnected'
-
-const appText = new Map<AppType, string>([
-  ['all', 'All Apps'],
-  ['connected', 'Connected'],
-  ['notConnected', 'Not Connected'],
-])
+const logoMap: Record<string, React.ReactNode> = {
+  shopify: <IconShopify />,
+  jnt_express: <IconJnt />,
+}
 
 export function Apps() {
   const [sort, setSort] = useState<'asc' | 'desc'>('asc')
-  const [appType, setAppType] = useState<AppType>('all')
   const [searchTerm, setSearchTerm] = useState('')
   const { can } = usePermissions()
+  const { connectors, loading, toggling, toggle } = useConnectors()
 
-  const filteredApps = apps
+  const filteredConnectors = [...connectors]
     .sort((a, b) =>
-      sort === 'asc'
-        ? a.name.localeCompare(b.name)
-        : b.name.localeCompare(a.name)
+      sort === 'asc' ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name)
     )
-    .filter((app) =>
-      appType === 'connected'
-        ? app.connected
-        : appType === 'notConnected'
-          ? !app.connected
-          : true
-    )
-    .filter((app) => app.name.toLowerCase().includes(searchTerm.toLowerCase()))
-
-  const handleSearch = (e: ChangeEvent<HTMLInputElement>) => {
-    setSearchTerm(e.target.value)
-  }
-
-  const handleTypeChange = (value: AppType) => {
-    setAppType(value)
-  }
-
-  const handleSortChange = (value: 'asc' | 'desc') => {
-    setSort(value)
-  }
+    .filter((c) => c.name.toLowerCase().includes(searchTerm.toLowerCase()))
 
   return (
     <>
@@ -67,15 +49,12 @@ export function Apps() {
         <Search className='me-auto' />
         <ThemeSwitch />
         <NotificationsDropdown />
-        <ConfigDrawer />
         <ProfileDropdown />
       </Header>
 
       <Main fixed>
         <div>
-          <h1 className='text-2xl font-bold tracking-tight'>
-            App Integrations
-          </h1>
+          <h1 className='text-2xl font-bold tracking-tight'>App Integrations</h1>
           <p className='text-muted-foreground'>
             Here&apos;s a list of your apps for the integration!
           </p>
@@ -86,21 +65,11 @@ export function Apps() {
               placeholder='Filter apps...'
               className='h-9 w-40 lg:w-62.5'
               value={searchTerm}
-              onChange={handleSearch}
+              onChange={(e: ChangeEvent<HTMLInputElement>) => setSearchTerm(e.target.value)}
             />
-            <Select value={appType} onValueChange={handleTypeChange}>
-              <SelectTrigger className='w-36'>
-                <SelectValue>{appText.get(appType)}</SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value='all'>All Apps</SelectItem>
-                <SelectItem value='connected'>Connected</SelectItem>
-                <SelectItem value='notConnected'>Not Connected</SelectItem>
-              </SelectContent>
-            </Select>
           </div>
 
-          <Select value={sort} onValueChange={handleSortChange}>
+          <Select value={sort} onValueChange={(v: 'asc' | 'desc') => setSort(v)}>
             <SelectTrigger className='w-16'>
               <SelectValue>
                 <SlidersHorizontal size={18} />
@@ -123,36 +92,88 @@ export function Apps() {
           </Select>
         </div>
         <Separator className='shadow-sm' />
-        <ul className='faded-bottom no-scrollbar grid gap-4 overflow-auto overscroll-contain pt-4 pb-16 md:grid-cols-2 lg:grid-cols-3'>
-          {filteredApps.map((app) => (
-            <li
-              key={app.name}
-              className='rounded-lg border p-4 hover:shadow-md'
-            >
-              <div className='mb-8 flex items-center justify-between'>
-                <div
-                  className={`flex size-10 items-center justify-center rounded-lg bg-muted p-2`}
-                >
-                  {app.logo}
-                </div>
-                {can('edit apps') && (
-                  <Button
-                    variant='outline'
-                    size='sm'
-                    className={`${app.connected ? 'border border-blue-300 bg-blue-50 hover:bg-blue-100 dark:border-blue-700 dark:bg-blue-950 dark:hover:bg-blue-900' : ''}`}
-                  >
-                    {app.connected ? 'Connected' : 'Connect'}
-                  </Button>
-                )}
-              </div>
-              <div>
-                <h2 className='mb-1 font-semibold'>{app.name}</h2>
-                <p className='line-clamp-2 text-gray-500'>{app.desc}</p>
-              </div>
-            </li>
-          ))}
-        </ul>
+
+        {loading ? (
+          <div className='flex items-center justify-center pt-16'>
+            <Loader2 className='text-muted-foreground h-6 w-6 animate-spin' />
+          </div>
+        ) : (
+          <ul className='faded-bottom no-scrollbar grid gap-4 overflow-auto overscroll-contain pt-4 pb-16 md:grid-cols-2 lg:grid-cols-3'>
+            {filteredConnectors.map((connector) => (
+              <ConnectorCard
+                key={connector.id}
+                connector={connector}
+                logo={logoMap[connector.key]}
+                canEdit={can('edit apps')}
+                isToggling={toggling === connector.id}
+                onToggle={() => toggle(connector)}
+              />
+            ))}
+          </ul>
+        )}
       </Main>
     </>
+  )
+}
+
+interface ConnectorCardProps {
+  connector: Connector
+  logo: React.ReactNode
+  canEdit: boolean
+  isToggling: boolean
+  onToggle: () => void
+}
+
+function ConnectorCard({ connector, logo, canEdit, isToggling, onToggle }: ConnectorCardProps) {
+  return (
+    <li className='rounded-lg border p-4 hover:shadow-md'>
+      <div className='mb-8 flex items-center justify-between'>
+        <div className='flex size-10 items-center justify-center rounded-lg bg-muted p-2'>
+          {logo}
+        </div>
+        {canEdit && (
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              disabled={isToggling}
+              className={cn(
+                'inline-flex cursor-pointer items-center gap-1 rounded-md border px-2 py-0.5 text-xs font-medium transition-colors outline-none',
+                connector.enabled
+                  ? 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-400 dark:hover:bg-emerald-900'
+                  : 'border-red-200 bg-red-50 text-red-600 hover:bg-red-100 dark:border-red-800 dark:bg-red-950 dark:text-red-400 dark:hover:bg-red-900'
+              )}
+            >
+              {isToggling ? (
+                <Loader2 className='h-3 w-3 animate-spin' />
+              ) : (
+                <>
+                  {connector.enabled ? 'Enabled' : 'Disabled'}
+                  <ChevronDown className='h-3 w-3 opacity-50' />
+                </>
+              )}
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align='end' className='min-w-28'>
+              <DropdownMenuItem
+                disabled={connector.enabled}
+                onSelect={onToggle}
+                className='text-xs text-emerald-700 focus:text-emerald-700 dark:text-emerald-400'
+              >
+                Enable
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={!connector.enabled}
+                onSelect={onToggle}
+                className='text-xs text-red-600 focus:text-red-600 dark:text-red-400'
+              >
+                Disable
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
+      </div>
+      <div>
+        <h2 className='mb-1 font-semibold'>{connector.name}</h2>
+        <p className='line-clamp-2 text-gray-500'>{connector.description}</p>
+      </div>
+    </li>
   )
 }

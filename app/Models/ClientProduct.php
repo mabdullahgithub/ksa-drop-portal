@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class ClientProduct extends Model
 {
@@ -23,16 +24,24 @@ class ClientProduct extends Model
         'verified_at',
         'verified_by',
         'notes',
+        'rejection_reason',
+        'is_out_of_stock',
     ];
 
     protected $casts = [
         'unit_price' => 'decimal:2',
         'verified_at' => 'datetime',
+        'is_out_of_stock' => 'boolean',
     ];
 
     public function client(): BelongsTo
     {
         return $this->belongsTo(Client::class);
+    }
+
+    public function images(): HasMany
+    {
+        return $this->hasMany(ClientProductImage::class)->orderBy('position');
     }
 
     public function verifiedByUser(): BelongsTo
@@ -57,6 +66,16 @@ class ClientProduct extends Model
     public function scopePending($query)
     {
         return $query->where('verification_status', 'pending');
+    }
+
+    public function scopeRejected($query)
+    {
+        return $query->where('verification_status', 'rejected');
+    }
+
+    public function scopeOutOfStock($query)
+    {
+        return $query->where('is_out_of_stock', true);
     }
 
     public function getIsVerifiedAttribute(): bool

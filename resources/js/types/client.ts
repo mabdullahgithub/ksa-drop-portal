@@ -42,6 +42,15 @@ export interface Client {
   updated_at: string
 }
 
+export interface ClientProductImage {
+  id: number
+  client_product_id: number
+  path: string
+  url: string
+  position: number
+  alt_text: string | null
+}
+
 export interface ClientProduct {
   id: number
   client_id: number
@@ -51,10 +60,13 @@ export interface ClientProduct {
   description: string | null
   quantity: number
   unit_price: string | null
-  verification_status: 'pending' | 'verified'
+  verification_status: 'pending' | 'verified' | 'rejected'
   verified_at: string | null
   verified_by: number | null
   notes: string | null
+  rejection_reason: string | null
+  is_out_of_stock: boolean
+  images: ClientProductImage[]
   created_at: string
   updated_at: string
 }

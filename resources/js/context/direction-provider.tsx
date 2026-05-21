@@ -18,9 +18,7 @@ type DirectionContextType = {
 const DirectionContext = createContext<DirectionContextType | null>(null)
 
 export function DirectionProvider({ children }: { children: React.ReactNode }) {
-  const [dir, _setDir] = useState<Direction>(
-    () => (getCookie(DIRECTION_COOKIE_NAME) as Direction) || DEFAULT_DIRECTION
-  )
+  const [dir, _setDir] = useState<Direction>(DEFAULT_DIRECTION)
 
   useEffect(() => {
     const htmlElement = document.documentElement

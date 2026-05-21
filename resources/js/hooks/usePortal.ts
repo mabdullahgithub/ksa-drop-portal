@@ -7,18 +7,21 @@ export function usePortalInventoryMutations() {
     document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
 
   const addProduct = async (
-    payload: Record<string, unknown>
+    payload: Record<string, unknown>,
+    images?: File[]
   ): Promise<boolean | { errors: Record<string, string[]> }> => {
     setLoading(true)
     try {
+      const form = new FormData()
+      Object.entries(payload).forEach(([k, v]) => {
+        if (v !== null && v !== undefined) form.append(k, String(v))
+      })
+      images?.forEach((f) => form.append('images[]', f))
+
       const response = await fetch('/portal/api/inventory', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'X-CSRF-TOKEN': getCsrfToken(),
-        },
-        body: JSON.stringify(payload),
+        headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': getCsrfToken() },
+        body: form,
       })
       if (!response.ok) {
         const error = await response.json()
@@ -26,7 +29,7 @@ export function usePortalInventoryMutations() {
         throw new Error(error.message || 'Failed')
       }
       return true
-    } catch (err: any) {
+    } catch {
       return false
     } finally {
       setLoading(false)
@@ -35,18 +38,24 @@ export function usePortalInventoryMutations() {
 
   const updateProduct = async (
     productId: number,
-    payload: Record<string, unknown>
+    payload: Record<string, unknown>,
+    images?: File[],
+    removeImageIds?: number[]
   ): Promise<boolean | { errors: Record<string, string[]> } | { message: string }> => {
     setLoading(true)
     try {
+      const form = new FormData()
+      Object.entries(payload).forEach(([k, v]) => {
+        if (v !== null && v !== undefined) form.append(k, String(v))
+      })
+      images?.forEach((f) => form.append('images[]', f))
+      removeImageIds?.forEach((id) => form.append('remove_image_ids[]', String(id)))
+      form.append('_method', 'PUT')
+
       const response = await fetch(`/portal/api/inventory/${productId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'X-CSRF-TOKEN': getCsrfToken(),
-        },
-        body: JSON.stringify(payload),
+        method: 'POST',
+        headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': getCsrfToken() },
+        body: form,
       })
       if (!response.ok) {
         const error = await response.json()

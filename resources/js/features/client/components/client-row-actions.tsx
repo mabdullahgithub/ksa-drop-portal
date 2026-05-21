@@ -1,6 +1,6 @@
 import { type Row } from '@tanstack/react-table'
 import { DotsHorizontalIcon } from '@radix-ui/react-icons'
-import { Eye, Pencil, Trash2, UserCheck, UserX, Ban, MonitorSmartphone } from 'lucide-react'
+import { Eye, Pencil, Trash2, UserCheck, UserX, Ban, MonitorSmartphone, PackagePlus } from 'lucide-react'
 import { toast } from 'sonner'
 import { router } from '@inertiajs/react'
 import { Button } from '@/components/ui/button'
@@ -47,6 +47,8 @@ export function ClientRowActions({ row }: ClientRowActionsProps) {
     }
   }
 
+  const showPortalGroup = (can('impersonate client') && client.status === 'active') || client.is_fulfilment
+
   return (
     <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
@@ -55,38 +57,48 @@ export function ClientRowActions({ row }: ClientRowActionsProps) {
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align='end' className='w-48'>
+        {/* Group 1: View / Edit */}
         <DropdownMenuItem onClick={() => router.visit(`/client/${client.id}`)}>
           <Eye className='mr-2 h-4 w-4' />
           View Details
         </DropdownMenuItem>
 
-        {can('impersonate client') && client.status === 'active' && (
-          <>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              onClick={handleImpersonate}
-              className='text-amber-600 focus:text-amber-600 focus:bg-amber-50 dark:text-amber-400 dark:focus:text-amber-400 dark:focus:bg-amber-950/40'
-            >
-              <MonitorSmartphone className='mr-2 h-4 w-4' />
-              View Client Portal
-            </DropdownMenuItem>
-          </>
+        {can('edit client') && (
+          <DropdownMenuItem
+            onClick={() => {
+              setCurrentRow(client)
+              setOpen('edit')
+            }}
+          >
+            <Pencil className='mr-2 h-4 w-4' />
+            Edit Details
+          </DropdownMenuItem>
         )}
 
+        {/* Group 2: Portal / Inventory */}
+        {showPortalGroup && <DropdownMenuSeparator />}
+
+        {can('impersonate client') && client.status === 'active' && (
+          <DropdownMenuItem
+            onClick={handleImpersonate}
+            className='text-amber-600 focus:text-amber-600 focus:bg-amber-50 dark:text-amber-400 dark:focus:text-amber-400 dark:focus:bg-amber-950/40'
+          >
+            <MonitorSmartphone className='mr-2 h-4 w-4' />
+            View Client Portal
+          </DropdownMenuItem>
+        )}
+
+        {client.is_fulfilment && (
+          <DropdownMenuItem onClick={() => router.visit(`/client/${client.id}?tab=inventory`)}>
+            <PackagePlus className='mr-2 h-4 w-4' />
+            Add Inventory
+          </DropdownMenuItem>
+        )}
+
+        {/* Group 3: Status / Delete */}
         {can('edit client') && (
           <>
-            <DropdownMenuItem
-              onClick={() => {
-                setCurrentRow(client)
-                setOpen('edit')
-              }}
-            >
-              <Pencil className='mr-2 h-4 w-4' />
-              Edit
-            </DropdownMenuItem>
-
             <DropdownMenuSeparator />
-
             <DropdownMenuSub>
               <DropdownMenuSubTrigger>
                 <UserCheck className='mr-2 h-4 w-4' />
