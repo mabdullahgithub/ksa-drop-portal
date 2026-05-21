@@ -1,9 +1,16 @@
 import { useState } from 'react'
 import { toast } from 'sonner'
-import { Search as SearchIcon, CheckCircle, Clock, Plus, Lock, Pencil, Trash2 } from 'lucide-react'
+import { Search as SearchIcon, CheckCircle, Clock, Plus, Lock, Pencil, Trash2, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import {
   Table,
   TableBody,
@@ -53,11 +60,17 @@ interface PortalProduct {
   created_at: string
 }
 
+type SortField = 'product_code' | 'quantity' | 'created_at'
+type SortOrder = 'asc' | 'desc'
+
 export function PortalInventory() {
-  const { products, meta, loading, filters, updateFilters, refresh } = usePortalInventory()
+  const { products, meta, loading, updateFilters, refresh } = usePortalInventory()
   const { loading: mutating, deleteProduct } = usePortalInventoryMutations()
 
   const [search, setSearch] = useState('')
+  const [statusFilter, setStatusFilter] = useState('all')
+  const [sortBy, setSortBy] = useState<SortField>('created_at')
+  const [sortOrder, setSortOrder] = useState<SortOrder>('desc')
   const [formOpen, setFormOpen] = useState(false)
   const [editingProduct, setEditingProduct] = useState<PortalProduct | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<PortalProduct | null>(null)
@@ -65,6 +78,25 @@ export function PortalInventory() {
   const handleSearch = (value: string) => {
     setSearch(value)
     updateFilters({ search: value, page: 1 })
+  }
+
+  const handleStatusFilter = (value: string) => {
+    setStatusFilter(value)
+    updateFilters({ verification_status: value, page: 1 })
+  }
+
+  const handleSort = (field: SortField) => {
+    const newOrder: SortOrder = sortBy === field && sortOrder === 'asc' ? 'desc' : 'asc'
+    setSortBy(field)
+    setSortOrder(newOrder)
+    updateFilters({ sort_by: field, sort_order: newOrder, page: 1 })
+  }
+
+  const SortIcon = ({ field }: { field: SortField }) => {
+    if (sortBy !== field) return <ArrowUpDown className='ml-1 inline h-3.5 w-3.5 text-muted-foreground/60' />
+    return sortOrder === 'asc'
+      ? <ArrowUp className='ml-1 inline h-3.5 w-3.5' />
+      : <ArrowDown className='ml-1 inline h-3.5 w-3.5' />
   }
 
   const openAdd = () => {
@@ -115,27 +147,72 @@ export function PortalInventory() {
         </div>
 
         <div className='space-y-4'>
-          <div className='relative max-w-sm'>
-            <SearchIcon className='absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground' />
-            <Input
-              placeholder='Search products...'
-              value={search}
-              onChange={(e) => handleSearch(e.target.value)}
-              className='pl-8'
-            />
+          <div className='flex flex-wrap items-center gap-2'>
+            <div className='relative'>
+              <SearchIcon className='absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground' />
+              <Input
+                placeholder='Search products...'
+                value={search}
+                onChange={(e) => handleSearch(e.target.value)}
+                className='pl-8 w-56'
+              />
+            </div>
+            <Select value={statusFilter} onValueChange={handleStatusFilter}>
+              <SelectTrigger className='w-36'>
+                <SelectValue placeholder='Status' />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value='all'>All Statuses</SelectItem>
+                <SelectItem value='pending'>Pending</SelectItem>
+                <SelectItem value='verified'>Verified</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select
+              value={`${sortBy}:${sortOrder}`}
+              onValueChange={(v) => {
+                const [field, order] = v.split(':') as [SortField, SortOrder]
+                setSortBy(field)
+                setSortOrder(order)
+                updateFilters({ sort_by: field, sort_order: order, page: 1 })
+              }}
+            >
+              <SelectTrigger className='w-44'>
+                <SelectValue placeholder='Sort by' />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value='product_code:asc'>Code — A to Z</SelectItem>
+                <SelectItem value='product_code:desc'>Code — Z to A</SelectItem>
+                <SelectItem value='quantity:asc'>Quantity — Low to High</SelectItem>
+                <SelectItem value='quantity:desc'>Quantity — High to Low</SelectItem>
+                <SelectItem value='created_at:desc'>Date Added — Newest</SelectItem>
+                <SelectItem value='created_at:asc'>Date Added — Oldest</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
           <div className='overflow-hidden rounded-md border'>
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Code</TableHead>
+                  <TableHead>
+                    <button onClick={() => handleSort('product_code')} className='flex items-center font-medium hover:text-foreground'>
+                      Code<SortIcon field='product_code' />
+                    </button>
+                  </TableHead>
                   <TableHead>Product Name</TableHead>
                   <TableHead>SKU</TableHead>
-                  <TableHead>Quantity</TableHead>
+                  <TableHead>
+                    <button onClick={() => handleSort('quantity')} className='flex items-center font-medium hover:text-foreground'>
+                      Quantity<SortIcon field='quantity' />
+                    </button>
+                  </TableHead>
                   <TableHead>Unit Price</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead>Added</TableHead>
+                  <TableHead>
+                    <button onClick={() => handleSort('created_at')} className='flex items-center font-medium hover:text-foreground'>
+                      Added<SortIcon field='created_at' />
+                    </button>
+                  </TableHead>
                   <TableHead className='w-10' />
                 </TableRow>
               </TableHeader>

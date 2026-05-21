@@ -114,7 +114,7 @@ export function PortalProductFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className='max-w-md'>
+      <DialogContent className='max-w-md max-h-[90vh] overflow-y-auto'>
         <DialogHeader>
           <DialogTitle>{isEdit ? 'Edit Product' : 'Add Product to Inventory'}</DialogTitle>
         </DialogHeader>

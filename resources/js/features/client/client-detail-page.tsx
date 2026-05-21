@@ -13,13 +13,22 @@ import {
   MapPin,
   FileText,
   DollarSign,
+  Package,
+  PackageCheck,
+  ShoppingCart,
+  Truck,
+  RotateCcw,
+  Banknote,
+  Warehouse,
+  Phone,
   Receipt,
+  Tag,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Package } from 'lucide-react'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -222,6 +231,63 @@ function ClientDetailContent({ client }: ClientDetailPageProps) {
           </div>
         )}
 
+        {/* Charges */}
+        {client.charges && (
+          <div className='mb-4'>
+            <h2 className='font-semibold mb-3 flex items-center gap-2 text-sm uppercase tracking-wide text-muted-foreground'>
+              <Receipt className='h-4 w-4' />
+              Client Charges
+            </h2>
+            <ChargesMiniCards charges={client.charges} />
+          </div>
+        )}
+
+        {/* Stats */}
+        <div className='mb-6 grid gap-4 md:grid-cols-2 lg:grid-cols-4'>
+          <Card>
+            <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
+              <CardTitle className='text-sm font-medium'>Total Orders</CardTitle>
+              <ShoppingCart className='h-4 w-4 text-muted-foreground' />
+            </CardHeader>
+            <CardContent>
+              <div className='text-2xl font-bold'>{client.orders_count ?? 0}</div>
+              <p className='text-xs text-muted-foreground'>All time orders</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
+              <CardTitle className='text-sm font-medium'>Total Revenue</CardTitle>
+              <DollarSign className='h-4 w-4 text-muted-foreground' />
+            </CardHeader>
+            <CardContent>
+              <div className='text-2xl font-bold'>
+                SAR {(client.total_revenue ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </div>
+              <p className='text-xs text-muted-foreground'>Across all orders</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
+              <CardTitle className='text-sm font-medium'>Products</CardTitle>
+              <Package className='h-4 w-4 text-muted-foreground' />
+            </CardHeader>
+            <CardContent>
+              <div className='text-2xl font-bold'>{client.products_count ?? 0}</div>
+              <p className='text-xs text-muted-foreground'>Total submitted</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
+              <CardTitle className='text-sm font-medium'>Verified Products</CardTitle>
+              <PackageCheck className='h-4 w-4 text-muted-foreground' />
+            </CardHeader>
+            <CardContent>
+              <div className='text-2xl font-bold'>{client.verified_products_count ?? 0}</div>
+              <p className='text-xs text-muted-foreground'>Active in inventory</p>
+            </CardContent>
+          </Card>
+        </div>
+
         {/* Tabs */}
         <Tabs defaultValue='overview'>
           <TabsList>
@@ -276,43 +342,6 @@ function ClientDetailContent({ client }: ClientDetailPageProps) {
               <div className='grid grid-cols-2 gap-4 text-sm'>
                 <InfoRow label='Tax ID (VAT)' value={client.tax_id} />
                 <InfoRow label='Commercial Registration' value={client.commercial_registration} />
-              </div>
-            </section>
-
-            {/* Charges */}
-            {client.charges && Object.values(client.charges).some((v) => v != null) && (
-              <>
-                <Separator />
-                <section>
-                  <h2 className='font-semibold mb-3 flex items-center gap-2 text-sm uppercase tracking-wide text-muted-foreground'>
-                    <Receipt className='h-4 w-4' />
-                    Client Charges
-                  </h2>
-                  <div className='grid grid-cols-2 md:grid-cols-4 gap-4 text-sm'>
-                    <InfoRow label='Delivery' value={client.charges.delivery != null ? `SAR ${client.charges.delivery}` : null} />
-                    <InfoRow label='Return' value={client.charges.return != null ? `SAR ${client.charges.return}` : null} />
-                    <InfoRow label='COD' value={client.charges.cod != null ? `SAR ${client.charges.cod}` : null} />
-                    <InfoRow label='Warehousing' value={client.charges.warehousing != null ? `SAR ${client.charges.warehousing}` : null} />
-                    <InfoRow label='Call Confirmation' value={client.charges.call_confirmation != null ? `SAR ${client.charges.call_confirmation}` : null} />
-                    <InfoRow label='VAT' value={client.charges.vat != null ? `${client.charges.vat}%` : null} />
-                    <InfoRow label='Other' value={client.charges.other != null ? `SAR ${client.charges.other}` : null} />
-                  </div>
-                </section>
-              </>
-            )}
-
-            {/* Stats */}
-            <Separator />
-            <section>
-              <h2 className='font-semibold mb-3 flex items-center gap-2 text-sm uppercase tracking-wide text-muted-foreground'>
-                <DollarSign className='h-4 w-4' />
-                Statistics
-              </h2>
-              <div className='grid grid-cols-2 md:grid-cols-4 gap-4'>
-                <StatCard label='Total Orders' value={String(client.orders_count ?? 0)} />
-                <StatCard label='Total Revenue' value={`SAR ${(client.total_revenue ?? 0).toLocaleString()}`} />
-                <StatCard label='Products' value={String(client.products_count ?? 0)} />
-                <StatCard label='Verified Products' value={String(client.verified_products_count ?? 0)} />
               </div>
             </section>
 
@@ -388,11 +417,42 @@ function InfoRow({ label, value }: { label: string; value: string | null | undef
   )
 }
 
-function StatCard({ label, value }: { label: string; value: string }) {
+const CHARGE_META = [
+  { key: 'delivery',          label: 'Delivery',     icon: <Truck className='h-4 w-4' />,       prefix: 'SAR' },
+  { key: 'return',            label: 'Return',        icon: <RotateCcw className='h-4 w-4' />,   prefix: 'SAR' },
+  { key: 'cod',               label: 'COD',           icon: <Banknote className='h-4 w-4' />,    prefix: 'SAR' },
+  { key: 'warehousing',       label: 'Warehousing',   icon: <Warehouse className='h-4 w-4' />,   prefix: 'SAR' },
+  { key: 'call_confirmation', label: 'Call Confirm',  icon: <Phone className='h-4 w-4' />,       prefix: 'SAR' },
+  { key: 'vat',               label: 'VAT',           icon: <Receipt className='h-4 w-4' />,     suffix: '%'   },
+  { key: 'other',             label: 'Other',         icon: <Tag className='h-4 w-4' />,         prefix: 'SAR' },
+] as const
+
+type ChargeKey = (typeof CHARGE_META)[number]['key']
+
+function ChargesMiniCards({ charges }: { charges: Record<string, number | null> }) {
   return (
-    <div className='rounded-lg border p-4 text-center'>
-      <div className='text-2xl font-bold'>{value}</div>
-      <div className='text-xs text-muted-foreground mt-1'>{label}</div>
+    <div className='grid grid-cols-4 gap-3 sm:grid-cols-7'>
+      {CHARGE_META.map(({ key, label, icon, ...fmt }) => {
+        const raw = charges[key as ChargeKey] ?? 0
+        const value = 'suffix' in fmt
+          ? `${Number(raw).toFixed(2)}%`
+          : `SAR ${Number(raw).toFixed(2)}`
+
+        return (
+          <div
+            key={key}
+            className='flex flex-col justify-between rounded-lg border border-muted/60 bg-card p-3 shadow-sm'
+          >
+            <div className='flex items-center justify-between mb-1.5'>
+              <span className='text-[10px] font-medium uppercase tracking-wide text-muted-foreground leading-tight'>
+                {label}
+              </span>
+              <span className='text-muted-foreground/60 shrink-0'>{icon}</span>
+            </div>
+            <span className='text-sm font-bold tabular-nums'>{value}</span>
+          </div>
+        )
+      })}
     </div>
   )
 }
