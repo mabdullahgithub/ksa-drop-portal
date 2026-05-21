@@ -127,6 +127,7 @@ export const clientColumns: ColumnDef<Client>[] = [
   },
   {
     id: 'actions',
+    header: () => <span className='text-sm font-medium'>Actions</span>,
     cell: ({ row }) => <ClientRowActions row={row} />,
   },
 ]

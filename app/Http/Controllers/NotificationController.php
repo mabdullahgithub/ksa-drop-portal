@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Client;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Inertia\Inertia;
@@ -9,38 +11,41 @@ use Inertia\Response;
 
 class NotificationController extends Controller
 {
-    /**
-     * Get paginated notifications for the authenticated user.
-     */
+    private function resolveUser(Request $request): User
+    {
+        if ($request->session()->has('impersonate.admin_id')) {
+            $client = Client::find($request->session()->get('impersonate.client_id'));
+            if ($client?->user_id) {
+                return User::findOrFail($client->user_id);
+            }
+        }
+
+        return $request->user();
+    }
+
     public function index(Request $request): JsonResponse
     {
         $perPage = $request->input('per_page', 15);
 
-        $notifications = $request->user()
+        $notifications = $this->resolveUser($request)
             ->notifications()
             ->paginate($perPage);
 
         return response()->json($notifications);
     }
 
-    /**
-     * Get unread notification count.
-     */
     public function unread(Request $request): JsonResponse
     {
-        $count = $request->user()
+        $count = $this->resolveUser($request)
             ->unreadNotifications()
             ->count();
 
         return response()->json(['count' => $count]);
     }
 
-    /**
-     * Mark a single notification as read.
-     */
     public function markAsRead(Request $request, string $id): JsonResponse
     {
-        $notification = $request->user()
+        $notification = $this->resolveUser($request)
             ->notifications()
             ->findOrFail($id);
 
@@ -49,24 +54,18 @@ class NotificationController extends Controller
         return response()->json(['success' => true]);
     }
 
-    /**
-     * Mark all notifications as read.
-     */
     public function markAllAsRead(Request $request): JsonResponse
     {
-        $request->user()
+        $this->resolveUser($request)
             ->unreadNotifications()
             ->update(['read_at' => now()]);
 
         return response()->json(['success' => true]);
     }
 
-    /**
-     * Delete a notification.
-     */
     public function destroy(Request $request, string $id): JsonResponse
     {
-        $notification = $request->user()
+        $notification = $this->resolveUser($request)
             ->notifications()
             ->findOrFail($id);
 
@@ -75,14 +74,11 @@ class NotificationController extends Controller
         return response()->json(['success' => true]);
     }
 
-    /**
-     * Show the notification center page.
-     */
     public function page(Request $request): Response
     {
         $perPage = $request->input('per_page', 20);
 
-        $notifications = $request->user()
+        $notifications = $this->resolveUser($request)
             ->notifications()
             ->paginate($perPage);
 

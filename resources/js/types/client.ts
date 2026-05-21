@@ -26,7 +26,7 @@ export interface Client {
   commercial_registration: string | null
   status: 'active' | 'inactive' | 'suspended'
   status_color: 'success' | 'warning' | 'error' | 'default'
-  portal_features: ('orders' | 'inventory' | 'revenue' | 'finance')[]
+  portal_features: ('orders' | 'inventory' | 'revenue' | 'finance' | 'products')[]
   charges: ClientCharges | null
   notes: string | null
   type_label: string
@@ -116,7 +116,7 @@ export interface CreateClientPayload {
   postal_code?: string
   tax_id?: string
   commercial_registration?: string
-  portal_features?: ('orders' | 'inventory' | 'revenue' | 'finance')[]
+  portal_features?: ('orders' | 'inventory' | 'revenue' | 'finance' | 'products')[]
   charges?: ClientCharges
   notes?: string
 }

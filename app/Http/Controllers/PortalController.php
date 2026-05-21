@@ -2,15 +2,25 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Client;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 
 class PortalController extends Controller
 {
+    private function resolveClient(): ?Client
+    {
+        if (session()->has('impersonate.client_id')) {
+            return Client::find(session('impersonate.client_id'));
+        }
+
+        return auth()->user()->client ?? null;
+    }
+
     public function dashboard()
     {
-        $client = auth()->user()->client;
+        $client = $this->resolveClient();
 
         if (!$client) {
             abort(403);
@@ -44,7 +54,7 @@ class PortalController extends Controller
 
     public function orders(Request $request)
     {
-        $client = auth()->user()->client;
+        $client = $this->resolveClient();
 
         if (!$client || !in_array('orders', $client->portal_features ?? [])) {
             abort(403);
@@ -75,7 +85,7 @@ class PortalController extends Controller
 
     public function inventory(Request $request)
     {
-        $client = auth()->user()->client;
+        $client = $this->resolveClient();
 
         if (!$client || !in_array('inventory', $client->portal_features ?? [])) {
             abort(403);
@@ -102,7 +112,7 @@ class PortalController extends Controller
 
     public function products(Request $request)
     {
-        $client = auth()->user()->client;
+        $client = $this->resolveClient();
 
         if (!$client || !$client->is_dropshipper || !in_array('products', $client->portal_features ?? [])) {
             abort(403);
@@ -131,9 +141,58 @@ class PortalController extends Controller
         return response()->json($query->paginate($perPage));
     }
 
+    public function productShow(Request $request, \App\Models\Product $product)
+    {
+        $client = $this->resolveClient();
+
+        if (!$client || !$client->is_dropshipper || !in_array('products', $client->portal_features ?? [])) {
+            abort(403);
+        }
+
+        if (!$product->published) {
+            abort(404);
+        }
+
+        $product->load('images');
+
+        return response()->json($product);
+    }
+
+    public function productFilterOptions(Request $request)
+    {
+        $client = $this->resolveClient();
+
+        if (!$client || !$client->is_dropshipper || !in_array('products', $client->portal_features ?? [])) {
+            abort(403);
+        }
+
+        $base = \App\Models\Product::where('published', true);
+
+        $vendors = (clone $base)
+            ->select('vendor')
+            ->distinct()
+            ->whereNotNull('vendor')
+            ->orderBy('vendor')
+            ->pluck('vendor')
+            ->map(fn($v) => ['value' => $v, 'label' => $v]);
+
+        $types = (clone $base)
+            ->select('type')
+            ->distinct()
+            ->whereNotNull('type')
+            ->orderBy('type')
+            ->pluck('type')
+            ->map(fn($t) => ['value' => $t, 'label' => $t]);
+
+        return response()->json([
+            'vendors' => $vendors,
+            'types'   => $types,
+        ]);
+    }
+
     public function revenue(Request $request)
     {
-        $client = auth()->user()->client;
+        $client = $this->resolveClient();
 
         if (!$client || !in_array('revenue', $client->portal_features ?? [])) {
             abort(403);
@@ -177,7 +236,7 @@ class PortalController extends Controller
 
     public function finance(Request $request)
     {
-        $client = auth()->user()->client;
+        $client = $this->resolveClient();
 
         if (!$client || !in_array('finance', $client->portal_features ?? [])) {
             abort(403);
@@ -268,7 +327,7 @@ class PortalController extends Controller
 
     public function updateCompanyProfile(Request $request)
     {
-        $client = auth()->user()->client;
+        $client = $this->resolveClient();
 
         if (!$client) {
             abort(403);
@@ -294,7 +353,7 @@ class PortalController extends Controller
 
     public function updateLogo(Request $request)
     {
-        $client = auth()->user()->client;
+        $client = $this->resolveClient();
 
         if (!$client) {
             abort(403);
@@ -316,7 +375,7 @@ class PortalController extends Controller
 
     public function removeLogo()
     {
-        $client = auth()->user()->client;
+        $client = $this->resolveClient();
 
         if (!$client) {
             abort(403);

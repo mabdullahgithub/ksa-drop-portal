@@ -49,8 +49,14 @@ class AuthenticatedSessionController extends Controller
                 $request->session()->invalidate();
                 $request->session()->regenerateToken();
 
+                $message = match ($client?->status) {
+                    'suspended' => __('Your account has been suspended. Please contact support.'),
+                    'inactive'  => __('Your account is inactive. Please contact support to reactivate it.'),
+                    default     => __('Your account is not active. Please contact support.'),
+                };
+
                 throw \Illuminate\Validation\ValidationException::withMessages([
-                    'email' => __('Your account is not active. Please contact support.'),
+                    'email' => $message,
                 ]);
             }
 

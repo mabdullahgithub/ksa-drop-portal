@@ -80,9 +80,16 @@ export function EditClientDialog({ client, open, onOpenChange, onSuccess }: Edit
   }, [client])
 
   const handleTypeToggle = (type: string) => {
-    setClientTypes((prev) =>
-      prev.includes(type) ? prev.filter((t) => t !== type) : [...prev, type]
-    )
+    setClientTypes((prev) => {
+      const removing = prev.includes(type)
+      if (removing && type === 'dropshipper') {
+        setPortalFeatures((pf) => pf.filter((f) => f !== 'products'))
+      }
+      if (removing && type === 'fulfilment') {
+        setPortalFeatures((pf) => pf.filter((f) => f !== 'inventory'))
+      }
+      return removing ? prev.filter((t) => t !== type) : [...prev, type]
+    })
   }
 
   const handleFeatureToggle = (feature: string) => {
@@ -189,10 +196,24 @@ export function EditClientDialog({ client, open, onOpenChange, onSuccess }: Edit
                 <Label htmlFor='ef-orders'>Orders</Label>
                 <Switch id='ef-orders' checked={portalFeatures.includes('orders')} onCheckedChange={() => handleFeatureToggle('orders')} />
               </div>
-              <div className='flex items-center justify-between'>
-                <Label htmlFor='ef-inventory'>Inventory</Label>
-                <Switch id='ef-inventory' checked={portalFeatures.includes('inventory')} onCheckedChange={() => handleFeatureToggle('inventory')} />
-              </div>
+              {clientTypes.includes('fulfilment') && (
+                <div className='flex items-center justify-between'>
+                  <div>
+                    <Label htmlFor='ef-inventory'>Inventory</Label>
+                    <p className='text-xs text-muted-foreground'>Show client's own stock & products</p>
+                  </div>
+                  <Switch id='ef-inventory' checked={portalFeatures.includes('inventory')} onCheckedChange={() => handleFeatureToggle('inventory')} />
+                </div>
+              )}
+              {clientTypes.includes('dropshipper') && (
+                <div className='flex items-center justify-between'>
+                  <div>
+                    <Label htmlFor='ef-products'>Products Catalog</Label>
+                    <p className='text-xs text-muted-foreground'>Show all published products to this dropshipper</p>
+                  </div>
+                  <Switch id='ef-products' checked={portalFeatures.includes('products')} onCheckedChange={() => handleFeatureToggle('products')} />
+                </div>
+              )}
               <div className='flex items-center justify-between'>
                 <Label htmlFor='ef-revenue'>Revenue</Label>
                 <Switch id='ef-revenue' checked={portalFeatures.includes('revenue')} onCheckedChange={() => handleFeatureToggle('revenue')} />

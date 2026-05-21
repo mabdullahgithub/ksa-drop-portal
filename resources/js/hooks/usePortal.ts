@@ -126,6 +126,94 @@ export function usePortalInventory(initialFilters: Record<string, any> = {}) {
   }
 }
 
+export function usePortalProducts(initialFilters: Record<string, any> = {
+  per_page: 20,
+  sort_by: 'created_at',
+  sort_order: 'desc',
+}) {
+  const [products, setProducts] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
+  const [filters, setFilters] = useState(initialFilters)
+
+  const fetchProducts = useCallback(async (newFilters?: Record<string, any>) => {
+    setLoading(true)
+    const params = new URLSearchParams()
+    const activeFilters = newFilters || filters
+
+    Object.entries(activeFilters).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') {
+        params.append(key, String(value))
+      }
+    })
+
+    try {
+      const response = await fetch(`/portal/api/products?${params}`)
+      const data = await response.json()
+      setProducts(data)
+    } catch (error) {
+      console.error('Error fetching portal products:', error)
+    } finally {
+      setLoading(false)
+    }
+  }, [filters])
+
+  useEffect(() => { fetchProducts() }, [])
+
+  const updateFilters = useCallback((newFilters: Record<string, any>) => {
+    const merged = { ...filters, ...newFilters }
+    setFilters(merged)
+    fetchProducts(merged)
+  }, [filters, fetchProducts])
+
+  return {
+    products: products?.data || [],
+    meta: products ? {
+      current_page: products.current_page,
+      last_page: products.last_page,
+      per_page: products.per_page,
+      total: products.total,
+      from: products.from,
+      to: products.to,
+    } : null,
+    loading,
+    filters,
+    updateFilters,
+    refresh: () => fetchProducts(),
+  }
+}
+
+export function usePortalProduct(productId: number | null) {
+  const [product, setProduct] = useState<any>(null)
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    if (!productId) { setProduct(null); return }
+    setLoading(true)
+    fetch(`/portal/api/products/${productId}`)
+      .then((r) => r.json())
+      .then(setProduct)
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [productId])
+
+  return { product, loading }
+}
+
+export function usePortalProductFilterOptions() {
+  const [options, setOptions] = useState<{ vendors: { value: string; label: string }[]; types: { value: string; label: string }[] } | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    fetch('/portal/api/products/filter-options')
+      .then((r) => r.json())
+      .then(setOptions)
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [])
+
+  return { options, loading }
+}
+
 export function usePortalRevenue(period: string = '6months') {
   const [data, setData] = useState<any>(null)
   const [loading, setLoading] = useState(true)

@@ -73,8 +73,8 @@ export function ClientTable({
 
   return (
     <div className='space-y-3'>
-      <div className='overflow-hidden rounded-md border border-muted/50'>
-        <Table>
+      <div className='overflow-clip rounded-md border border-muted/50'>
+        <Table containerClassName='overflow-visible'>
           <TableHeader>
             {table.getHeaderGroups().map((headerGroup) => (
               <TableRow key={headerGroup.id}>

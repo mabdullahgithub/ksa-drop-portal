@@ -135,7 +135,7 @@ export function CreateClientDialog({ open, onOpenChange, onSuccess }: CreateClie
   const [city, setCity] = useState('')
   const [country, setCountry] = useState('SA')
   const [countryOpen, setCountryOpen] = useState(false)
-  const [portalFeatures, setPortalFeatures] = useState<string[]>(['orders', 'inventory', 'revenue', 'finance'])
+  const [portalFeatures, setPortalFeatures] = useState<string[]>(['orders', 'revenue', 'finance'])
   const [charges, setCharges] = useState<Record<string, string>>({
     delivery: '',
     return: '',
@@ -237,7 +237,7 @@ export function CreateClientDialog({ open, onOpenChange, onSuccess }: CreateClie
     setCity('')
     setCountry('SA')
     setCountryOpen(false)
-    setPortalFeatures(['orders', 'inventory', 'revenue', 'finance'])
+    setPortalFeatures(['orders', 'revenue', 'finance'])
     setCharges({ delivery: '', return: '', cod: '', warehousing: '', call_confirmation: '', vat: '', other: '' })
     setNotes('')
   }
@@ -275,11 +275,31 @@ export function CreateClientDialog({ open, onOpenChange, onSuccess }: CreateClie
             <h4 className='text-sm font-semibold mb-3'>Client Type *</h4>
             <div className='flex gap-4'>
               <label className='flex items-center gap-2 cursor-pointer'>
-                <input type='radio' name='client_type' value='dropshipper' checked={clientType === 'dropshipper'} onChange={(e) => setClientType(e.target.value)} className='h-4 w-4' />
+                <input
+                  type='radio'
+                  name='client_type'
+                  value='dropshipper'
+                  checked={clientType === 'dropshipper'}
+                  onChange={(e) => {
+                    setClientType(e.target.value)
+                    setPortalFeatures((pf) => pf.filter((f) => f !== 'inventory'))
+                  }}
+                  className='h-4 w-4'
+                />
                 <span className='text-sm'>Dropshipper</span>
               </label>
               <label className='flex items-center gap-2 cursor-pointer'>
-                <input type='radio' name='client_type' value='fulfilment' checked={clientType === 'fulfilment'} onChange={(e) => setClientType(e.target.value)} className='h-4 w-4' />
+                <input
+                  type='radio'
+                  name='client_type'
+                  value='fulfilment'
+                  checked={clientType === 'fulfilment'}
+                  onChange={(e) => {
+                    setClientType(e.target.value)
+                    setPortalFeatures((pf) => pf.filter((f) => f !== 'products'))
+                  }}
+                  className='h-4 w-4'
+                />
                 <span className='text-sm'>Fulfilment</span>
               </label>
             </div>
@@ -298,10 +318,24 @@ export function CreateClientDialog({ open, onOpenChange, onSuccess }: CreateClie
                 <Label htmlFor='pf-orders'>Orders</Label>
                 <Switch id='pf-orders' checked={portalFeatures.includes('orders')} onCheckedChange={() => handleFeatureToggle('orders')} />
               </div>
-              <div className='flex items-center justify-between'>
-                <Label htmlFor='pf-inventory'>Inventory</Label>
-                <Switch id='pf-inventory' checked={portalFeatures.includes('inventory')} onCheckedChange={() => handleFeatureToggle('inventory')} />
-              </div>
+              {clientType === 'fulfilment' && (
+                <div className='flex items-center justify-between'>
+                  <div>
+                    <Label htmlFor='pf-inventory'>Inventory</Label>
+                    <p className='text-xs text-muted-foreground'>Show client's own stock & products</p>
+                  </div>
+                  <Switch id='pf-inventory' checked={portalFeatures.includes('inventory')} onCheckedChange={() => handleFeatureToggle('inventory')} />
+                </div>
+              )}
+              {clientType === 'dropshipper' && (
+                <div className='flex items-center justify-between'>
+                  <div>
+                    <Label htmlFor='pf-products'>Products Catalog</Label>
+                    <p className='text-xs text-muted-foreground'>Show all published products to this dropshipper</p>
+                  </div>
+                  <Switch id='pf-products' checked={portalFeatures.includes('products')} onCheckedChange={() => handleFeatureToggle('products')} />
+                </div>
+              )}
               <div className='flex items-center justify-between'>
                 <Label htmlFor='pf-revenue'>Revenue</Label>
                 <Switch id='pf-revenue' checked={portalFeatures.includes('revenue')} onCheckedChange={() => handleFeatureToggle('revenue')} />

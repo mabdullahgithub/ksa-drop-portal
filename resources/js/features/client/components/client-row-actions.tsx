@@ -1,7 +1,8 @@
 import { type Row } from '@tanstack/react-table'
 import { DotsHorizontalIcon } from '@radix-ui/react-icons'
-import { Eye, Pencil, Trash2, UserCheck, UserX, Ban } from 'lucide-react'
+import { Eye, Pencil, Trash2, UserCheck, UserX, Ban, MonitorSmartphone } from 'lucide-react'
 import { toast } from 'sonner'
+import { router } from '@inertiajs/react'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -27,6 +28,14 @@ export function ClientRowActions({ row }: ClientRowActionsProps) {
   const { setOpen, setCurrentRow } = useClientContext()
   const { can } = usePermissions()
   const { updateStatus } = useClientMutations()
+
+  const handleImpersonate = () => {
+    if (!client.user_id) {
+      toast.error('This client has no associated user account.')
+      return
+    }
+    router.post(route('impersonate.start', { client: client.id }))
+  }
 
   const handleStatusUpdate = async (status: string) => {
     const success = await updateStatus(client.id, status)
@@ -55,6 +64,16 @@ export function ClientRowActions({ row }: ClientRowActionsProps) {
           <Eye className='mr-2 h-4 w-4' />
           View Details
         </DropdownMenuItem>
+
+        {can('impersonate client') && client.status === 'active' && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={handleImpersonate} className='text-amber-600 focus:text-amber-600 focus:bg-amber-50 dark:text-amber-400 dark:focus:text-amber-400 dark:focus:bg-amber-950/40'>
+              <MonitorSmartphone className='mr-2 h-4 w-4' />
+              View Client Portal
+            </DropdownMenuItem>
+          </>
+        )}
 
         {can('edit client') && (
           <>

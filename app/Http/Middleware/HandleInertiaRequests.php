@@ -31,8 +31,24 @@ class HandleInertiaRequests extends Middleware
     {
         $user = $request->user();
 
+        // Resolve the client: impersonated client takes priority over the logged-in user's own client
         $client = null;
-        if ($user && $user->hasRole('client')) {
+        $impersonating = null;
+
+        if ($user && session()->has('impersonate.admin_id')) {
+            try {
+                $impersonatedClient = \App\Models\Client::find(session('impersonate.client_id'));
+                if ($impersonatedClient) {
+                    $client = $impersonatedClient;
+                    $impersonating = [
+                        'client_id' => $client->id,
+                        'client_name' => $client->company_name,
+                    ];
+                }
+            } catch (\Exception $e) {
+                $client = null;
+            }
+        } elseif ($user && $user->hasRole('client')) {
             try {
                 $client = $user->client;
             } catch (\Exception $e) {
@@ -47,6 +63,7 @@ class HandleInertiaRequests extends Middleware
                 'permissions' => $user ? $user->getAllPermissions()->pluck('name') : [],
                 'roles' => $user ? $user->getRoleNames() : [],
                 'portal_features' => $client?->portal_features,
+                'impersonating' => $impersonating,
                 'client' => $client ? [
                     'id' => $client->id,
                     'company_name' => $client->company_name,
@@ -62,6 +79,10 @@ class HandleInertiaRequests extends Middleware
                     'tax_id' => $client->tax_id,
                     'commercial_registration' => $client->commercial_registration,
                     'type_label' => $client->type_label,
+                    'is_dropshipper' => $client->is_dropshipper,
+                    'is_fulfilment' => $client->is_fulfilment,
+                    'status' => $client->status,
+                    'charges' => $client->charges,
                 ] : null,
             ],
             'preferences' => $request->user()?->preference ? [

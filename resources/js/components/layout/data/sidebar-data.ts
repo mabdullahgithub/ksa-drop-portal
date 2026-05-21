@@ -119,6 +119,12 @@ export const sidebarData: SidebarData = {
           role: 'client',
         },
         {
+          title: 'Products',
+          url: '/portal/products',
+          icon: Package,
+          role: 'client',
+        },
+        {
           title: 'Revenue',
           url: '/portal/revenue',
           icon: TrendingUp,

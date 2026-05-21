@@ -23,6 +23,7 @@ class SettingsUpdatedMail extends Mailable implements ShouldQueue
     public function envelope(): Envelope
     {
         return new Envelope(
+            to: [$this->user->email],
             subject: ucfirst($this->settingType) . ' Settings Updated',
         );
     }

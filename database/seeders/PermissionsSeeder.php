@@ -26,6 +26,7 @@ class PermissionsSeeder extends Seeder
             'create client',
             'edit client',
             'delete client',
+            'impersonate client',
 
             // Inventory
             'view inventory',
@@ -98,6 +99,7 @@ class PermissionsSeeder extends Seeder
             'create client',
             'edit client',
             'delete client',
+            'impersonate client',
             'view inventory',
             'create inventory',
             'edit inventory',

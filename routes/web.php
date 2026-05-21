@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\ClientController;
 use App\Http\Controllers\Api\OrderController;
 use App\Http\Controllers\Api\ProductController;
+use App\Http\Controllers\ImpersonateController;
 use App\Http\Controllers\PortalController;
 use App\Http\Controllers\EmailSettingsController;
 use App\Http\Controllers\NotificationController;
@@ -141,6 +142,15 @@ Route::middleware(['auth', 'verified'])->group(function () {
     });
 });
 
+// Impersonate
+Route::middleware(['auth', 'verified'])->group(function () {
+    Route::post('/impersonate/leave', [ImpersonateController::class, 'leave'])->name('impersonate.leave');
+    Route::post('/impersonate/{client}', [ImpersonateController::class, 'impersonate'])->name('impersonate.start');
+});
+
+// Client Portal - account restricted page (no role:client check so suspended clients can see it)
+Route::middleware(['auth', 'verified'])->get('/portal/suspended', fn () => Inertia::render('Portal/Suspended'))->name('portal.suspended');
+
 // Client Portal
 Route::prefix('portal')->middleware(['auth', 'verified', 'role:client'])->group(function () {
     Route::get('/', fn () => Inertia::render('Portal/Dashboard'))->name('portal.dashboard');
@@ -157,6 +167,8 @@ Route::prefix('portal')->middleware(['auth', 'verified', 'role:client'])->group(
     Route::get('/api/orders', [PortalController::class, 'orders'])->name('portal.api.orders');
     Route::get('/api/inventory', [PortalController::class, 'inventory'])->name('portal.api.inventory');
     Route::get('/api/products', [PortalController::class, 'products'])->name('portal.api.products');
+    Route::get('/api/products/filter-options', [PortalController::class, 'productFilterOptions'])->name('portal.api.products.filter-options');
+    Route::get('/api/products/{product}', [PortalController::class, 'productShow'])->name('portal.api.products.show');
     Route::get('/api/revenue', [PortalController::class, 'revenue'])->name('portal.api.revenue');
     Route::get('/api/finance', [PortalController::class, 'finance'])->name('portal.api.finance');
     Route::post('/settings/company-profile', [PortalController::class, 'updateCompanyProfile'])->name('portal.settings.company-profile.update');
