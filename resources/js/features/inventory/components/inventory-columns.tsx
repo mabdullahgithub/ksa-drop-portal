@@ -6,16 +6,16 @@ import { type Product } from '@/types/product'
 import { InventoryRowActions } from './inventory-row-actions'
 import { format } from 'date-fns'
 
-const statusVariant: Record<string, 'default' | 'secondary' | 'destructive' | 'outline'> = {
-  active: 'default',
-  draft: 'secondary',
-  archived: 'outline',
+const statusColorMap: Record<string, string> = {
+  active: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
+  draft: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400',
+  archived: 'bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400',
 }
 
-const stockBadge = (qty: number) => {
-  if (qty === 0) return 'destructive'
-  if (qty <= 5) return 'secondary'
-  return 'outline'
+const stockColorMap = (qty: number) => {
+  if (qty === 0) return 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
+  if (qty <= 5) return 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400'
+  return 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
 }
 
 export const inventoryColumns: ColumnDef<Product>[] = [
@@ -116,7 +116,7 @@ export const inventoryColumns: ColumnDef<Product>[] = [
     cell: ({ row }) => {
       const qty = row.getValue('variant_inventory_qty') as number
       return (
-        <Badge variant={stockBadge(qty)} className='text-[10px] py-0 h-4 px-1.5 font-medium tabular-nums'>
+        <Badge variant='secondary' className={`text-[10px] py-0 h-4 px-1.5 font-medium tabular-nums ${stockColorMap(qty)}`}>
           {qty}
         </Badge>
       )
@@ -130,7 +130,7 @@ export const inventoryColumns: ColumnDef<Product>[] = [
     cell: ({ row }) => {
       const status = row.getValue('status') as string
       return (
-        <Badge variant={statusVariant[status]} className='capitalize text-[10px] py-0 h-4 px-1.5'>
+        <Badge variant='secondary' className={`capitalize text-[10px] py-0 h-4 px-1.5 ${statusColorMap[status] || ''}`}>
           {status}
         </Badge>
       )

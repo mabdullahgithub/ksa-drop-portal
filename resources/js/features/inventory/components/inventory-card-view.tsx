@@ -8,16 +8,16 @@ import { InventoryCardsSkeleton } from './inventory-skeleton'
 import { InventoryPagination } from './inventory-pagination'
 import { ProductActions } from './inventory-row-actions'
 
-const statusVariant: Record<string, 'default' | 'secondary' | 'destructive' | 'outline'> = {
-  active: 'default',
-  draft: 'secondary',
-  archived: 'outline',
+const statusColorMap: Record<string, string> = {
+  active: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
+  draft: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400',
+  archived: 'bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400',
 }
 
-const stockBadge = (qty: number) => {
-  if (qty === 0) return 'destructive'
-  if (qty <= 5) return 'secondary'
-  return 'outline'
+const stockColorMap = (qty: number) => {
+  if (qty === 0) return 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
+  if (qty <= 5) return 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400'
+  return 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
 }
 
 interface InventoryCardViewProps {
@@ -73,7 +73,7 @@ export function InventoryCardView({ data, meta, loading, onPageChange, onPageSiz
                 )}
                 {/* Status badge overlay */}
                 <div className='absolute top-2 left-2'>
-                  <Badge variant={statusVariant[product.status]} className='text-[9px] py-0 h-4 px-1.5 capitalize shadow-sm'>
+                  <Badge variant='secondary' className={`text-[9px] py-0 h-4 px-1.5 capitalize shadow-sm ${statusColorMap[product.status] || ''}`}>
                     {product.status}
                   </Badge>
                 </div>
@@ -120,7 +120,7 @@ export function InventoryCardView({ data, meta, loading, onPageChange, onPageSiz
                       </span>
                     )}
                   </div>
-                  <Badge variant={stockBadge(product.variant_inventory_qty)} className='text-[9px] py-0 h-4 px-1.5 font-medium tabular-nums shrink-0'>
+                  <Badge variant='secondary' className={`text-[9px] py-0 h-4 px-1.5 font-medium tabular-nums shrink-0 ${stockColorMap(product.variant_inventory_qty)}`}>
                     {product.variant_inventory_qty} in stock
                   </Badge>
                 </div>

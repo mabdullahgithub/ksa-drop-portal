@@ -10,16 +10,16 @@ import { ChevronLeft, ChevronRight, Package, Tag, Globe, BarChart3, Info } from 
 import { type Product } from '@/types/product'
 import { useProduct } from '@/hooks/useProducts'
 
-const statusVariant: Record<string, 'default' | 'secondary' | 'destructive' | 'outline'> = {
-  active: 'default',
-  draft: 'secondary',
-  archived: 'outline',
+const statusColorMap: Record<string, string> = {
+  active: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
+  draft: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400',
+  archived: 'bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400',
 }
 
-const stockBadge = (qty: number) => {
-  if (qty === 0) return 'destructive'
-  if (qty <= 5) return 'secondary'
-  return 'outline'
+const stockColorMap = (qty: number) => {
+  if (qty === 0) return 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
+  if (qty <= 5) return 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400'
+  return 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
 }
 
 interface ProductDetailsDialogProps {
@@ -122,7 +122,7 @@ export function ProductDetailsDialog({ product, open, onOpenChange }: ProductDet
             <div className='min-w-0'>
               <DialogTitle className='text-base font-semibold leading-tight line-clamp-2'>{product.title}</DialogTitle>
               <div className='flex items-center gap-2 mt-1.5 flex-wrap'>
-                <Badge variant={statusVariant[product.status]} className='capitalize text-[10px] h-4 px-1.5'>
+                <Badge variant='secondary' className={`capitalize text-[10px] h-4 px-1.5 ${statusColorMap[product.status] || ''}`}>
                   {product.status}
                 </Badge>
                 {product.published ? (
@@ -132,7 +132,7 @@ export function ProductDetailsDialog({ product, open, onOpenChange }: ProductDet
                 ) : (
                   <Badge variant='outline' className='text-[10px] h-4 px-1.5'>Draft</Badge>
                 )}
-                <Badge variant={stockBadge(product.variant_inventory_qty)} className='text-[10px] h-4 px-1.5 font-mono'>
+                <Badge variant='secondary' className={`text-[10px] h-4 px-1.5 font-mono ${stockColorMap(product.variant_inventory_qty)}`}>
                   {product.variant_inventory_qty} in stock
                 </Badge>
               </div>
@@ -223,7 +223,7 @@ export function ProductDetailsDialog({ product, open, onOpenChange }: ProductDet
                 <p className='text-[10px] text-muted-foreground font-medium uppercase tracking-wide'>Inventory</p>
                 <div className='rounded-lg border border-muted/50 p-3 space-y-0 divide-y divide-muted/30'>
                   <InfoRow label='Quantity' value={
-                    <Badge variant={stockBadge(product.variant_inventory_qty)} className='text-[10px] h-4 px-1.5 font-mono'>
+                    <Badge variant='secondary' className={`text-[10px] h-4 px-1.5 font-mono ${stockColorMap(product.variant_inventory_qty)}`}>
                       {product.variant_inventory_qty}
                     </Badge>
                   } />

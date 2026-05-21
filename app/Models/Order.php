@@ -11,6 +11,7 @@ class Order extends Model
     use HasFactory, SoftDeletes;
 
     protected $fillable = [
+        'client_id',
         'order_number',
         'shopify_order_id',
         'customer_name',
@@ -93,6 +94,14 @@ class Order extends Model
     public function items()
     {
         return $this->hasMany(OrderItem::class);
+    }
+
+    /**
+     * Get the client that owns the order.
+     */
+    public function client()
+    {
+        return $this->belongsTo(Client::class);
     }
 
     /**

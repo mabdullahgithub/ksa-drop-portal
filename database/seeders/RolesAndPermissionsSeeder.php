@@ -134,6 +134,10 @@ class RolesAndPermissionsSeeder extends Seeder
             'view settings',
         ]);
 
+        // Client - Portal access only, section access controlled via portal_features column
+        $clientRole = Role::firstOrCreate(['name' => 'client']);
+        $clientRole->syncPermissions([]);
+
         // Create admin user
         $adminUser = User::firstOrCreate(
             ['email' => 'admin@ksadrop.com'],

@@ -44,11 +44,11 @@ const orders = [
   },
 ]
 
-const statusVariants = {
-  completed: 'default',
-  pending: 'secondary',
-  processing: 'outline',
-} as const
+const statusColorMap: Record<string, string> = {
+  completed: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
+  pending: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400',
+  processing: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400',
+}
 
 export function RecentOrders() {
   return (
@@ -70,7 +70,7 @@ export function RecentOrders() {
               <p className='text-sm text-muted-foreground'>{order.id}</p>
             </div>
             <div className='flex items-center gap-3'>
-              <Badge variant={statusVariants[order.status]}>
+              <Badge variant='secondary' className={statusColorMap[order.status] || ''}>
                 {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
               </Badge>
               <div className='font-medium'>{order.amount}</div>

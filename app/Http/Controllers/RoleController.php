@@ -18,6 +18,7 @@ class RoleController extends Controller
                 'permissions' => $role->permissions->pluck('name'),
                 'users_count' => $role->users()->count(),
                 'is_super_admin' => $role->name === 'superadmin',
+                'is_protected' => in_array($role->name, ['superadmin', 'client']),
                 'created_at' => $role->created_at,
                 'updated_at' => $role->updated_at,
             ];
@@ -50,8 +51,8 @@ class RoleController extends Controller
 
     public function update(Request $request, Role $role)
     {
-        if ($role->name === 'superadmin') {
-            return back()->withErrors(['name' => 'Super admin role cannot be modified.']);
+        if (in_array($role->name, ['superadmin', 'client'])) {
+            return back()->withErrors(['name' => 'This role cannot be modified.']);
         }
 
         $validated = $request->validate([
@@ -68,8 +69,8 @@ class RoleController extends Controller
 
     public function destroy(Role $role)
     {
-        if ($role->name === 'superadmin') {
-            return back()->withErrors(['name' => 'Super admin role cannot be deleted.']);
+        if (in_array($role->name, ['superadmin', 'client'])) {
+            return back()->withErrors(['name' => 'This role cannot be deleted.']);
         }
 
         $role->delete();

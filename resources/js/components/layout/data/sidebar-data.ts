@@ -15,6 +15,8 @@ import {
   Mail,
   PackageSearch,
   UserCircle,
+  TrendingUp,
+  Wallet,
 } from 'lucide-react'
 import { type SidebarData } from '../types'
 
@@ -42,7 +44,7 @@ export const sidebarData: SidebarData = {
       items: [
         {
           title: 'Dashboard',
-          url: '/',
+          url: '/dashboard',
           icon: LayoutDashboard,
           permission: 'view dashboard',
         },
@@ -65,7 +67,7 @@ export const sidebarData: SidebarData = {
           permission: 'view orders',
         },
         {
-          title: 'Apps',
+          title: 'Connectors',
           url: '/apps',
           icon: Package,
           permission: 'view apps',
@@ -96,16 +98,65 @@ export const sidebarData: SidebarData = {
       ],
     },
     {
+      title: 'My Portal',
+      items: [
+        {
+          title: 'Dashboard',
+          url: '/portal',
+          icon: LayoutDashboard,
+          role: 'client',
+        },
+        {
+          title: 'My Orders',
+          url: '/portal/orders',
+          icon: ShoppingCart,
+          role: 'client',
+        },
+        {
+          title: 'My Inventory',
+          url: '/portal/inventory',
+          icon: PackageSearch,
+          role: 'client',
+        },
+        {
+          title: 'Revenue',
+          url: '/portal/revenue',
+          icon: TrendingUp,
+          role: 'client',
+        },
+        {
+          title: 'Finance',
+          url: '/portal/finance',
+          icon: Wallet,
+          role: 'client',
+        },
+        {
+          title: 'Notifications',
+          url: '/notifications',
+          icon: Bell,
+          role: 'client',
+        },
+        {
+          title: 'Settings',
+          url: '/portal/settings',
+          icon: Settings,
+          role: 'client',
+        },
+      ],
+    },
+    {
       title: 'Other',
       items: [
         {
           title: 'Notifications',
           url: '/notifications',
           icon: Bell,
+          permission: 'view dashboard',
         },
         {
           title: 'Settings',
           icon: Settings,
+          permission: 'view settings',
           items: [
             {
               title: 'Profile',

@@ -96,7 +96,7 @@ export function RolesTable({ data }: RolesTableProps) {
                           View Permissions
                         </DropdownMenuItem>
                       )}
-                      {!role.is_super_admin && (
+                      {!role.is_protected && (
                         <>
                           {can('edit roles') && (
                             <DropdownMenuItem onClick={() => handleEdit(role)}>

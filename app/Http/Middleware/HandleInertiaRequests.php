@@ -31,12 +31,38 @@ class HandleInertiaRequests extends Middleware
     {
         $user = $request->user();
 
+        $client = null;
+        if ($user && $user->hasRole('client')) {
+            try {
+                $client = $user->client;
+            } catch (\Exception $e) {
+                $client = null;
+            }
+        }
+
         return [
             ...parent::share($request),
             'auth' => [
                 'user' => $user,
                 'permissions' => $user ? $user->getAllPermissions()->pluck('name') : [],
                 'roles' => $user ? $user->getRoleNames() : [],
+                'portal_features' => $client?->portal_features,
+                'client' => $client ? [
+                    'id' => $client->id,
+                    'company_name' => $client->company_name,
+                    'logo' => $client->logo,
+                    'client_id' => $client->client_id,
+                    'contact_person' => $client->contact_person,
+                    'phone' => $client->phone,
+                    'secondary_phone' => $client->secondary_phone,
+                    'address' => $client->address,
+                    'city' => $client->city,
+                    'country' => $client->country,
+                    'postal_code' => $client->postal_code,
+                    'tax_id' => $client->tax_id,
+                    'commercial_registration' => $client->commercial_registration,
+                    'type_label' => $client->type_label,
+                ] : null,
             ],
             'preferences' => $request->user()?->preference ? [
                 'toast_position' => $request->user()->preference->toast_position ?? 'bottom-right',

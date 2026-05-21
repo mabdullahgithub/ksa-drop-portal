@@ -41,4 +41,12 @@ class User extends Authenticatable
     {
         return $this->hasOne(UserPreference::class);
     }
+
+    /**
+     * Get the client profile associated with the user.
+     */
+    public function client(): HasOne
+    {
+        return $this->hasOne(Client::class);
+    }
 }

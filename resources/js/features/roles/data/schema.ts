@@ -6,6 +6,7 @@ export const roleSchema = z.object({
   permissions: z.array(z.string()),
   users_count: z.number(),
   is_super_admin: z.boolean(),
+  is_protected: z.boolean(),
   created_at: z.string(),
   updated_at: z.string(),
 })

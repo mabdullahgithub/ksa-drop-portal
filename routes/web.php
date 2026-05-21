@@ -1,7 +1,9 @@
 <?php
 
+use App\Http\Controllers\Api\ClientController;
 use App\Http\Controllers\Api\OrderController;
 use App\Http\Controllers\Api\ProductController;
+use App\Http\Controllers\PortalController;
 use App\Http\Controllers\EmailSettingsController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\PermissionController;
@@ -14,6 +16,9 @@ use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
 Route::get('/', function () {
+    if (auth()->check() && auth()->user()->hasRole('client')) {
+        return redirect()->route('portal.dashboard');
+    }
     return redirect()->route('dashboard');
 });
 
@@ -50,6 +55,26 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::post('/{order}/fulfillment-status', [OrderController::class, 'updateFulfillmentStatus'])->middleware('permission:edit orders')->name('api.orders.fulfillment-status');
         Route::post('/{order}/financial-status', [OrderController::class, 'updateFinancialStatus'])->middleware('permission:edit orders')->name('api.orders.financial-status');
         Route::post('/bulk-update', [OrderController::class, 'bulkUpdate'])->middleware('permission:edit orders')->name('api.orders.bulk-update');
+    });
+
+    // Clients API
+    Route::prefix('api/clients')->group(function () {
+        Route::get('/', [ClientController::class, 'index'])->middleware('permission:view client')->name('api.clients.index');
+        Route::get('/statistics', [ClientController::class, 'statistics'])->middleware('permission:view client')->name('api.clients.statistics');
+        Route::get('/filter-options', [ClientController::class, 'filterOptions'])->middleware('permission:view client')->name('api.clients.filter-options');
+        Route::get('/export', [ClientController::class, 'export'])->middleware('permission:view client')->name('api.clients.export');
+        Route::post('/', [ClientController::class, 'store'])->middleware('permission:create client')->name('api.clients.store');
+        Route::get('/{client}', [ClientController::class, 'show'])->middleware('permission:view client')->name('api.clients.show');
+        Route::put('/{client}', [ClientController::class, 'update'])->middleware('permission:edit client')->name('api.clients.update');
+        Route::patch('/{client}/status', [ClientController::class, 'updateStatus'])->middleware('permission:edit client')->name('api.clients.update-status');
+        Route::post('/bulk-update', [ClientController::class, 'bulkUpdate'])->middleware('permission:edit client')->name('api.clients.bulk-update');
+        Route::delete('/{client}', [ClientController::class, 'destroy'])->middleware('permission:delete client')->name('api.clients.destroy');
+        // Client Products (Inventory)
+        Route::get('/{client}/products', [ClientController::class, 'products'])->middleware('permission:view client')->name('api.clients.products.index');
+        Route::post('/{client}/products', [ClientController::class, 'storeProduct'])->middleware('permission:edit client')->name('api.clients.products.store');
+        Route::put('/{client}/products/{product}', [ClientController::class, 'updateProduct'])->middleware('permission:edit client')->name('api.clients.products.update');
+        Route::patch('/{client}/products/{product}/verify', [ClientController::class, 'verifyProduct'])->middleware('permission:edit client')->name('api.clients.products.verify');
+        Route::delete('/{client}/products/{product}', [ClientController::class, 'destroyProduct'])->middleware('permission:delete client')->name('api.clients.products.destroy');
     });
 
     // Inventory / Products API
@@ -114,6 +139,27 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('/email-logs', [EmailSettingsController::class, 'logs'])->name('admin.email-logs');
         Route::get('/email-statistics', [EmailSettingsController::class, 'statistics'])->name('admin.email-statistics');
     });
+});
+
+// Client Portal
+Route::prefix('portal')->middleware(['auth', 'verified', 'role:client'])->group(function () {
+    Route::get('/', fn () => Inertia::render('Portal/Dashboard'))->name('portal.dashboard');
+    Route::get('/orders', fn () => Inertia::render('Portal/Orders'))->name('portal.orders');
+    Route::get('/inventory', fn () => Inertia::render('Portal/Inventory'))->name('portal.inventory');
+    Route::get('/revenue', fn () => Inertia::render('Portal/Revenue'))->name('portal.revenue');
+    Route::get('/finance', fn () => Inertia::render('Portal/Finance'))->name('portal.finance');
+    Route::get('/settings', fn () => Inertia::render('Portal/Settings/CompanyProfile'))->name('portal.settings');
+    Route::get('/settings/security', fn () => Inertia::render('Portal/Settings/Security'))->name('portal.settings.security');
+
+    // Portal API
+    Route::get('/api/dashboard', [PortalController::class, 'dashboard'])->name('portal.api.dashboard');
+    Route::get('/api/orders', [PortalController::class, 'orders'])->name('portal.api.orders');
+    Route::get('/api/inventory', [PortalController::class, 'inventory'])->name('portal.api.inventory');
+    Route::get('/api/revenue', [PortalController::class, 'revenue'])->name('portal.api.revenue');
+    Route::get('/api/finance', [PortalController::class, 'finance'])->name('portal.api.finance');
+    Route::post('/settings/company-profile', [PortalController::class, 'updateCompanyProfile'])->name('portal.settings.company-profile.update');
+    Route::post('/settings/logo', [PortalController::class, 'updateLogo'])->name('portal.settings.logo.update');
+    Route::delete('/settings/logo', [PortalController::class, 'removeLogo'])->name('portal.settings.logo.remove');
 });
 
 // Error pages
