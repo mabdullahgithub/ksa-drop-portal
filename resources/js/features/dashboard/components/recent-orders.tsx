@@ -70,7 +70,7 @@ export function RecentOrders() {
               <p className='text-sm text-muted-foreground'>{order.id}</p>
             </div>
             <div className='flex items-center gap-3'>
-              <Badge variant='secondary' className={statusColorMap[order.status] || ''}>
+              <Badge variant='outline' className={`text-xs ${statusColorMap[order.status] || ''}`}>
                 {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
               </Badge>
               <div className='font-medium'>{order.amount}</div>

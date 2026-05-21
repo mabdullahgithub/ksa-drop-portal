@@ -57,12 +57,12 @@ const columns: ColumnDef<any>[] = [
     cell: ({ row }) => {
       const status = row.getValue('verification_status') as string
       return status === 'verified' ? (
-        <Badge variant='secondary' className='bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 text-xs'>
+        <Badge variant='outline' className='bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 text-xs'>
           <CheckCircle className='mr-1 h-3 w-3' />
           Verified
         </Badge>
       ) : (
-        <Badge variant='secondary' className='bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400 text-xs'>
+        <Badge variant='outline' className='bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400 text-xs'>
           <Clock className='mr-1 h-3 w-3' />
           Pending
         </Badge>

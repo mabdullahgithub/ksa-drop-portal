@@ -73,7 +73,7 @@ export function InventoryCardView({ data, meta, loading, onPageChange, onPageSiz
                 )}
                 {/* Status badge overlay */}
                 <div className='absolute top-2 left-2'>
-                  <Badge variant='secondary' className={`text-[9px] py-0 h-4 px-1.5 capitalize shadow-sm ${statusColorMap[product.status] || ''}`}>
+                  <Badge variant='outline' className={`text-[9px] py-0 h-4 px-1.5 capitalize shadow-sm ${statusColorMap[product.status] || ''}`}>
                     {product.status}
                   </Badge>
                 </div>
@@ -120,7 +120,7 @@ export function InventoryCardView({ data, meta, loading, onPageChange, onPageSiz
                       </span>
                     )}
                   </div>
-                  <Badge variant='secondary' className={`text-[9px] py-0 h-4 px-1.5 font-medium tabular-nums shrink-0 ${stockColorMap(product.variant_inventory_qty)}`}>
+                  <Badge variant='outline' className={`text-[9px] py-0 h-4 px-1.5 font-medium tabular-nums shrink-0 ${stockColorMap(product.variant_inventory_qty)}`}>
                     {product.variant_inventory_qty} in stock
                   </Badge>
                 </div>

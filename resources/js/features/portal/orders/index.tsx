@@ -39,7 +39,7 @@ const columns: ColumnDef<any>[] = [
         unfulfilled: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400',
         cancelled: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400',
       }
-      return <Badge variant='secondary' className={`text-xs capitalize ${colorMap[status] || ''}`}>{status}</Badge>
+      return <Badge variant='outline' className={`text-xs capitalize ${colorMap[status] || ''}`}>{status}</Badge>
     },
   },
   {
@@ -53,7 +53,7 @@ const columns: ColumnDef<any>[] = [
         refunded: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400',
         partially_refunded: 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400',
       }
-      return <Badge variant='secondary' className={`text-xs capitalize ${colorMap[status] || ''}`}>{status}</Badge>
+      return <Badge variant='outline' className={`text-xs capitalize ${colorMap[status] || ''}`}>{status}</Badge>
     },
   },
   {

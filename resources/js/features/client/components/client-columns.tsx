@@ -97,7 +97,7 @@ export const clientColumns: ColumnDef<Client>[] = [
         suspended: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400',
       }
       return (
-        <Badge variant='secondary' className={`text-xs capitalize ${colorMap[status]}`}>
+        <Badge variant='outline' className={`text-xs capitalize ${colorMap[status]}`}>
           {status}
         </Badge>
       )

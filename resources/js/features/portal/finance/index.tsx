@@ -175,7 +175,7 @@ export function PortalFinance() {
                     {data.status_breakdown.map((item: any) => (
                       <div key={item.financial_status} className='flex items-center justify-between rounded-lg border p-3'>
                         <div>
-                          <Badge className={statusColor(item.financial_status)} variant='secondary'>
+                          <Badge className={`text-xs ${statusColor(item.financial_status)}`} variant='outline'>
                             {item.financial_status.replace('_', ' ')}
                           </Badge>
                           <p className='mt-1 text-xs text-muted-foreground'>{item.count} orders</p>

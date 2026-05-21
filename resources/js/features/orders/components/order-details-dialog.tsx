@@ -34,13 +34,13 @@ export function OrderDetailsDialog({ order, open, onOpenChange }: OrderDetailsDi
           <div className='flex flex-wrap gap-4'>
             <div>
               <div className='text-sm font-medium text-muted-foreground mb-1'>Fulfillment</div>
-              <Badge variant='secondary' className={`capitalize ${statusColorMap[order.status_color] || statusColorMap.default}`}>
+              <Badge variant='outline' className={`text-xs capitalize ${statusColorMap[order.status_color] || statusColorMap.default}`}>
                 {order.fulfillment_status}
               </Badge>
             </div>
             <div>
               <div className='text-sm font-medium text-muted-foreground mb-1'>Payment</div>
-              <Badge variant='secondary' className={`capitalize ${statusColorMap[order.financial_status_color] || statusColorMap.default}`}>
+              <Badge variant='outline' className={`capitalize ${statusColorMap[order.financial_status_color] || statusColorMap.default}`}>
                 {order.financial_status}
               </Badge>
             </div>

@@ -39,7 +39,7 @@ export function ClientDetailsDialog({ client, open, onOpenChange }: ClientDetail
           <div className='flex flex-wrap gap-4'>
             <div>
               <div className='text-sm font-medium text-muted-foreground mb-1'>Status</div>
-              <Badge variant='secondary' className={`capitalize ${statusColorMap[client.status]}`}>
+              <Badge variant='outline' className={`text-xs capitalize ${statusColorMap[client.status]}`}>
                 {client.status}
               </Badge>
             </div>

@@ -80,7 +80,7 @@ export function FinanceTransactionsTable({ transactions, loading, onPageChange }
                   {tx.currency} {parseFloat(tx.total).toLocaleString()}
                 </td>
                 <td className='py-2.5 pr-4'>
-                  <Badge className={statusVariant(tx.financial_status)} variant='secondary'>
+                  <Badge className={`text-xs ${statusVariant(tx.financial_status)}`} variant='outline'>
                     {tx.financial_status.replace('_', ' ')}
                   </Badge>
                 </td>

@@ -122,7 +122,7 @@ export function ProductDetailsDialog({ product, open, onOpenChange }: ProductDet
             <div className='min-w-0'>
               <DialogTitle className='text-base font-semibold leading-tight line-clamp-2'>{product.title}</DialogTitle>
               <div className='flex items-center gap-2 mt-1.5 flex-wrap'>
-                <Badge variant='secondary' className={`capitalize text-[10px] h-4 px-1.5 ${statusColorMap[product.status] || ''}`}>
+                <Badge variant='outline' className={`capitalize text-[10px] h-4 px-1.5 ${statusColorMap[product.status] || ''}`}>
                   {product.status}
                 </Badge>
                 {product.published ? (
@@ -132,7 +132,7 @@ export function ProductDetailsDialog({ product, open, onOpenChange }: ProductDet
                 ) : (
                   <Badge variant='outline' className='text-[10px] h-4 px-1.5'>Draft</Badge>
                 )}
-                <Badge variant='secondary' className={`text-[10px] h-4 px-1.5 font-mono ${stockColorMap(product.variant_inventory_qty)}`}>
+                <Badge variant='outline' className={`text-[10px] h-4 px-1.5 font-mono ${stockColorMap(product.variant_inventory_qty)}`}>
                   {product.variant_inventory_qty} in stock
                 </Badge>
               </div>
@@ -223,7 +223,7 @@ export function ProductDetailsDialog({ product, open, onOpenChange }: ProductDet
                 <p className='text-[10px] text-muted-foreground font-medium uppercase tracking-wide'>Inventory</p>
                 <div className='rounded-lg border border-muted/50 p-3 space-y-0 divide-y divide-muted/30'>
                   <InfoRow label='Quantity' value={
-                    <Badge variant='secondary' className={`text-[10px] h-4 px-1.5 font-mono ${stockColorMap(product.variant_inventory_qty)}`}>
+                    <Badge variant='outline' className={`text-[10px] h-4 px-1.5 font-mono ${stockColorMap(product.variant_inventory_qty)}`}>
                       {product.variant_inventory_qty}
                     </Badge>
                   } />

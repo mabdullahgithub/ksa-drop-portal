@@ -42,7 +42,7 @@ export const inventoryColumns: ColumnDef<Product>[] = [
   },
   {
     id: 'image',
-    header: () => <span className='text-xs font-medium'>Image</span>,
+    header: () => <span className='text-sm font-medium'>Image</span>,
     cell: ({ row }) => {
       const img = row.original.primary_image
       return img ? (
@@ -66,9 +66,9 @@ export const inventoryColumns: ColumnDef<Product>[] = [
       const product = row.original
       return (
         <div className='flex flex-col gap-0 min-w-0'>
-          <span className='truncate font-medium text-xs'>{product.title}</span>
+          <span className='truncate font-medium text-sm'>{product.title}</span>
           {product.variant_sku && (
-            <span className='text-[10px] text-muted-foreground truncate'>SKU: {product.variant_sku}</span>
+            <span className='text-xs text-muted-foreground truncate'>SKU: {product.variant_sku}</span>
           )}
         </div>
       )
@@ -81,7 +81,7 @@ export const inventoryColumns: ColumnDef<Product>[] = [
     header: ({ column }) => <DataTableColumnHeader column={column} title='Vendor' />,
     meta: { className: 'ps-1', tdClassName: 'ps-4' },
     cell: ({ row }) => (
-      <span className='text-[11px] text-muted-foreground truncate max-w-[120px] block'>
+      <span className='text-sm text-muted-foreground truncate max-w-[120px] block'>
         {row.getValue('vendor') || '-'}
       </span>
     ),
@@ -96,11 +96,11 @@ export const inventoryColumns: ColumnDef<Product>[] = [
       const compare = row.original.variant_compare_at_price
       return (
         <div className='flex flex-col gap-0'>
-          <span className='font-semibold text-xs'>
+          <span className='font-semibold text-sm'>
             {price ? `SAR ${parseFloat(price).toFixed(2)}` : '-'}
           </span>
           {compare && parseFloat(compare) > 0 && parseFloat(compare) !== parseFloat(price || '0') && (
-            <span className='text-[10px] text-muted-foreground line-through'>
+            <span className='text-xs text-muted-foreground line-through'>
               SAR {parseFloat(compare).toFixed(2)}
             </span>
           )}
@@ -116,7 +116,7 @@ export const inventoryColumns: ColumnDef<Product>[] = [
     cell: ({ row }) => {
       const qty = row.getValue('variant_inventory_qty') as number
       return (
-        <Badge variant='secondary' className={`text-[10px] py-0 h-4 px-1.5 font-medium tabular-nums ${stockColorMap(qty)}`}>
+        <Badge variant='outline' className={`text-xs py-0 h-5 px-1.5 font-medium tabular-nums ${stockColorMap(qty)}`}>
           {qty}
         </Badge>
       )
@@ -130,7 +130,7 @@ export const inventoryColumns: ColumnDef<Product>[] = [
     cell: ({ row }) => {
       const status = row.getValue('status') as string
       return (
-        <Badge variant='secondary' className={`capitalize text-[10px] py-0 h-4 px-1.5 ${statusColorMap[status] || ''}`}>
+        <Badge variant='outline' className={`capitalize text-xs py-0 h-5 px-1.5 ${statusColorMap[status] || ''}`}>
           {status}
         </Badge>
       )
@@ -141,7 +141,7 @@ export const inventoryColumns: ColumnDef<Product>[] = [
     header: ({ column }) => <DataTableColumnHeader column={column} title='Added' />,
     meta: { className: 'ps-1', tdClassName: 'ps-4' },
     cell: ({ row }) => (
-      <span className='text-[11px] text-muted-foreground'>
+      <span className='text-sm text-muted-foreground'>
         {format(new Date(row.getValue('created_at')), 'MMM dd, yyyy')}
       </span>
     ),

@@ -65,9 +65,9 @@ export const ordersColumns: ColumnDef<Order>[] = [
 
       return (
         <div className='flex flex-col gap-0'>
-          <span className='truncate font-medium'>{name || 'N/A'}</span>
+          <span className='truncate font-medium text-sm'>{name || 'N/A'}</span>
           {phone && (
-            <span className='text-[10px] text-muted-foreground truncate' dir='ltr'>
+            <span className='text-xs text-muted-foreground truncate' dir='ltr'>
               {phone}
             </span>
           )}
@@ -87,7 +87,7 @@ export const ordersColumns: ColumnDef<Order>[] = [
     cell: ({ row }) => {
       const email = row.getValue('customer_email') as string | null
       return (
-        <span className='text-muted-foreground truncate max-w-[180px] block'>
+        <span className='text-sm text-muted-foreground truncate max-w-[180px] block'>
           {email || '-'}
         </span>
       )
@@ -104,7 +104,7 @@ export const ordersColumns: ColumnDef<Order>[] = [
       const total = parseFloat(row.original.total)
       const currency = row.original.currency
       return (
-        <span className='font-semibold'>
+        <span className='font-semibold text-sm'>
           {currency} {total.toFixed(2)}
         </span>
       )
@@ -122,7 +122,7 @@ export const ordersColumns: ColumnDef<Order>[] = [
       const color = row.original.status_color
 
       return (
-        <Badge variant='secondary' className={`capitalize text-[10px] py-0 h-4 px-1.5 ${statusColorMap[color] || statusColorMap.default}`}>
+        <Badge variant='outline' className={`capitalize text-xs py-0 h-5 px-1.5 ${statusColorMap[color] || statusColorMap.default}`}>
           {status}
         </Badge>
       )
@@ -142,7 +142,7 @@ export const ordersColumns: ColumnDef<Order>[] = [
       const color = row.original.financial_status_color
 
       return (
-        <Badge variant='secondary' className={`capitalize text-[10px] py-0 h-4 px-1.5 ${statusColorMap[color] || statusColorMap.default}`}>
+        <Badge variant='outline' className={`capitalize text-xs py-0 h-5 px-1.5 ${statusColorMap[color] || statusColorMap.default}`}>
           {status}
         </Badge>
       )
@@ -160,7 +160,7 @@ export const ordersColumns: ColumnDef<Order>[] = [
     cell: ({ row }) => {
       const method = row.getValue('payment_method') as string | null
       return (
-        <span className='truncate max-w-[120px] block text-[11px]'>
+        <span className='truncate max-w-[120px] block text-sm'>
           {method || 'N/A'}
         </span>
       )
@@ -176,7 +176,7 @@ export const ordersColumns: ColumnDef<Order>[] = [
     cell: ({ row }) => {
       const country = row.getValue('shipping_country') as string | null
       return (
-        <span className='text-[11px]'>
+        <span className='text-sm'>
           {country || '-'}
         </span>
       )
@@ -192,7 +192,7 @@ export const ordersColumns: ColumnDef<Order>[] = [
     cell: ({ row }) => {
       const date = row.getValue('created_at') as string
       return (
-        <span className='text-[11px] text-muted-foreground'>
+        <span className='text-sm text-muted-foreground'>
           {format(new Date(date), 'MMM dd, yyyy')}
         </span>
       )
