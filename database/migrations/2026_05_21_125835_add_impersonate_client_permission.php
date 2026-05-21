@@ -12,7 +12,7 @@ return new class extends Migration
 
         $permission = Permission::firstOrCreate(['name' => 'impersonate client', 'guard_name' => 'web']);
 
-        foreach (['superadmin', 'admin'] as $roleName) {
+        foreach (['superadmin', 'admin', 'manager'] as $roleName) {
             $role = Role::where('name', $roleName)->first();
             if ($role && !$role->hasPermissionTo('impersonate client')) {
                 $role->givePermissionTo($permission);

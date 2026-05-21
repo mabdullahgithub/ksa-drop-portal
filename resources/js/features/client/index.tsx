@@ -47,7 +47,7 @@ function ClientContent() {
         <ProfileDropdown />
       </Header>
 
-      <Main fixed>
+      <Main>
         <div className='mb-4 flex items-center justify-between'>
           <div>
             <h1 className='text-2xl font-bold tracking-tight'>Clients</h1>

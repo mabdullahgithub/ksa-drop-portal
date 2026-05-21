@@ -3,6 +3,9 @@
 namespace App\Http\Controllers;
 
 use App\Models\Client;
+use App\Models\ClientProduct;
+use App\Models\User;
+use App\Notifications\ProductSubmittedNotification;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -387,5 +390,100 @@ class PortalController extends Controller
         }
 
         return back()->with('success', 'Company logo removed.');
+    }
+
+    // --- Fulfilment Inventory (client-facing write endpoints) ---
+
+    private function resolveFulfilmentClient(): Client
+    {
+        $client = $this->resolveClient();
+
+        if (!$client || !$client->is_fulfilment || !in_array('inventory', $client->portal_features ?? [])) {
+            abort(403);
+        }
+
+        return $client;
+    }
+
+    public function storeInventory(Request $request)
+    {
+        $client = $this->resolveFulfilmentClient();
+
+        $validated = $request->validate([
+            'name'        => 'required|string|max:255',
+            'sku'         => 'nullable|string|max:100',
+            'description' => 'nullable|string',
+            'quantity'    => 'required|integer|min:0',
+            'unit_price'  => 'nullable|numeric|min:0',
+            'notes'       => 'nullable|string',
+        ]);
+
+        $productCode = ClientProduct::generateProductCode($client);
+
+        $product = $client->clientProducts()->create([
+            'product_code' => $productCode,
+            'name'         => $validated['name'],
+            'sku'          => $validated['sku'] ?? null,
+            'description'  => $validated['description'] ?? null,
+            'quantity'     => $validated['quantity'],
+            'unit_price'   => $validated['unit_price'] ?? null,
+            'notes'        => $validated['notes'] ?? null,
+        ]);
+
+        // Notify admins and superadmins that a product needs verification
+        User::role(['admin', 'superadmin'])->each(
+            fn ($adminUser) => $adminUser->notify(new ProductSubmittedNotification($product, $client))
+        );
+
+        return response()->json([
+            'message' => 'Product added successfully',
+            'product' => $product,
+        ], 201);
+    }
+
+    public function updateInventory(Request $request, ClientProduct $product)
+    {
+        $client = $this->resolveFulfilmentClient();
+
+        if ($product->client_id !== $client->id) {
+            abort(403);
+        }
+
+        if ($product->verification_status === 'verified') {
+            abort(422, 'Verified products cannot be edited.');
+        }
+
+        $validated = $request->validate([
+            'name'        => 'sometimes|string|max:255',
+            'sku'         => 'nullable|string|max:100',
+            'description' => 'nullable|string',
+            'quantity'    => 'sometimes|integer|min:0',
+            'unit_price'  => 'nullable|numeric|min:0',
+            'notes'       => 'nullable|string',
+        ]);
+
+        $product->update($validated);
+
+        return response()->json([
+            'message' => 'Product updated successfully',
+            'product' => $product->fresh(),
+        ]);
+    }
+
+    public function destroyInventory(ClientProduct $product)
+    {
+        $client = $this->resolveFulfilmentClient();
+
+        if ($product->client_id !== $client->id) {
+            abort(403);
+        }
+
+        if ($product->verification_status === 'verified') {
+            abort(422, 'Verified products cannot be deleted.');
+        }
+
+        $product->delete();
+
+        return response()->json(['message' => 'Product deleted successfully']);
     }
 }

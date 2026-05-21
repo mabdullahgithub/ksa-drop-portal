@@ -11,7 +11,6 @@ import {
 } from '@/components/ui/alert-dialog'
 import { useClientMutations } from '@/hooks/useClients'
 import { useClientContext } from './client-provider'
-import { ClientDetailsDialog } from './client-details-dialog'
 import { CreateClientDialog } from './create-client-dialog'
 import { EditClientDialog } from './edit-client-dialog'
 
@@ -50,12 +49,6 @@ export function ClientDialogs({ onSuccess }: ClientDialogsProps) {
 
       {currentRow && (
         <>
-          <ClientDetailsDialog
-            client={currentRow}
-            open={open === 'view'}
-            onOpenChange={(isOpen) => { if (!isOpen) handleClose() }}
-          />
-
           <EditClientDialog
             client={currentRow}
             open={open === 'edit'}
@@ -73,7 +66,11 @@ export function ClientDialogs({ onSuccess }: ClientDialogsProps) {
               </AlertDialogHeader>
               <AlertDialogFooter>
                 <AlertDialogCancel>Cancel</AlertDialogCancel>
-                <AlertDialogAction onClick={handleDelete} disabled={loading} className='bg-destructive text-destructive-foreground hover:bg-destructive/90'>
+                <AlertDialogAction
+                  onClick={handleDelete}
+                  disabled={loading}
+                  className='bg-destructive text-destructive-foreground hover:bg-destructive/90'
+                >
                   {loading ? 'Deleting...' : 'Delete'}
                 </AlertDialogAction>
               </AlertDialogFooter>

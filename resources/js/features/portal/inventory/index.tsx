@@ -1,14 +1,35 @@
 import { useState } from 'react'
-import { Search as SearchIcon, CheckCircle, Clock } from 'lucide-react'
-import {
-  flexRender,
-  getCoreRowModel,
-  useReactTable,
-  type ColumnDef,
-} from '@tanstack/react-table'
+import { toast } from 'sonner'
+import { Search as SearchIcon, CheckCircle, Clock, Plus, Lock, Pencil, Trash2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import { DotsHorizontalIcon } from '@radix-ui/react-icons'
 import { ConfigDrawer } from '@/components/config-drawer'
 import { Header } from '@/components/layout/header'
 import { NotificationsDropdown } from '@/components/layout/notifications-dropdown'
@@ -16,81 +37,59 @@ import { Main } from '@/components/layout/main'
 import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
-import { usePortalInventory } from '@/hooks/usePortal'
+import { usePortalInventory, usePortalInventoryMutations } from '@/hooks/usePortal'
+import { PortalProductFormDialog } from './portal-product-form-dialog'
 
-const columns: ColumnDef<any>[] = [
-  {
-    accessorKey: 'product_code',
-    header: 'Code',
-    cell: ({ row }) => (
-      <code className='rounded bg-muted px-1.5 py-0.5 text-xs font-semibold'>
-        {row.getValue('product_code')}
-      </code>
-    ),
-  },
-  {
-    accessorKey: 'name',
-    header: 'Product Name',
-    cell: ({ row }) => <span className='font-medium'>{row.getValue('name')}</span>,
-  },
-  {
-    accessorKey: 'sku',
-    header: 'SKU',
-    cell: ({ row }) => <span className='text-sm'>{row.getValue('sku') || '—'}</span>,
-  },
-  {
-    accessorKey: 'quantity',
-    header: 'Quantity',
-    cell: ({ row }) => <span className='font-medium'>{row.getValue('quantity')}</span>,
-  },
-  {
-    accessorKey: 'unit_price',
-    header: 'Unit Price',
-    cell: ({ row }) => {
-      const price = row.getValue('unit_price') as string | null
-      return <span className='text-sm'>{price ? `SAR ${parseFloat(price).toFixed(2)}` : '—'}</span>
-    },
-  },
-  {
-    accessorKey: 'verification_status',
-    header: 'Status',
-    cell: ({ row }) => {
-      const status = row.getValue('verification_status') as string
-      return status === 'verified' ? (
-        <Badge variant='outline' className='bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 text-xs'>
-          <CheckCircle className='mr-1 h-3 w-3' />
-          Verified
-        </Badge>
-      ) : (
-        <Badge variant='outline' className='bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400 text-xs'>
-          <Clock className='mr-1 h-3 w-3' />
-          Pending
-        </Badge>
-      )
-    },
-  },
-  {
-    accessorKey: 'created_at',
-    header: 'Added',
-    cell: ({ row }) => new Date(row.getValue('created_at')).toLocaleDateString(),
-  },
-]
+interface PortalProduct {
+  id: number
+  product_code: string
+  name: string
+  sku: string | null
+  description: string | null
+  quantity: number
+  unit_price: string | null
+  notes: string | null
+  verification_status: 'pending' | 'verified'
+  created_at: string
+}
 
 export function PortalInventory() {
-  const { products, meta, loading, filters, updateFilters } = usePortalInventory()
-  const [search, setSearch] = useState('')
+  const { products, meta, loading, filters, updateFilters, refresh } = usePortalInventory()
+  const { loading: mutating, deleteProduct } = usePortalInventoryMutations()
 
-  const table = useReactTable({
-    data: products,
-    columns,
-    getCoreRowModel: getCoreRowModel(),
-    manualPagination: true,
-    pageCount: meta?.last_page || 0,
-  })
+  const [search, setSearch] = useState('')
+  const [formOpen, setFormOpen] = useState(false)
+  const [editingProduct, setEditingProduct] = useState<PortalProduct | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<PortalProduct | null>(null)
 
   const handleSearch = (value: string) => {
     setSearch(value)
     updateFilters({ search: value, page: 1 })
+  }
+
+  const openAdd = () => {
+    setEditingProduct(null)
+    setFormOpen(true)
+  }
+
+  const openEdit = (product: PortalProduct) => {
+    setEditingProduct(product)
+    setFormOpen(true)
+  }
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return
+    const result = await deleteProduct(deleteTarget.id)
+    if (result === true) {
+      toast.success(`"${deleteTarget.name}" removed from inventory`)
+      setDeleteTarget(null)
+      refresh()
+    } else if (result && typeof result === 'object' && 'message' in result) {
+      toast.error((result as { message: string }).message)
+      setDeleteTarget(null)
+    } else {
+      toast.error('Failed to delete product')
+    }
   }
 
   return (
@@ -104,9 +103,15 @@ export function PortalInventory() {
       </Header>
 
       <Main fixed>
-        <div className='mb-4'>
-          <h1 className='text-2xl font-bold tracking-tight'>My Inventory</h1>
-          <p className='text-muted-foreground'>Track your products and stock levels</p>
+        <div className='mb-4 flex items-start justify-between'>
+          <div>
+            <h1 className='text-2xl font-bold tracking-tight'>My Inventory</h1>
+            <p className='text-muted-foreground'>Manage your products and track verification status</p>
+          </div>
+          <Button onClick={openAdd}>
+            <Plus className='mr-2 h-4 w-4' />
+            Add Product
+          </Button>
         </div>
 
         <div className='space-y-4'>
@@ -123,53 +128,160 @@ export function PortalInventory() {
           <div className='overflow-hidden rounded-md border'>
             <Table>
               <TableHeader>
-                {table.getHeaderGroups().map((headerGroup) => (
-                  <TableRow key={headerGroup.id}>
-                    {headerGroup.headers.map((header) => (
-                      <TableHead key={header.id}>
-                        {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
-                      </TableHead>
-                    ))}
-                  </TableRow>
-                ))}
+                <TableRow>
+                  <TableHead>Code</TableHead>
+                  <TableHead>Product Name</TableHead>
+                  <TableHead>SKU</TableHead>
+                  <TableHead>Quantity</TableHead>
+                  <TableHead>Unit Price</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Added</TableHead>
+                  <TableHead className='w-10' />
+                </TableRow>
               </TableHeader>
               <TableBody>
                 {loading ? (
                   Array.from({ length: 5 }).map((_, i) => (
                     <TableRow key={i}>
-                      {columns.map((_, j) => (
-                        <TableCell key={j}><div className='h-4 w-full animate-pulse rounded bg-muted' /></TableCell>
-                      ))}
-                    </TableRow>
-                  ))
-                ) : table.getRowModel().rows?.length ? (
-                  table.getRowModel().rows.map((row) => (
-                    <TableRow key={row.id}>
-                      {row.getVisibleCells().map((cell) => (
-                        <TableCell key={cell.id}>
-                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      {Array.from({ length: 8 }).map((_, j) => (
+                        <TableCell key={j}>
+                          <div className='h-4 w-full animate-pulse rounded bg-muted' />
                         </TableCell>
                       ))}
                     </TableRow>
                   ))
-                ) : (
+                ) : (products as PortalProduct[]).length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={columns.length} className='h-24 text-center'>
-                      No products found.
+                    <TableCell colSpan={8} className='h-32 text-center'>
+                      <div className='flex flex-col items-center gap-2 text-muted-foreground'>
+                        <p className='text-sm'>You haven&apos;t added any products yet.</p>
+                        <p className='text-xs'>Add your first product to request warehouse intake.</p>
+                        <Button variant='outline' size='sm' className='mt-2' onClick={openAdd}>
+                          <Plus className='mr-2 h-4 w-4' />
+                          Add Product
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
+                ) : (
+                  (products as PortalProduct[]).map((product) => {
+                    const isPending = product.verification_status === 'pending'
+                    return (
+                      <TableRow key={product.id}>
+                        <TableCell>
+                          <code className='rounded bg-muted px-1.5 py-0.5 text-xs font-semibold'>
+                            {product.product_code}
+                          </code>
+                        </TableCell>
+                        <TableCell className='font-medium'>{product.name}</TableCell>
+                        <TableCell className='text-sm text-muted-foreground'>
+                          {product.sku || '—'}
+                        </TableCell>
+                        <TableCell>{product.quantity}</TableCell>
+                        <TableCell className='text-sm'>
+                          {product.unit_price
+                            ? `SAR ${parseFloat(product.unit_price).toFixed(2)}`
+                            : '—'}
+                        </TableCell>
+                        <TableCell>
+                          {isPending ? (
+                            <Badge
+                              variant='outline'
+                              className='bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400 text-xs'
+                              title='Awaiting admin verification'
+                            >
+                              <Clock className='mr-1 h-3 w-3' />
+                              Pending
+                            </Badge>
+                          ) : (
+                            <Badge
+                              variant='outline'
+                              className='bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 text-xs'
+                            >
+                              <CheckCircle className='mr-1 h-3 w-3' />
+                              Verified
+                            </Badge>
+                          )}
+                        </TableCell>
+                        <TableCell className='text-sm text-muted-foreground'>
+                          {new Date(product.created_at).toLocaleDateString()}
+                        </TableCell>
+                        <TableCell>
+                          {isPending ? (
+                            <DropdownMenu modal={false}>
+                              <DropdownMenuTrigger asChild>
+                                <Button
+                                  variant='ghost'
+                                  className='flex h-8 w-8 p-0 data-[state=open]:bg-muted'
+                                  disabled={mutating}
+                                >
+                                  <DotsHorizontalIcon className='h-4 w-4' />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align='end' className='w-40'>
+                                <DropdownMenuItem onClick={() => openEdit(product)}>
+                                  <Pencil className='mr-2 h-4 w-4' />
+                                  Edit
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
+                                  className='text-destructive'
+                                  onClick={() => setDeleteTarget(product)}
+                                >
+                                  <Trash2 className='mr-2 h-4 w-4' />
+                                  Delete
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          ) : (
+                            <div className='flex h-8 w-8 items-center justify-center' title='Verified products are locked'>
+                              <Lock className='h-3.5 w-3.5 text-muted-foreground/50' />
+                            </div>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })
                 )}
               </TableBody>
             </Table>
           </div>
 
-          {meta && (
+          {meta && meta.total > 0 && (
             <div className='text-sm text-muted-foreground'>
               Showing {meta.from} to {meta.to} of {meta.total} products
             </div>
           )}
         </div>
       </Main>
+
+      <PortalProductFormDialog
+        product={editingProduct}
+        open={formOpen}
+        onOpenChange={setFormOpen}
+        onSuccess={refresh}
+      />
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => { if (!open) setDeleteTarget(null) }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove Product</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to remove <strong>{deleteTarget?.name}</strong> from your inventory? This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={mutating}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDelete}
+              disabled={mutating}
+              className='bg-destructive text-destructive-foreground hover:bg-destructive/90'
+            >
+              {mutating ? 'Removing...' : 'Remove'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   )
 }

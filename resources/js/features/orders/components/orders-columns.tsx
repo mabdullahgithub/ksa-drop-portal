@@ -202,6 +202,7 @@ export const ordersColumns: ColumnDef<Order>[] = [
   },
   {
     id: 'actions',
-    cell: ({ row }) => <DataTableRowActions row={row} />,
+    header: () => <span className='text-sm font-medium'>Actions</span>,
+    cell: DataTableRowActions,
   },
 ]

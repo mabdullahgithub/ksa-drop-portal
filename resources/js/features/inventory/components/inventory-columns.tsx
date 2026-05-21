@@ -150,6 +150,7 @@ export const inventoryColumns: ColumnDef<Product>[] = [
   },
   {
     id: 'actions',
-    cell: ({ row }) => <InventoryRowActions row={row} />,
+    header: () => <span className='text-sm font-medium'>Actions</span>,
+    cell: InventoryRowActions,
   },
 ]

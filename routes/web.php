@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\ClientController;
 use App\Http\Controllers\Api\OrderController;
+use App\Http\Controllers\ClientPageController;
 use App\Http\Controllers\Api\ProductController;
 use App\Http\Controllers\ImpersonateController;
 use App\Http\Controllers\PortalController;
@@ -30,6 +31,7 @@ Route::get('/dashboard', function () {
 Route::middleware(['auth', 'verified'])->group(function () {
     // General
     Route::get('/client', fn () => Inertia::render('Client'))->middleware('permission:view client')->name('client');
+    Route::get('/client/{client}', [ClientPageController::class, 'show'])->middleware('permission:view client')->name('client.show');
     Route::get('/inventory', fn () => Inertia::render('Inventory'))->middleware('permission:view inventory')->name('inventory');
     Route::get('/orders', fn () => Inertia::render('Orders'))->middleware('permission:view orders')->name('orders');
     Route::get('/apps', fn () => Inertia::render('Apps'))->middleware('permission:view apps')->name('apps');
@@ -166,6 +168,9 @@ Route::prefix('portal')->middleware(['auth', 'verified', 'role:client'])->group(
     Route::get('/api/dashboard', [PortalController::class, 'dashboard'])->name('portal.api.dashboard');
     Route::get('/api/orders', [PortalController::class, 'orders'])->name('portal.api.orders');
     Route::get('/api/inventory', [PortalController::class, 'inventory'])->name('portal.api.inventory');
+    Route::post('/api/inventory', [PortalController::class, 'storeInventory'])->name('portal.api.inventory.store');
+    Route::put('/api/inventory/{product}', [PortalController::class, 'updateInventory'])->name('portal.api.inventory.update');
+    Route::delete('/api/inventory/{product}', [PortalController::class, 'destroyInventory'])->name('portal.api.inventory.destroy');
     Route::get('/api/products', [PortalController::class, 'products'])->name('portal.api.products');
     Route::get('/api/products/filter-options', [PortalController::class, 'productFilterOptions'])->name('portal.api.products.filter-options');
     Route::get('/api/products/{product}', [PortalController::class, 'productShow'])->name('portal.api.products.show');

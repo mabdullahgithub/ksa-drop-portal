@@ -26,8 +26,9 @@ class RolesAndPermissionsSeeder extends Seeder
             'create client',
             'edit client',
             'delete client',
+            'impersonate client',
 
-            // Inventory CRUD
+            // Inventory CRUD (global product catalog)
             'view inventory',
             'create inventory',
             'edit inventory',
@@ -89,7 +90,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'view dashboard', 'create dashboard', 'edit dashboard', 'delete dashboard',
 
             // Client
-            'view client', 'create client', 'edit client', 'delete client',
+            'view client', 'create client', 'edit client', 'delete client', 'impersonate client',
 
             // Inventory
             'view inventory', 'create inventory', 'edit inventory', 'delete inventory',
@@ -119,7 +120,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'view dashboard', 'create dashboard', 'edit dashboard', 'delete dashboard',
 
             // Client
-            'view client', 'create client', 'edit client', 'delete client',
+            'view client', 'create client', 'edit client', 'delete client', 'impersonate client',
 
             // Inventory
             'view inventory', 'create inventory', 'edit inventory', 'delete inventory',

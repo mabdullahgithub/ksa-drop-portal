@@ -7,6 +7,9 @@ use App\Mail\Clients\WelcomeClientMail;
 use App\Models\Client;
 use App\Models\ClientProduct;
 use App\Models\User;
+use App\Notifications\ClientCreatedNotification;
+use App\Notifications\ClientStatusChangedNotification;
+use App\Notifications\ProductVerifiedNotification;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -128,6 +131,11 @@ class ClientController extends Controller
             // Email sending failure should not block client creation
         }
 
+        // Notify all admins and superadmins
+        User::role(['admin', 'superadmin'])->each(
+            fn ($adminUser) => $adminUser->notify(new ClientCreatedNotification($client))
+        );
+
         $client->load('user');
 
         return response()->json([
@@ -185,7 +193,15 @@ class ClientController extends Controller
             'status' => 'required|in:active,inactive,suspended',
         ]);
 
-        $client->update(['status' => $request->status]);
+        $oldStatus = $client->status;
+        $newStatus = $request->status;
+
+        $client->update(['status' => $newStatus]);
+
+        // Only notify if the status actually changed
+        if ($oldStatus !== $newStatus) {
+            $client->user?->notify(new ClientStatusChangedNotification($client, $oldStatus, $newStatus));
+        }
 
         return response()->json([
             'message' => 'Client status updated successfully',
@@ -386,6 +402,8 @@ class ClientController extends Controller
             'verified_at' => now(),
             'verified_by' => auth()->id(),
         ]);
+
+        $product->client->user?->notify(new ProductVerifiedNotification($product->fresh()));
 
         return response()->json([
             'message' => 'Product verified successfully',

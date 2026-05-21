@@ -55,12 +55,7 @@ export function ClientRowActions({ row }: ClientRowActionsProps) {
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align='end' className='w-48'>
-        <DropdownMenuItem
-          onClick={() => {
-            setCurrentRow(client)
-            setOpen('view')
-          }}
-        >
+        <DropdownMenuItem onClick={() => router.visit(`/client/${client.id}`)}>
           <Eye className='mr-2 h-4 w-4' />
           View Details
         </DropdownMenuItem>
@@ -68,7 +63,10 @@ export function ClientRowActions({ row }: ClientRowActionsProps) {
         {can('impersonate client') && client.status === 'active' && (
           <>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={handleImpersonate} className='text-amber-600 focus:text-amber-600 focus:bg-amber-50 dark:text-amber-400 dark:focus:text-amber-400 dark:focus:bg-amber-950/40'>
+            <DropdownMenuItem
+              onClick={handleImpersonate}
+              className='text-amber-600 focus:text-amber-600 focus:bg-amber-50 dark:text-amber-400 dark:focus:text-amber-400 dark:focus:bg-amber-950/40'
+            >
               <MonitorSmartphone className='mr-2 h-4 w-4' />
               View Client Portal
             </DropdownMenuItem>

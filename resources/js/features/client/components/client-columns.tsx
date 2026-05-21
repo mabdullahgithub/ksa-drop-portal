@@ -72,10 +72,14 @@ export const clientColumns: ColumnDef<Client>[] = [
     ),
     cell: ({ row }) => {
       const types = row.original.client_types
+      const typeColorMap: Record<string, string> = {
+        dropshipper: 'bg-blue-100 text-blue-800 border-blue-200/50 dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-800/50',
+        fulfilment: 'bg-purple-100 text-purple-800 border-purple-200/50 dark:bg-purple-900/30 dark:text-purple-400 dark:border-purple-800/50',
+      }
       return (
         <div className='flex gap-1'>
           {types.map((type) => (
-            <Badge key={type} variant='outline' className='text-xs capitalize'>
+            <Badge key={type} variant='outline' className={`text-xs capitalize ${typeColorMap[type] ?? ''}`}>
               {type}
             </Badge>
           ))}
@@ -128,6 +132,6 @@ export const clientColumns: ColumnDef<Client>[] = [
   {
     id: 'actions',
     header: () => <span className='text-sm font-medium'>Actions</span>,
-    cell: ({ row }) => <ClientRowActions row={row} />,
+    cell: ClientRowActions,
   },
 ]

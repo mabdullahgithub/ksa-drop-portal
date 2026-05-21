@@ -1,5 +1,95 @@
 import { useState, useEffect, useCallback } from 'react'
 
+export function usePortalInventoryMutations() {
+  const [loading, setLoading] = useState(false)
+
+  const getCsrfToken = () =>
+    document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
+
+  const addProduct = async (
+    payload: Record<string, unknown>
+  ): Promise<boolean | { errors: Record<string, string[]> }> => {
+    setLoading(true)
+    try {
+      const response = await fetch('/portal/api/inventory', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'X-CSRF-TOKEN': getCsrfToken(),
+        },
+        body: JSON.stringify(payload),
+      })
+      if (!response.ok) {
+        const error = await response.json()
+        if (error.errors) return { errors: error.errors }
+        throw new Error(error.message || 'Failed')
+      }
+      return true
+    } catch (err: any) {
+      return false
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const updateProduct = async (
+    productId: number,
+    payload: Record<string, unknown>
+  ): Promise<boolean | { errors: Record<string, string[]> } | { message: string }> => {
+    setLoading(true)
+    try {
+      const response = await fetch(`/portal/api/inventory/${productId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'X-CSRF-TOKEN': getCsrfToken(),
+        },
+        body: JSON.stringify(payload),
+      })
+      if (!response.ok) {
+        const error = await response.json()
+        if (response.status === 422) return { message: error.message || 'This product cannot be edited.' }
+        if (error.errors) return { errors: error.errors }
+        throw new Error('Failed')
+      }
+      return true
+    } catch {
+      return false
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const deleteProduct = async (
+    productId: number
+  ): Promise<boolean | { message: string }> => {
+    setLoading(true)
+    try {
+      const response = await fetch(`/portal/api/inventory/${productId}`, {
+        method: 'DELETE',
+        headers: {
+          'Accept': 'application/json',
+          'X-CSRF-TOKEN': getCsrfToken(),
+        },
+      })
+      if (!response.ok) {
+        const error = await response.json()
+        if (response.status === 422) return { message: error.message || 'This product cannot be deleted.' }
+        throw new Error('Failed')
+      }
+      return true
+    } catch {
+      return false
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return { loading, addProduct, updateProduct, deleteProduct }
+}
+
 export function usePortalDashboard() {
   const [data, setData] = useState<any>(null)
   const [loading, setLoading] = useState(true)
