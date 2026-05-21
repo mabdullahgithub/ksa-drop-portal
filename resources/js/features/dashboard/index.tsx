@@ -173,11 +173,9 @@ export function Dashboard() {
               <Card className='col-span-1 lg:col-span-3'>
                 <CardHeader>
                   <CardTitle>Recent Orders</CardTitle>
-                  <CardDescription>
-                    You have 5 orders this month.
-                  </CardDescription>
+                  <CardDescription>Latest 10 orders</CardDescription>
                 </CardHeader>
-                <CardContent>
+                <CardContent className='max-h-[360px] overflow-y-auto pr-1'>
                   <RecentOrders />
                 </CardContent>
               </Card>
@@ -194,27 +192,27 @@ export function Dashboard() {
 
 const topNav = [
   {
-    title: 'Overview',
-    href: 'dashboard/overview',
+    title: 'Dashboard',
+    href: '/dashboard',
     isActive: true,
     disabled: false,
   },
   {
-    title: 'Customers',
-    href: 'dashboard/customers',
+    title: 'Orders',
+    href: '/orders',
     isActive: false,
-    disabled: true,
+    disabled: false,
   },
   {
-    title: 'Products',
-    href: 'dashboard/products',
+    title: 'Clients',
+    href: '/client',
     isActive: false,
-    disabled: true,
+    disabled: false,
   },
   {
-    title: 'Settings',
-    href: 'dashboard/settings',
+    title: 'Inventory',
+    href: '/inventory',
     isActive: false,
-    disabled: true,
+    disabled: false,
   },
 ]

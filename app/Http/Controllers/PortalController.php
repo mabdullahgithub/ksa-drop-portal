@@ -100,6 +100,37 @@ class PortalController extends Controller
         return response()->json($query->paginate($perPage));
     }
 
+    public function products(Request $request)
+    {
+        $client = auth()->user()->client;
+
+        if (!$client || !$client->is_dropshipper || !in_array('products', $client->portal_features ?? [])) {
+            abort(403);
+        }
+
+        $query = \App\Models\Product::where('published', true);
+
+        if ($request->has('search') && $request->search) {
+            $query->search($request->search);
+        }
+
+        if ($request->has('type') && $request->type) {
+            $query->where('type', $request->type);
+        }
+
+        if ($request->has('vendor') && $request->vendor) {
+            $query->where('vendor', $request->vendor);
+        }
+
+        $sortBy = $request->get('sort_by', 'created_at');
+        $sortOrder = $request->get('sort_order', 'desc');
+        $query->orderBy($sortBy, $sortOrder);
+
+        $perPage = $request->get('per_page', 15);
+
+        return response()->json($query->paginate($perPage));
+    }
+
     public function revenue(Request $request)
     {
         $client = auth()->user()->client;

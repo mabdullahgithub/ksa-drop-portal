@@ -148,6 +148,7 @@ Route::prefix('portal')->middleware(['auth', 'verified', 'role:client'])->group(
     Route::get('/inventory', fn () => Inertia::render('Portal/Inventory'))->name('portal.inventory');
     Route::get('/revenue', fn () => Inertia::render('Portal/Revenue'))->name('portal.revenue');
     Route::get('/finance', fn () => Inertia::render('Portal/Finance'))->name('portal.finance');
+    Route::get('/products', fn () => Inertia::render('Portal/Products'))->name('portal.products');
     Route::get('/settings', fn () => Inertia::render('Portal/Settings/CompanyProfile'))->name('portal.settings');
     Route::get('/settings/security', fn () => Inertia::render('Portal/Settings/Security'))->name('portal.settings.security');
 
@@ -155,6 +156,7 @@ Route::prefix('portal')->middleware(['auth', 'verified', 'role:client'])->group(
     Route::get('/api/dashboard', [PortalController::class, 'dashboard'])->name('portal.api.dashboard');
     Route::get('/api/orders', [PortalController::class, 'orders'])->name('portal.api.orders');
     Route::get('/api/inventory', [PortalController::class, 'inventory'])->name('portal.api.inventory');
+    Route::get('/api/products', [PortalController::class, 'products'])->name('portal.api.products');
     Route::get('/api/revenue', [PortalController::class, 'revenue'])->name('portal.api.revenue');
     Route::get('/api/finance', [PortalController::class, 'finance'])->name('portal.api.finance');
     Route::post('/settings/company-profile', [PortalController::class, 'updateCompanyProfile'])->name('portal.settings.company-profile.update');
