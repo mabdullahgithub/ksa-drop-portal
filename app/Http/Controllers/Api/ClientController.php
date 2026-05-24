@@ -93,6 +93,8 @@ class ClientController extends Controller
             'charges.vat' => 'nullable|numeric|min:0|max:100',
             'charges.other' => 'nullable|numeric|min:0',
             'notes' => 'nullable|string',
+        ], [
+            'email.unique' => "You can't create an account with this email.",
         ]);
 
         $password = Str::random(16);
@@ -131,13 +133,17 @@ class ClientController extends Controller
         try {
             Mail::to($user->email)->send(new WelcomeClientMail($client, $password));
         } catch (\Exception $e) {
-            // Email sending failure should not block client creation
+            \Log::error('WelcomeClientMail failed for client ' . $client->id . ': ' . $e->getMessage());
         }
 
         // Notify all admins and superadmins
-        User::role(['admin', 'superadmin'])->each(
-            fn ($adminUser) => $adminUser->notify(new ClientCreatedNotification($client))
-        );
+        try {
+            User::role(['admin', 'superadmin'])->each(
+                fn ($adminUser) => $adminUser->notify(new ClientCreatedNotification($client))
+            );
+        } catch (\Exception $e) {
+            \Log::error('ClientCreatedNotification failed for client ' . $client->id . ': ' . $e->getMessage());
+        }
 
         $client->load('user');
 

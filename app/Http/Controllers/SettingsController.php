@@ -91,7 +91,19 @@ class SettingsController extends Controller
     {
         $user = $request->user();
 
-        return Inertia::render('Settings/Security', [
+        return Inertia::render('Settings/Security', $this->twoFactorProps($user));
+    }
+
+    public function portalSecurity(Request $request): Response
+    {
+        $user = $request->user();
+
+        return Inertia::render('Portal/Settings/Security', $this->twoFactorProps($user));
+    }
+
+    private function twoFactorProps($user): array
+    {
+        return [
             'user' => $user->only('id', 'name', 'email', 'avatar', 'two_factor_enabled', 'two_factor_confirmed_at'),
             'twoFactorQrCodeUrl' => $user->two_factor_secret && ! $user->two_factor_confirmed_at
                 ? $this->generateQrCodeUrl($user)
@@ -102,7 +114,7 @@ class SettingsController extends Controller
             'recoveryCodes' => $user->two_factor_enabled && session('two_factor_recovery_codes')
                 ? session('two_factor_recovery_codes')
                 : null,
-        ]);
+        ];
     }
 
     public function updatePassword(Request $request): RedirectResponse

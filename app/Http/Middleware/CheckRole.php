@@ -19,6 +19,18 @@ class CheckRole
             return redirect()->route('login');
         }
 
+        // Negation: role:!client blocks clients from admin routes
+        if (str_starts_with($role, '!')) {
+            $denied = ltrim($role, '!');
+            if (auth()->user()->hasRole($denied) && !session()->has('impersonate.admin_id')) {
+                if ($request->expectsJson()) {
+                    return response()->json(['message' => 'Clients cannot access this resource.'], 403);
+                }
+                return redirect()->route('portal.dashboard');
+            }
+            return $next($request);
+        }
+
         // Allow admins impersonating a client to access portal routes
         if ($role === 'client' && session()->has('impersonate.admin_id')) {
             return $next($request);

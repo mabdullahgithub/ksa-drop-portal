@@ -8,6 +8,7 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Content;
 use Illuminate\Mail\Mailables\Envelope;
+use Illuminate\Mail\Mailables\Headers;
 use Illuminate\Queue\SerializesModels;
 
 class WelcomeClientMail extends Mailable implements ShouldQueue
@@ -19,10 +20,22 @@ class WelcomeClientMail extends Mailable implements ShouldQueue
         public string $password
     ) {}
 
+    public function headers(): Headers
+    {
+        return new Headers(
+            messageId: null,
+            references: [],
+            text: [
+                'Reply-To' => config('mail.from.address'),
+                'X-Mailer' => config('app.name'),
+            ],
+        );
+    }
+
     public function envelope(): Envelope
     {
         return new Envelope(
-            subject: 'Welcome to ' . config('app.name') . ' - Your Portal Access',
+            subject: 'Your ' . config('app.name') . ' account is ready',
         );
     }
 
@@ -30,6 +43,7 @@ class WelcomeClientMail extends Mailable implements ShouldQueue
     {
         return new Content(
             view: 'emails.clients.welcome',
+            text: 'emails.clients.welcome-text',
             with: [
                 'client' => $this->client,
                 'password' => $this->password,

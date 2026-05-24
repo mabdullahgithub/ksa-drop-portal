@@ -20,6 +20,9 @@ class CheckPermission
         }
 
         if (!auth()->user()->can($permission)) {
+            if (auth()->user()->hasRole('client')) {
+                return redirect()->route('portal.dashboard');
+            }
             abort(403, 'You do not have permission to access this resource.');
         }
 

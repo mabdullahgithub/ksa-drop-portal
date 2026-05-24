@@ -169,7 +169,7 @@ Route::prefix('portal')->middleware(['auth', 'verified', 'role:client'])->group(
     Route::get('/finance', fn () => Inertia::render('Portal/Finance'))->name('portal.finance');
     Route::get('/products', fn () => Inertia::render('Portal/Products'))->name('portal.products');
     Route::get('/settings', fn () => Inertia::render('Portal/Settings/CompanyProfile'))->name('portal.settings');
-    Route::get('/settings/security', fn () => Inertia::render('Portal/Settings/Security'))->name('portal.settings.security');
+    Route::get('/settings/security', [SettingsController::class, 'portalSecurity'])->name('portal.settings.security');
 
     // Portal API
     Route::get('/api/dashboard', [PortalController::class, 'dashboard'])->name('portal.api.dashboard');

@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/dialog'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { useState, useRef, useEffect } from 'react'
+import { QRCodeSVG } from 'qrcode.react'
 import { checkPasswordStrength, generateStrongPassword, isDefaultPassword, type PasswordStrength } from '@/lib/password-utils'
 import { PasswordGeneratorModal } from '@/components/password-generator-modal'
 
@@ -384,12 +385,10 @@ export function SecurityForm() {
                 1. Scan this QR code with Google Authenticator
               </p>
               <div className='bg-white p-4 inline-block rounded'>
-                <img
-                  src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(
-                    twoFactorQrCodeUrl
-                  )}`}
-                  alt='2FA QR Code'
-                  className='w-48 h-48'
+                <QRCodeSVG
+                  value={twoFactorQrCodeUrl}
+                  size={192}
+                  level='M'
                 />
               </div>
               {twoFactorSecret && (

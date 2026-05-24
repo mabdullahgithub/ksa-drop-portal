@@ -82,7 +82,7 @@ export function AppSidebar() {
         ))}
       </SidebarContent>
       <SidebarFooter>
-        <NavUser user={auth.user} />
+        <NavUser user={auth.user} disableDropdown={!!portalFeatures || isImpersonating} />
       </SidebarFooter>
       <SidebarRail />
     </Sidebar>

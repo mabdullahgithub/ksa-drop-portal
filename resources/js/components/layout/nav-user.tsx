@@ -1,11 +1,10 @@
 import { Link } from '@inertiajs/react'
 import {
-  BadgeCheck,
   Bell,
   ChevronsUpDown,
-  CreditCard,
   LogOut,
-  Sparkles,
+  Settings,
+  TrendingUp,
 } from 'lucide-react'
 import useDialogState from '@/hooks/use-dialog-state'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -32,9 +31,10 @@ type NavUserProps = {
     email: string
     avatar?: string
   }
+  disableDropdown?: boolean
 }
 
-export function NavUser({ user }: NavUserProps) {
+export function NavUser({ user, disableDropdown = false }: NavUserProps) {
   const { isMobile } = useSidebar()
   const [open, setOpen] = useDialogState()
   const initials = user.name
@@ -45,6 +45,25 @@ export function NavUser({ user }: NavUserProps) {
     .slice(0, 2)
 
   const avatarSrc = user.avatar ? `/storage/${user.avatar}` : undefined
+
+  if (disableDropdown) {
+    return (
+      <SidebarMenu>
+        <SidebarMenuItem>
+          <SidebarMenuButton size='lg' className='cursor-default hover:bg-transparent active:bg-transparent'>
+            <Avatar className='h-8 w-8 rounded-lg'>
+              <AvatarImage src={avatarSrc} alt={user.name} />
+              <AvatarFallback className='rounded-lg'>{initials}</AvatarFallback>
+            </Avatar>
+            <div className='grid flex-1 text-start text-sm leading-tight'>
+              <span className='truncate font-semibold'>{user.name}</span>
+              <span className='truncate text-xs'>{user.email}</span>
+            </div>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+      </SidebarMenu>
+    )
+  }
 
   return (
     <>
@@ -69,7 +88,7 @@ export function NavUser({ user }: NavUserProps) {
             </DropdownMenuTrigger>
             <DropdownMenuContent
               className='w-(--radix-dropdown-menu-trigger-width) min-w-56 rounded-lg'
-              side={isMobile ? 'bottom' : 'right'}
+              side={isMobile ? 'bottom' : 'top'}
               align='end'
               sideOffset={4}
             >
@@ -87,29 +106,22 @@ export function NavUser({ user }: NavUserProps) {
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
               <DropdownMenuGroup>
-                <DropdownMenuItem>
-                  <Sparkles />
-                  Upgrade to Pro
-                </DropdownMenuItem>
-              </DropdownMenuGroup>
-              <DropdownMenuSeparator />
-              <DropdownMenuGroup>
                 <DropdownMenuItem asChild>
-                  <Link href='/settings/account'>
-                    <BadgeCheck />
-                    Account
+                  <Link href='/portal/revenue'>
+                    <TrendingUp />
+                    Revenue
                   </Link>
                 </DropdownMenuItem>
                 <DropdownMenuItem asChild>
-                  <Link href='/settings'>
-                    <CreditCard />
-                    Billing
-                  </Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild>
-                  <Link href='/settings/notifications'>
+                  <Link href='/notifications'>
                     <Bell />
-                    Toasts
+                    Notifications
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link href='/portal/settings'>
+                    <Settings />
+                    Settings
                   </Link>
                 </DropdownMenuItem>
               </DropdownMenuGroup>
