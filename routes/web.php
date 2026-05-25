@@ -57,7 +57,6 @@ Route::middleware(['auth', 'verified', 'role:!client'])->group(function () {
         Route::get('/statistics', [OrderController::class, 'statistics'])->middleware('permission:view orders')->name('api.orders.statistics');
         Route::get('/filter-options', [OrderController::class, 'filterOptions'])->middleware('permission:view orders')->name('api.orders.filter-options');
         Route::get('/export', [OrderController::class, 'export'])->middleware('permission:view orders')->name('api.orders.export');
-        Route::post('/import', [OrderController::class, 'import'])->middleware('permission:edit orders')->name('api.orders.import');
         Route::get('/{order}', [OrderController::class, 'show'])->middleware('permission:view orders')->name('api.orders.show');
         Route::put('/{order}', [OrderController::class, 'update'])->middleware('permission:edit orders')->name('api.orders.update');
         Route::post('/{order}/fulfillment-status', [OrderController::class, 'updateFulfillmentStatus'])->middleware('permission:edit orders')->name('api.orders.fulfillment-status');

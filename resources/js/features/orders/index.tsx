@@ -38,7 +38,7 @@ export function Orders() {
               Manage your orders and track their status.
             </p>
           </div>
-          <OrdersPrimaryButtons onImportSuccess={refresh} />
+          <OrdersPrimaryButtons />
         </div>
 
         <OrdersStats />
