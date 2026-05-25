@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useCallback } from 'react'
 import { Upload, FileSpreadsheet, X, CheckCircle2, AlertCircle } from 'lucide-react'
 import {
   Dialog,
@@ -11,10 +11,41 @@ import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 
+const MAX_FILE_SIZE_MB = 10
+const ALLOWED_MIME = ['text/csv', 'application/vnd.ms-excel', 'application/csv']
+
+interface ImportResult {
+  success: boolean
+  message: string
+  imported?: number
+  duplicates?: number
+  invalid?: number
+  total?: number
+  has_errors?: boolean
+  errors?: Array<{
+    row: number
+    order_number?: string
+    reason: string
+    details: string
+  }>
+}
+
 interface OrdersImportDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   onSuccess?: () => void
+}
+
+function validateFile(file: File): string | null {
+  const isCSV =
+    file.name.toLowerCase().endsWith('.csv') ||
+    ALLOWED_MIME.includes(file.type) ||
+    file.type === ''
+  if (!isCSV) return 'Only CSV files are supported.'
+  if (file.size === 0) return 'The selected file is empty.'
+  if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024)
+    return `File size must be under ${MAX_FILE_SIZE_MB}MB. Selected file is ${(file.size / 1024 / 1024).toFixed(1)}MB.`
+  return null
 }
 
 export function OrdersImportDialog({
@@ -23,80 +54,60 @@ export function OrdersImportDialog({
   onSuccess,
 }: OrdersImportDialogProps) {
   const [file, setFile] = useState<File | null>(null)
+  const [fileError, setFileError] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
   const [progress, setProgress] = useState(0)
   const [isDragging, setIsDragging] = useState(false)
-  const [result, setResult] = useState<{
-    success: boolean
-    message: string
-    imported?: number
-    duplicates?: number
-    invalid?: number
-    total?: number
-    errors?: Array<{
-      row: number
-      order_number?: string
-      reason: string
-      details: string
-    }>
-    has_errors?: boolean
-  } | null>(null)
+  const [result, setResult] = useState<ImportResult | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const dragCounter = useRef(0)
 
-  const validateFile = (file: File): boolean => {
-    // Check file type
-    if (!file.name.endsWith('.csv') && file.type !== 'text/csv') {
-      alert('Please select a CSV file')
-      return false
-    }
-
-    // Check file size (10MB max)
-    if (file.size > 10 * 1024 * 1024) {
-      alert('File size must be less than 10MB')
-      return false
-    }
-
-    return true
-  }
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFile = e.target.files?.[0]
-    if (selectedFile && validateFile(selectedFile)) {
-      setFile(selectedFile)
+  const selectFile = useCallback((f: File) => {
+    const err = validateFile(f)
+    if (err) {
+      setFileError(err)
+      setFile(null)
+    } else {
+      setFileError(null)
+      setFile(f)
       setResult(null)
     }
+  }, [])
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selected = e.target.files?.[0]
+    if (selected) selectFile(selected)
+    e.target.value = ''
   }
 
-  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+  const handleDragEnter = (e: React.DragEvent) => {
     e.preventDefault()
-    e.stopPropagation()
+    dragCounter.current++
     setIsDragging(true)
   }
 
-  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+  const handleDragLeave = (e: React.DragEvent) => {
     e.preventDefault()
-    e.stopPropagation()
-    setIsDragging(false)
+    dragCounter.current--
+    if (dragCounter.current === 0) setIsDragging(false)
   }
 
-  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+  const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault()
-    e.stopPropagation()
-    setIsDragging(false)
+  }
 
-    const droppedFile = e.dataTransfer.files[0]
-    if (droppedFile && validateFile(droppedFile)) {
-      setFile(droppedFile)
-      setResult(null)
-    }
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    dragCounter.current = 0
+    setIsDragging(false)
+    const dropped = e.dataTransfer.files[0]
+    if (dropped) selectFile(dropped)
   }
 
   const handleRemoveFile = () => {
     setFile(null)
+    setFileError(null)
     setResult(null)
-    if (fileInputRef.current) {
-      fileInputRef.current.value = ''
-    }
   }
 
   const handleImport = async () => {
@@ -109,20 +120,18 @@ export function OrdersImportDialog({
     const formData = new FormData()
     formData.append('file', file)
 
-    // Simulate progress
-    const progressInterval = setInterval(() => {
-      setProgress((prev) => Math.min(prev + 10, 90))
-    }, 200)
+    const progressInterval = setInterval(
+      () => setProgress((prev) => Math.min(prev + 8, 88)),
+      250
+    )
 
     try {
       const response = await fetch('/api/orders/import', {
         method: 'POST',
         headers: {
-          'Accept': 'application/json',
+          Accept: 'application/json',
           'X-CSRF-TOKEN':
-            document
-              .querySelector('meta[name="csrf-token"]')
-              ?.getAttribute('content') || '',
+            document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
         },
         body: formData,
       })
@@ -131,56 +140,57 @@ export function OrdersImportDialog({
       setProgress(100)
 
       const text = await response.text()
-      let data: any
+      let data: ImportResult
       try {
         data = JSON.parse(text)
       } catch {
-        data = { success: false, message: `Server error (${response.status}): unexpected response format` }
+        data = {
+          success: false,
+          message: `Server error (${response.status}): unexpected response format.`,
+        }
       }
 
       if (response.ok && data.success) {
         setResult(data)
-        // Trigger refresh in the background
         onSuccess?.()
       } else {
         setResult({
           success: false,
-          message: data.message || 'Import failed',
+          message: data.message || `Import failed (HTTP ${response.status}).`,
         })
       }
     } catch (error) {
       clearInterval(progressInterval)
+      setProgress(0)
       setResult({
         success: false,
-        message: error instanceof Error ? error.message : 'Import failed',
+        message:
+          error instanceof Error
+            ? error.message
+            : 'An unexpected error occurred. Please try again.',
       })
     } finally {
       setUploading(false)
     }
   }
 
-  const handleClose = () => {
-    if (!uploading) {
-      setFile(null)
-      setResult(null)
-      setProgress(0)
-      setIsDragging(false)
-      if (fileInputRef.current) {
-        fileInputRef.current.value = ''
-      }
-      onOpenChange(false)
-    }
-  }
-
   const handleReset = () => {
     setFile(null)
+    setFileError(null)
     setResult(null)
     setProgress(0)
     setIsDragging(false)
-    if (fileInputRef.current) {
-      fileInputRef.current.value = ''
-    }
+    dragCounter.current = 0
   }
+
+  const handleClose = () => {
+    if (uploading) return
+    handleReset()
+    onOpenChange(false)
+  }
+
+  const showDropzone = !file && !result
+  const showFileCard = !!file && !result
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
@@ -193,30 +203,43 @@ export function OrdersImportDialog({
         </DialogHeader>
 
         <div className='space-y-4'>
-          {!file && !result && (
+          {/* Drop zone */}
+          {showDropzone && (
             <div
-              onDragOver={handleDragOver}
+              onDragEnter={handleDragEnter}
               onDragLeave={handleDragLeave}
+              onDragOver={handleDragOver}
               onDrop={handleDrop}
-              className={`flex flex-col items-center justify-center rounded-lg border-2 border-dashed p-12 text-center transition-colors cursor-pointer ${
+              onClick={() => fileInputRef.current?.click()}
+              className={`flex flex-col items-center justify-center rounded-lg border-2 border-dashed p-12 text-center transition-colors cursor-pointer select-none ${
                 isDragging
                   ? 'border-primary bg-primary/5'
+                  : fileError
+                  ? 'border-destructive/50 bg-destructive/5'
                   : 'border-muted-foreground/25 hover:border-muted-foreground/50'
               }`}
-              onClick={() => fileInputRef.current?.click()}
             >
-              <FileSpreadsheet className={`mb-4 h-12 w-12 ${isDragging ? 'text-primary' : 'text-muted-foreground'}`} />
+              <FileSpreadsheet
+                className={`mb-4 h-12 w-12 ${
+                  isDragging
+                    ? 'text-primary'
+                    : fileError
+                    ? 'text-destructive'
+                    : 'text-muted-foreground'
+                }`}
+              />
               <div className='mb-4'>
                 <p className='text-sm font-medium'>
                   {isDragging ? 'Drop your CSV file here' : 'Drag & drop or click to select'}
                 </p>
                 <p className='text-xs text-muted-foreground mt-1'>
-                  CSV files only • Maximum 10MB
+                  CSV files only • Maximum {MAX_FILE_SIZE_MB}MB
                 </p>
               </div>
               <Button
                 variant='outline'
                 size='sm'
+                type='button'
                 onClick={(e) => {
                   e.stopPropagation()
                   fileInputRef.current?.click()
@@ -228,31 +251,40 @@ export function OrdersImportDialog({
               <input
                 ref={fileInputRef}
                 type='file'
-                accept='.csv'
+                accept='.csv,text/csv'
                 onChange={handleFileChange}
                 className='hidden'
               />
             </div>
           )}
 
-          {file && !result && (
+          {/* File validation error */}
+          {fileError && !file && (
+            <Alert variant='destructive'>
+              <AlertCircle className='h-4 w-4' />
+              <AlertDescription>{fileError}</AlertDescription>
+            </Alert>
+          )}
+
+          {/* Selected file card */}
+          {showFileCard && (
             <div className='rounded-lg border bg-muted/50 p-4'>
               <div className='flex items-start justify-between'>
                 <div className='flex items-start gap-3'>
-                  <FileSpreadsheet className='h-5 w-5 text-muted-foreground mt-0.5' />
+                  <FileSpreadsheet className='h-5 w-5 text-muted-foreground mt-0.5 shrink-0' />
                   <div className='flex-1 min-w-0'>
                     <p className='text-sm font-medium truncate'>{file.name}</p>
                     <p className='text-xs text-muted-foreground'>
-                      {(file.size / 1024).toFixed(2)} KB
+                      {(file.size / 1024).toFixed(1)} KB
                     </p>
                   </div>
                 </div>
                 {!uploading && (
                   <Button
                     variant='ghost'
-                    size='sm'
+                    size='icon'
                     onClick={handleRemoveFile}
-                    className='h-8 w-8 p-0'
+                    className='h-7 w-7 shrink-0 -mt-0.5 -mr-1'
                   >
                     <X className='h-4 w-4' />
                   </Button>
@@ -261,15 +293,16 @@ export function OrdersImportDialog({
 
               {uploading && (
                 <div className='mt-4 space-y-2'>
-                  <Progress value={progress} />
+                  <Progress value={progress} className='h-1.5' />
                   <p className='text-xs text-center text-muted-foreground'>
-                    Importing orders... {progress}%
+                    Importing orders… {progress}%
                   </p>
                 </div>
               )}
             </div>
           )}
 
+          {/* Result */}
           {result && (
             <div className='space-y-3'>
               <Alert variant={result.success ? 'default' : 'destructive'}>
@@ -282,7 +315,7 @@ export function OrdersImportDialog({
                   <p className='font-medium'>{result.message}</p>
                   {result.success && result.imported !== undefined && (
                     <div className='mt-3 text-sm space-y-2'>
-                      {result.imported > 0 && (
+                      {(result.imported ?? 0) > 0 && (
                         <div className='flex justify-between'>
                           <span className='text-muted-foreground'>✓ Imported:</span>
                           <span className='font-medium text-green-600 dark:text-green-400'>
@@ -290,7 +323,7 @@ export function OrdersImportDialog({
                           </span>
                         </div>
                       )}
-                      {result.duplicates !== undefined && result.duplicates > 0 && (
+                      {(result.duplicates ?? 0) > 0 && (
                         <div className='flex justify-between'>
                           <span className='text-muted-foreground'>⊘ Duplicates skipped:</span>
                           <span className='font-medium text-blue-600 dark:text-blue-400'>
@@ -298,7 +331,7 @@ export function OrdersImportDialog({
                           </span>
                         </div>
                       )}
-                      {result.invalid !== undefined && result.invalid > 0 && (
+                      {(result.invalid ?? 0) > 0 && (
                         <div className='flex justify-between'>
                           <span className='text-muted-foreground'>⚠ Invalid rows:</span>
                           <span className='font-medium text-orange-600 dark:text-orange-400'>
@@ -315,7 +348,6 @@ export function OrdersImportDialog({
                 </AlertDescription>
               </Alert>
 
-              {/* Show error details if any */}
               {result.has_errors && result.errors && result.errors.length > 0 && (
                 <div className='rounded-lg border bg-muted/50 p-3 max-h-48 overflow-y-auto'>
                   <p className='text-sm font-medium mb-2'>
@@ -333,13 +365,13 @@ export function OrdersImportDialog({
                           )}
                         </div>
                         <p className='text-muted-foreground'>
-                          {error.reason} - {error.details}
+                          {error.reason} — {error.details}
                         </p>
                       </div>
                     ))}
                     {result.errors.length > 10 && (
                       <p className='text-xs text-muted-foreground italic'>
-                        ... and {result.errors.length - 10} more issues
+                        … and {result.errors.length - 10} more issues
                       </p>
                     )}
                   </div>
@@ -348,6 +380,7 @@ export function OrdersImportDialog({
             </div>
           )}
 
+          {/* Actions */}
           <div className='flex justify-end gap-2'>
             {result ? (
               <>
@@ -358,19 +391,12 @@ export function OrdersImportDialog({
               </>
             ) : (
               <>
-                <Button
-                  variant='outline'
-                  onClick={handleClose}
-                  disabled={uploading}
-                >
+                <Button variant='outline' onClick={handleClose} disabled={uploading}>
                   Cancel
                 </Button>
                 {file && (
-                  <Button
-                    onClick={handleImport}
-                    disabled={uploading}
-                  >
-                    {uploading ? 'Importing...' : 'Import Orders'}
+                  <Button onClick={handleImport} disabled={uploading}>
+                    {uploading ? 'Importing…' : 'Import Orders'}
                   </Button>
                 )}
               </>

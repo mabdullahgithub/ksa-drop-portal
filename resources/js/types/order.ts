@@ -1,5 +1,12 @@
 export interface Order {
   id: number
+  client_id: number | null
+  client?: {
+    id: number
+    company_name: string
+    client_id: string
+    type_label: string
+  } | null
   order_number: string
   shopify_order_id: string | null
   customer_name: string | null
@@ -96,6 +103,13 @@ export interface OrderFilters {
   sort_order?: 'asc' | 'desc'
   per_page?: number
   page?: number
+  client_ids?: number[]
+}
+
+export interface ClientFilterOption {
+  value: number
+  label: string
+  client_id: string
 }
 
 export interface OrderStatistics {
@@ -126,6 +140,7 @@ export interface OrderFilterOptions {
   utm_sources: FilterOption[]
   countries: FilterOption[]
   risk_levels: FilterOption[]
+  clients: ClientFilterOption[]
 }
 
 export interface PaginatedOrders {

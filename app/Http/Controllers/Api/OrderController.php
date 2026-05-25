@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\Client;
 use App\Models\Order;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -14,7 +15,7 @@ class OrderController extends Controller
      */
     public function index(Request $request)
     {
-        $query = Order::with('items');
+        $query = Order::with(['items', 'client']);
 
         // Search
         if ($request->has('search')) {
@@ -67,6 +68,17 @@ class OrderController extends Controller
         }
         if ($request->has('max_total')) {
             $query->where('total', '<=', $request->max_total);
+        }
+
+        // Filter by client IDs (multi-select)
+        if ($request->has('client_ids')) {
+            $clientIds = is_array($request->client_ids)
+                ? $request->client_ids
+                : explode(',', $request->client_ids);
+            $clientIds = array_filter(array_map('intval', $clientIds));
+            if (!empty($clientIds)) {
+                $query->whereIn('client_id', $clientIds);
+            }
         }
 
         // Sorting
@@ -286,6 +298,11 @@ class OrderController extends Controller
                 ['value' => 'Medium', 'label' => 'Medium'],
                 ['value' => 'High', 'label' => 'High'],
             ],
+            'clients' => Client::select('id', 'company_name', 'short_id')
+                ->orderBy('company_name')
+                ->get()
+                ->map(fn($c) => ['value' => $c->id, 'label' => $c->company_name, 'client_id' => $c->short_id])
+                ->values(),
         ]);
     }
 
@@ -362,6 +379,15 @@ class OrderController extends Controller
         if ($request->has('financial_status') && $request->financial_status !== 'all') {
             $query->where('financial_status', $request->financial_status);
         }
+        if ($request->has('client_ids')) {
+            $clientIds = is_array($request->client_ids)
+                ? $request->client_ids
+                : explode(',', $request->client_ids);
+            $clientIds = array_filter(array_map('intval', $clientIds));
+            if (!empty($clientIds)) {
+                $query->whereIn('client_id', $clientIds);
+            }
+        }
 
         $orders = $query->get();
 
@@ -405,7 +431,7 @@ class OrderController extends Controller
                     $order->accepts_marketing ? 'yes' : 'no',
                     $order->currency,
                     $order->subtotal,
-                    $order->shipping,
+                    $order->shipping_cost,
                     $order->taxes,
                     $order->total,
                     $order->discount_code,
@@ -471,7 +497,10 @@ class OrderController extends Controller
     {
         $request->validate([
             'file' => 'required|file|mimes:csv,txt|max:51200', // 50MB max
+            'client_id' => 'nullable|integer|exists:clients,id',
         ]);
+
+        $clientId = $request->input('client_id');
 
         $file = $request->file('file');
         $path = $file->getRealPath();
@@ -585,6 +614,7 @@ class OrderController extends Controller
 
                     // Create order
                     $order = Order::create([
+                    'client_id' => $clientId,
                     'order_number' => $orderNumber,
                     'customer_name' => $data['Billing Name'] ?? $data['Shipping Name'] ?? null,
                     'customer_email' => $data['Email'] ?? null,
@@ -594,7 +624,7 @@ class OrderController extends Controller
                     'accepts_marketing' => strtolower($data['Accepts Marketing'] ?? 'no') === 'yes',
                     'currency' => $data['Currency'] ?? 'SAR',
                     'subtotal' => floatval($data['Subtotal'] ?? 0),
-                    'shipping' => floatval($data['Shipping'] ?? 0),
+                    'shipping_cost' => floatval($data['Shipping'] ?? 0),
                     'taxes' => floatval($data['Taxes'] ?? 0),
                     'total' => floatval($data['Total'] ?? 0),
                     'discount_code' => $data['Discount Code'] ?? null,

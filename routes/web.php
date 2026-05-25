@@ -29,7 +29,7 @@ Route::get('/dashboard', function () {
     return Inertia::render('Dashboard');
 })->middleware(['auth', 'verified', 'permission:view dashboard'])->name('dashboard');
 
-Route::middleware(['auth', 'verified'])->group(function () {
+Route::middleware(['auth', 'verified', 'role:!client'])->group(function () {
     // General
     Route::get('/client', fn () => Inertia::render('Client'))->middleware('permission:view client')->name('client');
     Route::get('/client/{client}', [ClientPageController::class, 'show'])->middleware('permission:view client')->name('client.show');
@@ -41,7 +41,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/api/connectors', [ConnectorController::class, 'index'])->middleware('permission:view apps')->name('api.connectors.index');
     Route::patch('/api/connectors/{connector}/toggle', [ConnectorController::class, 'toggle'])->middleware('permission:edit apps')->name('api.connectors.toggle');
     Route::get('/chats', fn () => Inertia::render('Chats'))->name('chats');
-    Route::get('/users', fn () => Inertia::render('Users'))->name('users');
+    Route::get('/users', fn () => Inertia::render('Users'))->middleware('permission:view users')->name('users');
 
     // Notifications
     Route::get('/notifications', [NotificationController::class, 'page'])->name('notifications');
@@ -141,8 +141,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // Help
     Route::get('/help-center', fn () => Inertia::render('HelpCenter'))->name('help-center');
 
-    // Admin Email Settings (requires permission)
-    Route::prefix('admin')->group(function () {
+    // Admin Email Settings
+    Route::prefix('admin')->middleware('permission:manage-email-settings')->group(function () {
         Route::get('/email-settings', [EmailSettingsController::class, 'index'])->name('admin.email-settings');
         Route::put('/email-settings', [EmailSettingsController::class, 'update'])->name('admin.email-settings.update');
         Route::post('/email-settings/test', [EmailSettingsController::class, 'test'])->name('admin.email-settings.test');
@@ -174,6 +174,8 @@ Route::prefix('portal')->middleware(['auth', 'verified', 'role:client'])->group(
     // Portal API
     Route::get('/api/dashboard', [PortalController::class, 'dashboard'])->name('portal.api.dashboard');
     Route::get('/api/orders', [PortalController::class, 'orders'])->name('portal.api.orders');
+    Route::post('/api/orders/import', [PortalController::class, 'importOrders'])->name('portal.api.orders.import');
+    Route::get('/api/orders/export', [PortalController::class, 'exportOrders'])->name('portal.api.orders.export');
     Route::get('/api/inventory', [PortalController::class, 'inventory'])->name('portal.api.inventory');
     Route::post('/api/inventory', [PortalController::class, 'storeInventory'])->name('portal.api.inventory.store');
     Route::put('/api/inventory/{product}', [PortalController::class, 'updateInventory'])->name('portal.api.inventory.update');

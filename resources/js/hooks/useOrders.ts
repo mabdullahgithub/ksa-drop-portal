@@ -22,7 +22,13 @@ export function useOrders(initialFilters: OrderFilters = {}) {
 
     Object.entries(activeFilters).forEach(([key, value]) => {
       if (value !== undefined && value !== null && value !== '') {
-        params.append(key, String(value))
+        if (key === 'client_ids' && Array.isArray(value)) {
+          if (value.length > 0) {
+            params.append(key, value.join(','))
+          }
+        } else {
+          params.append(key, String(value))
+        }
       }
     })
 
@@ -268,7 +274,13 @@ export function useOrderMutations() {
     const params = new URLSearchParams()
     Object.entries(filters).forEach(([key, value]) => {
       if (value !== undefined && value !== null && value !== '') {
-        params.append(key, String(value))
+        if (key === 'client_ids' && Array.isArray(value)) {
+          if (value.length > 0) {
+            params.append(key, value.join(','))
+          }
+        } else {
+          params.append(key, String(value))
+        }
       }
     })
 

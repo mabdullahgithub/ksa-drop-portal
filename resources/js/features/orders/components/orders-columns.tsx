@@ -51,6 +51,25 @@ export const ordersColumns: ColumnDef<Order>[] = [
     enableHiding: false,
   },
   {
+    id: 'client',
+    accessorFn: (row) => row.client?.company_name ?? null,
+    header: ({ column }) => (
+      <DataTableColumnHeader column={column} title='Client' />
+    ),
+    meta: { className: 'ps-1', tdClassName: 'ps-4' },
+    cell: ({ row }) => {
+      const client = row.original.client
+      if (!client) return <span className='text-xs text-muted-foreground'>—</span>
+      return (
+        <div className='flex flex-col gap-0'>
+          <span className='truncate text-sm font-medium'>{client.company_name}</span>
+          <span className='text-xs text-muted-foreground'>{client.client_id}</span>
+        </div>
+      )
+    },
+    enableHiding: true,
+  },
+  {
     accessorKey: 'customer_name',
     header: ({ column }) => (
       <DataTableColumnHeader column={column} title='Customer' />

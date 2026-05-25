@@ -21,6 +21,7 @@ import {
 import { useFilterOptions } from '@/hooks/useOrders'
 import type { OrderFilters, Order } from '@/types/order'
 import { OrdersFiltersSkeleton } from './orders-skeleton'
+import { ClientMultiFilter } from './client-multi-filter'
 
 interface OrdersFiltersProps {
   filters: OrderFilters
@@ -54,6 +55,7 @@ export function OrdersFilters({ filters, onFiltersChange, table }: OrdersFilters
       country: undefined,
       start_date: undefined,
       end_date: undefined,
+      client_ids: [],
       page: 1,
     })
   }
@@ -64,7 +66,8 @@ export function OrdersFilters({ filters, onFiltersChange, table }: OrdersFilters
     filters.financial_status ||
     filters.payment_method ||
     filters.utm_source ||
-    filters.country
+    filters.country ||
+    (filters.client_ids && filters.client_ids.length > 0)
 
   if (loading) {
     return <OrdersFiltersSkeleton />
@@ -172,6 +175,15 @@ export function OrdersFilters({ filters, onFiltersChange, table }: OrdersFilters
             ))}
           </SelectContent>
         </Select>
+      )}
+
+      {/* Client Multi-Select Filter */}
+      {options?.clients && options.clients.length > 0 && (
+        <ClientMultiFilter
+          clients={options.clients}
+          selectedIds={filters.client_ids || []}
+          onChange={(ids) => onFiltersChange({ client_ids: ids, page: 1 })}
+        />
       )}
 
       {/* Clear Filters Button */}
