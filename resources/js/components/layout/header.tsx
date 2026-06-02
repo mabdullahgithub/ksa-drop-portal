@@ -8,7 +8,7 @@ type HeaderProps = React.HTMLAttributes<HTMLElement> & {
   ref?: React.Ref<HTMLElement>
 }
 
-export function Header({ className, fixed, children, ...props }: HeaderProps) {
+export function Header({ className, fixed = true, children, ...props }: HeaderProps) {
   const [offset, setOffset] = useState(0)
 
   useEffect(() => {

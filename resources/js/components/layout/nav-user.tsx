@@ -3,7 +3,6 @@ import {
   Bell,
   ChevronsUpDown,
   LogOut,
-  Settings,
   TrendingUp,
 } from 'lucide-react'
 import useDialogState from '@/hooks/use-dialog-state'
@@ -116,12 +115,6 @@ export function NavUser({ user, disableDropdown = false }: NavUserProps) {
                   <Link href='/notifications'>
                     <Bell />
                     Notifications
-                  </Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild>
-                  <Link href='/portal/settings'>
-                    <Settings />
-                    Settings
                   </Link>
                 </DropdownMenuItem>
               </DropdownMenuGroup>
