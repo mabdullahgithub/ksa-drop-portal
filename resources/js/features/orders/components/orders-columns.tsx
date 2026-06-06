@@ -14,6 +14,16 @@ const statusColorMap: Record<string, string> = {
   default: 'bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400',
 }
 
+const shipmentColorMap: Record<string, string> = {
+  gray: 'bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400',
+  blue: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400',
+  indigo: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-400',
+  orange: 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400',
+  red: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400',
+  green: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
+  yellow: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400',
+}
+
 export const ordersColumns: ColumnDef<Order>[] = [
   {
     id: 'select',
@@ -169,6 +179,29 @@ export const ordersColumns: ColumnDef<Order>[] = [
     filterFn: (row, id, value) => {
       return value.includes(row.getValue(id))
     },
+  },
+  {
+    id: 'shipment',
+    header: ({ column }) => (
+      <DataTableColumnHeader column={column} title='Shipment' />
+    ),
+    meta: { className: 'ps-1', tdClassName: 'ps-4' },
+    cell: ({ row }) => {
+      const shipment = row.original.latest_shipment
+      if (!shipment) {
+        return <span className='text-xs text-muted-foreground'>—</span>
+      }
+      return (
+        <Badge
+          variant='outline'
+          className={`text-xs py-0 h-5 px-1.5 ${shipmentColorMap[shipment.status_color] || shipmentColorMap.gray}`}
+        >
+          {shipment.status_label}
+        </Badge>
+      )
+    },
+    enableSorting: false,
+    enableHiding: true,
   },
   {
     accessorKey: 'payment_method',

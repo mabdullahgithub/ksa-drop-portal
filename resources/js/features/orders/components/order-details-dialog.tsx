@@ -4,6 +4,11 @@ import { Separator } from '@/components/ui/separator'
 import { type Order } from '@/types/order'
 import { format } from 'date-fns'
 import { Package, DollarSign, MapPin, Phone, Mail, Calendar, Tag } from 'lucide-react'
+import { ShipmentPanel } from './shipment-panel'
+import { CreateShipmentDialog } from './create-shipment-dialog'
+import { InvoicePanel } from './invoice-panel'
+import { useState, useEffect, useCallback } from 'react'
+import axios from 'axios'
 
 interface OrderDetailsDialogProps {
   order: Order | null
@@ -12,7 +17,24 @@ interface OrderDetailsDialogProps {
 }
 
 export function OrderDetailsDialog({ order, open, onOpenChange }: OrderDetailsDialogProps) {
-  if (!order) return null
+  const [createShipmentOpen, setCreateShipmentOpen] = useState(false)
+  const [currentOrder, setCurrentOrder] = useState<Order | null>(order)
+
+  useEffect(() => {
+    setCurrentOrder(order)
+  }, [order])
+
+  const refetchOrder = useCallback(async () => {
+    if (!order) return
+    try {
+      const res = await axios.get(`/api/orders/${order.id}`)
+      setCurrentOrder(res.data)
+    } catch {
+      // keep existing data on failure
+    }
+  }, [order])
+
+  if (!order || !currentOrder) return null
 
   const statusColorMap: Record<string, string> = {
     success: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
@@ -273,8 +295,28 @@ export function OrderDetailsDialog({ order, open, onOpenChange }: OrderDetailsDi
               </div>
             </>
           )}
+
+          {/* Shipment */}
+          <Separator />
+          <ShipmentPanel
+            shipment={currentOrder.latest_shipment || null}
+            orderId={currentOrder.id}
+            onCreateShipment={() => setCreateShipmentOpen(true)}
+            onShipmentUpdated={refetchOrder}
+          />
+
+          {/* Invoices */}
+          <Separator />
+          <InvoicePanel order={currentOrder} onInvoicesChanged={refetchOrder} />
         </div>
       </DialogContent>
+
+      <CreateShipmentDialog
+        order={currentOrder}
+        open={createShipmentOpen}
+        onOpenChange={setCreateShipmentOpen}
+        onSuccess={refetchOrder}
+      />
     </Dialog>
   )
 }

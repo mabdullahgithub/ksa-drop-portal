@@ -1,5 +1,6 @@
 import { type ChangeEvent, useState } from 'react'
-import { SlidersHorizontal, ArrowUpAZ, ArrowDownAZ, ChevronDown, Loader2 } from 'lucide-react'
+import { router } from '@inertiajs/react'
+import { SlidersHorizontal, ArrowUpAZ, ArrowDownAZ, ChevronDown, Loader2, Settings } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import {
   Select,
@@ -29,6 +30,11 @@ import { cn } from '@/lib/utils'
 const logoMap: Record<string, React.ReactNode> = {
   shopify: <IconShopify />,
   jnt_express: <IconJnt />,
+}
+
+// Connectors that have a dedicated settings page
+const settingsRouteMap: Record<string, string> = {
+  jnt_express: '/apps/jnt-express',
 }
 
 export function Apps() {
@@ -125,6 +131,8 @@ interface ConnectorCardProps {
 }
 
 function ConnectorCard({ connector, logo, canEdit, isToggling, onToggle }: ConnectorCardProps) {
+  const settingsRoute = settingsRouteMap[connector.key]
+
   return (
     <li className='rounded-lg border p-4 hover:shadow-md'>
       <div className='mb-8 flex items-center justify-between'>
@@ -174,6 +182,16 @@ function ConnectorCard({ connector, logo, canEdit, isToggling, onToggle }: Conne
         <h2 className='mb-1 font-semibold'>{connector.name}</h2>
         <p className='line-clamp-2 text-gray-500'>{connector.description}</p>
       </div>
+      {settingsRoute && canEdit && (
+        <button
+          type='button'
+          onClick={() => router.visit(settingsRoute)}
+          className='mt-4 inline-flex w-full items-center justify-center gap-2 rounded-md border px-3 py-1.5 text-xs font-medium transition-colors hover:bg-muted'
+        >
+          <Settings className='h-3.5 w-3.5' />
+          Configure
+        </button>
+      )}
     </li>
   )
 }

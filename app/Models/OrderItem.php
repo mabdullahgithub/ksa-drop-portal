@@ -32,6 +32,11 @@ class OrderItem extends Model
         'lineitem_taxable' => 'boolean',
     ];
 
+    protected $appends = [
+        'total_price',
+        'formatted_price',
+    ];
+
     /**
      * Get the order that owns the order item.
      */

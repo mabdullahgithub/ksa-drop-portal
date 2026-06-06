@@ -1,7 +1,12 @@
 <?php
 
 use App\Http\Controllers\Api\ClientController;
+use App\Http\Controllers\Api\ConnectorSettingsController;
+use App\Http\Controllers\Api\InvoiceController;
 use App\Http\Controllers\Api\OrderController;
+use App\Http\Controllers\Api\ShipmentController;
+use App\Http\Controllers\Api\WarehouseController;
+use App\Http\Controllers\Api\WebhookController;
 use App\Http\Controllers\ClientPageController;
 use App\Http\Controllers\Api\ProductController;
 use App\Http\Controllers\ImpersonateController;
@@ -14,6 +19,7 @@ use App\Http\Controllers\RoleController;
 use App\Http\Controllers\SettingsController;
 use App\Http\Controllers\TeamController;
 use App\Http\Controllers\ConnectorController;
+use App\Http\Controllers\TrackingController;
 use App\Http\Controllers\UserRoleController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -40,6 +46,36 @@ Route::middleware(['auth', 'verified', 'role:!client'])->group(function () {
     // Connectors API
     Route::get('/api/connectors', [ConnectorController::class, 'index'])->middleware('permission:view apps')->name('api.connectors.index');
     Route::patch('/api/connectors/{connector}/toggle', [ConnectorController::class, 'toggle'])->middleware('permission:edit apps')->name('api.connectors.toggle');
+    Route::get('/api/connectors/{connector}/settings', [ConnectorSettingsController::class, 'show'])->middleware('permission:edit apps')->name('api.connectors.settings.show');
+    Route::put('/api/connectors/{connector}/settings', [ConnectorSettingsController::class, 'update'])->middleware('permission:edit apps')->name('api.connectors.settings.update');
+    Route::post('/api/connectors/{connector}/test', [ConnectorSettingsController::class, 'test'])->middleware('permission:edit apps')->name('api.connectors.settings.test');
+
+    // J&T Express Settings Page
+    Route::get('/apps/jnt-express', fn () => Inertia::render('Apps/JntSettings'))->middleware('permission:edit apps')->name('apps.jnt-express');
+
+    // Warehouses API
+    Route::prefix('api/warehouses')->middleware('permission:edit apps')->group(function () {
+        Route::get('/', [WarehouseController::class, 'index'])->name('api.warehouses.index');
+        Route::post('/', [WarehouseController::class, 'store'])->name('api.warehouses.store');
+        Route::put('/{warehouse}', [WarehouseController::class, 'update'])->name('api.warehouses.update');
+        Route::delete('/{warehouse}', [WarehouseController::class, 'destroy'])->name('api.warehouses.destroy');
+    });
+
+    // Shipments API
+    Route::prefix('api/shipments')->group(function () {
+        Route::get('/', [ShipmentController::class, 'index'])->middleware('permission:view orders')->name('api.shipments.index');
+        Route::post('/', [ShipmentController::class, 'store'])->middleware('permission:edit orders')->name('api.shipments.store');
+        Route::post('/bulk', [ShipmentController::class, 'bulkStore'])->middleware('permission:edit orders')->name('api.shipments.bulk');
+        Route::get('/{shipment}', [ShipmentController::class, 'show'])->middleware('permission:view orders')->name('api.shipments.show');
+        Route::post('/{shipment}/track', [ShipmentController::class, 'track'])->middleware('permission:view orders')->name('api.shipments.track');
+        Route::post('/{shipment}/cancel', [ShipmentController::class, 'cancel'])->middleware('permission:edit orders')->name('api.shipments.cancel');
+        Route::post('/{shipment}/invoice', [InvoiceController::class, 'generateShipping'])->middleware('permission:edit orders')->name('api.shipments.invoice');
+    });
+
+    // Invoices API (waybill only)
+    Route::get('/api/invoices/{invoice}/preview', [InvoiceController::class, 'preview'])->middleware('permission:view orders')->name('api.invoices.preview');
+    Route::get('/api/invoices/{invoice}/download', [InvoiceController::class, 'download'])->middleware('permission:view orders')->name('api.invoices.download');
+
     Route::get('/chats', fn () => Inertia::render('Chats'))->name('chats');
     Route::get('/users', fn () => Inertia::render('Users'))->middleware('permission:view users')->name('users');
 
@@ -185,10 +221,19 @@ Route::prefix('portal')->middleware(['auth', 'verified', 'role:client'])->group(
     Route::get('/api/products/{product}', [PortalController::class, 'productShow'])->name('portal.api.products.show');
     Route::get('/api/revenue', [PortalController::class, 'revenue'])->name('portal.api.revenue');
     Route::get('/api/finance', [PortalController::class, 'finance'])->name('portal.api.finance');
+    Route::get('/api/invoices/{invoice}/preview', [InvoiceController::class, 'portalPreview'])->name('portal.api.invoices.preview');
+    Route::get('/api/invoices/{invoice}/download', [InvoiceController::class, 'portalDownload'])->name('portal.api.invoices.download');
     Route::post('/settings/company-profile', [PortalController::class, 'updateCompanyProfile'])->name('portal.settings.company-profile.update');
     Route::post('/settings/logo', [PortalController::class, 'updateLogo'])->name('portal.settings.logo.update');
     Route::delete('/settings/logo', [PortalController::class, 'removeLogo'])->name('portal.settings.logo.remove');
 });
+
+// Public Tracking Page (no auth required)
+Route::get('/track/{trackingNumber}', [TrackingController::class, 'show'])->name('tracking.show');
+Route::get('/api/track/{trackingNumber}', [TrackingController::class, 'api'])->name('tracking.api');
+
+// Webhooks (no auth, no CSRF)
+Route::post('/webhooks/jnt-express', [WebhookController::class, 'handleJntExpress'])->name('webhooks.jnt-express');
 
 // Error pages
 Route::get('/errors/unauthorized', fn () => Inertia::render('Errors/Unauthorized'))->name('errors.unauthorized');

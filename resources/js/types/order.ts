@@ -65,6 +65,56 @@ export interface Order {
   status_color: 'success' | 'warning' | 'info' | 'error' | 'default'
   financial_status_color: 'success' | 'warning' | 'info' | 'error' | 'default'
   items?: OrderItem[]
+  latest_shipment?: Shipment | null
+  invoices?: Invoice[]
+}
+
+export interface TrackingEvent {
+  status: string
+  description: string
+  location: string | null
+  timestamp: string
+  raw_status: string | null
+}
+
+export interface Shipment {
+  id: number
+  order_id: number
+  courier: string
+  tracking_number: string | null
+  txlogistic_id: string
+  sorting_code: string | null
+  status: string
+  status_label: string
+  status_color: string
+  courier_status: string | null
+  courier_status_description: string | null
+  tracking_history: TrackingEvent[] | null
+  label_url: string | null
+  weight: string
+  service_type: string
+  shipped_at: string | null
+  delivered_at: string | null
+  cancelled_at: string | null
+  cancel_reason: string | null
+  error_message: string | null
+  created_at: string
+}
+
+export interface Invoice {
+  id: number
+  order_id: number
+  shipment_id: number | null
+  invoice_number: string
+  type: 'shipping' | 'billing'
+  status: 'draft' | 'issued'
+  subtotal: string
+  tax_amount: string
+  shipping_amount: string
+  total: string
+  issued_at: string | null
+  file_path: string | null
+  created_at: string
 }
 
 export interface OrderItem {

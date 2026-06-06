@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback } from 'react'
-import { Search as SearchIcon, Download, Upload, CheckCircle2, AlertCircle, FileSpreadsheet, X, Package, DollarSign, Clock, TruckIcon } from 'lucide-react'
+import { Search as SearchIcon, Download, Upload, CheckCircle2, AlertCircle, FileSpreadsheet, X, Package, DollarSign, Clock, TruckIcon, Copy } from 'lucide-react'
 import {
   flexRender,
   getCoreRowModel,
@@ -98,6 +98,58 @@ const columns: ColumnDef<any>[] = [
         SAR {parseFloat(row.getValue('total') || '0').toLocaleString()}
       </span>
     ),
+  },
+  {
+    id: 'tracking',
+    header: 'Tracking',
+    cell: ({ row }) => {
+      const shipment = row.original.latest_shipment
+      if (!shipment) return <span className='text-muted-foreground'>—</span>
+
+      const colorMap: Record<string, string> = {
+        gray: 'bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400',
+        blue: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400',
+        indigo: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-400',
+        orange: 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400',
+        red: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400',
+        green: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
+        yellow: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400',
+      }
+
+      const copyTracking = () => {
+        if (shipment.tracking_number) {
+          navigator.clipboard.writeText(shipment.tracking_number)
+        }
+      }
+
+      return (
+        <div className='flex flex-col gap-1'>
+          <Badge variant='outline' className={`w-fit text-xs ${colorMap[shipment.status_color] || ''}`}>
+            {shipment.status_label}
+          </Badge>
+          {shipment.tracking_number && (
+            <div className='flex items-center gap-1'>
+              <a
+                href={`/track/${shipment.tracking_number}`}
+                target='_blank'
+                rel='noopener noreferrer'
+                className='font-mono text-xs text-primary hover:underline'
+              >
+                {shipment.tracking_number}
+              </a>
+              <button
+                type='button'
+                onClick={copyTracking}
+                className='text-muted-foreground hover:text-foreground'
+                title='Copy tracking number'
+              >
+                <Copy className='h-3 w-3' />
+              </button>
+            </div>
+          )}
+        </div>
+      )
+    },
   },
   {
     accessorKey: 'created_at',

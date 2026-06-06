@@ -1,0 +1,544 @@
+<?php
+
+namespace App\Services\Shipping\Drivers;
+
+use App\Models\ConnectorSetting;
+use App\Services\Shipping\Contracts\CourierDriver;
+use App\Services\Shipping\DTOs\CancelResult;
+use App\Services\Shipping\DTOs\ShipmentData;
+use App\Services\Shipping\DTOs\ShipmentResult;
+use App\Services\Shipping\DTOs\TrackingEvent;
+use App\Services\Shipping\DTOs\TrackingResult;
+use App\Services\Shipping\Enums\ShipmentStatus;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\RateLimiter;
+
+class JntExpressDriver implements CourierDriver
+{
+    protected ?array $credentials = null;
+
+    public function getDriverName(): string
+    {
+        return 'jnt_express';
+    }
+
+    public function createShipment(ShipmentData $data): ShipmentResult
+    {
+        $credentials = $this->getCredentials();
+
+        // J&T validates "prov" against its own canonical list of KSA regions and
+        // rejects empty/unknown values (error 1450033315). Normalise both parties'
+        // provinces and fail fast with a clear message rather than sending a request
+        // that is guaranteed to be rejected with a cryptic error.
+        $senderProvince = $this->normalizeProvince($data->sender['province'] ?? '');
+        $receiverProvince = $this->normalizeProvince($data->receiver['province'] ?? '');
+
+        $missing = [];
+        if ($receiverProvince === '') {
+            $missing[] = 'province';
+        }
+        if ($this->isBlank($data->receiver['city'] ?? null)) {
+            $missing[] = 'city';
+        }
+        if ($this->isBlank($data->receiver['address'] ?? null)) {
+            $missing[] = 'address';
+        }
+
+        if (! empty($missing)) {
+            return ShipmentResult::failure(
+                errorMessage: 'Missing or invalid receiver ' . implode(', ', $missing)
+                    . '. Please complete the receiver address (with a valid KSA province) before creating the shipment.',
+                errorCode: 'VALIDATION_ERROR',
+            );
+        }
+
+        $bizContent = [
+            'customerCode' => $credentials['api_account'],
+            'txlogisticId' => $data->txlogisticId,
+            'orderType' => '1',
+            'serviceType' => $data->serviceType,
+            'deliveryType' => '03',
+            'operateType' => '1',
+            'expressType' => 'EZKSA',
+            'goodsType' => 'ITN1',
+            'weight' => (string) $data->weight,
+            'itemName' => $data->itemDescription,
+            'totalQuantity' => (string) $data->quantity,
+            'sender' => [
+                'name' => $data->sender['name'],
+                'phone' => $data->sender['phone'],
+                'mobile' => $data->sender['phone'],
+                'countryCode' => $this->normalizeCountryCode($data->sender['countryCode'] ?? null),
+                'prov' => $senderProvince,
+                'city' => $data->sender['city'],
+                'area' => $data->sender['area'] ?? '',
+                'address' => $data->sender['address'],
+                'postCode' => $data->sender['postCode'] ?? '',
+            ],
+            'receiver' => [
+                'name' => $data->receiver['name'],
+                'phone' => $data->receiver['phone'],
+                'mobile' => $data->receiver['phone'],
+                'countryCode' => $this->normalizeCountryCode($data->receiver['countryCode'] ?? null),
+                'prov' => $receiverProvince,
+                'city' => $data->receiver['city'],
+                'area' => $data->receiver['area'] ?? '',
+                'address' => $data->receiver['address'],
+                'postCode' => $data->receiver['postCode'] ?? '',
+            ],
+        ];
+
+        if ($data->length) {
+            $bizContent['length'] = (string) $data->length;
+        }
+        if ($data->width) {
+            $bizContent['width'] = (string) $data->width;
+        }
+        if ($data->height) {
+            $bizContent['height'] = (string) $data->height;
+        }
+
+        $response = $this->makeRequest('/webopenplatformapi/api/order/addOrder', $bizContent);
+
+        if (! $response) {
+            return ShipmentResult::failure('Failed to connect to J&T Express API');
+        }
+
+        // J&T is inconsistent about whether `code` is a string or an integer, so
+        // always compare as a string. Success is code "1".
+        $code = (string) ($response['code'] ?? '');
+
+        if ($code === '1') {
+            return ShipmentResult::success(
+                trackingNumber: $response['data']['billCode'] ?? '',
+                sortingCode: $response['data']['sortingCode'] ?? null,
+                txlogisticId: $data->txlogisticId,
+                rawResponse: $response,
+            );
+        }
+
+        Log::error('J&T Express shipment creation failed', [
+            'txlogistic_id' => $data->txlogisticId,
+            'response_code' => $response['code'] ?? null,
+            'response_msg' => $response['msg'] ?? null,
+            'full_response' => $response,
+        ]);
+
+        return ShipmentResult::failure(
+            errorMessage: $this->friendlyError($code, $response['msg'] ?? null),
+            errorCode: $code !== '' ? $code : null,
+            rawResponse: $response,
+        );
+    }
+
+    public function trackShipment(string $trackingNumber): TrackingResult
+    {
+        $bizContent = [
+            'billCodes' => [$trackingNumber],
+            'lang' => 'en',
+        ];
+
+        $response = $this->makeRequest('/webopenplatformapi/api/logistics/trace', $bizContent);
+
+        if (! $response) {
+            return TrackingResult::failure('Failed to connect to J&T Express API');
+        }
+
+        if ((string) ($response['code'] ?? '') !== '1') {
+            return TrackingResult::failure(
+                $response['msg'] ?? 'Failed to get tracking info',
+                $response,
+            );
+        }
+
+        $details = $response['data'][0]['details'] ?? [];
+        $events = [];
+
+        foreach ($details as $detail) {
+            $events[] = new TrackingEvent(
+                status: $this->normalizeStatus($detail['scanType'] ?? ''),
+                description: $detail['desc'] ?? '',
+                location: $detail['scanCity'] ?? null,
+                timestamp: $detail['scanTime'] ?? '',
+                rawStatus: $detail['scanType'] ?? '',
+            );
+        }
+
+        $currentStatus = ! empty($events)
+            ? $events[0]->status
+            : ShipmentStatus::INFO_RECEIVED;
+
+        return TrackingResult::success($currentStatus, $events, $response);
+    }
+
+    public function cancelShipment(string $trackingNumber, string $reason): CancelResult
+    {
+        $credentials = $this->getCredentials();
+
+        $bizContent = [
+            'customerCode' => $credentials['api_account'],
+            'txlogisticId' => $trackingNumber,
+            'orderType' => '2',
+            'reason' => $reason,
+        ];
+
+        $response = $this->makeRequest('/webopenplatformapi/api/order/cancelOrder', $bizContent);
+
+        if (! $response) {
+            return CancelResult::failure('Failed to connect to J&T Express API');
+        }
+
+        $code = (string) ($response['code'] ?? '');
+
+        if ($code === '1') {
+            return CancelResult::success($response);
+        }
+
+        return CancelResult::failure(
+            errorMessage: $this->friendlyError($code, $response['msg'] ?? null),
+            errorCode: $code !== '' ? $code : null,
+            rawResponse: $response,
+        );
+    }
+
+    public function testConnection(): bool
+    {
+        try {
+            $this->getCredentials();
+
+            $bizContent = [
+                'billCodes' => ['TEST000000000'],
+                'lang' => 'en',
+            ];
+
+            $response = $this->makeRequest('/webopenplatformapi/api/logistics/trace', $bizContent);
+
+            // If we get any response (even "not found"), credentials are valid
+            return $response !== null && (string) ($response['code'] ?? '') !== '145003030';
+        } catch (\Exception $e) {
+            return false;
+        }
+    }
+
+    public function normalizeStatus(string $rawStatus): ShipmentStatus
+    {
+        return match ($rawStatus) {
+            'GOT' => ShipmentStatus::INFO_RECEIVED,
+            'PICK_UP', 'COLLECTED' => ShipmentStatus::INFO_RECEIVED,
+            'DEPARTURE', 'SEND_SCAN', 'IN_TRANSIT' => ShipmentStatus::IN_TRANSIT,
+            'ARRIVAL', 'ARRIVAL_SCAN' => ShipmentStatus::IN_TRANSIT,
+            'DELIVERING', 'OUT_FOR_DELIVERY' => ShipmentStatus::OUT_FOR_DELIVERY,
+            'SIGNED', 'DELIVERED', 'POD' => ShipmentStatus::DELIVERED,
+            'FAILED', 'ATTEMPT_FAIL', 'UNDELIVERED' => ShipmentStatus::ATTEMPT_FAIL,
+            'RETURN', 'RETURNED' => ShipmentStatus::RETURNED,
+            'CANCEL', 'CANCELLED' => ShipmentStatus::CANCELLED,
+            'LOST', 'DAMAGED', 'EXCEPTION' => ShipmentStatus::EXCEPTION,
+            default => ShipmentStatus::IN_TRANSIT,
+        };
+    }
+
+    /**
+     * Turn a J&T error code/message into a clear, actionable English message.
+     * J&T sometimes returns non-English (e.g. Chinese) messages, so we map the
+     * codes we know about and keep the raw message available for debugging.
+     */
+    protected function friendlyError(string $code, ?string $msg): string
+    {
+        $known = self::errorMessages();
+
+        if (isset($known[$code])) {
+            return $known[$code];
+        }
+
+        $msg = trim((string) $msg);
+
+        if ($msg === '') {
+            return 'J&T Express rejected the shipment (code ' . $code . ').';
+        }
+
+        return 'J&T Express: ' . $msg . ' (code ' . $code . ').';
+    }
+
+    /**
+     * Known J&T Express response codes mapped to clear English messages.
+     * Address/region/province/city codes are phrased to be actionable for the
+     * operator; the rest mirror J&T's official documentation.
+     *
+     * @return array<string, string>
+     */
+    protected static function errorMessages(): array
+    {
+        return [
+            '0' => 'J&T Express rejected the request (general failure).',
+
+            // Auth, headers & signature
+            '145003030' => 'J&T header signature verification failed — check the API account and private key.',
+            '145003031' => 'J&T business-parameter signature verification failed — check the private key / digest.',
+            '145003071' => 'apiAccount is empty — J&T credentials are not configured.',
+            '145003052' => 'Request digest is empty — the signature could not be generated.',
+            '145003053' => 'Request timestamp is empty.',
+
+            // System / call exceptions
+            '145003040' => 'J&T internal call exception — please retry shortly.',
+            '145005000' => 'J&T system error — please retry shortly.',
+            '145003041' => 'Order placement failed at J&T — please retry.',
+            '145003203' => 'Updating the order failed at J&T — please try again later.',
+
+            // Parameter validation
+            '145003050' => 'Illegal parameters were sent to J&T.',
+            '145003087' => 'Invalid order type, service type, delivery type, item type, shipment type or settlement method.',
+            '145003200' => 'Invalid service type — it must be 01 (Express) or 02 (Standard).',
+            '145003088' => 'Incomplete service-time information.',
+
+            // Region / city / province / address
+            '145003060' => 'J&T did not accept the region. Choose a valid KSA region.',
+            '145003061' => 'J&T did not accept the city. Use a city recognised by J&T.',
+            '145003062' => 'J&T did not accept the province. Choose a valid KSA region.',
+            '145003064' => 'J&T could not match the address — verify the receiver province, city and district.',
+            '145003086' => 'Incomplete address information for the shipment.',
+            '145003109' => 'Too much address information — shorten the address fields.',
+            '145003110' => 'Street information is too long — shorten the street address.',
+            // Observed gateway variants (different code layer than the docs above)
+            '1450033315' => 'J&T did not accept the receiver province. Choose a valid KSA region.',
+            '999002000' => 'J&T could not match the receiver address. The city or district is not '
+                . 'recognised in J&T\'s KSA address list — verify the receiver city and district.',
+
+            // Sender / recipient details
+            '145003083' => 'Incomplete sender information — check the warehouse address.',
+            '145003084' => 'Incomplete recipient information — check the receiver address.',
+            '145003085' => 'Phone number cannot be empty.',
+            '145003103' => 'Name information is invalid.',
+            '145003104' => 'Company information is too long.',
+            '145003105' => 'Contact information is too long.',
+            '145003106' => 'Postcode or email address is invalid.',
+
+            // Item / weight / amount / price
+            '145003092' => 'The weight value is invalid.',
+            '145003093' => 'Incomplete item type.',
+            '145003096' => 'Invalid item quantity.',
+            '145003099' => 'Invalid amount.',
+            '145003107' => 'Price information is invalid.',
+            '145003108' => 'Comments, descriptions or links are invalid.',
+            '145003111' => 'The total number of parcels is invalid.',
+
+            // COD / payment
+            '145003112' => 'COD service is not enabled for this account.',
+            '145003113' => 'Payment method does not match (expected PP_CASH, CC_CASH or PP_MM).',
+
+            // Duplicates
+            '145002001' => 'Duplicate order — this order has already been placed at J&T.',
+            '145003101' => 'This customer order number already exists at J&T; cannot place it again.',
+
+            // Status-transition / cancellation
+            '145003201' => 'Order is already picked up and can no longer be modified.',
+            '145003202' => 'Order is already cancelled and can no longer be modified.',
+        ];
+    }
+
+    /**
+     * The 13 canonical KSA regions accepted by J&T Express as "prov".
+     *
+     * @return array<int, string>
+     */
+    public static function provinces(): array
+    {
+        return [
+            'Riyadh',
+            'Makkah',
+            'Madinah',
+            'Eastern Province',
+            'Qassim',
+            'Asir',
+            'Tabuk',
+            'Hail',
+            'Northern Borders',
+            'Jazan',
+            'Najran',
+            'Al Bahah',
+            'Al Jawf',
+        ];
+    }
+
+    /**
+     * Map a free-text province (English/Arabic variants, or a city name that maps
+     * to a region) onto J&T's canonical region name. Returns '' when it cannot be
+     * resolved, so callers can reject the shipment before hitting the API.
+     */
+    public function normalizeProvince(string $value): string
+    {
+        $value = trim($value);
+
+        if ($value === '' || $value === '-') {
+            return '';
+        }
+
+        // Collapse punctuation/whitespace; keep latin + arabic letters and digits.
+        $key = preg_replace('/[^\p{L}\p{N}]+/u', ' ', $value);
+        $key = trim(preg_replace('/\s+/', ' ', mb_strtolower($key)));
+
+        $map = [
+            // Riyadh
+            'riyadh' => 'Riyadh', 'al riyadh' => 'Riyadh', 'ar riyadh' => 'Riyadh', 'الرياض' => 'Riyadh',
+            // Makkah
+            'makkah' => 'Makkah', 'mecca' => 'Makkah', 'makkah al mukarramah' => 'Makkah',
+            'jeddah' => 'Makkah', 'taif' => 'Makkah', 'مكة المكرمة' => 'Makkah', 'مكة' => 'Makkah',
+            // Madinah
+            'madinah' => 'Madinah', 'medina' => 'Madinah', 'al madinah' => 'Madinah',
+            'al madinah al munawwarah' => 'Madinah', 'المدينة المنورة' => 'Madinah', 'المدينة' => 'Madinah',
+            // Eastern Province
+            'eastern province' => 'Eastern Province', 'eastern' => 'Eastern Province',
+            'eastern region' => 'Eastern Province', 'ash sharqiyah' => 'Eastern Province',
+            'al sharqiyah' => 'Eastern Province', 'dammam' => 'Eastern Province', 'khobar' => 'Eastern Province',
+            'al khobar' => 'Eastern Province', 'dhahran' => 'Eastern Province',
+            'المنطقة الشرقية' => 'Eastern Province', 'الشرقية' => 'Eastern Province',
+            // Qassim
+            'qassim' => 'Qassim', 'al qassim' => 'Qassim', 'qaseem' => 'Qassim',
+            'buraidah' => 'Qassim', 'القصيم' => 'Qassim',
+            // Asir
+            'asir' => 'Asir', 'aseer' => 'Asir', 'abha' => 'Asir', 'عسير' => 'Asir',
+            // Tabuk
+            'tabuk' => 'Tabuk', 'tabouk' => 'Tabuk', 'تبوك' => 'Tabuk',
+            // Hail
+            'hail' => 'Hail', 'ha il' => 'Hail', 'حائل' => 'Hail',
+            // Northern Borders
+            'northern borders' => 'Northern Borders', 'northern border' => 'Northern Borders',
+            'northern borders region' => 'Northern Borders', 'al hudud ash shamaliyah' => 'Northern Borders',
+            'arar' => 'Northern Borders', 'الحدود الشمالية' => 'Northern Borders',
+            // Jazan
+            'jazan' => 'Jazan', 'jizan' => 'Jazan', 'gizan' => 'Jazan', 'جازان' => 'Jazan', 'جيزان' => 'Jazan',
+            // Najran
+            'najran' => 'Najran', 'نجران' => 'Najran',
+            // Al Bahah
+            'al bahah' => 'Al Bahah', 'al baha' => 'Al Bahah', 'bahah' => 'Al Bahah',
+            'baha' => 'Al Bahah', 'الباحة' => 'Al Bahah',
+            // Al Jawf
+            'al jawf' => 'Al Jawf', 'al jouf' => 'Al Jawf', 'jawf' => 'Al Jawf',
+            'sakaka' => 'Al Jawf', 'الجوف' => 'Al Jawf',
+        ];
+
+        // Also try a variant with trailing qualifier words removed, so values like
+        // "Riyadh Region" or "Makkah Province" still resolve.
+        $stripped = trim(preg_replace('/\s+/', ' ',
+            preg_replace('/\b(region|province|governorate|emirate|district|of)\b/u', ' ', $key)
+        ));
+
+        foreach ([$key, $stripped] as $candidate) {
+            if ($candidate !== '' && isset($map[$candidate])) {
+                return $map[$candidate];
+            }
+
+            // Already a canonical value (case-insensitive)?
+            foreach (self::provinces() as $province) {
+                if (mb_strtolower($province) === $candidate) {
+                    return $province;
+                }
+            }
+        }
+
+        // Unknown — let the caller decide. Returning '' forces a clear validation error.
+        return '';
+    }
+
+    protected function isBlank(?string $value): bool
+    {
+        $value = trim((string) $value);
+
+        return $value === '' || $value === '-';
+    }
+
+    /**
+     * J&T-SA's address tree is keyed on "KSA", not the ISO-3166 "SA"/"SAU".
+     * Sending the ISO code makes prov/city lookups miss → 999002000 "Data not found".
+     * Map any Saudi representation to "KSA"; pass through anything genuinely foreign.
+     */
+    protected function normalizeCountryCode(?string $value): string
+    {
+        $value = strtoupper(trim((string) $value));
+
+        $saudi = ['', 'SA', 'SAU', 'KSA', 'SAUDI ARABIA', 'SAUDIARABIA', 'KINGDOM OF SAUDI ARABIA'];
+
+        return in_array($value, $saudi, true) ? 'KSA' : $value;
+    }
+
+    protected function getCredentials(): array
+    {
+        if ($this->credentials) {
+            return $this->credentials;
+        }
+
+        $this->credentials = [
+            'api_account' => ConnectorSetting::getForConnector('jnt_express', 'api_account'),
+            'private_key' => ConnectorSetting::getForConnector('jnt_express', 'private_key'),
+            'base_url' => ConnectorSetting::getForConnector('jnt_express', 'base_url') ?? 'https://openapi.jtjms-sa.com',
+        ];
+
+        if (! $this->credentials['api_account'] || ! $this->credentials['private_key']) {
+            throw new \RuntimeException('J&T Express credentials are not configured.');
+        }
+
+        return $this->credentials;
+    }
+
+    protected function buildDigest(string $bizContent): string
+    {
+        $credentials = $this->getCredentials();
+
+        // J&T header signature: base64(md5(bizContent + privateKey)), private key used as raw string.
+        return base64_encode(md5($bizContent . $credentials['private_key'], true));
+    }
+
+    protected function makeRequest(string $endpoint, array $data): ?array
+    {
+        $rateLimitKey = 'jnt_express:api';
+
+        if (RateLimiter::tooManyAttempts($rateLimitKey, 30)) {
+            Log::warning('J&T Express API rate limit reached');
+            return null;
+        }
+
+        try {
+            $credentials = $this->getCredentials();
+            // The exact bizContent string posted is what the header digest is computed over.
+            $bizContent = json_encode($data, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+            $digest = $this->buildDigest($bizContent);
+            // J&T expects a millisecond timestamp (13 digits).
+            $timestamp = (string) round(microtime(true) * 1000);
+
+            Log::debug('J&T Express request details', [
+                'endpoint' => $endpoint,
+                'bizContent' => $bizContent,
+                'computed_digest' => $digest,
+                'timestamp' => $timestamp,
+                'api_account' => $credentials['api_account'],
+            ]);
+
+            $response = Http::asForm()
+                ->withHeaders([
+                    'apiAccount' => $credentials['api_account'],
+                    'digest' => $digest,
+                    'timestamp' => $timestamp,
+                ])
+                ->timeout(30)
+                ->post($credentials['base_url'] . $endpoint, [
+                    'bizContent' => $bizContent,
+                ]);
+
+            RateLimiter::hit($rateLimitKey, 60);
+
+            Log::info('J&T Express API call', [
+                'endpoint' => $endpoint,
+                'status' => $response->status(),
+            ]);
+
+            return $response->json();
+        } catch (\Exception $e) {
+            Log::error('J&T Express API error', [
+                'endpoint' => $endpoint,
+                'error' => $e->getMessage(),
+            ]);
+
+            return null;
+        }
+    }
+}

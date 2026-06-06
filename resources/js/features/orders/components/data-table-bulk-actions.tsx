@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { type Table } from '@tanstack/react-table'
-import { Package, DollarSign, Tag, Trash2 } from 'lucide-react'
+import { Package, DollarSign, Tag, Trash2, Truck, CheckCircle2, XCircle } from 'lucide-react'
 import { toast } from 'sonner'
+import axios from 'axios'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -27,6 +28,19 @@ import {
 import { DataTableBulkActions as BulkActionsToolbar } from '@/components/data-table'
 import { type Order } from '@/types/order'
 import { useOrderMutations } from '@/hooks/useOrders'
+import { usePermissions } from '@/hooks/use-permissions'
+
+interface Warehouse {
+  id: number
+  name: string
+  city: string
+  is_default: boolean
+}
+
+interface BulkShipmentResult {
+  created: { id: number; tracking_number: string | null }[]
+  failed: { order_id: number; error: string }[]
+}
 
 type DataTableBulkActionsProps<TData> = {
   table: Table<TData>
@@ -37,9 +51,66 @@ export function DataTableBulkActions<TData>({
 }: DataTableBulkActionsProps<TData>) {
   const selectedRows = table.getFilteredSelectedRowModel().rows
   const { bulkUpdate } = useOrderMutations()
+  const { can } = usePermissions()
   const [showTagDialog, setShowTagDialog] = useState(false)
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const [tagInput, setTagInput] = useState('')
+
+  // Bulk shipment state
+  const [showShipmentDialog, setShowShipmentDialog] = useState(false)
+  const [warehouses, setWarehouses] = useState<Warehouse[]>([])
+  const [selectedWarehouse, setSelectedWarehouse] = useState<number | ''>('')
+  const [shipmentServiceType, setShipmentServiceType] = useState('02')
+  const [shipmentWeight, setShipmentWeight] = useState('0.5')
+  const [creatingShipments, setCreatingShipments] = useState(false)
+  const [shipmentResult, setShipmentResult] = useState<BulkShipmentResult | null>(null)
+
+  useEffect(() => {
+    if (showShipmentDialog && warehouses.length === 0) {
+      axios
+        .get('/api/warehouses')
+        .then((res) => {
+          const wh: Warehouse[] = res.data.warehouses || []
+          setWarehouses(wh)
+          const def = wh.find((w) => w.is_default) || wh[0]
+          if (def) setSelectedWarehouse(def.id)
+        })
+        .catch(() => toast.error('Failed to load warehouses'))
+    }
+  }, [showShipmentDialog, warehouses.length])
+
+  const handleCreateShipments = async () => {
+    if (!selectedWarehouse) {
+      toast.error('Please select a warehouse')
+      return
+    }
+    const orderIds = selectedRows.map((row) => (row.original as Order).id)
+    setCreatingShipments(true)
+    setShipmentResult(null)
+    try {
+      const res = await axios.post('/api/shipments/bulk', {
+        order_ids: orderIds,
+        warehouse_id: selectedWarehouse,
+        weight: parseFloat(shipmentWeight) || 0.5,
+        service_type: shipmentServiceType,
+      })
+      setShipmentResult({ created: res.data.created || [], failed: res.data.failed || [] })
+      toast.success(res.data.message)
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Failed to create shipments')
+    } finally {
+      setCreatingShipments(false)
+    }
+  }
+
+  const closeShipmentDialog = () => {
+    setShowShipmentDialog(false)
+    if (shipmentResult && shipmentResult.created.length > 0) {
+      table.resetRowSelection()
+      window.location.reload()
+    }
+    setShipmentResult(null)
+  }
 
   const handleBulkFulfillmentChange = async (status: string) => {
     const selectedOrders = selectedRows.map((row) => (row.original as Order).id)
@@ -221,6 +292,27 @@ export function DataTableBulkActions<TData>({
           </TooltipContent>
         </Tooltip>
 
+        {can('edit orders') && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant='outline'
+                size='icon'
+                onClick={() => setShowShipmentDialog(true)}
+                className='size-8'
+                aria-label='Create shipments'
+                title='Create shipments'
+              >
+                <Truck className='h-4 w-4' />
+                <span className='sr-only'>Create shipments</span>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Create shipments</p>
+            </TooltipContent>
+          </Tooltip>
+        )}
+
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
@@ -287,6 +379,116 @@ export function DataTableBulkActions<TData>({
             <Button variant='destructive' onClick={handleBulkDelete}>
               Cancel Orders
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Create Shipments Dialog */}
+      <Dialog
+        open={showShipmentDialog}
+        onOpenChange={(open) => (open ? setShowShipmentDialog(true) : closeShipmentDialog())}
+      >
+        <DialogContent className='max-w-lg'>
+          <DialogHeader>
+            <DialogTitle>Create Shipments</DialogTitle>
+            <DialogDescription>
+              Create J&amp;T Express shipments for {selectedRows.length} selected order
+              {selectedRows.length > 1 ? 's' : ''}. Orders that already have an active shipment will be skipped.
+            </DialogDescription>
+          </DialogHeader>
+
+          {!shipmentResult ? (
+            <div className='space-y-4 py-2'>
+              <div className='space-y-2'>
+                <Label>Sender Warehouse</Label>
+                <select
+                  className='flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm'
+                  value={selectedWarehouse}
+                  onChange={(e) => setSelectedWarehouse(Number(e.target.value))}
+                >
+                  <option value=''>Select a warehouse...</option>
+                  {warehouses.map((w) => (
+                    <option key={w.id} value={w.id}>
+                      {w.name} {w.is_default ? '(Default)' : ''} — {w.city}
+                    </option>
+                  ))}
+                </select>
+                {warehouses.length === 0 && (
+                  <p className='text-xs text-muted-foreground'>
+                    No warehouses configured. Add one in J&amp;T Settings first.
+                  </p>
+                )}
+              </div>
+              <div className='grid grid-cols-2 gap-3'>
+                <div className='space-y-2'>
+                  <Label>Default Weight (kg)</Label>
+                  <Input
+                    type='number'
+                    step='0.1'
+                    value={shipmentWeight}
+                    onChange={(e) => setShipmentWeight(e.target.value)}
+                  />
+                </div>
+                <div className='space-y-2'>
+                  <Label>Service Type</Label>
+                  <select
+                    className='flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm'
+                    value={shipmentServiceType}
+                    onChange={(e) => setShipmentServiceType(e.target.value)}
+                  >
+                    <option value='01'>Express</option>
+                    <option value='02'>Standard</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className='space-y-3 py-2 max-h-72 overflow-y-auto'>
+              {shipmentResult.created.length > 0 && (
+                <div className='space-y-2'>
+                  <div className='flex items-center gap-2 text-sm font-medium text-green-600'>
+                    <CheckCircle2 className='h-4 w-4' />
+                    {shipmentResult.created.length} shipment(s) created
+                  </div>
+                  {shipmentResult.created.map((s) => (
+                    <div key={s.id} className='text-xs text-muted-foreground pl-6 font-mono'>
+                      {s.tracking_number || '—'}
+                    </div>
+                  ))}
+                </div>
+              )}
+              {shipmentResult.failed.length > 0 && (
+                <div className='space-y-2'>
+                  <div className='flex items-center gap-2 text-sm font-medium text-red-600'>
+                    <XCircle className='h-4 w-4' />
+                    {shipmentResult.failed.length} failed
+                  </div>
+                  {shipmentResult.failed.map((f, i) => (
+                    <div key={i} className='text-xs text-muted-foreground pl-6'>
+                      Order #{f.order_id}: {f.error}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          <DialogFooter>
+            {!shipmentResult ? (
+              <>
+                <Button variant='outline' onClick={closeShipmentDialog}>
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleCreateShipments}
+                  disabled={creatingShipments || !selectedWarehouse}
+                >
+                  {creatingShipments ? 'Creating...' : 'Create Shipments'}
+                </Button>
+              </>
+            ) : (
+              <Button onClick={closeShipmentDialog}>Done</Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

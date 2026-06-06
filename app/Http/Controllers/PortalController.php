@@ -64,7 +64,7 @@ class PortalController extends Controller
             abort(403);
         }
 
-        $query = $client->orders()->with('items');
+        $query = $client->orders()->with(['items', 'latestShipment', 'invoices']);
 
         if ($request->has('search') && $request->search) {
             $query->search($request->search);

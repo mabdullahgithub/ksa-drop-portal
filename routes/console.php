@@ -10,3 +10,6 @@ Artisan::command('inspire', function () {
 
 // Email log cleanup - runs daily at 2:00 AM, keeps logs for 180 days
 Schedule::command('email:cleanup-logs --days=180')->dailyAt('02:00');
+
+// Sync shipment tracking every 2 hours
+Schedule::command('shipments:sync-tracking')->everyTwoHours();

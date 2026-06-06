@@ -100,6 +100,21 @@ class Order extends Model
         return $this->belongsTo(Client::class);
     }
 
+    public function shipments()
+    {
+        return $this->hasMany(Shipment::class);
+    }
+
+    public function latestShipment()
+    {
+        return $this->hasOne(Shipment::class)->latestOfMany();
+    }
+
+    public function invoices()
+    {
+        return $this->hasMany(Invoice::class);
+    }
+
     /**
      * Scope a query to only include orders with a specific status.
      */

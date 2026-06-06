@@ -15,7 +15,7 @@ class OrderController extends Controller
      */
     public function index(Request $request)
     {
-        $query = Order::with(['items', 'client']);
+        $query = Order::with(['items', 'client', 'latestShipment']);
 
         // Search
         if ($request->has('search')) {
@@ -98,7 +98,7 @@ class OrderController extends Controller
      */
     public function show(Order $order)
     {
-        $order->load('items');
+        $order->load(['items', 'latestShipment', 'invoices']);
         return response()->json($order);
     }
 
