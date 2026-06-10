@@ -17,6 +17,7 @@ use App\Http\Controllers\PermissionController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\RoleController;
 use App\Http\Controllers\SettingsController;
+use App\Http\Controllers\TagController;
 use App\Http\Controllers\TeamController;
 use App\Http\Controllers\ConnectorController;
 use App\Http\Controllers\TrackingController;
@@ -172,6 +173,13 @@ Route::middleware(['auth', 'verified', 'role:!client'])->group(function () {
     Route::post('/team-management/users', [UserRoleController::class, 'store'])->middleware('permission:create users')->name('team-management.users.store');
     Route::put('/team-management/users/{user}', [UserRoleController::class, 'update'])->middleware('permission:edit users')->name('team-management.users.update');
     Route::delete('/team-management/users/{user}', [UserRoleController::class, 'destroy'])->middleware('permission:delete users')->name('team-management.users.destroy');
+
+    // Tags
+    Route::get('/tags', [TagController::class, 'index'])->middleware('permission:view tags')->name('tags');
+    Route::get('/api/tags', [TagController::class, 'list'])->middleware('permission:view tags')->name('api.tags.index');
+    Route::post('/tags', [TagController::class, 'store'])->middleware('permission:create tags')->name('tags.store');
+    Route::put('/tags/{tag}', [TagController::class, 'update'])->middleware('permission:edit tags')->name('tags.update');
+    Route::delete('/tags/{tag}', [TagController::class, 'destroy'])->middleware('permission:delete tags')->name('tags.destroy');
 
     // Help
     Route::get('/help-center', fn () => Inertia::render('HelpCenter'))->name('help-center');

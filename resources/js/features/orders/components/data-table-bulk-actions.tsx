@@ -29,6 +29,7 @@ import { DataTableBulkActions as BulkActionsToolbar } from '@/components/data-ta
 import { type Order } from '@/types/order'
 import { useOrderMutations } from '@/hooks/useOrders'
 import { usePermissions } from '@/hooks/use-permissions'
+import { OrderTagsDialog } from './order-tags-dialog'
 
 interface Warehouse {
   id: number
@@ -53,8 +54,8 @@ export function DataTableBulkActions<TData>({
   const { bulkUpdate } = useOrderMutations()
   const { can } = usePermissions()
   const [showTagDialog, setShowTagDialog] = useState(false)
+  const [isSavingTags, setIsSavingTags] = useState(false)
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
-  const [tagInput, setTagInput] = useState('')
 
   // Bulk shipment state
   const [showShipmentDialog, setShowShipmentDialog] = useState(false)
@@ -154,33 +155,30 @@ export function DataTableBulkActions<TData>({
     )
   }
 
-  const handleAddTags = async () => {
+  const handleAddTags = async (tags: string[]) => {
     const selectedOrders = selectedRows.map((row) => (row.original as Order).id)
-    const tags = tagInput.split(',').map(tag => tag.trim()).filter(tag => tag)
 
     if (tags.length === 0) {
-      toast.error('Please enter at least one tag')
+      toast.error('Please select at least one tag')
       return
     }
 
-    toast.promise(
-      bulkUpdate({
+    setIsSavingTags(true)
+    try {
+      await bulkUpdate({
         order_ids: selectedOrders,
         action: 'add_tags',
         tags,
-      }),
-      {
-        loading: 'Adding tags...',
-        success: () => {
-          table.resetRowSelection()
-          setShowTagDialog(false)
-          setTagInput('')
-          window.location.reload()
-          return `Added tags to ${selectedOrders.length} order${selectedOrders.length > 1 ? 's' : ''}`
-        },
-        error: 'Failed to add tags',
-      }
-    )
+      })
+      table.resetRowSelection()
+      setShowTagDialog(false)
+      toast.success(`Added tags to ${selectedOrders.length} order${selectedOrders.length > 1 ? 's' : ''}`)
+      window.location.reload()
+    } catch {
+      toast.error('Failed to add tags')
+    } finally {
+      setIsSavingTags(false)
+    }
   }
 
   const handleBulkDelete = async () => {
@@ -333,35 +331,14 @@ export function DataTableBulkActions<TData>({
         </Tooltip>
       </BulkActionsToolbar>
 
-      {/* Add Tags Dialog */}
-      <Dialog open={showTagDialog} onOpenChange={setShowTagDialog}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Add Tags</DialogTitle>
-            <DialogDescription>
-              Add tags to {selectedRows.length} selected order{selectedRows.length > 1 ? 's' : ''}. Separate multiple tags with commas.
-            </DialogDescription>
-          </DialogHeader>
-          <div className='py-4'>
-            <Label htmlFor='tags'>Tags</Label>
-            <Input
-              id='tags'
-              placeholder='urgent, vip, priority'
-              value={tagInput}
-              onChange={(e) => setTagInput(e.target.value)}
-              className='mt-2'
-            />
-          </div>
-          <DialogFooter>
-            <Button variant='outline' onClick={() => setShowTagDialog(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleAddTags}>
-              Add Tags
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <OrderTagsDialog
+        open={showTagDialog}
+        onOpenChange={setShowTagDialog}
+        orderNumber={`${selectedRows.length} order${selectedRows.length !== 1 ? 's' : ''}`}
+        currentTags={[]}
+        onSave={handleAddTags}
+        isSaving={isSavingTags}
+      />
 
       {/* Delete Confirmation Dialog */}
       <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>

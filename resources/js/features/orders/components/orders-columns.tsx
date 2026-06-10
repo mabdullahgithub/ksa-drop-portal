@@ -5,6 +5,43 @@ import { DataTableColumnHeader } from '@/components/data-table'
 import { type Order } from '@/types/order'
 import { DataTableRowActions } from './data-table-row-actions'
 import { format } from 'date-fns'
+import { useAvailableTags } from '@/hooks/useTags'
+
+function hexToRgba(hex: string, alpha: number) {
+  const r = parseInt(hex.slice(1, 3), 16)
+  const g = parseInt(hex.slice(3, 5), 16)
+  const b = parseInt(hex.slice(5, 7), 16)
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`
+}
+
+function TagsCell({ tags }: { tags: string[] | null }) {
+  const { tags: predefined } = useAvailableTags()
+  if (!tags || tags.length === 0) return <span className='text-xs text-muted-foreground'>—</span>
+  return (
+    <div className='flex flex-wrap gap-1'>
+      {tags.map((name) => {
+        const meta = predefined.find((t) => t.name === name)
+        return meta ? (
+          <span
+            key={name}
+            className='inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium'
+            style={{
+              backgroundColor: hexToRgba(meta.color, 0.15),
+              color: meta.color,
+              border: `1px solid ${hexToRgba(meta.color, 0.3)}`,
+            }}
+          >
+            {name}
+          </span>
+        ) : (
+          <Badge key={name} variant='secondary' className='text-[10px] py-0 px-1.5 h-4'>
+            {name}
+          </Badge>
+        )
+      })}
+    </div>
+  )
+}
 
 const statusColorMap: Record<string, string> = {
   success: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
@@ -90,34 +127,37 @@ export const ordersColumns: ColumnDef<Order>[] = [
     },
     cell: ({ row }) => {
       const name = row.getValue('customer_name') as string | null
-      const phone = row.original.customer_phone
-
+      return <span className='truncate font-medium text-sm'>{name || 'N/A'}</span>
+    },
+  },
+  {
+    accessorKey: 'customer_phone',
+    header: ({ column }) => (
+      <DataTableColumnHeader column={column} title='Phone' />
+    ),
+    meta: { className: 'ps-1', tdClassName: 'ps-4' },
+    cell: ({ row }) => {
+      const phone = row.getValue('customer_phone') as string | null
       return (
-        <div className='flex flex-col gap-0'>
-          <span className='truncate font-medium text-sm'>{name || 'N/A'}</span>
-          {phone && (
-            <span className='text-xs text-muted-foreground truncate' dir='ltr'>
-              {phone}
-            </span>
-          )}
-        </div>
+        <span className='text-sm text-muted-foreground' dir='ltr'>
+          {phone || '—'}
+        </span>
       )
     },
+    enableSorting: false,
+    enableHiding: true,
   },
   {
     accessorKey: 'customer_email',
     header: ({ column }) => (
       <DataTableColumnHeader column={column} title='Email' />
     ),
-    meta: {
-      className: 'ps-1',
-      tdClassName: 'ps-4',
-    },
+    meta: { className: 'ps-1', tdClassName: 'ps-4' },
     cell: ({ row }) => {
       const email = row.getValue('customer_email') as string | null
       return (
         <span className='text-sm text-muted-foreground truncate max-w-[180px] block'>
-          {email || '-'}
+          {email || '—'}
         </span>
       )
     },
@@ -250,6 +290,16 @@ export const ordersColumns: ColumnDef<Order>[] = [
       )
     },
     enableSorting: true,
+    enableHiding: true,
+  },
+  {
+    accessorKey: 'tags',
+    header: ({ column }) => (
+      <DataTableColumnHeader column={column} title='Tags' />
+    ),
+    meta: { className: 'ps-1', tdClassName: 'ps-4' },
+    cell: ({ row }) => <TagsCell tags={row.original.tags} />,
+    enableSorting: false,
     enableHiding: true,
   },
   {

@@ -52,7 +52,12 @@ export function OrdersTable({
 }: OrdersTableProps) {
   const [rowSelection, setRowSelection] = useState({})
   const [sorting, setSorting] = useState<SortingState>([])
-  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
+  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({
+    shipment: false,
+    shipping_country: false,
+    payment_method: false,
+    customer_email: false,
+  })
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
 
   const handleSortingChange = (updater: Updater<SortingState>) => {

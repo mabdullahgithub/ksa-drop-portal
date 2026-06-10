@@ -13,35 +13,24 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { type Order } from '@/types/order'
 import { useOrdersContext } from './orders-provider'
 import { usePermissions } from '@/hooks/use-permissions'
 import { useOrderMutations } from '@/hooks/useOrders'
+import { OrderTagsDialog } from './order-tags-dialog'
 import { toast } from 'sonner'
 
 type DataTableRowActionsProps<TData> = {
   row: Row<TData>
 }
 
-export function DataTableRowActions<TData>({
-  row,
-}: DataTableRowActionsProps<TData>) {
+export function DataTableRowActions<TData>({ row }: DataTableRowActionsProps<TData>) {
   const order = row.original as Order
   const { setOpen, setCurrentRow } = useOrdersContext()
   const { can } = usePermissions()
   const { updateFulfillmentStatus, updateFinancialStatus, updateOrder } = useOrderMutations()
   const [showTagDialog, setShowTagDialog] = useState(false)
-  const [tagInput, setTagInput] = useState(order.tags?.join(', ') || '')
+  const [isSavingTags, setIsSavingTags] = useState(false)
 
   const canView = can('view orders')
   const canEdit = can('edit orders')
@@ -66,10 +55,10 @@ export function DataTableRowActions<TData>({
     }
   }
 
-  const handleUpdateTags = async () => {
-    const tags = tagInput.split(',').map(tag => tag.trim()).filter(tag => tag)
-
+  const handleSaveTags = async (tags: string[]) => {
+    setIsSavingTags(true)
     const success = await updateOrder(order.id, { tags })
+    setIsSavingTags(false)
     if (success) {
       toast.success('Tags updated')
       setShowTagDialog(false)
@@ -79,18 +68,13 @@ export function DataTableRowActions<TData>({
     }
   }
 
-  if (!canView) {
-    return null
-  }
+  if (!canView) return null
 
   return (
     <>
       <DropdownMenu modal={false}>
         <DropdownMenuTrigger asChild>
-          <Button
-            variant='ghost'
-            className='flex h-8 w-8 p-0 data-[state=open]:bg-muted'
-          >
+          <Button variant='ghost' className='flex h-8 w-8 p-0 data-[state=open]:bg-muted'>
             <DotsHorizontalIcon className='h-4 w-4' />
             <span className='sr-only'>Open menu</span>
           </Button>
@@ -123,18 +107,10 @@ export function DataTableRowActions<TData>({
                   Fulfillment Status
                 </DropdownMenuSubTrigger>
                 <DropdownMenuSubContent>
-                  <DropdownMenuItem onClick={() => handleStatusUpdate('pending')}>
-                    Pending
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => handleStatusUpdate('unfulfilled')}>
-                    Unfulfilled
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => handleStatusUpdate('fulfilled')}>
-                    Fulfilled
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => handleStatusUpdate('cancelled')}>
-                    Cancelled
-                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleStatusUpdate('pending')}>Pending</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleStatusUpdate('unfulfilled')}>Unfulfilled</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleStatusUpdate('fulfilled')}>Fulfilled</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleStatusUpdate('cancelled')}>Cancelled</DropdownMenuItem>
                 </DropdownMenuSubContent>
               </DropdownMenuSub>
 
@@ -144,18 +120,10 @@ export function DataTableRowActions<TData>({
                   Payment Status
                 </DropdownMenuSubTrigger>
                 <DropdownMenuSubContent>
-                  <DropdownMenuItem onClick={() => handleFinancialUpdate('pending')}>
-                    Pending
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => handleFinancialUpdate('paid')}>
-                    Paid
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => handleFinancialUpdate('partially_refunded')}>
-                    Partially Refunded
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => handleFinancialUpdate('refunded')}>
-                    Refunded
-                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleFinancialUpdate('pending')}>Pending</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleFinancialUpdate('paid')}>Paid</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleFinancialUpdate('partially_refunded')}>Partially Refunded</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleFinancialUpdate('refunded')}>Refunded</DropdownMenuItem>
                 </DropdownMenuSubContent>
               </DropdownMenuSub>
             </>
@@ -163,35 +131,14 @@ export function DataTableRowActions<TData>({
         </DropdownMenuContent>
       </DropdownMenu>
 
-      {/* Manage Tags Dialog */}
-      <Dialog open={showTagDialog} onOpenChange={setShowTagDialog}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Manage Tags</DialogTitle>
-            <DialogDescription>
-              Add or update tags for order {order.order_number}. Separate multiple tags with commas.
-            </DialogDescription>
-          </DialogHeader>
-          <div className='py-4'>
-            <Label htmlFor='order-tags'>Tags</Label>
-            <Input
-              id='order-tags'
-              placeholder='urgent, vip, priority'
-              value={tagInput}
-              onChange={(e) => setTagInput(e.target.value)}
-              className='mt-2'
-            />
-          </div>
-          <DialogFooter>
-            <Button variant='outline' onClick={() => setShowTagDialog(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleUpdateTags}>
-              Save Tags
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <OrderTagsDialog
+        open={showTagDialog}
+        onOpenChange={setShowTagDialog}
+        orderNumber={order.order_number}
+        currentTags={order.tags ?? []}
+        onSave={handleSaveTags}
+        isSaving={isSavingTags}
+      />
     </>
   )
 }

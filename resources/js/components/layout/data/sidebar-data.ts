@@ -16,6 +16,7 @@ import {
   PackageSearch,
   UserCircle,
   TrendingUp,
+  Tag,
   Wallet,
 } from 'lucide-react'
 import { type SidebarData } from '../types'
@@ -71,6 +72,12 @@ export const sidebarData: SidebarData = {
           url: '/apps',
           icon: Package,
           permission: 'view apps',
+        },
+        {
+          title: 'Tags',
+          url: '/tags',
+          icon: Tag,
+          permission: 'view tags',
         },
       ],
     },
