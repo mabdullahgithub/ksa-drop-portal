@@ -80,7 +80,7 @@ class InvoiceService
             'order' => $order,
             'shipment' => $shipment,
             'seller' => $this->seller(),
-        ])->setPaper('a4');
+        ])->setPaper('a4', 'portrait');
 
         $path = "invoices/shipping/{$invoice->invoice_number}.pdf";
         Storage::disk('local')->put($path, $pdf->output());

@@ -54,7 +54,8 @@ class JntExpressDriver implements CourierDriver
         }
 
         $bizContent = [
-            'customerCode' => $credentials['api_account'],
+            'customerCode' => $credentials['customer_code'],
+            'digest'       => $this->buildInnerDigest(),
             'txlogisticId' => $data->txlogisticId,
             'orderType' => '1',
             'serviceType' => $data->serviceType,
@@ -177,10 +178,11 @@ class JntExpressDriver implements CourierDriver
         $credentials = $this->getCredentials();
 
         $bizContent = [
-            'customerCode' => $credentials['api_account'],
+            'customerCode' => $credentials['customer_code'],
+            'digest'       => $this->buildInnerDigest(),
             'txlogisticId' => $trackingNumber,
-            'orderType' => '2',
-            'reason' => $reason,
+            'orderType'    => '2',
+            'reason'       => $reason,
         ];
 
         $response = $this->makeRequest('/webopenplatformapi/api/order/cancelOrder', $bizContent);
@@ -468,24 +470,58 @@ class JntExpressDriver implements CourierDriver
         }
 
         $this->credentials = [
-            'api_account' => ConnectorSetting::getForConnector('jnt_express', 'api_account'),
-            'private_key' => ConnectorSetting::getForConnector('jnt_express', 'private_key'),
-            'base_url' => ConnectorSetting::getForConnector('jnt_express', 'base_url') ?? 'https://openapi.jtjms-sa.com',
+            'api_account'       => ConnectorSetting::getForConnector('jnt_express', 'api_account'),
+            'private_key'       => ConnectorSetting::getForConnector('jnt_express', 'private_key'),
+            'customer_code'     => ConnectorSetting::getForConnector('jnt_express', 'customer_code'),
+            'customer_password' => ConnectorSetting::getForConnector('jnt_express', 'customer_password'),
+            'sandbox_uuid'      => ConnectorSetting::getForConnector('jnt_express', 'sandbox_uuid'),
+            'base_url'          => ConnectorSetting::getForConnector('jnt_express', 'base_url') ?? 'https://openapi.jtjms-sa.com',
         ];
 
         if (! $this->credentials['api_account'] || ! $this->credentials['private_key']) {
             throw new \RuntimeException('J&T Express credentials are not configured.');
         }
 
+        if (! $this->credentials['customer_code'] || ! $this->credentials['customer_password']) {
+            throw new \RuntimeException('J&T Express customer code / password are not configured.');
+        }
+
         return $this->credentials;
+    }
+
+    /**
+     * Inner bizContent digest — required by J&T on every order request.
+     * Formula (from official docs):
+     *   ciphertext   = strtoupper( md5( plainPassword + "jadada236t2" ) )
+     *   inner_digest = base64( md5( customerCode + ciphertext + privateKey ) )
+     */
+    protected function buildInnerDigest(): string
+    {
+        $creds      = $this->getCredentials();
+        $ciphertext = strtoupper(md5($creds['customer_password'] . 'jadada236t2'));
+
+        return base64_encode(md5($creds['customer_code'] . $ciphertext . $creds['private_key'], true));
     }
 
     protected function buildDigest(string $bizContent): string
     {
         $credentials = $this->getCredentials();
 
-        // J&T header signature: base64(md5(bizContent + privateKey)), private key used as raw string.
+        // J&T header signature: base64(md5(bizContent + privateKey))
         return base64_encode(md5($bizContent . $credentials['private_key'], true));
+    }
+
+    protected function buildEndpointUrl(string $endpoint): string
+    {
+        $creds = $this->getCredentials();
+        $url   = $creds['base_url'] . $endpoint;
+
+        // Sandbox environments route through a per-account UUID.
+        if ($creds['sandbox_uuid']) {
+            $url .= '?uuid=' . $creds['sandbox_uuid'];
+        }
+
+        return $url;
     }
 
     protected function makeRequest(string $endpoint, array $data): ?array
@@ -520,7 +556,7 @@ class JntExpressDriver implements CourierDriver
                     'timestamp' => $timestamp,
                 ])
                 ->timeout(30)
-                ->post($credentials['base_url'] . $endpoint, [
+                ->post($this->buildEndpointUrl($endpoint), [
                     'bizContent' => $bizContent,
                 ]);
 

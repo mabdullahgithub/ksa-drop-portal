@@ -140,13 +140,18 @@ class PortalController extends Controller
                     }
 
                     $data = array_combine($headers, $row);
-                    $orderNumber = $data['Name'] ?? null;
+                    $rawOrderNumber = $data['Name'] ?? null;
 
-                    if (!$orderNumber) {
+                    if (!$rawOrderNumber) {
                         $invalidRows++;
                         $errors[] = ['row' => $totalRows, 'reason' => 'Missing order number', 'details' => 'Order number (Name) field is required'];
                         continue;
                     }
+
+                    // Prefix with client short_id so orders from different clients are
+                    // distinguishable. e.g. "#1001" for client EVENIE → "EVENIE-#1001".
+                    $prefix = $client->short_id ? $client->short_id . '-' : '';
+                    $orderNumber = $prefix . $rawOrderNumber;
 
                     if (\App\Models\Order::where('order_number', $orderNumber)->exists()) {
                         $duplicates++;
