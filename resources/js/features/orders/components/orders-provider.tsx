@@ -2,7 +2,7 @@ import React, { useState } from 'react'
 import useDialogState from '@/hooks/use-dialog-state'
 import { type Order } from '@/types/order'
 
-type OrdersDialogType = 'view' | 'update' | 'delete' | 'export'
+type OrdersDialogType = 'view' | 'update' | 'delete' | 'export' | 'shipment'
 
 type OrdersContextType = {
   open: OrdersDialogType | null

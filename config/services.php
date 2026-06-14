@@ -35,4 +35,19 @@ return [
         ],
     ],
 
+    /*
+    | J&T Express — fallback credentials used only when the matching
+    | ConnectorSetting (saved from Apps → J&T Settings) is missing. The DB
+    | settings always take precedence; these env values let the integration
+    | keep working before anything is configured in the UI.
+    */
+    'jnt_express' => [
+        'api_account' => env('JNT_API_ACCOUNT'),
+        'private_key' => env('JNT_PRIVATE_KEY'),
+        'customer_code' => env('JNT_CUSTOMER_CODE'),
+        'customer_password' => env('JNT_CUSTOMER_PASSWORD'),
+        'sandbox_uuid' => env('JNT_SANDBOX_UUID'),
+        'base_url' => env('JNT_BASE_URL', 'https://openapi.jtjms-sa.com'),
+    ],
+
 ];

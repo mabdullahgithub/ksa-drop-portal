@@ -12,7 +12,7 @@ export function AuthLogo({ className }: AuthLogoProps) {
 
   const logoSrc = isDark
     ? '/ksa-al-logo-files/Logo/KSA Drop Logo PNG-03.png'
-    : '/ksa-al-logo-files/Logo/KSA Drop Logo PNG-02.png'
+    : '/ksa-al-logo-files/Logo/ksa_drop_logo.png.png'
 
   return (
     <img

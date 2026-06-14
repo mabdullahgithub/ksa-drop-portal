@@ -37,6 +37,20 @@ class InvoiceController extends Controller
     }
 
     /**
+     * Delete a generated invoice / waybill and its stored PDF (admin).
+     */
+    public function destroy(Invoice $invoice)
+    {
+        if ($invoice->file_path) {
+            Storage::disk('local')->delete($invoice->file_path);
+        }
+
+        $invoice->delete();
+
+        return response()->json(['message' => 'Waybill deleted.']);
+    }
+
+    /**
      * Stream an invoice PDF inline for preview (admin).
      */
     public function preview(Invoice $invoice)

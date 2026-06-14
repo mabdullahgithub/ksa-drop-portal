@@ -469,13 +469,17 @@ class JntExpressDriver implements CourierDriver
             return $this->credentials;
         }
 
+        // DB-backed ConnectorSetting (saved from Apps → J&T Settings) is the source
+        // of truth. When a value is missing we fall back to config/services.php
+        // (env-driven) so the integration keeps working before anything is
+        // configured in the UI.
         $this->credentials = [
-            'api_account'       => ConnectorSetting::getForConnector('jnt_express', 'api_account'),
-            'private_key'       => ConnectorSetting::getForConnector('jnt_express', 'private_key'),
-            'customer_code'     => ConnectorSetting::getForConnector('jnt_express', 'customer_code'),
-            'customer_password' => ConnectorSetting::getForConnector('jnt_express', 'customer_password'),
-            'sandbox_uuid'      => ConnectorSetting::getForConnector('jnt_express', 'sandbox_uuid'),
-            'base_url'          => ConnectorSetting::getForConnector('jnt_express', 'base_url') ?? 'https://openapi.jtjms-sa.com',
+            'api_account'       => ConnectorSetting::getForConnector('jnt_express', 'api_account') ?: config('services.jnt_express.api_account'),
+            'private_key'       => ConnectorSetting::getForConnector('jnt_express', 'private_key') ?: config('services.jnt_express.private_key'),
+            'customer_code'     => ConnectorSetting::getForConnector('jnt_express', 'customer_code') ?: config('services.jnt_express.customer_code'),
+            'customer_password' => ConnectorSetting::getForConnector('jnt_express', 'customer_password') ?: config('services.jnt_express.customer_password'),
+            'sandbox_uuid'      => ConnectorSetting::getForConnector('jnt_express', 'sandbox_uuid') ?: config('services.jnt_express.sandbox_uuid'),
+            'base_url'          => ConnectorSetting::getForConnector('jnt_express', 'base_url') ?: config('services.jnt_express.base_url', 'https://openapi.jtjms-sa.com'),
         ];
 
         if (! $this->credentials['api_account'] || ! $this->credentials['private_key']) {

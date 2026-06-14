@@ -22,35 +22,6 @@ interface Warehouse {
   is_default: boolean
 }
 
-// The 13 canonical KSA regions accepted by J&T as "prov".
-// Mirrors App\Services\Shipping\Drivers\JntExpressDriver::provinces().
-const KSA_PROVINCES = [
-  'Riyadh',
-  'Makkah',
-  'Madinah',
-  'Eastern Province',
-  'Qassim',
-  'Asir',
-  'Tabuk',
-  'Hail',
-  'Northern Borders',
-  'Jazan',
-  'Najran',
-  'Al Bahah',
-  'Al Jawf',
-] as const
-
-// Best-effort match of imported province text onto a canonical region.
-function matchProvince(value?: string | null): string {
-  const v = (value ?? '').trim().toLowerCase()
-  if (!v || v === '-') return ''
-  return (
-    KSA_PROVINCES.find((p) => p.toLowerCase() === v) ??
-    KSA_PROVINCES.find((p) => v.startsWith(p.toLowerCase())) ??
-    ''
-  )
-}
-
 const isBlankField = (value: string) => {
   const v = value.trim()
   return v === '' || v === '-'
@@ -91,7 +62,7 @@ export function CreateShipmentDialog({ order, open, onOpenChange, onSuccess }: C
           ...prev,
           receiver_name: order.shipping_name || order.customer_name || '',
           receiver_phone: order.shipping_phone || order.customer_phone || '',
-          receiver_province: matchProvince(order.shipping_province),
+          receiver_province: order.shipping_province || '',
           receiver_city: order.shipping_city || '',
           receiver_area: '',
           receiver_address: order.shipping_address1 || '',
@@ -229,18 +200,10 @@ export function CreateShipmentDialog({ order, open, onOpenChange, onSuccess }: C
                 </div>
                 <div className='space-y-1'>
                   <Label className='text-xs text-muted-foreground'>Province / Region</Label>
-                  <select
-                    className='flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm'
+                  <Input
                     value={form.receiver_province}
                     onChange={(e) => setForm({ ...form, receiver_province: e.target.value })}
-                  >
-                    <option value=''>Select a region...</option>
-                    {KSA_PROVINCES.map((p) => (
-                      <option key={p} value={p}>
-                        {p}
-                      </option>
-                    ))}
-                  </select>
+                  />
                 </div>
                 <div className='space-y-1'>
                   <Label className='text-xs text-muted-foreground'>City</Label>

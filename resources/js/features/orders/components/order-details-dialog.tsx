@@ -34,6 +34,14 @@ export function OrderDetailsDialog({ order, open, onOpenChange }: OrderDetailsDi
     }
   }, [order])
 
+  // The list row lacks invoices/full shipment data, so pull the complete order
+  // whenever the dialog opens — otherwise a generated waybill looks ungenerated.
+  useEffect(() => {
+    if (open && order) {
+      refetchOrder()
+    }
+  }, [open, order, refetchOrder])
+
   if (!order || !currentOrder) return null
 
   const statusColorMap: Record<string, string> = {

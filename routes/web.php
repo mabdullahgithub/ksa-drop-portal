@@ -76,6 +76,7 @@ Route::middleware(['auth', 'verified', 'role:!client'])->group(function () {
     // Invoices API (waybill only)
     Route::get('/api/invoices/{invoice}/preview', [InvoiceController::class, 'preview'])->middleware('permission:view orders')->name('api.invoices.preview');
     Route::get('/api/invoices/{invoice}/download', [InvoiceController::class, 'download'])->middleware('permission:view orders')->name('api.invoices.download');
+    Route::delete('/api/invoices/{invoice}', [InvoiceController::class, 'destroy'])->middleware('permission:edit orders')->name('api.invoices.destroy');
 
     Route::get('/chats', fn () => Inertia::render('Chats'))->name('chats');
     Route::get('/users', fn () => Inertia::render('Users'))->middleware('permission:view users')->name('users');

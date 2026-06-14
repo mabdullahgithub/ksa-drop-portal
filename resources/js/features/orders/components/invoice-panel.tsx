@@ -1,5 +1,5 @@
 import { Button } from '@/components/ui/button'
-import { FileText, Download, Eye, Receipt, Loader2 } from 'lucide-react'
+import { FileText, Download, Eye, Receipt, Loader2, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import axios from 'axios'
 import { useState } from 'react'
@@ -16,6 +16,7 @@ export function InvoicePanel({ order, onInvoicesChanged }: InvoicePanelProps) {
   const hasShipment = !!order.latest_shipment?.tracking_number
 
   const [generating, setGenerating] = useState<'shipping' | null>(null)
+  const [deleting, setDeleting] = useState(false)
 
   const generateShipping = async () => {
     if (!order.latest_shipment) return
@@ -28,6 +29,20 @@ export function InvoicePanel({ order, onInvoicesChanged }: InvoicePanelProps) {
       toast.error(err.response?.data?.message || 'Failed to generate waybill')
     } finally {
       setGenerating(null)
+    }
+  }
+
+  const deleteInvoice = async (invoice: Invoice) => {
+    if (!window.confirm('Delete this waybill? You can regenerate it later.')) return
+    setDeleting(true)
+    try {
+      await axios.delete(`/api/invoices/${invoice.id}`)
+      toast.success('Waybill deleted')
+      onInvoicesChanged?.()
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Failed to delete waybill')
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -44,6 +59,8 @@ export function InvoicePanel({ order, onInvoicesChanged }: InvoicePanelProps) {
         invoice={shipping}
         generating={generating === 'shipping'}
         onGenerate={generateShipping}
+        onDelete={deleteInvoice}
+        deleting={deleting}
         generateLabel='Generate'
         disabled={!hasShipment}
         disabledHint='Create a shipment first'
@@ -58,12 +75,14 @@ interface InvoiceRowProps {
   invoice?: Invoice
   generating: boolean
   onGenerate: () => void
+  onDelete?: (invoice: Invoice) => void
+  deleting?: boolean
   generateLabel: string
   disabled?: boolean
   disabledHint?: string
 }
 
-function InvoiceRow({ icon, title, invoice, generating, onGenerate, generateLabel, disabled, disabledHint }: InvoiceRowProps) {
+function InvoiceRow({ icon, title, invoice, generating, onGenerate, onDelete, deleting, generateLabel, disabled, disabledHint }: InvoiceRowProps) {
   return (
     <div className='flex items-center justify-between rounded-lg border p-3 text-sm'>
       <div className='flex items-center gap-2'>
@@ -98,6 +117,18 @@ function InvoiceRow({ icon, title, invoice, generating, onGenerate, generateLabe
               <Download className='h-3 w-3 mr-1' />
               PDF
             </Button>
+            {onDelete && (
+              <Button
+                size='sm'
+                variant='outline'
+                className='text-destructive hover:text-destructive'
+                onClick={() => onDelete(invoice)}
+                disabled={deleting}
+                title='Delete waybill'
+              >
+                {deleting ? <Loader2 className='h-3 w-3 animate-spin' /> : <Trash2 className='h-3 w-3' />}
+              </Button>
+            )}
           </>
         ) : (
           <Button size='sm' variant='outline' onClick={onGenerate} disabled={disabled || generating}>

@@ -14,8 +14,32 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Info } from 'lucide-react'
 import { toast } from 'sonner'
 import axios from 'axios'
+
+// Mini info icon + popover explaining how to obtain a given credential and where
+// to add it. Used next to each J&T API credential field.
+function FieldInfo({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type='button'
+          aria-label={`How to get ${title}`}
+          className='text-muted-foreground transition-colors hover:text-foreground'
+        >
+          <Info className='h-3.5 w-3.5' />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align='start' className='w-80 text-sm'>
+        <p className='mb-1 font-semibold'>{title}</p>
+        <div className='space-y-1 text-xs text-muted-foreground'>{children}</div>
+      </PopoverContent>
+    </Popover>
+  )
+}
 
 interface Warehouse {
   id: number
@@ -36,6 +60,9 @@ export default function JntSettings() {
   const [settings, setSettings] = useState({
     api_account: '',
     private_key: '',
+    customer_code: '',
+    customer_password: '',
+    sandbox_uuid: '',
     base_url: 'https://openapi.jtjms-sa.com',
     default_weight: '0.5',
     default_service_type: '02',
@@ -71,6 +98,9 @@ export default function JntSettings() {
         ...prev,
         api_account: data.api_account?.value || '',
         private_key: data.private_key?.value || '',
+        customer_code: data.customer_code?.value || '',
+        customer_password: data.customer_password?.value || '',
+        sandbox_uuid: data.sandbox_uuid?.value || '',
         base_url: data.base_url?.value || 'https://openapi.jtjms-sa.com',
         default_weight: data.default_weight?.value || '0.5',
         default_service_type: data.default_service_type?.value || '02',
@@ -98,6 +128,9 @@ export default function JntSettings() {
         settings: [
           { key: 'api_account', value: settings.api_account, is_encrypted: false },
           { key: 'private_key', value: settings.private_key, is_encrypted: true },
+          { key: 'customer_code', value: settings.customer_code, is_encrypted: false },
+          { key: 'customer_password', value: settings.customer_password, is_encrypted: true },
+          { key: 'sandbox_uuid', value: settings.sandbox_uuid, is_encrypted: false },
           { key: 'base_url', value: settings.base_url, is_encrypted: false },
           { key: 'default_weight', value: settings.default_weight, is_encrypted: false },
           { key: 'default_service_type', value: settings.default_service_type, is_encrypted: false },
@@ -238,7 +271,13 @@ export default function JntSettings() {
                 <CardContent className='space-y-4'>
                   <div className='grid gap-4 md:grid-cols-2'>
                     <div className='space-y-2'>
-                      <Label htmlFor='api_account'>API Account</Label>
+                      <div className='flex items-center gap-1.5'>
+                        <Label htmlFor='api_account'>API Account</Label>
+                        <FieldInfo title='API Account (apiAccount)'>
+                          <p>Your J&T Express OpenAPI account number. It identifies your integration and is sent in the <code>apiAccount</code> request header.</p>
+                          <p><span className='font-medium'>Where to get it:</span> issued by your J&T account manager when OpenAPI access is approved — check the J&T onboarding email or the merchant/OpenAPI portal under API credentials.</p>
+                        </FieldInfo>
+                      </div>
                       <Input
                         id='api_account'
                         value={settings.api_account}
@@ -247,7 +286,13 @@ export default function JntSettings() {
                       />
                     </div>
                     <div className='space-y-2'>
-                      <Label htmlFor='private_key'>Private Key</Label>
+                      <div className='flex items-center gap-1.5'>
+                        <Label htmlFor='private_key'>Private Key</Label>
+                        <FieldInfo title='Private Key'>
+                          <p>The secret key paired with your API Account. Every request is signed with it (the header <code>digest</code>), so it must match exactly.</p>
+                          <p><span className='font-medium'>Where to get it:</span> issued together with the API Account by J&T. Stored encrypted — leave the masked value untouched to keep the saved key.</p>
+                        </FieldInfo>
+                      </div>
                       <Input
                         id='private_key'
                         type='password'
@@ -256,15 +301,69 @@ export default function JntSettings() {
                         placeholder='Your J&T private key'
                       />
                     </div>
+                    <div className='space-y-2'>
+                      <div className='flex items-center gap-1.5'>
+                        <Label htmlFor='customer_code'>Customer Code</Label>
+                        <FieldInfo title='Customer Code (customerCode)'>
+                          <p>Your J&T merchant/customer code. Sent on every shipment order to identify the billing account.</p>
+                          <p><span className='font-medium'>Where to get it:</span> listed in your J&T merchant agreement / contract, or in the merchant portal account details. Ask your J&T account manager if unsure.</p>
+                        </FieldInfo>
+                      </div>
+                      <Input
+                        id='customer_code'
+                        value={settings.customer_code}
+                        onChange={(e) => setSettings({ ...settings, customer_code: e.target.value })}
+                        placeholder='Your J&T customer code'
+                      />
+                    </div>
+                    <div className='space-y-2'>
+                      <div className='flex items-center gap-1.5'>
+                        <Label htmlFor='customer_password'>Customer Password</Label>
+                        <FieldInfo title='Customer Password'>
+                          <p>The password tied to your Customer Code. Used to build the inner order digest required when creating shipments.</p>
+                          <p><span className='font-medium'>Where to get it:</span> provided by J&T together with your customer code. Stored encrypted — leave the masked value untouched to keep the saved password.</p>
+                        </FieldInfo>
+                      </div>
+                      <Input
+                        id='customer_password'
+                        type='password'
+                        value={settings.customer_password}
+                        onChange={(e) => setSettings({ ...settings, customer_password: e.target.value })}
+                        placeholder='Your J&T customer password'
+                      />
+                    </div>
                   </div>
 
                   <div className='space-y-2'>
-                    <Label htmlFor='base_url'>Base URL</Label>
+                    <div className='flex items-center gap-1.5'>
+                      <Label htmlFor='base_url'>Base URL</Label>
+                      <FieldInfo title='Base URL'>
+                        <p>The J&T OpenAPI gateway every request is sent to.</p>
+                        <p><span className='font-medium'>Production:</span> <code>https://openapi.jtjms-sa.com</code></p>
+                        <p><span className='font-medium'>Sandbox / testing:</span> use the test gateway URL J&T provided for your sandbox account.</p>
+                      </FieldInfo>
+                    </div>
                     <Input
                       id='base_url'
                       value={settings.base_url}
                       onChange={(e) => setSettings({ ...settings, base_url: e.target.value })}
                       placeholder='https://openapi.jtjms-sa.com'
+                    />
+                  </div>
+
+                  <div className='space-y-2'>
+                    <div className='flex items-center gap-1.5'>
+                      <Label htmlFor='sandbox_uuid'>Sandbox UUID</Label>
+                      <FieldInfo title='Sandbox UUID (optional)'>
+                        <p>Only for the sandbox/testing environment. When set, it is appended as <code>?uuid=</code> to every request to route it to your test account.</p>
+                        <p><span className='font-medium'>Where to get it:</span> provided by J&T when they grant sandbox access. <span className='font-medium'>Leave empty for production.</span></p>
+                      </FieldInfo>
+                    </div>
+                    <Input
+                      id='sandbox_uuid'
+                      value={settings.sandbox_uuid}
+                      onChange={(e) => setSettings({ ...settings, sandbox_uuid: e.target.value })}
+                      placeholder='Leave empty for production'
                     />
                   </div>
 
