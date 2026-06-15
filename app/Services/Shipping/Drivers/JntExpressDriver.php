@@ -9,6 +9,7 @@ use App\Services\Shipping\DTOs\ShipmentData;
 use App\Services\Shipping\DTOs\ShipmentResult;
 use App\Services\Shipping\DTOs\TrackingEvent;
 use App\Services\Shipping\DTOs\TrackingResult;
+use App\Services\Shipping\Enums\JntErrorCode;
 use App\Services\Shipping\Enums\ShipmentStatus;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -216,8 +217,10 @@ class JntExpressDriver implements CourierDriver
 
             $response = $this->makeRequest('/webopenplatformapi/api/logistics/trace', $bizContent);
 
-            // If we get any response (even "not found"), credentials are valid
-            return $response !== null && (string) ($response['code'] ?? '') !== '145003030';
+            // If we get any response (even "not found"), credentials are valid.
+            // A signature failure means the credentials themselves are wrong.
+            return $response !== null
+                && (string) ($response['code'] ?? '') !== JntErrorCode::HEADER_SIGNATURE_INVALID->value;
         } catch (\Exception $e) {
             return false;
         }
@@ -241,101 +244,14 @@ class JntExpressDriver implements CourierDriver
     }
 
     /**
-     * Turn a J&T error code/message into a clear, actionable English message.
-     * J&T sometimes returns non-English (e.g. Chinese) messages, so we map the
-     * codes we know about and keep the raw message available for debugging.
+     * Turn a J&T error code/message into a clear, actionable English message that
+     * always carries the code for traceability. J&T sometimes returns non-English
+     * (e.g. Chinese) messages, so known codes are mapped via {@see JntErrorCode}
+     * and the raw message is used as a fallback.
      */
     protected function friendlyError(string $code, ?string $msg): string
     {
-        $known = self::errorMessages();
-
-        if (isset($known[$code])) {
-            return $known[$code];
-        }
-
-        $msg = trim((string) $msg);
-
-        if ($msg === '') {
-            return 'J&T Express rejected the shipment (code ' . $code . ').';
-        }
-
-        return 'J&T Express: ' . $msg . ' (code ' . $code . ').';
-    }
-
-    /**
-     * Known J&T Express response codes mapped to clear English messages.
-     * Address/region/province/city codes are phrased to be actionable for the
-     * operator; the rest mirror J&T's official documentation.
-     *
-     * @return array<string, string>
-     */
-    protected static function errorMessages(): array
-    {
-        return [
-            '0' => 'J&T Express rejected the request (general failure).',
-
-            // Auth, headers & signature
-            '145003030' => 'J&T header signature verification failed — check the API account and private key.',
-            '145003031' => 'J&T business-parameter signature verification failed — check the private key / digest.',
-            '145003071' => 'apiAccount is empty — J&T credentials are not configured.',
-            '145003052' => 'Request digest is empty — the signature could not be generated.',
-            '145003053' => 'Request timestamp is empty.',
-
-            // System / call exceptions
-            '145003040' => 'J&T internal call exception — please retry shortly.',
-            '145005000' => 'J&T system error — please retry shortly.',
-            '145003041' => 'Order placement failed at J&T — please retry.',
-            '145003203' => 'Updating the order failed at J&T — please try again later.',
-
-            // Parameter validation
-            '145003050' => 'Illegal parameters were sent to J&T.',
-            '145003087' => 'Invalid order type, service type, delivery type, item type, shipment type or settlement method.',
-            '145003200' => 'Invalid service type — it must be 01 (Express) or 02 (Standard).',
-            '145003088' => 'Incomplete service-time information.',
-
-            // Region / city / province / address
-            '145003060' => 'J&T did not accept the region. Choose a valid KSA region.',
-            '145003061' => 'J&T did not accept the city. Use a city recognised by J&T.',
-            '145003062' => 'J&T did not accept the province. Choose a valid KSA region.',
-            '145003064' => 'J&T could not match the address — verify the receiver province, city and district.',
-            '145003086' => 'Incomplete address information for the shipment.',
-            '145003109' => 'Too much address information — shorten the address fields.',
-            '145003110' => 'Street information is too long — shorten the street address.',
-            // Observed gateway variants (different code layer than the docs above)
-            '1450033315' => 'J&T did not accept the receiver province. Choose a valid KSA region.',
-            '999002000' => 'J&T could not match the receiver address. The city or district is not '
-                . 'recognised in J&T\'s KSA address list — verify the receiver city and district.',
-
-            // Sender / recipient details
-            '145003083' => 'Incomplete sender information — check the warehouse address.',
-            '145003084' => 'Incomplete recipient information — check the receiver address.',
-            '145003085' => 'Phone number cannot be empty.',
-            '145003103' => 'Name information is invalid.',
-            '145003104' => 'Company information is too long.',
-            '145003105' => 'Contact information is too long.',
-            '145003106' => 'Postcode or email address is invalid.',
-
-            // Item / weight / amount / price
-            '145003092' => 'The weight value is invalid.',
-            '145003093' => 'Incomplete item type.',
-            '145003096' => 'Invalid item quantity.',
-            '145003099' => 'Invalid amount.',
-            '145003107' => 'Price information is invalid.',
-            '145003108' => 'Comments, descriptions or links are invalid.',
-            '145003111' => 'The total number of parcels is invalid.',
-
-            // COD / payment
-            '145003112' => 'COD service is not enabled for this account.',
-            '145003113' => 'Payment method does not match (expected PP_CASH, CC_CASH or PP_MM).',
-
-            // Duplicates
-            '145002001' => 'Duplicate order — this order has already been placed at J&T.',
-            '145003101' => 'This customer order number already exists at J&T; cannot place it again.',
-
-            // Status-transition / cancellation
-            '145003201' => 'Order is already picked up and can no longer be modified.',
-            '145003202' => 'Order is already cancelled and can no longer be modified.',
-        ];
+        return JntErrorCode::resolve($code, $msg);
     }
 
     /**
