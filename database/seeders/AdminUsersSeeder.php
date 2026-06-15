@@ -12,7 +12,7 @@ class AdminUsersSeeder extends Seeder
     {
         $users = [
             [
-                'name' => 'Support',
+                'name' => 'Super Admin',
                 'email' => 'support@ksadrop.com',
                 'password' => Hash::make('KsaDrop$123'),
                 'role' => 'superadmin',
