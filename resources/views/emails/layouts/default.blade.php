@@ -164,10 +164,16 @@
                     <!-- Header / Logo -->
                     <tr>
                         <td class="email-header" align="center" style="padding:32px 40px 24px 40px; background-color:#ffffff; text-align:center;">
+                            @php
+                                $logoPath = public_path('images/email/logo.png');
+                                $logoSrc = (isset($message) && file_exists($logoPath))
+                                    ? $message->embed($logoPath)
+                                    : rtrim(config('app.url'), '/') . '/images/email/logo.png';
+                            @endphp
                             <a href="{{ config('app.url') }}" target="_blank" style="text-decoration:none;">
-                                <img src="{{ isset($message) ? $message->embed(public_path('images/email/logo.png')) : config('app.url') . '/images/email/logo.png' }}"
-                                     width="150" height="38" alt="{{ config('app.name') }}"
-                                     style="width:150px; max-width:150px; height:38px; margin:0 auto;">
+                                <img src="{{ $logoSrc }}"
+                                     width="160" height="40" alt="{{ config('app.name') }}"
+                                     style="width:160px; max-width:160px; height:40px; margin:0 auto;">
                             </a>
                         </td>
                     </tr>

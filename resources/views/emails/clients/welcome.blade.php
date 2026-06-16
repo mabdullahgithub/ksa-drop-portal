@@ -11,16 +11,22 @@
         Your client portal account has been created for <strong>{{ $client->company_name }}</strong>. You can now access your portal to track orders, inventory, and revenue.
     </p>
 
+    <p class="email-text">
+        Here are your sign-in details for the portal:
+    </p>
+
     @component('emails.components.alert', ['type' => 'info'])
-        <p style="margin: 0; color: #374151;">
-            <strong>Your login credentials:</strong><br>
-            Email: {{ $client->user->email }}<br>
-            Password: {{ $password }}
+        <p style="margin: 0; color: #374151; font-size: 15px; line-height: 1.6;">
+            <strong style="color: #111827;">Email</strong><br>
+            {{ $client->user->email }}
+            <br><br>
+            <strong style="color: #111827;">Temporary password</strong><br>
+            <span style="font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace; letter-spacing: 0.5px;">{{ $password }}</span>
         </p>
     @endcomponent
 
-    <p class="email-text" style="color: #dc2626;">
-        <strong>Important:</strong> Please change your password after your first login for security purposes.
+    <p class="email-text" style="color: #6b7280; font-size: 14px;">
+        For your security, we recommend updating this temporary password to one of your own after your first sign-in.
     </p>
 
     @component('emails.components.button', ['url' => $loginUrl])

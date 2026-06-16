@@ -4,11 +4,11 @@ Hi {{ $client->contact_person ?? $client->user->name }},
 
 Your client portal account has been created for {{ $client->company_name }}. You can now access your portal to track orders, inventory, and revenue.
 
-Your login credentials:
-  Email:    {{ $client->user->email }}
-  Password: {{ $password }}
+Here are your sign-in details for the portal:
+  Email:              {{ $client->user->email }}
+  Temporary password: {{ $password }}
 
-Important: Please change your password after your first login for security purposes.
+For your security, we recommend updating this temporary password to one of your own after your first sign-in.
 
 Login to Portal:
 {{ $loginUrl }}
