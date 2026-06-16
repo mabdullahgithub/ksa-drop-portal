@@ -1,1 +1,0 @@
-import{n as e,t}from"./app-qyq6LmRM.js";import{t as n}from"./AuthenticatedLayout-BG2YA5jk.js";import{t as r}from"./security-form-BA56JaXw.js";import{t as i}from"./settings-DEf2jJDB.js";var a=t();function o(){return(0,a.jsxs)(n,{children:[(0,a.jsx)(e,{title:`Security`}),(0,a.jsx)(i,{children:(0,a.jsx)(r,{})})]})}export{o as default};
