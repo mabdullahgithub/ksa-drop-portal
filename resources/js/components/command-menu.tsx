@@ -12,12 +12,37 @@ import {
   CommandSeparator,
 } from '@/components/ui/command'
 import { CustomCommandDialog } from '@/components/custom-command-dialog'
-import { sidebarData } from './layout/data/sidebar-data'
+import { useNavGroups } from '@/hooks/use-nav-groups'
+import { usePermissions } from '@/hooks/use-permissions'
 import { ScrollArea } from './ui/scroll-area'
 
 export function CommandMenu() {
   const { setTheme } = useTheme()
   const { open, setOpen } = useSearch()
+  const { can, hasRole } = usePermissions()
+  const navGroups = useNavGroups()
+
+  // Mirror NavGroup's per-item permission/role filtering so the command menu
+  // only surfaces the tabs the current user can actually see.
+  const isVisible = (item: { permission?: string | string[]; role?: string | string[] }) => {
+    if (item.permission && !can(item.permission)) return false
+    if (item.role && !hasRole(item.role)) return false
+    return true
+  }
+
+  const visibleGroups = navGroups
+    .map((group) => ({
+      ...group,
+      items: group.items
+        .filter(isVisible)
+        .map((item) =>
+          item.items
+            ? { ...item, items: item.items.filter(isVisible) }
+            : item
+        )
+        .filter((item) => !item.items || item.items.length > 0),
+    }))
+    .filter((group) => group.items.length > 0)
 
   const runCommand = React.useCallback(
     (command: () => unknown) => {
@@ -33,7 +58,7 @@ export function CommandMenu() {
       <CommandList>
         <ScrollArea type='hover' className='h-[400px] pe-1'>
           <CommandEmpty>No results found.</CommandEmpty>
-          {sidebarData.navGroups.map((group) => (
+          {visibleGroups.map((group) => (
             <CommandGroup key={group.title} heading={group.title}>
               {group.items.map((navItem, i) => {
                 if (navItem.url)

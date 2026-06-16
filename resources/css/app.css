@@ -22,7 +22,7 @@
     @apply h-svh overflow-hidden;
   }
 
-  body:has(main[data-layout='fixed']) > div {
+  body:has(main[data-layout='fixed']) > #app {
     @apply h-full;
   }
 
