@@ -15,12 +15,36 @@ class EmailService
 {
     /**
      * Check if email system is enabled and configured.
+     *
+     * Prefers the database EmailSetting (managed via the admin UI). When no
+     * EmailSetting row exists at all, falls back to the application's mail
+     * configuration (i.e. the .env MAIL_* values) so email still works.
      */
     public function isEnabled(): bool
     {
         $settings = EmailSetting::getActive();
 
-        return $settings && $settings->is_active;
+        if ($settings) {
+            return (bool) $settings->is_active;
+        }
+
+        // No DB settings configured — fall back to .env / config mail settings.
+        return $this->hasEnvMailConfig();
+    }
+
+    /**
+     * Determine whether usable mail settings exist in the app config (.env).
+     */
+    protected function hasEnvMailConfig(): bool
+    {
+        $default = Config::get('mail.default');
+
+        // Transports that don't require an SMTP host are usable as-is.
+        if (in_array($default, ['log', 'array', 'sendmail', 'ses', 'postmark', 'mailgun', 'resend'], true)) {
+            return true;
+        }
+
+        return ! empty(Config::get("mail.mailers.{$default}.host"));
     }
 
     /**
