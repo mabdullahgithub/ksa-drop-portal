@@ -67,12 +67,12 @@
         }
 
         .email-title {
-            font-size: 23px;
-            font-weight: 700;
+            font-size: 19px;
+            font-weight: 600;
             color: #111827;
-            margin: 0 0 18px 0;
+            margin: 0 0 16px 0;
             line-height: 1.3;
-            letter-spacing: -0.3px;
+            letter-spacing: -0.2px;
         }
 
         .email-text {
@@ -137,7 +137,7 @@
             .email-body { padding: 8px 24px 28px 24px !important; }
             .email-header { padding: 28px 24px 20px 24px !important; }
             .email-footer { padding: 24px 24px !important; }
-            .email-title { font-size: 21px !important; }
+            .email-title { font-size: 18px !important; }
             .email-button { display: block !important; width: 100% !important; text-align: center !important; box-sizing: border-box !important; }
         }
     </style>
