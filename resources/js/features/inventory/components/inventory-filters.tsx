@@ -64,7 +64,7 @@ export function InventoryFilters({ filters, onFiltersChange, table }: InventoryF
           <SelectValue placeholder='Status' />
         </SelectTrigger>
         <SelectContent>
-          {options?.statuses.map((s) => (
+          {options?.statuses?.map((s) => (
             <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
           ))}
         </SelectContent>

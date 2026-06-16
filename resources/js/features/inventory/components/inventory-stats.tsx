@@ -7,7 +7,7 @@ export function InventoryStats() {
   const { statistics, loading } = useProductStatistics()
 
   if (loading) return <InventoryStatsSkeleton />
-  if (!statistics) return null
+  if (!statistics || typeof statistics.total_inventory_value !== 'number') return null
 
   return (
     <div className='grid gap-3 md:grid-cols-2 lg:grid-cols-4'>

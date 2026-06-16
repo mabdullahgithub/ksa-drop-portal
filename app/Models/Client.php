@@ -162,7 +162,7 @@ class Client extends Model
 
         foreach (range('A', 'Z') as $suffix) {
             $attempt = $base4 . $suffix;
-            if (!static::withTrashed()->where('client_id', $attempt)->exists()) {
+            if (!static::withTrashed()->where('short_id', $attempt)->exists()) {
                 return $attempt;
             }
         }
@@ -171,7 +171,7 @@ class Client extends Model
         foreach (range('A', 'Z') as $s1) {
             foreach (range('A', 'Z') as $s2) {
                 $attempt = $base3 . $s1 . $s2;
-                if (!static::withTrashed()->where('client_id', $attempt)->exists()) {
+                if (!static::withTrashed()->where('short_id', $attempt)->exists()) {
                     return $attempt;
                 }
             }

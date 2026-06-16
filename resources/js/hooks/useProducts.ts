@@ -23,6 +23,7 @@ export function useProducts(initialFilters: ProductFilters = {}) {
     })
     try {
       const response = await fetch(`/api/products?${params}`)
+      if (!response.ok) throw new Error(`HTTP ${response.status}`)
       const data = await response.json()
       setProducts(data)
     } catch (error) {
@@ -87,6 +88,7 @@ export function useProductStatistics() {
     const fetchStatistics = async () => {
       try {
         const res = await fetch('/api/products/statistics')
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
         setStatistics(await res.json())
       } catch (error) {
         console.error('Error fetching product statistics:', error)
@@ -108,6 +110,7 @@ export function useProductFilterOptions() {
     const fetchOptions = async () => {
       try {
         const res = await fetch('/api/products/filter-options')
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
         setOptions(await res.json())
       } catch (error) {
         console.error('Error fetching filter options:', error)
