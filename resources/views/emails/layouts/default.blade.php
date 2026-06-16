@@ -84,15 +84,16 @@
 
         .email-button {
             display: inline-block;
-            padding: 14px 32px;
+            padding: 8px 18px;
             background-color: #f26722;
             color: #ffffff !important;
             text-decoration: none;
-            border-radius: 8px;
-            font-weight: 600;
-            font-size: 15px;
+            border-radius: 5px;
+            font-weight: 500;
+            font-size: 13px;
+            line-height: 18px;
             letter-spacing: 0.2px;
-            margin: 24px 0;
+            margin: 18px 0;
         }
 
         .email-divider {
