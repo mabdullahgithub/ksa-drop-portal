@@ -25,7 +25,7 @@
         If the button above doesn't work, copy and paste this link into your browser:
     </p>
 
-    <p style="word-break: break-all; color: #667eea; font-size: 14px; background-color: #f3f4f6; padding: 12px; border-radius: 4px;">
+    <p style="word-break: break-all; color: #f26722; font-size: 14px; background-color: #f3f4f6; padding: 12px; border-radius: 4px;">
         {{ $resetUrl }}
     </p>
 

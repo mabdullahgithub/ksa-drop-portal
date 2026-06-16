@@ -27,7 +27,8 @@ class ProductVerifiedNotification extends Notification
 
     public function toMail(object $notifiable): ProductVerifiedMail
     {
-        return new ProductVerifiedMail($this->product);
+        return (new ProductVerifiedMail($this->product))
+            ->to($notifiable->email);
     }
 
     public function toArray(object $notifiable): array

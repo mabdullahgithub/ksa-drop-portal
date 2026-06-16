@@ -33,7 +33,8 @@ class SettingsUpdatedNotification extends Notification
      */
     public function toMail(object $notifiable): SettingsUpdatedMail
     {
-        return new SettingsUpdatedMail($notifiable, $this->settingType, $this->changes);
+        return (new SettingsUpdatedMail($notifiable, $this->settingType, $this->changes))
+            ->to($notifiable->email);
     }
 
     public function toArray(object $notifiable): array

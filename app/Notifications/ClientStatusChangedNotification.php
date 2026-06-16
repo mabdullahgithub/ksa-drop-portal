@@ -31,7 +31,8 @@ class ClientStatusChangedNotification extends Notification
 
     public function toMail(object $notifiable): ClientStatusChangedMail
     {
-        return new ClientStatusChangedMail($this->client, $this->oldStatus, $this->newStatus);
+        return (new ClientStatusChangedMail($this->client, $this->oldStatus, $this->newStatus))
+            ->to($notifiable->email);
     }
 
     public function toArray(object $notifiable): array

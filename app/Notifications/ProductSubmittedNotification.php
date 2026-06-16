@@ -31,7 +31,8 @@ class ProductSubmittedNotification extends Notification
 
     public function toMail(object $notifiable): ProductSubmittedAdminMail
     {
-        return new ProductSubmittedAdminMail($this->product, $this->client);
+        return (new ProductSubmittedAdminMail($this->product, $this->client))
+            ->to($notifiable->email);
     }
 
     public function toArray(object $notifiable): array

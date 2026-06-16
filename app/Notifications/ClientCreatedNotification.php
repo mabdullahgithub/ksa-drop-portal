@@ -27,7 +27,8 @@ class ClientCreatedNotification extends Notification
 
     public function toMail(object $notifiable): ClientCreatedAdminMail
     {
-        return new ClientCreatedAdminMail($this->client);
+        return (new ClientCreatedAdminMail($this->client))
+            ->to($notifiable->email);
     }
 
     public function toArray(object $notifiable): array

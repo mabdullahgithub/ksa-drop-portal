@@ -16,6 +16,7 @@ use App\Notifications\ProductRejectedNotification;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use App\Services\EmailService;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 
@@ -131,7 +132,11 @@ class ClientController extends Controller
         ]);
 
         try {
-            Mail::to($user->email)->send(new WelcomeClientMail($client, $password));
+            $emailService = app(EmailService::class);
+            if ($emailService->isEnabled()) {
+                $emailService->configureMailer();
+                Mail::to($user->email)->send(new WelcomeClientMail($client, $password));
+            }
         } catch (\Exception $e) {
             \Log::error('WelcomeClientMail failed for client ' . $client->id . ': ' . $e->getMessage());
         }

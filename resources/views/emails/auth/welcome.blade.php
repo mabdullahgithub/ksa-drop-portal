@@ -38,7 +38,7 @@
 
     <p class="email-text">
         If you have any questions or need help getting started, don't hesitate to visit our
-        <a href="{{ config('app.url') }}/help-center" style="color: #667eea; text-decoration: none;">Help Center</a>
+        <a href="{{ config('app.url') }}/help-center" style="color: #f26722; text-decoration: none;">Help Center</a>
         or contact our support team.
     </p>
 

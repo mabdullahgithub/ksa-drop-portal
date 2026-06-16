@@ -26,7 +26,6 @@ class WelcomeClientMail extends Mailable implements ShouldQueue
             messageId: null,
             references: [],
             text: [
-                'Reply-To' => config('mail.from.address'),
                 'X-Mailer' => config('app.name'),
             ],
         );
@@ -36,6 +35,7 @@ class WelcomeClientMail extends Mailable implements ShouldQueue
     {
         return new Envelope(
             subject: 'Your ' . config('app.name') . ' account is ready',
+            replyTo: [config('mail.from.address')],
         );
     }
 
