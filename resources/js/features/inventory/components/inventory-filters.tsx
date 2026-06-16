@@ -79,7 +79,7 @@ export function InventoryFilters({ filters, onFiltersChange, table }: InventoryF
             <SelectValue placeholder='Vendor' />
           </SelectTrigger>
           <SelectContent>
-            {options.vendors.map((v) => (
+            {options.vendors.filter((v) => v.value !== '').map((v) => (
               <SelectItem key={v.value} value={v.value}>{v.label}</SelectItem>
             ))}
           </SelectContent>
@@ -95,7 +95,7 @@ export function InventoryFilters({ filters, onFiltersChange, table }: InventoryF
             <SelectValue placeholder='Type' />
           </SelectTrigger>
           <SelectContent>
-            {options.types.map((t) => (
+            {options.types.filter((t) => t.value !== '').map((t) => (
               <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
             ))}
           </SelectContent>
