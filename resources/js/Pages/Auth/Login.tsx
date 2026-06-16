@@ -1,14 +1,15 @@
 import { Head, Link, useForm } from '@inertiajs/react'
 import { FormEventHandler } from 'react'
 import { cn } from '@/lib/utils'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Checkbox } from '@/components/ui/checkbox'
+import { PasswordInput } from '@/components/password-input'
 import { ThemeProvider } from '@/context/theme-provider'
 import { ThemeSwitch } from '@/components/theme-switch'
 import { AuthLogo } from '@/components/layout/auth-logo'
+
+const BRAND = '#f26722'
+const BRAND_HOVER = '#d9591c'
 
 export default function Login({
   status,
@@ -32,92 +33,135 @@ export default function Login({
 
   return (
     <ThemeProvider>
-      <div className='flex min-h-svh flex-col items-center justify-center gap-6 bg-muted p-6 md:p-10'>
-        <Head title='Log in' />
-        <div className='absolute right-6 top-6'>
-          <ThemeSwitch />
-        </div>
-        <div className='flex w-full max-w-sm flex-col gap-6'>
-          <div className='flex justify-center'>
+      <Head title='Log in' />
+      <div className='relative grid min-h-svh grid-cols-1 lg:grid-cols-[1.6fr_1fr]'>
+        {/* Brand / illustration panel */}
+        <div className='relative hidden flex-col bg-muted/60 lg:flex'>
+          <div className='absolute left-8 top-7'>
             <AuthLogo />
           </div>
-          <Card>
-            <CardHeader className='text-center'>
-              <CardTitle className='text-xl'>Welcome back</CardTitle>
-              <CardDescription>Login to your account</CardDescription>
-            </CardHeader>
-            <CardContent>
+          <div className='flex flex-1 items-center justify-center p-10'>
+            <video
+              src='/images/login/drone-with-parcel.mp4'
+              className='h-auto w-full max-w-2xl select-none object-contain'
+              autoPlay
+              loop
+              muted
+              playsInline
+              aria-label='KSA Drop'
+            />
+          </div>
+        </div>
+
+        {/* Form panel */}
+        <div className='relative flex flex-col bg-background'>
+          {/* mobile logo */}
+          <div className='flex items-center px-6 pt-6 lg:hidden'>
+            <AuthLogo />
+          </div>
+
+          <div className='absolute right-6 top-6'>
+            <ThemeSwitch />
+          </div>
+
+          <div className='flex flex-1 items-center justify-center px-6 py-12'>
+            <div className='w-full max-w-sm'>
+              <div className='mb-7'>
+                <h1 className='text-2xl font-semibold tracking-tight'>
+                  Welcome to KSA DROP! <span aria-hidden>👋</span>
+                </h1>
+                <p className='mt-1.5 text-sm text-muted-foreground'>
+                  Please sign-in to your account and start the adventure
+                </p>
+              </div>
+
               {status && (
-                <div className='mb-4 text-sm font-medium text-green-600'>
+                <div className='mb-4 rounded-md bg-green-50 px-3 py-2 text-sm font-medium text-green-700'>
                   {status}
                 </div>
               )}
-              <form onSubmit={submit}>
-                <div className='grid gap-6'>
-                  <div className='grid gap-2'>
-                    <Label htmlFor='email'>Email</Label>
-                    <Input
-                      id='email'
-                      type='email'
-                      value={data.email}
-                      autoComplete='username'
-                      autoFocus
-                      onChange={(e) => setData('email', e.target.value)}
-                      className={cn(errors.email && 'border-destructive')}
-                    />
-                    {errors.email && (
-                      <p className='text-sm text-destructive'>{errors.email}</p>
+
+              <form onSubmit={submit} className='space-y-5'>
+                {/* Email */}
+                <div className='group relative'>
+                  <Label
+                    htmlFor='email'
+                    className='absolute -top-2 left-2.5 z-10 bg-background px-1 text-xs font-medium text-muted-foreground transition-colors group-focus-within:text-foreground'
+                  >
+                    Email ID <span style={{ color: BRAND }}>*</span>
+                  </Label>
+                  <Input
+                    id='email'
+                    type='email'
+                    value={data.email}
+                    autoComplete='username'
+                    autoFocus
+                    onChange={(e) => setData('email', e.target.value)}
+                    className={cn(
+                      'h-12 rounded-lg border-input px-3.5',
+                      'focus-visible:border-2 focus-visible:border-foreground focus-visible:ring-0',
+                      errors.email && 'border-destructive'
                     )}
-                  </div>
-                  <div className='grid gap-2'>
-                    <div className='flex items-center'>
-                      <Label htmlFor='password'>Password</Label>
-                      {canResetPassword && (
-                        <Link
-                          href={route('password.request')}
-                          className='ml-auto text-sm underline-offset-4 hover:underline'
-                        >
-                          Forgot your password?
-                        </Link>
-                      )}
-                    </div>
-                    <Input
+                  />
+                  {errors.email && (
+                    <p className='mt-1.5 text-sm text-destructive'>{errors.email}</p>
+                  )}
+                </div>
+
+                {/* Password */}
+                <div>
+                  <div className='group relative'>
+                    <Label
+                      htmlFor='password'
+                      className='absolute -top-2 left-2.5 z-10 bg-background px-1 text-xs font-medium text-muted-foreground transition-colors group-focus-within:text-foreground'
+                    >
+                      Password <span style={{ color: BRAND }}>*</span>
+                    </Label>
+                    <PasswordInput
                       id='password'
-                      type='password'
                       value={data.password}
                       autoComplete='current-password'
                       onChange={(e) => setData('password', e.target.value)}
-                      className={cn(errors.password && 'border-destructive')}
+                      className={cn(
+                        '[&>input]:h-12 [&>input]:rounded-lg [&>input]:border-input [&>input]:px-3.5',
+                        '[&>input]:focus-visible:border-2 [&>input]:focus-visible:border-foreground [&>input]:focus-visible:ring-0',
+                        errors.password && '[&>input]:border-destructive'
+                      )}
                     />
-                    {errors.password && (
-                      <p className='text-sm text-destructive'>{errors.password}</p>
+                  </div>
+                  <div className='mt-2 flex justify-end'>
+                    {canResetPassword && (
+                      <Link
+                        href={route('password.request')}
+                        className='text-sm font-medium hover:underline'
+                        style={{ color: BRAND }}
+                      >
+                        Forgot Password
+                      </Link>
                     )}
                   </div>
-                  <div className='flex items-center space-x-2'>
-                    <Checkbox
-                      id='remember'
-                      checked={data.remember}
-                      onCheckedChange={(checked) =>
-                        setData('remember', checked === true)
-                      }
-                    />
-                    <Label htmlFor='remember' className='text-sm font-normal'>
-                      Remember me
-                    </Label>
-                  </div>
-                  <Button type='submit' className='w-full' disabled={processing}>
-                    Log in
-                  </Button>
+                  {errors.password && (
+                    <p className='mt-1.5 text-sm text-destructive'>{errors.password}</p>
+                  )}
                 </div>
-                <div className='mt-4 text-center text-sm'>
-                  Don&apos;t have an account?{' '}
-                  <Link href={route('register')} className='underline underline-offset-4'>
-                    Sign up
-                  </Link>
-                </div>
+
+                <button
+                  type='submit'
+                  disabled={processing}
+                  className='flex h-12 w-full items-center justify-center rounded-lg text-sm font-semibold text-white shadow-sm transition-colors disabled:cursor-not-allowed disabled:opacity-60'
+                  style={{ backgroundColor: BRAND }}
+                  onMouseEnter={(e) =>
+                    (e.currentTarget.style.backgroundColor = BRAND_HOVER)
+                  }
+                  onMouseLeave={(e) =>
+                    (e.currentTarget.style.backgroundColor = BRAND)
+                  }
+                >
+                  {processing ? 'Signing in…' : 'Sign In'}
+                </button>
               </form>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         </div>
       </div>
     </ThemeProvider>
