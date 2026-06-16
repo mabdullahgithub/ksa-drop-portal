@@ -46,6 +46,12 @@ class RolesAndPermissionsSeeder extends Seeder
             'edit apps',
             'delete apps',
 
+            // Tags CRUD
+            'view tags',
+            'create tags',
+            'edit tags',
+            'delete tags',
+
             // User Management CRUD
             'view users',
             'create users',
@@ -60,7 +66,19 @@ class RolesAndPermissionsSeeder extends Seeder
 
             // Permission Management
             'view permissions',
+            'create permissions',
             'edit permissions',
+            'delete permissions',
+
+            // Team Management
+            'view teams',
+            'create teams',
+            'edit teams',
+            'delete teams',
+
+            // Notifications
+            'view notifications',
+            'delete notifications',
 
             // Settings
             'view settings',
@@ -70,24 +88,58 @@ class RolesAndPermissionsSeeder extends Seeder
             'manage-email-settings',
         ];
 
+        // Create permissions if they don't already exist
         foreach ($permissions as $permission) {
             Permission::firstOrCreate(['name' => $permission]);
         }
 
-        // Super Admin - All permissions
+        // Super Admin — sync all permissions (runs after all are created above)
         $superAdmin = Role::firstOrCreate(['name' => 'superadmin']);
         $superAdmin->syncPermissions(Permission::all());
 
-        // Admin - Full CRUD on users/roles, view permissions, full CRUD on content, manage settings
+        // Admin — full CRUD on all content, manage users/roles, view permissions, manage settings
         $admin = Role::firstOrCreate(['name' => 'admin']);
-        $admin->syncPermissions([
+        $adminPermissions = [
+            // Dashboard
+            'view dashboard', 'create dashboard', 'edit dashboard', 'delete dashboard',
+
+            // Client
+            'view client', 'create client', 'edit client', 'delete client', 'impersonate client',
+
+            // Inventory
+            'view inventory', 'create inventory', 'edit inventory', 'delete inventory',
+
+            // Orders
+            'view orders', 'create orders', 'edit orders', 'delete orders',
+
+            // Apps
+            'view apps', 'create apps', 'edit apps', 'delete apps',
+
+            // Tags
+            'view tags', 'create tags', 'edit tags', 'delete tags',
+
             // User & Role Management
             'view users', 'create users', 'edit users', 'delete users',
             'view roles', 'create roles', 'edit roles', 'delete roles',
             'view permissions',
 
+            // Teams
+            'view teams', 'create teams', 'edit teams', 'delete teams',
+
+            // Notifications
+            'view notifications', 'delete notifications',
+
+            // Settings
+            'view settings', 'edit settings',
+            'manage-email-settings',
+        ];
+        $admin->syncPermissions($adminPermissions);
+
+        // Manager — view-only on user management, full CRUD on content, view settings
+        $manager = Role::firstOrCreate(['name' => 'manager']);
+        $managerPermissions = [
             // Dashboard
-            'view dashboard', 'create dashboard', 'edit dashboard', 'delete dashboard',
+            'view dashboard',
 
             // Client
             'view client', 'create client', 'edit client', 'delete client', 'impersonate client',
@@ -101,45 +153,30 @@ class RolesAndPermissionsSeeder extends Seeder
             // Apps
             'view apps', 'create apps', 'edit apps', 'delete apps',
 
-            // Settings
-            'view settings', 'edit settings',
+            // Tags
+            'view tags', 'create tags', 'edit tags',
 
-            // Email Settings
-            'manage-email-settings',
-        ]);
-
-        // Manager - View-only on user management, full CRUD on content, view settings
-        $manager = Role::firstOrCreate(['name' => 'manager']);
-        $manager->syncPermissions([
             // User & Role Management (view only)
             'view users',
             'view roles',
             'view permissions',
 
-            // Dashboard
-            'view dashboard', 'create dashboard', 'edit dashboard', 'delete dashboard',
+            // Teams
+            'view teams', 'create teams', 'edit teams',
 
-            // Client
-            'view client', 'create client', 'edit client', 'delete client', 'impersonate client',
-
-            // Inventory
-            'view inventory', 'create inventory', 'edit inventory', 'delete inventory',
-
-            // Orders
-            'view orders', 'create orders', 'edit orders', 'delete orders',
-
-            // Apps
-            'view apps', 'create apps', 'edit apps', 'delete apps',
+            // Notifications
+            'view notifications',
 
             // Settings (view only)
             'view settings',
-        ]);
+        ];
+        $manager->syncPermissions($managerPermissions);
 
-        // Client - Portal access only, section access controlled via portal_features column
+        // Client — portal access only, section access controlled via portal_features column
         $clientRole = Role::firstOrCreate(['name' => 'client']);
         $clientRole->syncPermissions([]);
 
-        // Create admin user
+        // Create admin user if not exists
         $adminUser = User::firstOrCreate(
             ['email' => 'admin@ksadrop.com'],
             [
@@ -149,7 +186,8 @@ class RolesAndPermissionsSeeder extends Seeder
             ]
         );
 
-        // Assign superadmin role to admin user
-        $adminUser->assignRole('superadmin');
+        if (! $adminUser->hasRole('superadmin')) {
+            $adminUser->assignRole('superadmin');
+        }
     }
 }

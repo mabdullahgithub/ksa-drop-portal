@@ -13,13 +13,14 @@ class PermissionsSeeder extends Seeder
      */
     public function run(): void
     {
-        // Reset cached roles and permissions
         app()[\Spatie\Permission\PermissionRegistrar::class]->forgetCachedPermissions();
 
-        // Define permissions
         $permissions = [
             // Dashboard
             'view dashboard',
+            'create dashboard',
+            'edit dashboard',
+            'delete dashboard',
 
             // Client
             'view client',
@@ -45,6 +46,12 @@ class PermissionsSeeder extends Seeder
             'create apps',
             'edit apps',
             'delete apps',
+
+            // Tags
+            'view tags',
+            'create tags',
+            'edit tags',
+            'delete tags',
 
             // Users
             'view users',
@@ -80,79 +87,56 @@ class PermissionsSeeder extends Seeder
             'manage-email-settings',
         ];
 
-        // Create permissions
+        // Create permissions if they don't already exist
         foreach ($permissions as $permission) {
             Permission::firstOrCreate(['name' => $permission]);
         }
 
-        // Create roles and assign permissions
-
-        // Superadmin - all permissions
+        // Superadmin — sync all permissions (runs after all are created above)
         $superadmin = Role::firstOrCreate(['name' => 'superadmin']);
-        $superadmin->givePermissionTo(Permission::all());
+        $superadmin->syncPermissions(Permission::all());
 
-        // Admin - most permissions except critical ones
+        // Admin — most permissions except critical role/permission management
         $admin = Role::firstOrCreate(['name' => 'admin']);
-        $admin->givePermissionTo([
+        $admin->syncPermissions([
             'view dashboard',
-            'view client',
-            'create client',
-            'edit client',
-            'delete client',
-            'impersonate client',
-            'view inventory',
-            'create inventory',
-            'edit inventory',
-            'delete inventory',
-            'view orders',
-            'create orders',
-            'edit orders',
-            'delete orders',
-            'view apps',
-            'create apps',
-            'edit apps',
-            'delete apps',
-            'view users',
-            'create users',
-            'edit users',
+            'view client', 'create client', 'edit client', 'delete client', 'impersonate client',
+            'view inventory', 'create inventory', 'edit inventory', 'delete inventory',
+            'view orders', 'create orders', 'edit orders', 'delete orders',
+            'view apps', 'create apps', 'edit apps', 'delete apps',
+            'view tags', 'create tags', 'edit tags', 'delete tags',
+            'view users', 'create users', 'edit users',
             'view roles',
             'view permissions',
-            'view teams',
-            'create teams',
-            'edit teams',
-            'view notifications',
-            'view settings',
-            'edit settings',
+            'view teams', 'create teams', 'edit teams',
+            'view notifications', 'delete notifications',
+            'view settings', 'edit settings',
             'manage-email-settings',
         ]);
 
-        // Manager - moderate permissions
+        // Manager — moderate permissions
         $manager = Role::firstOrCreate(['name' => 'manager']);
-        $manager->givePermissionTo([
+        $manager->syncPermissions([
             'view dashboard',
-            'view client',
-            'create client',
-            'edit client',
-            'view inventory',
-            'create inventory',
-            'edit inventory',
-            'view orders',
-            'create orders',
-            'edit orders',
+            'view client', 'create client', 'edit client',
+            'view inventory', 'create inventory', 'edit inventory',
+            'view orders', 'create orders', 'edit orders',
             'view apps',
+            'view tags', 'create tags', 'edit tags',
             'view users',
             'view teams',
             'view notifications',
             'view settings',
         ]);
 
-        // User - basic permissions
+        // User — basic permissions
         $user = Role::firstOrCreate(['name' => 'user']);
-        $user->givePermissionTo([
+        $user->syncPermissions([
             'view dashboard',
             'view client',
             'view inventory',
             'view orders',
+            'view tags',
             'view notifications',
             'view settings',
         ]);

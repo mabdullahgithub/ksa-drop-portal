@@ -45,40 +45,46 @@ class PermissionCategoriesSeeder extends Seeder
                 'order' => 5,
             ],
             [
+                'name' => 'tags',
+                'label' => 'Tags',
+                'description' => 'Tag management permissions',
+                'order' => 6,
+            ],
+            [
                 'name' => 'users',
                 'label' => 'User Management',
                 'description' => 'User management permissions',
-                'order' => 6,
+                'order' => 7,
             ],
             [
                 'name' => 'roles',
                 'label' => 'Role Management',
                 'description' => 'Role management permissions',
-                'order' => 7,
+                'order' => 8,
             ],
             [
                 'name' => 'permissions',
                 'label' => 'Permission Management',
                 'description' => 'Permission management',
-                'order' => 8,
+                'order' => 9,
             ],
             [
                 'name' => 'teams',
                 'label' => 'Team Management',
                 'description' => 'Team management permissions',
-                'order' => 9,
+                'order' => 10,
             ],
             [
                 'name' => 'notifications',
                 'label' => 'Notifications',
                 'description' => 'Notification management permissions',
-                'order' => 10,
+                'order' => 11,
             ],
             [
                 'name' => 'settings',
                 'label' => 'Settings',
                 'description' => 'Settings and configuration permissions',
-                'order' => 11,
+                'order' => 12,
             ],
         ];
 
