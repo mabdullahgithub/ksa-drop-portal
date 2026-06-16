@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Mail\Auth\PasswordChangedMail;
 use App\Mail\Clients\WelcomeClientMail;
 use App\Models\Client;
 use App\Models\ClientProduct;
@@ -16,6 +17,8 @@ use App\Notifications\ProductRejectedNotification;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Password;
+use Illuminate\Validation\Rules\Password as PasswordRule;
 use App\Services\EmailService;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
@@ -221,6 +224,69 @@ class ClientController extends Controller
             'message' => 'Client status updated successfully',
             'client' => $this->formatClient($client->fresh('user')),
         ]);
+    }
+
+    /**
+     * Set a new password for the client's user account and notify the client.
+     */
+    public function resetPassword(Request $request, Client $client)
+    {
+        $validated = $request->validate([
+            'password' => ['required', 'confirmed', PasswordRule::defaults()],
+        ]);
+
+        $user = $client->user;
+
+        if (! $user) {
+            return response()->json([
+                'message' => 'This client has no associated user account.',
+            ], 422);
+        }
+
+        $user->update([
+            'password' => Hash::make($validated['password']),
+        ]);
+
+        // Notify the client that their password was changed (no plaintext password).
+        try {
+            $emailService = app(EmailService::class);
+            if ($emailService->isEnabled()) {
+                $emailService->configureMailer();
+                Mail::to($user->email)->send(new PasswordChangedMail($user, $request->ip()));
+            }
+        } catch (\Exception $e) {
+            \Log::error('PasswordChangedMail failed for client ' . $client->id . ': ' . $e->getMessage());
+        }
+
+        return response()->json([
+            'message' => 'Password updated successfully. The client has been notified by email.',
+        ]);
+    }
+
+    /**
+     * Send a password reset link to the client's user account.
+     */
+    public function sendPasswordResetLink(Client $client)
+    {
+        $user = $client->user;
+
+        if (! $user) {
+            return response()->json([
+                'message' => 'This client has no associated user account.',
+            ], 422);
+        }
+
+        $status = Password::sendResetLink(['email' => $user->email]);
+
+        if ($status === Password::RESET_LINK_SENT) {
+            return response()->json([
+                'message' => 'Password reset link sent to ' . $user->email . '.',
+            ]);
+        }
+
+        return response()->json([
+            'message' => trans($status),
+        ], 422);
     }
 
     public function bulkUpdate(Request $request)

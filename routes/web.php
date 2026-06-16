@@ -112,6 +112,8 @@ Route::middleware(['auth', 'verified', 'role:!client'])->group(function () {
         Route::get('/{client}', [ClientController::class, 'show'])->middleware('permission:view client')->name('api.clients.show');
         Route::put('/{client}', [ClientController::class, 'update'])->middleware('permission:edit client')->name('api.clients.update');
         Route::patch('/{client}/status', [ClientController::class, 'updateStatus'])->middleware('permission:edit client')->name('api.clients.update-status');
+        Route::post('/{client}/reset-password', [ClientController::class, 'resetPassword'])->middleware('permission:edit client')->name('api.clients.reset-password');
+        Route::post('/{client}/send-reset-link', [ClientController::class, 'sendPasswordResetLink'])->middleware('permission:edit client')->name('api.clients.send-reset-link');
         Route::post('/bulk-update', [ClientController::class, 'bulkUpdate'])->middleware('permission:edit client')->name('api.clients.bulk-update');
         Route::delete('/{client}', [ClientController::class, 'destroy'])->middleware('permission:delete client')->name('api.clients.destroy');
         // Client Products (Inventory)

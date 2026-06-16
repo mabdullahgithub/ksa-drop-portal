@@ -181,6 +181,58 @@ export function useClientMutations() {
     }
   }
 
+  const resetPassword = async (
+    clientId: number,
+    password: string,
+    passwordConfirmation: string
+  ): Promise<boolean | { errors: Record<string, string[]> }> => {
+    setLoading(true)
+    try {
+      const response = await fetch(`/api/clients/${clientId}/reset-password`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'X-CSRF-TOKEN': getCsrfToken(),
+        },
+        body: JSON.stringify({ password, password_confirmation: passwordConfirmation }),
+      })
+      if (!response.ok) {
+        const error = await response.json()
+        if (error.errors) {
+          return { errors: error.errors }
+        }
+        throw error
+      }
+      return true
+    } catch (error) {
+      console.error('Error resetting client password:', error)
+      return false
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const sendResetLink = async (clientId: number): Promise<boolean> => {
+    setLoading(true)
+    try {
+      const response = await fetch(`/api/clients/${clientId}/send-reset-link`, {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'X-CSRF-TOKEN': getCsrfToken(),
+        },
+      })
+      if (!response.ok) throw new Error('Failed')
+      return true
+    } catch (error) {
+      console.error('Error sending reset link:', error)
+      return false
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const deleteClient = async (clientId: number): Promise<boolean> => {
     setLoading(true)
     try {
@@ -237,6 +289,8 @@ export function useClientMutations() {
     createClient,
     updateClient,
     updateStatus,
+    resetPassword,
+    sendResetLink,
     deleteClient,
     bulkUpdate,
     exportClients,

@@ -23,6 +23,8 @@ import {
   Phone,
   Receipt,
   Tag,
+  KeyRound,
+  Mail,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -59,6 +61,7 @@ import { usePermissions } from '@/hooks/use-permissions'
 import { useClientMutations } from '@/hooks/useClients'
 import { ClientProvider } from './components/client-provider'
 import { EditClientDialog } from './components/edit-client-dialog'
+import { ChangePasswordDialog } from './components/change-password-dialog'
 import { ClientInventoryTab } from './components/client-inventory-tab'
 import type { Client } from '@/types/client'
 
@@ -76,9 +79,10 @@ export function ClientDetailPage({ client }: ClientDetailPageProps) {
 
 function ClientDetailContent({ client }: ClientDetailPageProps) {
   const { can } = usePermissions()
-  const { updateStatus, deleteClient, loading } = useClientMutations()
+  const { updateStatus, sendResetLink, deleteClient, loading } = useClientMutations()
   const [editOpen, setEditOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
+  const [changePasswordOpen, setChangePasswordOpen] = useState(false)
   const initialTab = new URLSearchParams(window.location.search).get('tab') ?? 'overview'
 
   const statusColorMap: Record<string, string> = {
@@ -104,6 +108,19 @@ function ClientDetailContent({ client }: ClientDetailPageProps) {
       router.visit('/client')
     } else {
       toast.error('Failed to delete client')
+    }
+  }
+
+  const handleSendResetLink = async () => {
+    if (!client.user_id) {
+      toast.error('This client has no associated user account.')
+      return
+    }
+    const ok = await sendResetLink(client.id)
+    if (ok) {
+      toast.success(`Password reset link sent to ${client.user?.email}`)
+    } else {
+      toast.error('Failed to send reset link')
     }
   }
 
@@ -202,6 +219,27 @@ function ClientDetailContent({ client }: ClientDetailPageProps) {
                   >
                     <Ban className='mr-2 h-4 w-4' />
                     Suspend
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+
+            {can('edit client') && client.user_id && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant='outline' size='sm'>
+                    <KeyRound className='mr-2 h-4 w-4' />
+                    Password
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align='end'>
+                  <DropdownMenuItem onClick={() => setChangePasswordOpen(true)}>
+                    <KeyRound className='mr-2 h-4 w-4' />
+                    Change Password
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={handleSendResetLink} disabled={loading}>
+                    <Mail className='mr-2 h-4 w-4' />
+                    Send Reset Link
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -380,6 +418,13 @@ function ClientDetailContent({ client }: ClientDetailPageProps) {
         open={editOpen}
         onOpenChange={setEditOpen}
         onSuccess={() => router.reload()}
+      />
+
+      {/* Change password dialog */}
+      <ChangePasswordDialog
+        client={client}
+        open={changePasswordOpen}
+        onOpenChange={setChangePasswordOpen}
       />
 
       {/* Delete confirm */}
