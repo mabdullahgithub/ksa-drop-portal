@@ -1,10 +1,10 @@
 @extends('emails.layouts.default')
 
 @section('content')
-    <h1 class="email-title">Product Verified!</h1>
+    <h1 class="email-title">Your Product Has Been Verified</h1>
 
     <p class="email-text">
-        Great news! Your product has been reviewed and verified by our team. It is now active in your inventory.
+        Your product has been reviewed and verified by our team, and is now active in your inventory.
     </p>
 
     @component('emails.components.alert', ['type' => 'success'])

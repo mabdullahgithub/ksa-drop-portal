@@ -45,7 +45,7 @@
     <hr class="email-divider">
 
     <p class="email-text text-muted">
-        If you didn't make these changes, please contact our support team immediately.
+        If you didn't make these changes, please contact our support team.
     </p>
 
     <p class="email-text" style="margin-top: 32px;">

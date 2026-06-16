@@ -8,7 +8,7 @@
     </p>
 
     <p class="email-text">
-        Great news! Two-factor authentication (2FA) has been successfully enabled on your account.
+        Two-factor authentication (2FA) has been enabled on your account.
     </p>
 
     @component('emails.components.alert', ['type' => 'success'])
@@ -30,7 +30,7 @@
 
     @component('emails.components.alert', ['type' => 'warning'])
         <p style="margin: 0; color: #92400e;">
-            <strong>Important:</strong> Make sure to save your recovery codes in a safe place. You'll need them if you lose access to your authenticator app.
+            <strong>Please note:</strong> Keep your recovery codes in a safe place. You'll need them if you lose access to your authenticator app.
         </p>
     @endcomponent
 
@@ -47,7 +47,7 @@
     @component('emails.components.alert', ['type' => 'danger'])
         <p style="margin: 0; color: #991b1b;">
             <strong>Didn't enable this?</strong><br>
-            If you didn't enable two-factor authentication, your account may be compromised. Please contact our support team immediately and reset your password.
+            If you didn't enable two-factor authentication, please reset your password and contact our support team.
         </p>
     @endcomponent
 

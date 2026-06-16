@@ -31,7 +31,7 @@
     @component('emails.components.alert', ['type' => 'danger'])
         <p style="margin: 0; color: #991b1b;">
             <strong>Didn't disable this?</strong><br>
-            If you didn't disable two-factor authentication, your account may be compromised. Please enable 2FA immediately and change your password.
+            If you didn't disable two-factor authentication, please re-enable it and update your password.
         </p>
     @endcomponent
 

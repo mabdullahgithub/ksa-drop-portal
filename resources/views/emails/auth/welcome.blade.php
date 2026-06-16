@@ -1,14 +1,14 @@
 @extends('emails.layouts.default')
 
 @section('content')
-    <h1 class="email-title">Welcome to {{ config('app.name') }}! 🎉</h1>
+    <h1 class="email-title">Welcome to {{ config('app.name') }}</h1>
 
     <p class="email-text">
         Hi {{ $user->name }},
     </p>
 
     <p class="email-text">
-        We're thrilled to have you on board! Your account has been successfully created and you're all set to get started.
+        Your account has been created and is ready to use.
     </p>
 
     @component('emails.components.alert', ['type' => 'info'])

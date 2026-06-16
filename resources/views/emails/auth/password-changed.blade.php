@@ -35,7 +35,7 @@
     @component('emails.components.alert', ['type' => 'danger'])
         <p style="margin: 0; color: #991b1b;">
             <strong>Didn't make this change?</strong><br>
-            If you didn't change your password, your account may be compromised. Please contact our support team immediately.
+            If you didn't change your password, please reset it and contact our support team.
         </p>
     @endcomponent
 
