@@ -119,6 +119,13 @@ class PortalController extends Controller
         $invalidRows = 0;
         $totalRows = 0;
 
+        // Always prefix imported order numbers with a client identifier so they
+        // stay unique across clients (order_number has a global unique index).
+        // Prefer the human-friendly short_id; fall back to the client id so a
+        // missing short_id can never produce an unprefixed, collision-prone number.
+        // Format: "{prefix}{number}" e.g. "EVENIE31902".
+        $prefix = $client->short_id ?: 'CL' . $client->id;
+
         DB::beginTransaction();
 
         try {
@@ -148,10 +155,32 @@ class PortalController extends Controller
                         continue;
                     }
 
-                    // Prefix with client short_id so orders from different clients are
-                    // distinguishable. e.g. "#1001" for client EVENIE → "EVENIE-#1001".
-                    $prefix = $client->short_id ? $client->short_id . '-' : '';
-                    $orderNumber = $prefix . $rawOrderNumber;
+                    // Customer name and phone are required so every order is deliverable.
+                    // All other fields are optional.
+                    $customerName = trim((string) ($data['Billing Name'] ?? $data['Shipping Name'] ?? ''));
+                    $customerPhone = trim((string) ($data['Phone'] ?? $data['Billing Phone'] ?? $data['Shipping Phone'] ?? ''));
+
+                    if ($customerName === '') {
+                        $invalidRows++;
+                        $errors[] = ['row' => $totalRows, 'order_number' => $rawOrderNumber, 'reason' => 'Missing customer name', 'details' => 'Customer name (Billing Name or Shipping Name) is required'];
+                        continue;
+                    }
+
+                    if ($customerPhone === '') {
+                        $invalidRows++;
+                        $errors[] = ['row' => $totalRows, 'order_number' => $rawOrderNumber, 'reason' => 'Missing phone', 'details' => 'Phone (Phone, Billing Phone or Shipping Phone) is required'];
+                        continue;
+                    }
+
+                    // Prefix with the client identifier so orders from different
+                    // clients are distinguishable and unique. The raw Shopify name
+                    // (e.g. "#31902") is stripped to its digits and joined directly
+                    // to the prefix, e.g. client EVENIE → "EVENIE31902".
+                    $rawDigits = preg_replace('/\D+/', '', (string) $rawOrderNumber);
+                    // Fall back to the trimmed raw value when there are no digits,
+                    // so non-numeric names don't collapse into a bare prefix.
+                    $orderSuffix = $rawDigits !== '' ? $rawDigits : ltrim(trim((string) $rawOrderNumber), '#');
+                    $orderNumber = $prefix . $orderSuffix;
 
                     if (\App\Models\Order::where('order_number', $orderNumber)->exists()) {
                         $duplicates++;
@@ -178,9 +207,9 @@ class PortalController extends Controller
                     $order = \App\Models\Order::create([
                         'client_id' => $client->id,
                         'order_number' => $orderNumber,
-                        'customer_name' => $data['Billing Name'] ?? $data['Shipping Name'] ?? null,
+                        'customer_name' => $customerName,
                         'customer_email' => $data['Email'] ?? null,
-                        'customer_phone' => $data['Phone'] ?? $data['Billing Phone'] ?? $data['Shipping Phone'] ?? null,
+                        'customer_phone' => $customerPhone,
                         'financial_status' => strtolower($data['Financial Status'] ?? 'pending'),
                         'fulfillment_status' => strtolower($data['Fulfillment Status'] ?? 'unfulfilled'),
                         'accepts_marketing' => strtolower($data['Accepts Marketing'] ?? 'no') === 'yes',
@@ -277,6 +306,61 @@ class PortalController extends Controller
             DB::rollBack();
             return response()->json(['success' => false, 'message' => 'Import failed: ' . $e->getMessage(), 'errors' => $errors], 422);
         }
+    }
+
+    public function ordersImportTemplate(Request $request)
+    {
+        $client = $this->resolveClient();
+
+        if (!$client || !in_array('orders', $client->portal_features ?? [])) {
+            abort(403);
+        }
+
+        $columns = [
+            'Name', 'Email', 'Financial Status', 'Paid at', 'Fulfillment Status', 'Fulfilled at',
+            'Accepts Marketing', 'Currency', 'Subtotal', 'Shipping', 'Taxes', 'Total',
+            'Discount Code', 'Discount Amount', 'Shipping Method', 'Created at',
+            'Lineitem quantity', 'Lineitem name', 'Lineitem price', 'Lineitem compare at price',
+            'Lineitem sku', 'Lineitem requires shipping', 'Lineitem taxable', 'Lineitem fulfillment status',
+            'Billing Name', 'Billing Street', 'Billing Address1', 'Billing Address2', 'Billing Company',
+            'Billing City', 'Billing Zip', 'Billing Province', 'Billing Country', 'Billing Phone',
+            'Shipping Name', 'Shipping Street', 'Shipping Address1', 'Shipping Address2', 'Shipping Company',
+            'Shipping City', 'Shipping Zip', 'Shipping Province', 'Shipping Country', 'Shipping Phone',
+            'Notes', 'Note Attributes', 'Cancelled at', 'Payment Method', 'Payment Reference',
+            'Refunded Amount', 'Vendor', 'Outstanding Balance', 'Employee', 'Location', 'Device ID',
+            'Id', 'Tags', 'Risk Level', 'Source',
+        ];
+
+        // A sample row so clients can see the expected format/values for each column.
+        $sample = [
+            '#1001', 'customer@example.com', 'pending', '', 'unfulfilled', '',
+            'no', 'SAR', '100.00', '15.00', '0.00', '115.00',
+            '', '0.00', 'Standard', date('Y-m-d H:i:s'),
+            '1', 'Sample Product', '100.00', '0.00',
+            'SKU-001', 'true', 'false', 'unfulfilled',
+            'John Doe', '123 King Fahd Rd', '123 King Fahd Rd', '', '',
+            'Riyadh', '12345', 'Riyadh', 'SA', '+966500000000',
+            'John Doe', '123 King Fahd Rd', '123 King Fahd Rd', '', '',
+            'Riyadh', '12345', 'Riyadh', 'SA', '+966500000000',
+            '', '', '', 'Cash on Delivery', '',
+            '0.00', '', '0.00', '', '', '',
+            '', '', 'Low', 'manual',
+        ];
+
+        $filename = 'orders_import_template.csv';
+        $headers = [
+            'Content-Type' => 'text/csv',
+            'Content-Disposition' => "attachment; filename=\"{$filename}\"",
+        ];
+
+        $callback = function () use ($columns, $sample) {
+            $file = fopen('php://output', 'w');
+            fputcsv($file, $columns);
+            fputcsv($file, $sample);
+            fclose($file);
+        };
+
+        return response()->stream($callback, 200, $headers);
     }
 
     public function exportOrders(Request $request)

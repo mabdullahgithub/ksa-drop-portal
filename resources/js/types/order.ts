@@ -138,15 +138,16 @@ export interface OrderItem {
 
 export interface OrderFilters {
   search?: string
-  fulfillment_status?: string
-  financial_status?: string
-  payment_method?: string
+  fulfillment_status?: string[]
+  financial_status?: string[]
+  payment_method?: string[]
   start_date?: string
   end_date?: string
-  utm_source?: string
+  utm_source?: string[]
   utm_campaign?: string
   risk_level?: string
   country?: string
+  tags?: string[]
   min_total?: number
   max_total?: number
   sort_by?: string
@@ -190,6 +191,7 @@ export interface OrderFilterOptions {
   utm_sources: FilterOption[]
   countries: FilterOption[]
   risk_levels: FilterOption[]
+  tags: FilterOption[]
   clients: ClientFilterOption[]
 }
 

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Client;
 use App\Models\Order;
+use App\Models\Tag;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -22,19 +23,28 @@ class OrderController extends Controller
             $query->search($request->search);
         }
 
-        // Filter by fulfillment status
-        if ($request->has('fulfillment_status') && $request->fulfillment_status !== 'all') {
-            $query->where('fulfillment_status', $request->fulfillment_status);
+        // Filter by fulfillment status (multi-select)
+        if ($request->has('fulfillment_status')) {
+            $values = $this->multiValue($request->fulfillment_status);
+            if (!empty($values)) {
+                $query->whereIn('fulfillment_status', $values);
+            }
         }
 
-        // Filter by financial status
-        if ($request->has('financial_status') && $request->financial_status !== 'all') {
-            $query->where('financial_status', $request->financial_status);
+        // Filter by financial status (multi-select)
+        if ($request->has('financial_status')) {
+            $values = $this->multiValue($request->financial_status);
+            if (!empty($values)) {
+                $query->whereIn('financial_status', $values);
+            }
         }
 
-        // Filter by payment method
-        if ($request->has('payment_method') && $request->payment_method !== 'all') {
-            $query->where('payment_method', $request->payment_method);
+        // Filter by payment method (multi-select)
+        if ($request->has('payment_method')) {
+            $values = $this->multiValue($request->payment_method);
+            if (!empty($values)) {
+                $query->whereIn('payment_method', $values);
+            }
         }
 
         // Filter by date range
@@ -42,9 +52,24 @@ class OrderController extends Controller
             $query->dateRange($request->start_date, $request->end_date);
         }
 
-        // Filter by UTM source
+        // Filter by UTM source (multi-select)
         if ($request->has('utm_source')) {
-            $query->where('utm_source', $request->utm_source);
+            $values = $this->multiValue($request->utm_source);
+            if (!empty($values)) {
+                $query->whereIn('utm_source', $values);
+            }
+        }
+
+        // Filter by tags (match orders carrying any of the selected tags)
+        if ($request->has('tags')) {
+            $tags = $this->multiValue($request->tags);
+            if (!empty($tags)) {
+                $query->where(function ($q) use ($tags) {
+                    foreach ($tags as $tag) {
+                        $q->orWhereJsonContains('tags', $tag);
+                    }
+                });
+            }
         }
 
         // Filter by UTM campaign
@@ -94,6 +119,20 @@ class OrderController extends Controller
     }
 
     /**
+     * Normalise a multi-select filter value (array or comma-separated string)
+     * into a clean list, dropping empties and the legacy "all" sentinel.
+     */
+    private function multiValue($value): array
+    {
+        $values = is_array($value) ? $value : explode(',', (string) $value);
+
+        return array_values(array_filter(
+            array_map('trim', $values),
+            fn ($v) => $v !== '' && $v !== 'all'
+        ));
+    }
+
+    /**
      * Display the specified order.
      */
     public function show(Order $order)
@@ -108,10 +147,60 @@ class OrderController extends Controller
     public function update(Request $request, Order $order)
     {
         $validated = $request->validate([
+            // Customer
+            'customer_name' => 'sometimes|nullable|string|max:255',
+            'customer_email' => 'sometimes|nullable|email|max:255',
+            'customer_phone' => 'sometimes|nullable|string|max:50',
+
+            // Billing address
+            'billing_name' => 'sometimes|nullable|string|max:255',
+            'billing_street' => 'sometimes|nullable|string|max:255',
+            'billing_address1' => 'sometimes|nullable|string|max:255',
+            'billing_address2' => 'sometimes|nullable|string|max:255',
+            'billing_company' => 'sometimes|nullable|string|max:255',
+            'billing_city' => 'sometimes|nullable|string|max:255',
+            'billing_zip' => 'sometimes|nullable|string|max:50',
+            'billing_province' => 'sometimes|nullable|string|max:255',
+            'billing_country' => 'sometimes|nullable|string|max:255',
+            'billing_phone' => 'sometimes|nullable|string|max:50',
+
+            // Shipping address
+            'shipping_name' => 'sometimes|nullable|string|max:255',
+            'shipping_street' => 'sometimes|nullable|string|max:255',
+            'shipping_address1' => 'sometimes|nullable|string|max:255',
+            'shipping_address2' => 'sometimes|nullable|string|max:255',
+            'shipping_company' => 'sometimes|nullable|string|max:255',
+            'shipping_city' => 'sometimes|nullable|string|max:255',
+            'shipping_zip' => 'sometimes|nullable|string|max:50',
+            'shipping_province' => 'sometimes|nullable|string|max:255',
+            'shipping_country' => 'sometimes|nullable|string|max:255',
+            'shipping_phone' => 'sometimes|nullable|string|max:50',
+
+            // Status
             'fulfillment_status' => 'sometimes|in:pending,unfulfilled,fulfilled,cancelled',
             'financial_status' => 'sometimes|in:pending,paid,refunded,partially_refunded',
+
+            // Payment & amounts
+            'payment_method' => 'sometimes|nullable|string|max:255',
+            'payment_reference' => 'sometimes|nullable|string|max:255',
+            'currency' => 'sometimes|nullable|string|max:10',
+            'subtotal' => 'sometimes|numeric|min:0',
+            'shipping_cost' => 'sometimes|numeric|min:0',
+            'taxes' => 'sometimes|numeric|min:0',
+            'total' => 'sometimes|numeric|min:0',
+            'discount_code' => 'sometimes|nullable|string|max:255',
+            'discount_amount' => 'sometimes|numeric|min:0',
+            'shipping_method' => 'sometimes|nullable|string|max:255',
+            'outstanding_balance' => 'sometimes|numeric|min:0',
+            'refunded_amount' => 'sometimes|numeric|min:0',
+
+            // Meta
+            'risk_level' => 'sometimes|nullable|string|max:50',
+            'source' => 'sometimes|nullable|string|max:255',
+            'vendor' => 'sometimes|nullable|string|max:255',
             'notes' => 'sometimes|string|nullable',
             'tags' => 'sometimes|array',
+            'tags.*' => 'string|max:255',
         ]);
 
         // Update timestamps based on status changes
@@ -258,14 +347,12 @@ class OrderController extends Controller
     {
         return response()->json([
             'fulfillment_statuses' => [
-                ['value' => 'all', 'label' => 'All'],
                 ['value' => 'pending', 'label' => 'Pending'],
                 ['value' => 'unfulfilled', 'label' => 'Unfulfilled'],
                 ['value' => 'fulfilled', 'label' => 'Fulfilled'],
                 ['value' => 'cancelled', 'label' => 'Cancelled'],
             ],
             'financial_statuses' => [
-                ['value' => 'all', 'label' => 'All'],
                 ['value' => 'pending', 'label' => 'Pending'],
                 ['value' => 'paid', 'label' => 'Paid'],
                 ['value' => 'refunded', 'label' => 'Refunded'],
@@ -277,7 +364,6 @@ class OrderController extends Controller
                 ->whereNotNull('payment_method')
                 ->pluck('payment_method')
                 ->map(fn($method) => ['value' => $method, 'label' => $method])
-                ->prepend(['value' => 'all', 'label' => 'All'])
                 ->values(),
             'utm_sources' => DB::table('orders')
                 ->select('utm_source')
@@ -298,6 +384,10 @@ class OrderController extends Controller
                 ['value' => 'Medium', 'label' => 'Medium'],
                 ['value' => 'High', 'label' => 'High'],
             ],
+            'tags' => Tag::orderBy('name')
+                ->pluck('name')
+                ->map(fn($name) => ['value' => $name, 'label' => $name])
+                ->values(),
             'clients' => Client::select('id', 'company_name', 'short_id')
                 ->orderBy('company_name')
                 ->get()
@@ -373,11 +463,39 @@ class OrderController extends Controller
         if ($request->has('search')) {
             $query->search($request->search);
         }
-        if ($request->has('fulfillment_status') && $request->fulfillment_status !== 'all') {
-            $query->where('fulfillment_status', $request->fulfillment_status);
+        if ($request->has('fulfillment_status')) {
+            $values = $this->multiValue($request->fulfillment_status);
+            if (!empty($values)) {
+                $query->whereIn('fulfillment_status', $values);
+            }
         }
-        if ($request->has('financial_status') && $request->financial_status !== 'all') {
-            $query->where('financial_status', $request->financial_status);
+        if ($request->has('financial_status')) {
+            $values = $this->multiValue($request->financial_status);
+            if (!empty($values)) {
+                $query->whereIn('financial_status', $values);
+            }
+        }
+        if ($request->has('payment_method')) {
+            $values = $this->multiValue($request->payment_method);
+            if (!empty($values)) {
+                $query->whereIn('payment_method', $values);
+            }
+        }
+        if ($request->has('utm_source')) {
+            $values = $this->multiValue($request->utm_source);
+            if (!empty($values)) {
+                $query->whereIn('utm_source', $values);
+            }
+        }
+        if ($request->has('tags')) {
+            $tags = $this->multiValue($request->tags);
+            if (!empty($tags)) {
+                $query->where(function ($q) use ($tags) {
+                    foreach ($tags as $tag) {
+                        $q->orWhereJsonContains('tags', $tag);
+                    }
+                });
+            }
         }
         if ($request->has('client_ids')) {
             $clientIds = is_array($request->client_ids)

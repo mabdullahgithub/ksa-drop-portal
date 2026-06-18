@@ -221,6 +221,7 @@ Route::prefix('portal')->middleware(['auth', 'verified', 'role:client'])->group(
     Route::get('/api/dashboard', [PortalController::class, 'dashboard'])->name('portal.api.dashboard');
     Route::get('/api/orders', [PortalController::class, 'orders'])->name('portal.api.orders');
     Route::post('/api/orders/import', [PortalController::class, 'importOrders'])->name('portal.api.orders.import');
+    Route::get('/api/orders/import-template', [PortalController::class, 'ordersImportTemplate'])->name('portal.api.orders.import-template');
     Route::get('/api/orders/export', [PortalController::class, 'exportOrders'])->name('portal.api.orders.export');
     Route::get('/api/inventory', [PortalController::class, 'inventory'])->name('portal.api.inventory');
     Route::post('/api/inventory', [PortalController::class, 'storeInventory'])->name('portal.api.inventory.store');

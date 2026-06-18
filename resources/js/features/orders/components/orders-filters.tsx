@@ -1,15 +1,8 @@
 import { useState, useEffect } from 'react'
-import { Search, X, SlidersHorizontal } from 'lucide-react'
+import { Search, X, SlidersHorizontal, PackageCheck, CreditCard, Tag } from 'lucide-react'
 import { type Table } from '@tanstack/react-table'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -18,6 +11,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { MultiSelectFilter } from '@/components/multi-select-filter'
 import { useFilterOptions } from '@/hooks/useOrders'
 import type { OrderFilters, Order } from '@/types/order'
 import { OrdersFiltersSkeleton } from './orders-skeleton'
@@ -48,10 +42,9 @@ export function OrdersFilters({ filters, onFiltersChange, table }: OrdersFilters
     setSearchInput('')
     onFiltersChange({
       search: '',
-      fulfillment_status: undefined,
-      financial_status: undefined,
-      payment_method: undefined,
-      utm_source: undefined,
+      fulfillment_status: [],
+      financial_status: [],
+      tags: [],
       country: undefined,
       start_date: undefined,
       end_date: undefined,
@@ -62,10 +55,9 @@ export function OrdersFilters({ filters, onFiltersChange, table }: OrdersFilters
 
   const hasActiveFilters =
     filters.search ||
-    filters.fulfillment_status ||
-    filters.financial_status ||
-    filters.payment_method ||
-    filters.utm_source ||
+    (filters.fulfillment_status && filters.fulfillment_status.length > 0) ||
+    (filters.financial_status && filters.financial_status.length > 0) ||
+    (filters.tags && filters.tags.length > 0) ||
     filters.country ||
     (filters.client_ids && filters.client_ids.length > 0)
 
@@ -87,94 +79,32 @@ export function OrdersFilters({ filters, onFiltersChange, table }: OrdersFilters
       </div>
 
       {/* Fulfillment Status */}
-      <Select
-        value={filters.fulfillment_status || 'all'}
-        onValueChange={(value) =>
-          onFiltersChange({
-            fulfillment_status: value === 'all' ? undefined : value,
-            page: 1,
-          })
-        }
-      >
-        <SelectTrigger className='w-[115px] h-9 shrink-0'>
-          <SelectValue placeholder='Fulfillment' />
-        </SelectTrigger>
-        <SelectContent>
-          {options?.fulfillment_statuses.map((status) => (
-            <SelectItem key={status.value} value={status.value}>
-              {status.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+      <MultiSelectFilter
+        label='Fulfillment'
+        icon={PackageCheck}
+        options={options?.fulfillment_statuses ?? []}
+        selected={filters.fulfillment_status ?? []}
+        onChange={(values) => onFiltersChange({ fulfillment_status: values, page: 1 })}
+      />
 
       {/* Financial Status */}
-      <Select
-        value={filters.financial_status || 'all'}
-        onValueChange={(value) =>
-          onFiltersChange({
-            financial_status: value === 'all' ? undefined : value,
-            page: 1,
-          })
-        }
-      >
-        <SelectTrigger className='w-[110px] h-9 shrink-0'>
-          <SelectValue placeholder='Payment' />
-        </SelectTrigger>
-        <SelectContent>
-          {options?.financial_statuses.map((status) => (
-            <SelectItem key={status.value} value={status.value}>
-              {status.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+      <MultiSelectFilter
+        label='Payment'
+        icon={CreditCard}
+        options={options?.financial_statuses ?? []}
+        selected={filters.financial_status ?? []}
+        onChange={(values) => onFiltersChange({ financial_status: values, page: 1 })}
+      />
 
-      {/* Payment Method */}
-      <Select
-        value={filters.payment_method || 'all'}
-        onValueChange={(value) =>
-          onFiltersChange({
-            payment_method: value === 'all' ? undefined : value,
-            page: 1,
-          })
-        }
-      >
-        <SelectTrigger className='w-[100px] h-9 shrink-0'>
-          <SelectValue placeholder='Method' />
-        </SelectTrigger>
-        <SelectContent>
-          {options?.payment_methods.map((method) => (
-            <SelectItem key={method.value} value={method.value}>
-              {method.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-
-      {/* UTM Source */}
-      {options?.utm_sources && options.utm_sources.length > 0 && (
-        <Select
-          value={filters.utm_source || 'all'}
-          onValueChange={(value) =>
-            onFiltersChange({
-              utm_source: value === 'all' ? undefined : value,
-              page: 1,
-            })
-          }
-        >
-          <SelectTrigger className='w-[100px] h-9 shrink-0'>
-            <SelectValue placeholder='Source' />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value='all'>All</SelectItem>
-            {options.utm_sources.map((source) => (
-              <SelectItem key={source.value} value={source.value}>
-                {source.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+      {/* Tags */}
+      {options?.tags && options.tags.length > 0 && (
+        <MultiSelectFilter
+          label='Tags'
+          icon={Tag}
+          options={options.tags}
+          selected={filters.tags ?? []}
+          onChange={(values) => onFiltersChange({ tags: values, page: 1 })}
+        />
       )}
 
       {/* Client Multi-Select Filter */}

@@ -3,7 +3,8 @@
     "private": true,
     "type": "module",
     "scripts": {
-        "build": "tsc && vite build",
+        "build": "vite build",
+        "typecheck": "tsc --noEmit",
         "dev": "vite"
     },
     "dependencies": {

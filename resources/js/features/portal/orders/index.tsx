@@ -187,7 +187,7 @@ function PortalOrdersImportDialog({
   onOpenChange: (open: boolean) => void
   onSuccess?: () => void
 }) {
-  const { importOrders } = usePortalOrderMutations()
+  const { importOrders, downloadOrdersTemplate } = usePortalOrderMutations()
   const [file, setFile] = useState<File | null>(null)
   const [fileError, setFileError] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
@@ -311,12 +311,37 @@ function PortalOrdersImportDialog({
         <DialogHeader>
           <DialogTitle>Import Orders from CSV</DialogTitle>
           <DialogDescription>
-            Upload a CSV file. The file should match the Shopify export format.
-            All orders will be linked to your account.
+            Download the template, fill in your orders following its format, then
+            upload the completed CSV. <span className='font-medium text-foreground'>Customer name and phone are
+            required</span> for every order; other columns are optional. All orders
+            will be linked to your account.
           </DialogDescription>
         </DialogHeader>
 
         <div className='space-y-4'>
+          {/* Template download */}
+          {!result && (
+            <div className='flex items-center justify-between gap-3 rounded-lg border bg-muted/40 p-3'>
+              <div className='flex items-start gap-2'>
+                <FileSpreadsheet className='h-4 w-4 text-muted-foreground mt-0.5 shrink-0' />
+                <p className='text-xs text-muted-foreground'>
+                  Not sure about the format? Download the template with sample data
+                  and the required columns.
+                </p>
+              </div>
+              <Button
+                variant='outline'
+                size='sm'
+                type='button'
+                className='shrink-0'
+                onClick={() => downloadOrdersTemplate()}
+              >
+                <Download className='mr-2 h-4 w-4' />
+                Template
+              </Button>
+            </div>
+          )}
+
           {/* Drop zone */}
           {showDropzone && (
             <div

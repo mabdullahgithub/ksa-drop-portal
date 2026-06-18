@@ -14,7 +14,8 @@ export function OrdersDialogs({ onSuccess }: OrdersDialogsProps) {
       {currentRow && (
         <OrderDetailsDialog
           order={currentRow}
-          open={open === 'view'}
+          open={open === 'view' || open === 'edit'}
+          startInEdit={open === 'edit'}
           onOpenChange={(isOpen) => {
             if (!isOpen) {
               setOpen(null)
@@ -23,6 +24,7 @@ export function OrdersDialogs({ onSuccess }: OrdersDialogsProps) {
               }, 300)
             }
           }}
+          onSaved={onSuccess}
         />
       )}
 

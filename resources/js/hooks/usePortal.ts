@@ -153,7 +153,11 @@ export function usePortalOrderMutations() {
     window.location.href = `/portal/api/orders/export?${params}`
   }
 
-  return { importOrders, exportOrders }
+  const downloadOrdersTemplate = () => {
+    window.location.href = '/portal/api/orders/import-template'
+  }
+
+  return { importOrders, exportOrders, downloadOrdersTemplate }
 }
 
 export function usePortalOrders(initialFilters: Record<string, any> = {}) {

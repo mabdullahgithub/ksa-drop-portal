@@ -57,6 +57,8 @@ export function OrdersTable({
     shipping_country: false,
     payment_method: false,
     customer_email: false,
+    fulfillment_status: false,
+    financial_status: false,
   })
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
 
