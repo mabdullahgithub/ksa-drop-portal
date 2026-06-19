@@ -8,6 +8,7 @@ use App\Models\Shipment;
 use App\Services\Shipping\Drivers\JntExpressDriver;
 use App\Services\Shipping\DTOs\TrackingEvent;
 use App\Services\Shipping\Enums\ShipmentStatus;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 
@@ -17,27 +18,15 @@ class WebhookController extends Controller
     // 1. Logistics Tracking Return — scan events (pickup, in-transit, OFD, delivered)
     // -----------------------------------------------------------------------
 
-    public function handleJntTracking(Request $request)
+    public function handleJntTracking(Request $request): JsonResponse
     {
         return $this->handleJntExpress($request);
     }
 
-    public function handleJntExpress(Request $request)
+    public function handleJntExpress(Request $request): JsonResponse
     {
-        $body = $request->getContent();
-        $digest = $request->header('digest');
-
-        if (! $this->verifyJntSignature($body, $digest)) {
-            Log::warning('J&T tracking webhook signature verification failed');
-            return response()->json(['code' => 0, 'msg' => 'Invalid signature'], 401);
-        }
-
-        $bizContent = $request->input('bizContent');
-        $data = is_string($bizContent) ? json_decode($bizContent, true) : $bizContent;
-
-        if (! $data) {
-            return response()->json(['code' => 0, 'msg' => 'Invalid payload'], 400);
-        }
+        [$data, $error] = $this->parseAndVerify($request, 'tracking');
+        if ($error) return $error;
 
         $trackingNumber = $data['billCode'] ?? $data['mailNo'] ?? null;
 
@@ -67,10 +56,10 @@ class WebhookController extends Controller
 
         $shipment->addTrackingEvent($event);
         $shipment->update([
-            'status' => $normalizedStatus->value,
-            'courier_status' => $rawStatus,
+            'status'                    => $normalizedStatus->value,
+            'courier_status'            => $rawStatus,
             'courier_status_description' => $event->description,
-            'tracking_history' => $shipment->tracking_history,
+            'tracking_history'          => $shipment->tracking_history,
         ]);
 
         if ($normalizedStatus === ShipmentStatus::DELIVERED) {
@@ -79,7 +68,7 @@ class WebhookController extends Controller
 
         Log::info('J&T tracking webhook processed', [
             'tracking' => $trackingNumber,
-            'status' => $normalizedStatus->value,
+            'status'   => $normalizedStatus->value,
         ]);
 
         return response()->json(['code' => 1, 'msg' => 'success']);
@@ -89,22 +78,10 @@ class WebhookController extends Controller
     // 2. Order Return Status — package returned to sender
     // -----------------------------------------------------------------------
 
-    public function handleJntReturn(Request $request)
+    public function handleJntReturn(Request $request): JsonResponse
     {
-        $body = $request->getContent();
-        $digest = $request->header('digest');
-
-        if (! $this->verifyJntSignature($body, $digest)) {
-            Log::warning('J&T return webhook signature verification failed');
-            return response()->json(['code' => 0, 'msg' => 'Invalid signature'], 401);
-        }
-
-        $bizContent = $request->input('bizContent');
-        $data = is_string($bizContent) ? json_decode($bizContent, true) : $bizContent;
-
-        if (! $data) {
-            return response()->json(['code' => 0, 'msg' => 'Invalid payload'], 400);
-        }
+        [$data, $error] = $this->parseAndVerify($request, 'return');
+        if ($error) return $error;
 
         $trackingNumber = $data['billCode'] ?? $data['mailNo'] ?? null;
 
@@ -147,22 +124,10 @@ class WebhookController extends Controller
     // 3. COD Return — J&T remitted collected cash to merchant
     // -----------------------------------------------------------------------
 
-    public function handleJntCod(Request $request)
+    public function handleJntCod(Request $request): JsonResponse
     {
-        $body = $request->getContent();
-        $digest = $request->header('digest');
-
-        if (! $this->verifyJntSignature($body, $digest)) {
-            Log::warning('J&T COD webhook signature verification failed');
-            return response()->json(['code' => 0, 'msg' => 'Invalid signature'], 401);
-        }
-
-        $bizContent = $request->input('bizContent');
-        $data = is_string($bizContent) ? json_decode($bizContent, true) : $bizContent;
-
-        if (! $data) {
-            return response()->json(['code' => 0, 'msg' => 'Invalid payload'], 400);
-        }
+        [$data, $error] = $this->parseAndVerify($request, 'cod');
+        if ($error) return $error;
 
         $trackingNumber = $data['billCode'] ?? $data['mailNo'] ?? null;
 
@@ -182,10 +147,10 @@ class WebhookController extends Controller
         $remitTime = $data['remitTime'] ?? $data['operationTime'] ?? now()->toIso8601String();
 
         $shipment->order->update([
-            'financial_status'    => 'paid',
-            'paid_at'             => $shipment->order->paid_at ?? $remitTime,
+            'financial_status'     => 'paid',
+            'paid_at'              => $shipment->order->paid_at ?? $remitTime,
             'cod_collected_amount' => $codAmount,
-            'cod_collected_at'    => $remitTime,
+            'cod_collected_at'     => $remitTime,
         ]);
 
         Log::info('J&T COD webhook processed', [
@@ -201,22 +166,10 @@ class WebhookController extends Controller
     // 4. OTP Callback — customer confirmed receipt via OTP
     // -----------------------------------------------------------------------
 
-    public function handleJntOtp(Request $request)
+    public function handleJntOtp(Request $request): JsonResponse
     {
-        $body = $request->getContent();
-        $digest = $request->header('digest');
-
-        if (! $this->verifyJntSignature($body, $digest)) {
-            Log::warning('J&T OTP webhook signature verification failed');
-            return response()->json(['code' => 0, 'msg' => 'Invalid signature'], 401);
-        }
-
-        $bizContent = $request->input('bizContent');
-        $data = is_string($bizContent) ? json_decode($bizContent, true) : $bizContent;
-
-        if (! $data) {
-            return response()->json(['code' => 0, 'msg' => 'Invalid payload'], 400);
-        }
+        [$data, $error] = $this->parseAndVerify($request, 'otp');
+        if ($error) return $error;
 
         $trackingNumber = $data['billCode'] ?? $data['mailNo'] ?? null;
 
@@ -252,23 +205,62 @@ class WebhookController extends Controller
     }
 
     // -----------------------------------------------------------------------
-    // Shared signature verification
+    // Shared helpers
     // -----------------------------------------------------------------------
 
-    protected function verifyJntSignature(string $body, ?string $digest): bool
+    /**
+     * Extract and verify a J&T webhook request.
+     * Returns [parsed_data_array, null] on success, or [null, error_response] on failure.
+     */
+    private function parseAndVerify(Request $request, string $type): array
+    {
+        $digest = $request->header('digest');
+
+        // bizContent may arrive as a JSON string or a pre-parsed object
+        $raw = $request->input('bizContent');
+        $bizContentString = is_string($raw) ? $raw : json_encode($raw);
+
+        if (! $this->verifyJntSignature($bizContentString, $digest)) {
+            Log::warning("J&T {$type} webhook signature verification failed");
+            return [null, response()->json(['code' => 0, 'msg' => 'Invalid signature'], 401)];
+        }
+
+        $data = is_string($raw) ? json_decode($raw, true) : (array) $raw;
+
+        if (! $data) {
+            return [null, response()->json(['code' => 0, 'msg' => 'Invalid payload'], 400)];
+        }
+
+        return [$data, null];
+    }
+
+    protected function verifyJntSignature(string $bizContent, ?string $digest): bool
     {
         if (! $digest) {
+            Log::debug('J&T webhook: no digest header received');
             return false;
         }
 
         $privateKey = ConnectorSetting::getForConnector('jnt_express', 'private_key');
 
         if (! $privateKey) {
+            Log::warning('J&T webhook: private_key not configured in connector_settings');
             return false;
         }
 
-        $expectedDigest = base64_encode(md5($body . $privateKey, true));
+        // Mirrors JntExpressDriver::buildDigest — sign the bizContent string, not the full body
+        $expectedDigest = base64_encode(md5($bizContent . $privateKey, true));
 
-        return hash_equals($expectedDigest, $digest);
+        $valid = hash_equals($expectedDigest, $digest);
+
+        if (! $valid) {
+            Log::debug('J&T webhook signature mismatch', [
+                'received_digest' => $digest,
+                'expected_digest' => $expectedDigest,
+                'biz_preview'     => substr($bizContent, 0, 200),
+            ]);
+        }
+
+        return $valid;
     }
 }
