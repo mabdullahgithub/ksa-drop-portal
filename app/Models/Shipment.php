@@ -133,10 +133,12 @@ class Shipment extends Model
             'delivered_at' => $this->delivered_at ?? now(),
         ]);
 
-        $this->order->update([
-            'fulfillment_status' => 'fulfilled',
-            'fulfilled_at' => $this->order->fulfilled_at ?? now(),
-        ]);
+        if ($this->order) {
+            $this->order->update([
+                'fulfillment_status' => 'fulfilled',
+                'fulfilled_at' => $this->order->fulfilled_at ?? now(),
+            ]);
+        }
 
         if (! $alreadyDelivered) {
             $this->notifyAdminsOfDelivery();
@@ -164,10 +166,12 @@ class Shipment extends Model
             'cancelled_at'  => now(),
         ]);
 
-        $this->order->update([
-            'fulfillment_status' => 'cancelled',
-            'cancelled_at'       => $this->order->cancelled_at ?? now(),
-        ]);
+        if ($this->order) {
+            $this->order->update([
+                'fulfillment_status' => 'cancelled',
+                'cancelled_at'       => $this->order->cancelled_at ?? now(),
+            ]);
+        }
     }
 
     public function markFailed(string $message): void

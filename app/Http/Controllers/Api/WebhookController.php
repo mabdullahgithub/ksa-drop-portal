@@ -155,6 +155,11 @@ class WebhookController extends Controller
                 continue;
             }
 
+            if (! $shipment->order) {
+                Log::channel('jnt_webhooks')->warning('J&T COD webhook: shipment has no associated order (possibly deleted)', ['tracking' => $trackingNumber]);
+                continue;
+            }
+
             $shipment->order->update([
                 'financial_status'     => 'paid',
                 'paid_at'              => $shipment->order->paid_at ?? $remitTime,
