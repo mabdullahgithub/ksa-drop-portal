@@ -31,14 +31,14 @@ class WebhookController extends Controller
         $trackingNumber = $data['billCode'] ?? $data['mailNo'] ?? null;
 
         if (! $trackingNumber) {
-            Log::warning('J&T tracking webhook missing tracking number', ['data' => $data]);
+            Log::channel('jnt_webhooks')->warning('J&T tracking webhook missing tracking number', ['data' => $data]);
             return response()->json(['code' => 0, 'msg' => 'Missing tracking number'], 400);
         }
 
         $shipment = Shipment::where('tracking_number', $trackingNumber)->first();
 
         if (! $shipment) {
-            Log::info('J&T tracking webhook for unknown shipment', ['tracking' => $trackingNumber]);
+            Log::channel('jnt_webhooks')->info('J&T tracking webhook for unknown shipment', ['tracking' => $trackingNumber]);
             return response()->json(['code' => 1, 'msg' => 'success']);
         }
 
@@ -66,7 +66,7 @@ class WebhookController extends Controller
             $shipment->markDelivered();
         }
 
-        Log::info('J&T tracking webhook processed', [
+        Log::channel('jnt_webhooks')->info('J&T tracking webhook processed', [
             'tracking' => $trackingNumber,
             'status'   => $normalizedStatus->value,
         ]);
@@ -86,14 +86,14 @@ class WebhookController extends Controller
         $trackingNumber = $data['billCode'] ?? $data['mailNo'] ?? null;
 
         if (! $trackingNumber) {
-            Log::warning('J&T return webhook missing tracking number', ['data' => $data]);
+            Log::channel('jnt_webhooks')->warning('J&T return webhook missing tracking number', ['data' => $data]);
             return response()->json(['code' => 0, 'msg' => 'Missing tracking number'], 400);
         }
 
         $shipment = Shipment::where('tracking_number', $trackingNumber)->first();
 
         if (! $shipment) {
-            Log::info('J&T return webhook for unknown shipment', ['tracking' => $trackingNumber]);
+            Log::channel('jnt_webhooks')->info('J&T return webhook for unknown shipment', ['tracking' => $trackingNumber]);
             return response()->json(['code' => 1, 'msg' => 'success']);
         }
 
@@ -112,7 +112,7 @@ class WebhookController extends Controller
         $shipment->update(['tracking_history' => $shipment->tracking_history]);
         $shipment->markReturned($reason);
 
-        Log::info('J&T return webhook processed', [
+        Log::channel('jnt_webhooks')->info('J&T return webhook processed', [
             'tracking' => $trackingNumber,
             'reason'   => $reason,
         ]);
@@ -132,14 +132,14 @@ class WebhookController extends Controller
         $trackingNumber = $data['billCode'] ?? $data['mailNo'] ?? null;
 
         if (! $trackingNumber) {
-            Log::warning('J&T COD webhook missing tracking number', ['data' => $data]);
+            Log::channel('jnt_webhooks')->warning('J&T COD webhook missing tracking number', ['data' => $data]);
             return response()->json(['code' => 0, 'msg' => 'Missing tracking number'], 400);
         }
 
         $shipment = Shipment::with('order')->where('tracking_number', $trackingNumber)->first();
 
         if (! $shipment) {
-            Log::info('J&T COD webhook for unknown shipment', ['tracking' => $trackingNumber]);
+            Log::channel('jnt_webhooks')->info('J&T COD webhook for unknown shipment', ['tracking' => $trackingNumber]);
             return response()->json(['code' => 1, 'msg' => 'success']);
         }
 
@@ -153,7 +153,7 @@ class WebhookController extends Controller
             'cod_collected_at'     => $remitTime,
         ]);
 
-        Log::info('J&T COD webhook processed', [
+        Log::channel('jnt_webhooks')->info('J&T COD webhook processed', [
             'tracking'   => $trackingNumber,
             'cod_amount' => $codAmount,
             'remit_time' => $remitTime,
@@ -174,14 +174,14 @@ class WebhookController extends Controller
         $trackingNumber = $data['billCode'] ?? $data['mailNo'] ?? null;
 
         if (! $trackingNumber) {
-            Log::warning('J&T OTP webhook missing tracking number', ['data' => $data]);
+            Log::channel('jnt_webhooks')->warning('J&T OTP webhook missing tracking number', ['data' => $data]);
             return response()->json(['code' => 0, 'msg' => 'Missing tracking number'], 400);
         }
 
         $shipment = Shipment::where('tracking_number', $trackingNumber)->first();
 
         if (! $shipment) {
-            Log::info('J&T OTP webhook for unknown shipment', ['tracking' => $trackingNumber]);
+            Log::channel('jnt_webhooks')->info('J&T OTP webhook for unknown shipment', ['tracking' => $trackingNumber]);
             return response()->json(['code' => 1, 'msg' => 'success']);
         }
 
@@ -199,7 +199,7 @@ class WebhookController extends Controller
         $shipment->update(['tracking_history' => $shipment->tracking_history]);
         $shipment->markDelivered();
 
-        Log::info('J&T OTP webhook processed', ['tracking' => $trackingNumber]);
+        Log::channel('jnt_webhooks')->info('J&T OTP webhook processed', ['tracking' => $trackingNumber]);
 
         return response()->json(['code' => 1, 'msg' => 'success']);
     }
@@ -221,7 +221,7 @@ class WebhookController extends Controller
         $bizContentString = is_string($raw) ? $raw : json_encode($raw);
 
         if (! $this->verifyJntSignature($bizContentString, $digest)) {
-            Log::warning("J&T {$type} webhook signature verification failed");
+            Log::channel('jnt_webhooks')->warning("J&T {$type} webhook signature verification failed");
             return [null, response()->json(['code' => 0, 'msg' => 'Invalid signature'], 401)];
         }
 
@@ -237,14 +237,14 @@ class WebhookController extends Controller
     protected function verifyJntSignature(string $bizContent, ?string $digest): bool
     {
         if (! $digest) {
-            Log::debug('J&T webhook: no digest header received');
+            Log::channel('jnt_webhooks')->debug('J&T webhook: no digest header received');
             return false;
         }
 
         $privateKey = ConnectorSetting::getForConnector('jnt_express', 'private_key');
 
         if (! $privateKey) {
-            Log::warning('J&T webhook: private_key not configured in connector_settings');
+            Log::channel('jnt_webhooks')->warning('J&T webhook: private_key not configured in connector_settings');
             return false;
         }
 
@@ -254,7 +254,7 @@ class WebhookController extends Controller
         $valid = hash_equals($expectedDigest, $digest);
 
         if (! $valid) {
-            Log::debug('J&T webhook signature mismatch', [
+            Log::channel('jnt_webhooks')->debug('J&T webhook signature mismatch', [
                 'received_digest' => $digest,
                 'expected_digest' => $expectedDigest,
                 'biz_preview'     => substr($bizContent, 0, 200),

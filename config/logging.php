@@ -127,6 +127,14 @@ return [
             'path' => storage_path('logs/laravel.log'),
         ],
 
+        'jnt_webhooks' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/jnt-webhooks.log'),
+            'level' => 'debug',
+            'days' => 30,
+            'replace_placeholders' => true,
+        ],
+
     ],
 
 ];
