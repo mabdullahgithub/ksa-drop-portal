@@ -384,16 +384,8 @@ class OrderController extends Controller
                 ['value' => 'Medium', 'label' => 'Medium'],
                 ['value' => 'High', 'label' => 'High'],
             ],
-            // Tags actually used on orders (stored in the JSON `tags` column),
-            // merged with any defined tags so managed tags appear even if unused.
-            'tags' => Order::whereNotNull('tags')
-                ->pluck('tags')
-                ->flatten()
-                ->merge(Tag::pluck('name'))
-                ->filter()
-                ->unique()
-                ->sort(SORT_NATURAL | SORT_FLAG_CASE)
-                ->values()
+            'tags' => Tag::orderBy('name')
+                ->pluck('name')
                 ->map(fn($name) => ['value' => $name, 'label' => $name])
                 ->values(),
             'clients' => Client::select('id', 'company_name', 'short_id')
