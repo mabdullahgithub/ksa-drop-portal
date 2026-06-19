@@ -242,26 +242,41 @@ class WebhookController extends Controller
             return false;
         }
 
-        $privateKey = ConnectorSetting::getForConnector('jnt_express', 'private_key');
+        $creds = \App\Models\ConnectorSetting::getAllForConnector('jnt_express');
+        $privateKey      = $creds['private_key']       ?? '';
+        $customerCode    = $creds['customer_code']     ?? '';
+        $customerPass    = $creds['customer_password'] ?? '';
+        $apiAccount      = $creds['api_account']       ?? '';
 
         if (! $privateKey) {
             Log::channel('jnt_webhooks')->warning('J&T webhook: private_key not configured in connector_settings');
             return false;
         }
 
+        // Derived ciphertext used in inner digest formula
+        $ciphertext = strtoupper(md5($customerPass . 'jadada236t2'));
+
         // Extract the raw URL-encoded bizContent value from the body (before PHP decodes it)
         preg_match('/(?:^|&)bizContent=([^&]*)/', $fullBody, $m);
         $urlEncodedBiz = $m[1] ?? '';
 
         $candidates = [
-            'biz_decoded+key'      => base64_encode(md5($bizContent . $privateKey, true)),
-            'body+key'             => base64_encode(md5($fullBody . $privateKey, true)),
-            'biz_decoded_only'     => base64_encode(md5($bizContent, true)),
-            'body_only'            => base64_encode(md5($fullBody, true)),
-            'biz_urlencoded+key'   => base64_encode(md5($urlEncodedBiz . $privateKey, true)),
-            'biz_urlencoded_only'  => base64_encode(md5($urlEncodedBiz, true)),
-            'key+biz_decoded'      => base64_encode(md5($privateKey . $bizContent, true)),
-            'key+biz_urlencoded'   => base64_encode(md5($privateKey . $urlEncodedBiz, true)),
+            // ---- private_key variants ----
+            'biz+key'               => base64_encode(md5($bizContent . $privateKey, true)),
+            'body+key'              => base64_encode(md5($fullBody . $privateKey, true)),
+            'urlbiz+key'            => base64_encode(md5($urlEncodedBiz . $privateKey, true)),
+            'key+biz'               => base64_encode(md5($privateKey . $bizContent, true)),
+            // ---- ciphertext variants (derived from customer_password) ----
+            'biz+cipher'            => base64_encode(md5($bizContent . $ciphertext, true)),
+            'urlbiz+cipher'         => base64_encode(md5($urlEncodedBiz . $ciphertext, true)),
+            // ---- compound key variants ----
+            'biz+code+key'          => base64_encode(md5($bizContent . $customerCode . $privateKey, true)),
+            'code+biz+key'          => base64_encode(md5($customerCode . $bizContent . $privateKey, true)),
+            'biz+account+key'       => base64_encode(md5($bizContent . $apiAccount . $privateKey, true)),
+            'account+biz+key'       => base64_encode(md5($apiAccount . $bizContent . $privateKey, true)),
+            // ---- no-key variants ----
+            'biz_only'              => base64_encode(md5($bizContent, true)),
+            'body_only'             => base64_encode(md5($fullBody, true)),
         ];
 
         foreach ($candidates as $label => $candidate) {
@@ -274,15 +289,18 @@ class WebhookController extends Controller
         }
 
         Log::channel('jnt_webhooks')->debug('J&T webhook signature mismatch — all candidates failed', [
-            'type'             => $type,
-            'received_digest'  => $digest,
-            'candidates'       => $candidates,
-            'biz_length'       => strlen($bizContent),
-            'body_length'      => strlen($fullBody),
-            'urlencoded_biz_length' => strlen($urlEncodedBiz),
+            'type'                  => $type,
+            'received_digest'       => $digest,
+            'candidates'            => $candidates,
+            'private_key_hint'      => substr($privateKey, 0, 4) . '...' . substr($privateKey, -4),
             'private_key_length'    => strlen($privateKey),
-            'biz_preview'      => substr($bizContent, 0, 300),
-            'body_preview'     => substr($fullBody, 0, 300),
+            'customer_code'         => $customerCode,
+            'api_account'           => $apiAccount,
+            'ciphertext_hint'       => substr($ciphertext, 0, 6) . '...',
+            'biz_length'            => strlen($bizContent),
+            'urlencoded_biz_length' => strlen($urlEncodedBiz),
+            'body_length'           => strlen($fullBody),
+            'biz_preview'           => substr($bizContent, 0, 300),
         ]);
 
         return false;
