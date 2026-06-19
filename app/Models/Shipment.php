@@ -156,6 +156,20 @@ class Shipment extends Model
         }
     }
 
+    public function markReturned(string $reason = ''): void
+    {
+        $this->update([
+            'status'        => ShipmentStatus::RETURNED->value,
+            'cancel_reason' => $reason,
+            'cancelled_at'  => now(),
+        ]);
+
+        $this->order->update([
+            'fulfillment_status' => 'cancelled',
+            'cancelled_at'       => $this->order->cancelled_at ?? now(),
+        ]);
+    }
+
     public function markFailed(string $message): void
     {
         $this->update([

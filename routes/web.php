@@ -246,6 +246,10 @@ Route::get('/api/track/{identifier}', [TrackingController::class, 'api'])->name(
 
 // Webhooks (no auth, no CSRF)
 Route::post('/webhooks/jnt-express', [WebhookController::class, 'handleJntExpress'])->name('webhooks.jnt-express');
+Route::post('/webhooks/jnt-express/tracking', [WebhookController::class, 'handleJntTracking'])->name('webhooks.jnt-express.tracking');
+Route::post('/webhooks/jnt-express/return', [WebhookController::class, 'handleJntReturn'])->name('webhooks.jnt-express.return');
+Route::post('/webhooks/jnt-express/cod', [WebhookController::class, 'handleJntCod'])->name('webhooks.jnt-express.cod');
+Route::post('/webhooks/jnt-express/otp', [WebhookController::class, 'handleJntOtp'])->name('webhooks.jnt-express.otp');
 
 // Error pages
 Route::get('/errors/unauthorized', fn () => Inertia::render('Errors/Unauthorized'))->name('errors.unauthorized');
