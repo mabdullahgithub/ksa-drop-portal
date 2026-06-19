@@ -1,8 +1,6 @@
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import {
   Dialog,
@@ -12,7 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Truck, RefreshCw, X, Copy, ExternalLink, MapPin, Printer, AlertTriangle, Edit, CheckCircle2, ShieldCheck } from 'lucide-react'
+import { Truck, RefreshCw, X, Copy, ExternalLink, MapPin, AlertTriangle, CheckCircle2, ShieldCheck } from 'lucide-react'
 import { toast } from 'sonner'
 import axios from 'axios'
 import { useState } from 'react'
@@ -69,22 +67,9 @@ const statusColorMap: Record<string, string> = {
 export function ShipmentPanel({ shipment, orderId, onCreateShipment, onShipmentUpdated }: ShipmentPanelProps) {
   const [refreshing, setRefreshing] = useState(false)
   const [cancelling, setCancelling] = useState(false)
-  const [fetchingLabel, setFetchingLabel] = useState(false)
   const [escalating, setEscalating] = useState(false)
-  const [showEditDialog, setShowEditDialog] = useState(false)
   const [showEscalateDialog, setShowEscalateDialog] = useState(false)
   const [escalateNote, setEscalateNote] = useState('')
-  const [editForm, setEditForm] = useState({
-    receiver_name: '',
-    receiver_phone: '',
-    receiver_province: '',
-    receiver_city: '',
-    receiver_area: '',
-    receiver_address: '',
-    receiver_post_code: '',
-    weight: '',
-  })
-  const [saving, setSaving] = useState(false)
 
   if (!shipment) {
     return (
@@ -134,31 +119,6 @@ export function ShipmentPanel({ shipment, orderId, onCreateShipment, onShipmentU
     }
   }
 
-  const printLabel = async () => {
-    setFetchingLabel(true)
-    try {
-      const res = await axios.post(`/api/shipments/${shipment.id}/label`)
-      const { label_url, label_content } = res.data
-
-      if (label_url) {
-        window.open(label_url, '_blank')
-      } else if (label_content) {
-        const win = window.open('', '_blank')
-        if (win) {
-          win.document.write(`<html><body onload="window.print()">${atob(label_content)}</body></html>`)
-          win.document.close()
-        }
-      } else {
-        toast.error('No label content returned')
-      }
-      onShipmentUpdated?.()
-    } catch (err: any) {
-      toast.error(err.response?.data?.message || 'Failed to fetch label')
-    } finally {
-      setFetchingLabel(false)
-    }
-  }
-
   const escalateException = async () => {
     setEscalating(true)
     try {
@@ -171,37 +131,6 @@ export function ShipmentPanel({ shipment, orderId, onCreateShipment, onShipmentU
       toast.error(err.response?.data?.message || 'Failed to escalate')
     } finally {
       setEscalating(false)
-    }
-  }
-
-  const openEditDialog = () => {
-    setEditForm({
-      receiver_name: '',
-      receiver_phone: '',
-      receiver_province: '',
-      receiver_city: '',
-      receiver_area: '',
-      receiver_address: '',
-      receiver_post_code: '',
-      weight: shipment.weight ?? '',
-    })
-    setShowEditDialog(true)
-  }
-
-  const saveEdit = async () => {
-    setSaving(true)
-    try {
-      const payload: Record<string, string> = {}
-      Object.entries(editForm).forEach(([k, v]) => { if (v.trim()) payload[k] = v.trim() })
-
-      await axios.patch(`/api/shipments/${shipment.id}`, payload)
-      toast.success('Shipment updated!')
-      setShowEditDialog(false)
-      onShipmentUpdated?.()
-    } catch (err: any) {
-      toast.error(err.response?.data?.message || 'Failed to update shipment')
-    } finally {
-      setSaving(false)
     }
   }
 
@@ -355,23 +284,11 @@ export function ShipmentPanel({ shipment, orderId, onCreateShipment, onShipmentU
           </a>
         </Button>
 
-        {shipment.tracking_number && (
-          <Button size='sm' variant='outline' onClick={printLabel} disabled={fetchingLabel}>
-            <Printer className={`h-3 w-3 mr-1 ${fetchingLabel ? 'animate-pulse' : ''}`} />
-            {fetchingLabel ? 'Loading...' : 'Print Label'}
-          </Button>
-        )}
-
         {!isTerminal && (
           <>
             <Button size='sm' variant='outline' onClick={refreshTracking} disabled={refreshing}>
               <RefreshCw className={`h-3 w-3 mr-1 ${refreshing ? 'animate-spin' : ''}`} />
               {refreshing ? 'Refreshing...' : 'Refresh'}
-            </Button>
-
-            <Button size='sm' variant='outline' onClick={openEditDialog}>
-              <Edit className='h-3 w-3 mr-1' />
-              Edit
             </Button>
 
             {isException && !shipment.exception_escalated_at && (
@@ -388,60 +305,6 @@ export function ShipmentPanel({ shipment, orderId, onCreateShipment, onShipmentU
           </>
         )}
       </div>
-
-      {/* Edit Dialog */}
-      <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
-        <DialogContent className='sm:max-w-md'>
-          <DialogHeader>
-            <DialogTitle>Edit Shipment</DialogTitle>
-            <DialogDescription>Update receiver details or weight. Leave fields blank to keep existing values.</DialogDescription>
-          </DialogHeader>
-          <div className='grid gap-3 py-2'>
-            <div className='grid grid-cols-2 gap-3'>
-              <div className='space-y-1'>
-                <Label className='text-xs'>Receiver Name</Label>
-                <Input value={editForm.receiver_name} onChange={e => setEditForm(f => ({ ...f, receiver_name: e.target.value }))} placeholder='Keep existing' />
-              </div>
-              <div className='space-y-1'>
-                <Label className='text-xs'>Phone</Label>
-                <Input value={editForm.receiver_phone} onChange={e => setEditForm(f => ({ ...f, receiver_phone: e.target.value }))} placeholder='Keep existing' />
-              </div>
-            </div>
-            <div className='grid grid-cols-2 gap-3'>
-              <div className='space-y-1'>
-                <Label className='text-xs'>Province</Label>
-                <Input value={editForm.receiver_province} onChange={e => setEditForm(f => ({ ...f, receiver_province: e.target.value }))} placeholder='Keep existing' />
-              </div>
-              <div className='space-y-1'>
-                <Label className='text-xs'>City</Label>
-                <Input value={editForm.receiver_city} onChange={e => setEditForm(f => ({ ...f, receiver_city: e.target.value }))} placeholder='Keep existing' />
-              </div>
-            </div>
-            <div className='space-y-1'>
-              <Label className='text-xs'>Area / District</Label>
-              <Input value={editForm.receiver_area} onChange={e => setEditForm(f => ({ ...f, receiver_area: e.target.value }))} placeholder='Keep existing' />
-            </div>
-            <div className='space-y-1'>
-              <Label className='text-xs'>Address</Label>
-              <Input value={editForm.receiver_address} onChange={e => setEditForm(f => ({ ...f, receiver_address: e.target.value }))} placeholder='Keep existing' />
-            </div>
-            <div className='grid grid-cols-2 gap-3'>
-              <div className='space-y-1'>
-                <Label className='text-xs'>Post Code</Label>
-                <Input value={editForm.receiver_post_code} onChange={e => setEditForm(f => ({ ...f, receiver_post_code: e.target.value }))} placeholder='Keep existing' />
-              </div>
-              <div className='space-y-1'>
-                <Label className='text-xs'>Weight (kg)</Label>
-                <Input type='number' step='0.1' value={editForm.weight} onChange={e => setEditForm(f => ({ ...f, weight: e.target.value }))} />
-              </div>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant='outline' onClick={() => setShowEditDialog(false)}>Cancel</Button>
-            <Button onClick={saveEdit} disabled={saving}>{saving ? 'Saving...' : 'Save Changes'}</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* Escalate Exception Dialog */}
       <Dialog open={showEscalateDialog} onOpenChange={setShowEscalateDialog}>

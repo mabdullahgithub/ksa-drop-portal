@@ -175,7 +175,17 @@ class JntExpressDriver implements CourierDriver
         return TrackingResult::success($currentStatus, $events, $response);
     }
 
-    public function getLabel(string $trackingNumber): array
+    /**
+     * Fetch the shipping label from J&T.
+     * J&T KSA uses a different endpoint than the global platform; we try several
+     * candidates in order and return the first that responds with code=1.
+     * On success the response may carry a direct URL (`labelUrl`) or base64-
+     * encoded print content (`printContent`/`pdfContent`).
+     *
+     * The $fallbackData array is used to generate an HTML fallback label when
+     * none of the J&T endpoints are available (e.g. sandbox or limited plan).
+     */
+    public function getLabel(string $trackingNumber, array $fallbackData = []): array
     {
         $credentials = $this->getCredentials();
 
@@ -185,33 +195,133 @@ class JntExpressDriver implements CourierDriver
             'billCodes'    => [$trackingNumber],
         ];
 
-        $response = $this->makeRequest('/webopenplatformapi/api/order/getPrintData', $bizContent);
+        // J&T SA does not expose getPrintData — try the known KSA endpoints.
+        $endpoints = [
+            '/webopenplatformapi/api/order/getLabelUrl',
+            '/webopenplatformapi/api/order/getOrderLabel',
+            '/webopenplatformapi/api/order/getPrintInfo',
+            '/webopenplatformapi/api/order/getPrintData',
+        ];
 
-        if (! $response) {
-            return ['success' => false, 'error' => 'Failed to connect to J&T Express API'];
-        }
+        foreach ($endpoints as $endpoint) {
+            $response = $this->makeRequest($endpoint, $bizContent, 0);
 
-        $code = (string) ($response['code'] ?? '');
+            if (! $response) {
+                continue;
+            }
 
-        if ($code !== '1') {
+            $code = (string) ($response['code'] ?? '');
+
+            if ($code !== '1') {
+                Log::debug('J&T getLabel: endpoint failed', [
+                    'endpoint' => $endpoint,
+                    'code'     => $code,
+                    'msg'      => $response['msg'] ?? null,
+                ]);
+                continue;
+            }
+
+            $item = $response['data'][0] ?? $response['data'] ?? null;
+
             return [
-                'success' => false,
-                'error'   => $this->friendlyError($code, $response['msg'] ?? null),
+                'success'       => true,
+                'label_url'     => $item['labelUrl'] ?? $item['label_url'] ?? null,
+                'label_content' => $item['printContent'] ?? $item['pdfContent'] ?? $item['content'] ?? null,
+                'raw'           => $response,
             ];
         }
 
-        $item = $response['data'][0] ?? null;
-
-        if (! $item) {
-            return ['success' => false, 'error' => 'No label data returned'];
-        }
+        // All J&T endpoints unavailable — generate a minimal HTML waybill from
+        // the data we already have so operators can still print something.
+        Log::warning('J&T getLabel: all endpoints failed, generating HTML fallback', [
+            'tracking' => $trackingNumber,
+        ]);
 
         return [
-            'success'      => true,
-            'label_content' => $item['printContent'] ?? null,
-            'label_url'     => $item['labelUrl'] ?? null,
-            'raw'           => $response,
+            'success'       => true,
+            'label_url'     => null,
+            'label_content' => $this->buildFallbackLabel($trackingNumber, $fallbackData),
+            'fallback'      => true,
         ];
+    }
+
+    /**
+     * Build a minimal printable HTML shipping label from the data we already
+     * have stored locally. No J&T API call required.
+     */
+    protected function buildFallbackLabel(string $trackingNumber, array $data): string
+    {
+        $sortingCode    = $data['sorting_code'] ?? '';
+        $senderName     = $data['sender_name'] ?? '';
+        $senderPhone    = $data['sender_phone'] ?? '';
+        $senderAddress  = $data['sender_address'] ?? '';
+        $receiverName   = $data['receiver_name'] ?? '';
+        $receiverPhone  = $data['receiver_phone'] ?? '';
+        $receiverAddress = $data['receiver_address'] ?? '';
+        $weight         = $data['weight'] ?? '';
+        $serviceType    = ($data['service_type'] ?? '02') === '01' ? 'Express' : 'Standard';
+        $orderNumber    = $data['order_number'] ?? '';
+
+        $sortingRow = $sortingCode
+            ? "<div class='sorting'>Sort: " . htmlspecialchars($sortingCode) . '</div>'
+            : '';
+
+        return <<<HTML
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Shipping Label - {$trackingNumber}</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: Arial, sans-serif; font-size: 12px; padding: 10mm; }
+  .label { border: 2px solid #000; width: 100mm; padding: 4mm; }
+  .header { display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid #000; padding-bottom: 3mm; margin-bottom: 3mm; }
+  .logo { font-size: 18px; font-weight: bold; letter-spacing: -1px; }
+  .service { font-size: 11px; border: 1px solid #000; padding: 1mm 3mm; }
+  .tracking { text-align: center; font-size: 22px; font-weight: bold; letter-spacing: 2px; border: 2px solid #000; padding: 3mm; margin: 3mm 0; }
+  .sorting { text-align: center; font-size: 16px; font-weight: bold; margin: 2mm 0; }
+  .section { margin: 2mm 0; border-top: 1px dashed #999; padding-top: 2mm; }
+  .label-title { font-size: 9px; color: #666; text-transform: uppercase; }
+  .value { font-size: 11px; font-weight: bold; }
+  @media print { body { padding: 0; } @page { size: 100mm 150mm; margin: 5mm; } }
+</style>
+</head>
+<body>
+<div class="label">
+  <div class="header">
+    <div class="logo">J&amp;T Express</div>
+    <div class="service">{$serviceType}</div>
+  </div>
+
+  <div class="tracking">{$trackingNumber}</div>
+  {$sortingRow}
+
+  <div class="section">
+    <div class="label-title">From (Sender)</div>
+    <div class="value">{$senderName}</div>
+    <div>{$senderPhone}</div>
+    <div>{$senderAddress}</div>
+  </div>
+
+  <div class="section">
+    <div class="label-title">To (Receiver)</div>
+    <div class="value">{$receiverName}</div>
+    <div>{$receiverPhone}</div>
+    <div>{$receiverAddress}</div>
+  </div>
+
+  <div class="section">
+    <table width="100%"><tr>
+      <td><div class="label-title">Weight</div><div class="value">{$weight} kg</div></td>
+      <td><div class="label-title">Order #</div><div class="value">{$orderNumber}</div></td>
+    </tr></table>
+  </div>
+</div>
+<script>window.onload = function(){ window.print(); }</script>
+</body>
+</html>
+HTML;
     }
 
     public function cancelShipment(string $trackingNumber, string $reason): CancelResult
