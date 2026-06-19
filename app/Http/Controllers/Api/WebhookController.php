@@ -215,12 +215,13 @@ class WebhookController extends Controller
     private function parseAndVerify(Request $request, string $type): array
     {
         $digest = $request->header('digest');
+        $fullBody = $request->getContent();
 
         // bizContent may arrive as a JSON string or a pre-parsed object
         $raw = $request->input('bizContent');
         $bizContentString = is_string($raw) ? $raw : json_encode($raw);
 
-        if (! $this->verifyJntSignature($bizContentString, $digest)) {
+        if (! $this->verifyJntSignature($bizContentString, $fullBody, $digest, $type)) {
             Log::channel('jnt_webhooks')->warning("J&T {$type} webhook signature verification failed");
             return [null, response()->json(['code' => 0, 'msg' => 'Invalid signature'], 401)];
         }
@@ -234,7 +235,7 @@ class WebhookController extends Controller
         return [$data, null];
     }
 
-    protected function verifyJntSignature(string $bizContent, ?string $digest): bool
+    protected function verifyJntSignature(string $bizContent, string $fullBody, ?string $digest, string $type = ''): bool
     {
         if (! $digest) {
             Log::channel('jnt_webhooks')->debug('J&T webhook: no digest header received');
@@ -248,19 +249,37 @@ class WebhookController extends Controller
             return false;
         }
 
-        // Mirrors JntExpressDriver::buildDigest — sign the bizContent string, not the full body
-        $expectedDigest = base64_encode(md5($bizContent . $privateKey, true));
+        // Candidate 1: bizContent string + privateKey  (our current approach)
+        $d1 = base64_encode(md5($bizContent . $privateKey, true));
+        // Candidate 2: full raw body + privateKey
+        $d2 = base64_encode(md5($fullBody . $privateKey, true));
+        // Candidate 3: bizContent string only (no private key)
+        $d3 = base64_encode(md5($bizContent, true));
+        // Candidate 4: full raw body only (no private key)
+        $d4 = base64_encode(md5($fullBody, true));
 
-        $valid = hash_equals($expectedDigest, $digest);
-
-        if (! $valid) {
-            Log::channel('jnt_webhooks')->debug('J&T webhook signature mismatch', [
-                'received_digest' => $digest,
-                'expected_digest' => $expectedDigest,
-                'biz_preview'     => substr($bizContent, 0, 200),
-            ]);
+        foreach ([$d1, $d2, $d3, $d4] as $candidate) {
+            if (hash_equals($candidate, $digest)) {
+                Log::channel('jnt_webhooks')->info("J&T {$type} webhook signature matched", [
+                    'matched_candidate' => array_search($candidate, [$d1, $d2, $d3, $d4]) + 1,
+                ]);
+                return true;
+            }
         }
 
-        return $valid;
+        Log::channel('jnt_webhooks')->debug('J&T webhook signature mismatch — all candidates failed', [
+            'type'             => $type,
+            'received_digest'  => $digest,
+            'candidate_1_biz_plus_key'  => $d1,
+            'candidate_2_body_plus_key' => $d2,
+            'candidate_3_biz_only'      => $d3,
+            'candidate_4_body_only'     => $d4,
+            'biz_length'       => strlen($bizContent),
+            'body_length'      => strlen($fullBody),
+            'biz_preview'      => substr($bizContent, 0, 300),
+            'body_preview'     => substr($fullBody, 0, 300),
+        ]);
+
+        return false;
     }
 }
