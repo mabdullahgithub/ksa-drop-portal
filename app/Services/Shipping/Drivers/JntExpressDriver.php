@@ -137,7 +137,7 @@ class JntExpressDriver implements CourierDriver
     public function trackShipment(string $trackingNumber): TrackingResult
     {
         $bizContent = [
-            'billCodes' => [$trackingNumber],
+            'billCodes' => $trackingNumber,
             'lang' => 'en',
         ];
 
@@ -158,10 +158,11 @@ class JntExpressDriver implements CourierDriver
         $events = [];
 
         foreach ($details as $detail) {
+            $location = $detail['scanNetworkCity'] ?? $detail['scanNetworkProvince'] ?? null;
             $events[] = new TrackingEvent(
                 status: $this->normalizeStatus($detail['scanType'] ?? ''),
                 description: $detail['desc'] ?? '',
-                location: $detail['scanCity'] ?? null,
+                location: $location,
                 timestamp: $detail['scanTime'] ?? '',
                 rawStatus: $detail['scanType'] ?? '',
             );
@@ -228,17 +229,17 @@ class JntExpressDriver implements CourierDriver
 
     public function normalizeStatus(string $rawStatus): ShipmentStatus
     {
-        return match ($rawStatus) {
-            'GOT' => ShipmentStatus::INFO_RECEIVED,
-            'PICK_UP', 'COLLECTED' => ShipmentStatus::INFO_RECEIVED,
-            'DEPARTURE', 'SEND_SCAN', 'IN_TRANSIT' => ShipmentStatus::IN_TRANSIT,
-            'ARRIVAL', 'ARRIVAL_SCAN' => ShipmentStatus::IN_TRANSIT,
-            'DELIVERING', 'OUT_FOR_DELIVERY' => ShipmentStatus::OUT_FOR_DELIVERY,
-            'SIGNED', 'DELIVERED', 'POD' => ShipmentStatus::DELIVERED,
-            'FAILED', 'ATTEMPT_FAIL', 'UNDELIVERED' => ShipmentStatus::ATTEMPT_FAIL,
-            'RETURN', 'RETURNED' => ShipmentStatus::RETURNED,
-            'CANCEL', 'CANCELLED' => ShipmentStatus::CANCELLED,
-            'LOST', 'DAMAGED', 'EXCEPTION' => ShipmentStatus::EXCEPTION,
+        return match (strtolower(trim($rawStatus))) {
+            // Uppercase codes (some API versions / webhooks)
+            'got', 'pick_up', 'collected', 'pickup scan' => ShipmentStatus::INFO_RECEIVED,
+            'departure', 'send_scan', 'in_transit', 'sending scan',
+            'arrival', 'arrival_scan', 'station arrival' => ShipmentStatus::IN_TRANSIT,
+            'delivering', 'out_for_delivery', 'delivery scan' => ShipmentStatus::OUT_FOR_DELIVERY,
+            'signed', 'delivered', 'pod', 'sign scan' => ShipmentStatus::DELIVERED,
+            'failed', 'attempt_fail', 'undelivered' => ShipmentStatus::ATTEMPT_FAIL,
+            'return', 'returned' => ShipmentStatus::RETURNED,
+            'cancel', 'cancelled' => ShipmentStatus::CANCELLED,
+            'lost', 'damaged', 'exception' => ShipmentStatus::EXCEPTION,
             default => ShipmentStatus::IN_TRANSIT,
         };
     }

@@ -1,6 +1,6 @@
 import { DotsHorizontalIcon } from '@radix-ui/react-icons'
 import { type Row } from '@tanstack/react-table'
-import { Eye, Package, DollarSign, Tag, Truck, Pencil } from 'lucide-react'
+import { Eye, Package, DollarSign, Tag, Truck, Pencil, MapPin } from 'lucide-react'
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import {
@@ -118,6 +118,15 @@ export function DataTableRowActions<TData>({ row }: DataTableRowActionsProps<TDa
                 <Truck className='mr-2 h-4 w-4' />
                 {order.latest_shipment ? 'View Shipment' : 'Create Shipment'}
               </DropdownMenuItem>
+
+              {order.latest_shipment && (
+                <DropdownMenuItem
+                  onClick={() => window.open('/track', '_blank')}
+                >
+                  <MapPin className='mr-2 h-4 w-4' />
+                  Track Shipment
+                </DropdownMenuItem>
+              )}
 
               <DropdownMenuSeparator />
 

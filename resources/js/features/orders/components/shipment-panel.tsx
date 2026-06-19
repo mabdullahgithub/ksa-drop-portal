@@ -1,7 +1,7 @@
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
-import { Truck, RefreshCw, X, Copy, ExternalLink } from 'lucide-react'
+import { Truck, RefreshCw, X, Copy, ExternalLink, MapPin } from 'lucide-react'
 import { toast } from 'sonner'
 import axios from 'axios'
 import { useState } from 'react'
@@ -126,7 +126,7 @@ export function ShipmentPanel({ shipment, orderId, onCreateShipment, onShipmentU
                 <Copy className='h-3 w-3' />
               </button>
               <a
-                href={`/track/${shipment.tracking_number}`}
+                href='/track'
                 target='_blank'
                 rel='noopener noreferrer'
                 className='text-muted-foreground hover:text-foreground'
@@ -189,10 +189,16 @@ export function ShipmentPanel({ shipment, orderId, onCreateShipment, onShipmentU
       )}
 
       {/* Actions */}
-      {!isTerminal && (
-        <>
-          <Separator />
-          <div className='flex gap-2'>
+      <Separator />
+      <div className='flex flex-wrap gap-2'>
+        <Button size='sm' variant='outline' asChild>
+          <a href='/track' target='_blank' rel='noopener noreferrer'>
+            <MapPin className='h-3 w-3 mr-1' />
+            Track Shipment
+          </a>
+        </Button>
+        {!isTerminal && (
+          <>
             <Button size='sm' variant='outline' onClick={refreshTracking} disabled={refreshing}>
               <RefreshCw className={`h-3 w-3 mr-1 ${refreshing ? 'animate-spin' : ''}`} />
               {refreshing ? 'Refreshing...' : 'Refresh'}
@@ -201,9 +207,9 @@ export function ShipmentPanel({ shipment, orderId, onCreateShipment, onShipmentU
               <X className='h-3 w-3 mr-1' />
               {cancelling ? 'Cancelling...' : 'Cancel'}
             </Button>
-          </div>
-        </>
-      )}
+          </>
+        )}
+      </div>
     </div>
   )
 }

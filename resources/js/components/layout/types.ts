@@ -10,6 +10,7 @@ type BaseNavItem = {
   icon?: React.ElementType
   permission?: string | string[]
   role?: string | string[]
+  newTab?: boolean
 }
 
 type NavLink = BaseNavItem & {

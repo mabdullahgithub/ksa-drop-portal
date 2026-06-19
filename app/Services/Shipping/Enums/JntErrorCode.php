@@ -79,7 +79,7 @@ enum JntErrorCode: string
     // Gateway-layer variants (a different code layer than the documented codes above)
     case GW_PROVINCE_NOT_ACCEPTED = '1450033315';
     case GW_ABNORMAL_CONTACT_INFO = '1450033326';
-    case ADDRESS_DATA_NOT_FOUND = '999002000';
+    case DATA_NOT_FOUND = '999002000';
 
     /**
      * Clear, actionable English message for this code. Address/region/contact
@@ -144,8 +144,8 @@ enum JntErrorCode: string
             self::GW_ABNORMAL_CONTACT_INFO => 'J&T did not accept the contact details. Check the sender and receiver '
                 . 'name and phone — J&T KSA expects a valid Saudi mobile number (e.g. 05XXXXXXXX or 9665XXXXXXXX) '
                 . 'with no extra spaces or symbols.',
-            self::ADDRESS_DATA_NOT_FOUND => 'J&T could not match the receiver address. The city or district is not '
-                . 'recognised in J&T\'s KSA address list — verify the receiver city and district.',
+            self::DATA_NOT_FOUND => 'J&T could not find the requested data. For orders this means the city/district is '
+                . 'not recognised in J&T\'s KSA address list; for cancellations it means the order was not found in J&T\'s system.',
         };
     }
 

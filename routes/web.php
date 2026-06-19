@@ -240,9 +240,9 @@ Route::prefix('portal')->middleware(['auth', 'verified', 'role:client'])->group(
     Route::delete('/settings/logo', [PortalController::class, 'removeLogo'])->name('portal.settings.logo.remove');
 });
 
-// Public Tracking Page (no auth required)
-Route::get('/track/{trackingNumber}', [TrackingController::class, 'show'])->name('tracking.show');
-Route::get('/api/track/{trackingNumber}', [TrackingController::class, 'api'])->name('tracking.api');
+// Tracking — single search page + JSON API for AJAX lookup
+Route::get('/track', [TrackingController::class, 'search'])->name('tracking.search');
+Route::get('/api/track/{identifier}', [TrackingController::class, 'api'])->name('tracking.api');
 
 // Webhooks (no auth, no CSRF)
 Route::post('/webhooks/jnt-express', [WebhookController::class, 'handleJntExpress'])->name('webhooks.jnt-express');

@@ -18,6 +18,7 @@ import {
   TrendingUp,
   Tag,
   Wallet,
+  Truck,
 } from 'lucide-react'
 import { type SidebarData } from '../types'
 
@@ -66,6 +67,13 @@ export const sidebarData: SidebarData = {
           url: '/orders',
           icon: ShoppingCart,
           permission: 'view orders',
+        },
+        {
+          title: 'Track Shipment',
+          url: '/track',
+          icon: Truck,
+          permission: 'view orders',
+          newTab: true,
         },
         {
           title: 'Connectors',
