@@ -247,11 +247,18 @@ export default function JntSettings() {
 
       <Main>
         <div className='space-y-6'>
-          <div>
-            <h1 className='text-3xl font-bold tracking-tight'>J&T Express Settings</h1>
-            <p className='text-muted-foreground'>
-              Configure your J&T Express API credentials and warehouse addresses
-            </p>
+          <div className='flex items-start justify-between'>
+            <div>
+              <h1 className='text-3xl font-bold tracking-tight'>J&T Express Settings</h1>
+              <p className='text-muted-foreground'>
+                Configure your J&T Express API credentials and warehouse addresses
+              </p>
+            </div>
+            <a href='/apps/jnt-express/analytics'>
+              <Button variant='outline' size='sm'>
+                View Analytics & COD
+              </Button>
+            </a>
           </div>
 
           <Tabs defaultValue='credentials' className='space-y-4'>

@@ -130,7 +130,7 @@ const columns: ColumnDef<any>[] = [
           {shipment.tracking_number && (
             <div className='flex items-center gap-1'>
               <a
-                href={`/track/${shipment.tracking_number}`}
+                href={`/track?q=${encodeURIComponent(shipment.tracking_number)}`}
                 target='_blank'
                 rel='noopener noreferrer'
                 className='font-mono text-xs text-primary hover:underline'

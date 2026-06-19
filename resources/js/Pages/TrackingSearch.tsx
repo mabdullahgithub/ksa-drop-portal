@@ -298,6 +298,17 @@ export default function TrackingSearch() {
     return () => window.removeEventListener('resize', check)
   }, [])
 
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search).get('q')
+    if (q) {
+      setOrderInput(q)
+      setPhase('searching')
+      axios.get<ShipmentData>(`/api/track/${encodeURIComponent(q)}`)
+        .then(({ data }) => { setShipment(data); setPhase('found') })
+        .catch(() => setPhase('not_found'))
+    }
+  }, [])
+
   const toggleDark = () => {
     const next = !isDark
     setIsDark(next)

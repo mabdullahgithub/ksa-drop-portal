@@ -33,18 +33,26 @@ class Shipment extends Model
         'cancelled_at',
         'cancel_reason',
         'error_message',
+        'exception_note',
+        'exception_escalated_at',
+        'otp_verified',
+        'otp_verified_at',
+        'return_tracking_number',
     ];
 
     protected $casts = [
-        'tracking_history' => 'array',
-        'api_response' => 'array',
-        'weight' => 'decimal:2',
-        'length' => 'decimal:2',
-        'width' => 'decimal:2',
-        'height' => 'decimal:2',
-        'shipped_at' => 'datetime',
-        'delivered_at' => 'datetime',
-        'cancelled_at' => 'datetime',
+        'tracking_history'        => 'array',
+        'api_response'            => 'array',
+        'weight'                  => 'decimal:2',
+        'length'                  => 'decimal:2',
+        'width'                   => 'decimal:2',
+        'height'                  => 'decimal:2',
+        'shipped_at'              => 'datetime',
+        'delivered_at'            => 'datetime',
+        'cancelled_at'            => 'datetime',
+        'exception_escalated_at'  => 'datetime',
+        'otp_verified'            => 'boolean',
+        'otp_verified_at'         => 'datetime',
     ];
 
     protected $appends = [
@@ -189,5 +197,46 @@ class Shipment extends Model
             'cancelled_at' => now(),
             'cancel_reason' => $reason,
         ]);
+    }
+
+    public function markOtpVerified(): void
+    {
+        $this->update([
+            'otp_verified'    => true,
+            'otp_verified_at' => $this->otp_verified_at ?? now(),
+        ]);
+    }
+
+    public function escalateException(string $note = ''): void
+    {
+        $this->update([
+            'exception_note'           => $note ?: $this->exception_note,
+            'exception_escalated_at'   => now(),
+        ]);
+
+        try {
+            $this->loadMissing('order');
+
+            \App\Models\User::role(['admin', 'superadmin'])->each(
+                fn ($admin) => $admin->notify(new \App\Notifications\ShipmentExceptionNotification($this))
+            );
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('ShipmentExceptionNotification failed for shipment ' . $this->id . ': ' . $e->getMessage());
+        }
+    }
+
+    public function scopeExceptions($query)
+    {
+        return $query->where('status', ShipmentStatus::EXCEPTION->value);
+    }
+
+    public function scopeEscalated($query)
+    {
+        return $query->whereNotNull('exception_escalated_at');
+    }
+
+    public function scopeReturned($query)
+    {
+        return $query->where('status', ShipmentStatus::RETURNED->value);
     }
 }

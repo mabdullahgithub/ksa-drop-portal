@@ -175,6 +175,45 @@ class JntExpressDriver implements CourierDriver
         return TrackingResult::success($currentStatus, $events, $response);
     }
 
+    public function getLabel(string $trackingNumber): array
+    {
+        $credentials = $this->getCredentials();
+
+        $bizContent = [
+            'customerCode' => $credentials['customer_code'],
+            'digest'       => $this->buildInnerDigest(),
+            'billCodes'    => [$trackingNumber],
+        ];
+
+        $response = $this->makeRequest('/webopenplatformapi/api/order/getPrintData', $bizContent);
+
+        if (! $response) {
+            return ['success' => false, 'error' => 'Failed to connect to J&T Express API'];
+        }
+
+        $code = (string) ($response['code'] ?? '');
+
+        if ($code !== '1') {
+            return [
+                'success' => false,
+                'error'   => $this->friendlyError($code, $response['msg'] ?? null),
+            ];
+        }
+
+        $item = $response['data'][0] ?? null;
+
+        if (! $item) {
+            return ['success' => false, 'error' => 'No label data returned'];
+        }
+
+        return [
+            'success'      => true,
+            'label_content' => $item['printContent'] ?? null,
+            'label_url'     => $item['labelUrl'] ?? null,
+            'raw'           => $response,
+        ];
+    }
+
     public function cancelShipment(string $trackingNumber, string $reason): CancelResult
     {
         $credentials = $this->getCredentials();
@@ -445,7 +484,7 @@ class JntExpressDriver implements CourierDriver
         return $url;
     }
 
-    protected function makeRequest(string $endpoint, array $data): ?array
+    protected function makeRequest(string $endpoint, array $data, int $maxRetries = 2): ?array
     {
         $rateLimitKey = 'jnt_express:api';
 
@@ -454,48 +493,70 @@ class JntExpressDriver implements CourierDriver
             return null;
         }
 
-        try {
-            $credentials = $this->getCredentials();
-            // The exact bizContent string posted is what the header digest is computed over.
-            $bizContent = json_encode($data, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
-            $digest = $this->buildDigest($bizContent);
-            // J&T expects a millisecond timestamp (13 digits).
-            $timestamp = (string) round(microtime(true) * 1000);
+        $attempt = 0;
 
-            Log::debug('J&T Express request details', [
-                'endpoint' => $endpoint,
-                'bizContent' => $bizContent,
-                'computed_digest' => $digest,
-                'timestamp' => $timestamp,
-                'api_account' => $credentials['api_account'],
-            ]);
+        while ($attempt <= $maxRetries) {
+            try {
+                $credentials = $this->getCredentials();
+                $bizContent  = json_encode($data, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+                $digest      = $this->buildDigest($bizContent);
+                $timestamp   = (string) round(microtime(true) * 1000);
 
-            $response = Http::asForm()
-                ->withHeaders([
-                    'apiAccount' => $credentials['api_account'],
-                    'digest' => $digest,
-                    'timestamp' => $timestamp,
-                ])
-                ->timeout(30)
-                ->post($this->buildEndpointUrl($endpoint), [
-                    'bizContent' => $bizContent,
+                Log::debug('J&T Express request details', [
+                    'endpoint'        => $endpoint,
+                    'bizContent'      => $bizContent,
+                    'computed_digest' => $digest,
+                    'timestamp'       => $timestamp,
+                    'api_account'     => $credentials['api_account'],
+                    'attempt'         => $attempt + 1,
                 ]);
 
-            RateLimiter::hit($rateLimitKey, 60);
+                $response = Http::asForm()
+                    ->withHeaders([
+                        'apiAccount' => $credentials['api_account'],
+                        'digest'     => $digest,
+                        'timestamp'  => $timestamp,
+                    ])
+                    ->timeout(30)
+                    ->post($this->buildEndpointUrl($endpoint), [
+                        'bizContent' => $bizContent,
+                    ]);
 
-            Log::info('J&T Express API call', [
-                'endpoint' => $endpoint,
-                'status' => $response->status(),
-            ]);
+                RateLimiter::hit($rateLimitKey, 60);
 
-            return $response->json();
-        } catch (\Exception $e) {
-            Log::error('J&T Express API error', [
-                'endpoint' => $endpoint,
-                'error' => $e->getMessage(),
-            ]);
+                Log::info('J&T Express API call', [
+                    'endpoint' => $endpoint,
+                    'status'   => $response->status(),
+                    'attempt'  => $attempt + 1,
+                ]);
 
-            return null;
+                // Only retry on server-side 5xx or connection-level failures.
+                if ($response->serverError()) {
+                    throw new \RuntimeException('J&T server error: ' . $response->status());
+                }
+
+                return $response->json();
+            } catch (\Exception $e) {
+                $attempt++;
+
+                Log::warning('J&T Express API error (attempt ' . $attempt . ')', [
+                    'endpoint' => $endpoint,
+                    'error'    => $e->getMessage(),
+                ]);
+
+                if ($attempt > $maxRetries) {
+                    Log::error('J&T Express API failed after ' . $attempt . ' attempts', [
+                        'endpoint' => $endpoint,
+                        'error'    => $e->getMessage(),
+                    ]);
+                    return null;
+                }
+
+                // Exponential back-off: 500ms, 1000ms, …
+                usleep(500_000 * (2 ** ($attempt - 1)));
+            }
         }
+
+        return null;
     }
 }

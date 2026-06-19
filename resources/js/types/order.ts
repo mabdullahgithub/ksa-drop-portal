@@ -98,6 +98,11 @@ export interface Shipment {
   cancelled_at: string | null
   cancel_reason: string | null
   error_message: string | null
+  exception_note: string | null
+  exception_escalated_at: string | null
+  otp_verified: boolean
+  otp_verified_at: string | null
+  return_tracking_number: string | null
   created_at: string
 }
 
