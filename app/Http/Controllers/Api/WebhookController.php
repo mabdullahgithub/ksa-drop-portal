@@ -253,19 +253,34 @@ class WebhookController extends Controller
             return false;
         }
 
+        // Sandbox bypass: J&T's console debug test uses their own internal test key,
+        // not your actual private key. Enable this only during sandbox joint-debugging.
+        if (config('services.jnt.skip_webhook_verification', false)) {
+            Log::channel('jnt_webhooks')->info("J&T {$type} webhook: signature verification bypassed (sandbox mode)");
+            return true;
+        }
+
         // Derived ciphertext used in inner digest formula
         $ciphertext = strtoupper(md5($customerPass . 'jadada236t2'));
+
+        // Some integrations store the key as hex — try binary-decoded variant too
+        $privateKeyBin = (ctype_xdigit($privateKey) && strlen($privateKey) % 2 === 0)
+            ? hex2bin($privateKey)
+            : null;
 
         // Extract the raw URL-encoded bizContent value from the body (before PHP decodes it)
         preg_match('/(?:^|&)bizContent=([^&]*)/', $fullBody, $m);
         $urlEncodedBiz = $m[1] ?? '';
 
         $candidates = [
-            // ---- private_key variants ----
+            // ---- private_key (string) variants ----
             'biz+key'               => base64_encode(md5($bizContent . $privateKey, true)),
             'body+key'              => base64_encode(md5($fullBody . $privateKey, true)),
             'urlbiz+key'            => base64_encode(md5($urlEncodedBiz . $privateKey, true)),
             'key+biz'               => base64_encode(md5($privateKey . $bizContent, true)),
+            // ---- private_key (hex-decoded to binary) variants ----
+            'biz+key_bin'           => $privateKeyBin ? base64_encode(md5($bizContent . $privateKeyBin, true)) : null,
+            'urlbiz+key_bin'        => $privateKeyBin ? base64_encode(md5($urlEncodedBiz . $privateKeyBin, true)) : null,
             // ---- ciphertext variants (derived from customer_password) ----
             'biz+cipher'            => base64_encode(md5($bizContent . $ciphertext, true)),
             'urlbiz+cipher'         => base64_encode(md5($urlEncodedBiz . $ciphertext, true)),
@@ -280,7 +295,7 @@ class WebhookController extends Controller
         ];
 
         foreach ($candidates as $label => $candidate) {
-            if (hash_equals($candidate, $digest)) {
+            if ($candidate && hash_equals($candidate, $digest)) {
                 Log::channel('jnt_webhooks')->info("J&T {$type} webhook signature matched", [
                     'matched_candidate' => $label,
                 ]);
@@ -291,7 +306,7 @@ class WebhookController extends Controller
         Log::channel('jnt_webhooks')->debug('J&T webhook signature mismatch — all candidates failed', [
             'type'                  => $type,
             'received_digest'       => $digest,
-            'candidates'            => $candidates,
+            'candidates'            => array_filter($candidates),
             'private_key_hint'      => substr($privateKey, 0, 4) . '...' . substr($privateKey, -4),
             'private_key_length'    => strlen($privateKey),
             'customer_code'         => $customerCode,

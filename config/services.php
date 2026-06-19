@@ -41,6 +41,14 @@ return [
     | settings always take precedence; these env values let the integration
     | keep working before anything is configured in the UI.
     */
+    'jnt' => [
+        // Set to true only during J&T sandbox joint-debugging.
+        // J&T's console test calls use their internal test key, not yours,
+        // so signature verification will always fail during that step.
+        // Remove or set to false before going live.
+        'skip_webhook_verification' => env('JNT_SKIP_WEBHOOK_VERIFICATION', false),
+    ],
+
     'jnt_express' => [
         'api_account' => env('JNT_API_ACCOUNT'),
         'private_key' => env('JNT_PRIVATE_KEY'),
