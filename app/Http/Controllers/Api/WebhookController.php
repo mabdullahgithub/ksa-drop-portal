@@ -129,34 +129,48 @@ class WebhookController extends Controller
         [$data, $error] = $this->parseAndVerify($request, 'cod');
         if ($error) return $error;
 
-        $trackingNumber = $data['billCode'] ?? $data['mailNo'] ?? $data['waybillNo'] ?? null;
-
-        if (! $trackingNumber) {
-            Log::channel('jnt_webhooks')->warning('J&T COD webhook missing tracking number', ['data' => $data]);
-            return response()->json(['code' => 0, 'msg' => 'Missing tracking number'], 400);
+        // COD remittance is a batch: wayNos is an array of tracking numbers.
+        // Fallback to single-waybill fields for forward compatibility.
+        $wayNos = $data['wayNos'] ?? null;
+        if (! $wayNos) {
+            $single = $data['billCode'] ?? $data['mailNo'] ?? $data['waybillNo'] ?? null;
+            $wayNos = $single ? [$single] : [];
         }
 
-        $shipment = Shipment::with('order')->where('tracking_number', $trackingNumber)->first();
-
-        if (! $shipment) {
-            Log::channel('jnt_webhooks')->info('J&T COD webhook for unknown shipment', ['tracking' => $trackingNumber]);
-            return response()->json(['code' => 1, 'msg' => 'success']);
+        if (empty($wayNos)) {
+            Log::channel('jnt_webhooks')->warning('J&T COD webhook missing waybill numbers', ['data' => $data]);
+            return response()->json(['code' => 0, 'msg' => 'Missing waybill numbers'], 400);
         }
 
-        $codAmount = $data['codAmount'] ?? $data['amount'] ?? null;
-        $remitTime = $data['remitTime'] ?? $data['operationTime'] ?? now()->toIso8601String();
+        $totalAmount = $data['payCustomerCollectionAmount'] ?? $data['codAmount'] ?? null;
+        $remitTime   = $data['rebateTime'] ?? $data['remitTime'] ?? $data['operationTime'] ?? now()->toIso8601String();
+        $batchId     = $data['billSerialNum'] ?? null;
 
-        $shipment->order->update([
-            'financial_status'     => 'paid',
-            'paid_at'              => $shipment->order->paid_at ?? $remitTime,
-            'cod_collected_amount' => $codAmount,
-            'cod_collected_at'     => $remitTime,
-        ]);
+        $updated = 0;
+        foreach ($wayNos as $trackingNumber) {
+            $shipment = Shipment::with('order')->where('tracking_number', $trackingNumber)->first();
+
+            if (! $shipment) {
+                Log::channel('jnt_webhooks')->info('J&T COD webhook: unknown shipment in batch', ['tracking' => $trackingNumber]);
+                continue;
+            }
+
+            $shipment->order->update([
+                'financial_status'     => 'paid',
+                'paid_at'              => $shipment->order->paid_at ?? $remitTime,
+                'cod_collected_amount' => $totalAmount,
+                'cod_collected_at'     => $remitTime,
+            ]);
+
+            $updated++;
+        }
 
         Log::channel('jnt_webhooks')->info('J&T COD webhook processed', [
-            'tracking'   => $trackingNumber,
-            'cod_amount' => $codAmount,
-            'remit_time' => $remitTime,
+            'batch_id'      => $batchId,
+            'total_amount'  => $totalAmount,
+            'remit_time'    => $remitTime,
+            'waybill_count' => count($wayNos),
+            'updated'       => $updated,
         ]);
 
         return response()->json(['code' => 1, 'msg' => 'success']);
