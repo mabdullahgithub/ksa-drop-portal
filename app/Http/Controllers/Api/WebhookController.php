@@ -83,7 +83,7 @@ class WebhookController extends Controller
         [$data, $error] = $this->parseAndVerify($request, 'return');
         if ($error) return $error;
 
-        $trackingNumber = $data['billCode'] ?? $data['mailNo'] ?? null;
+        $trackingNumber = $data['billCode'] ?? $data['mailNo'] ?? $data['waybillNo'] ?? null;
 
         if (! $trackingNumber) {
             Log::channel('jnt_webhooks')->warning('J&T return webhook missing tracking number', ['data' => $data]);
@@ -129,7 +129,7 @@ class WebhookController extends Controller
         [$data, $error] = $this->parseAndVerify($request, 'cod');
         if ($error) return $error;
 
-        $trackingNumber = $data['billCode'] ?? $data['mailNo'] ?? null;
+        $trackingNumber = $data['billCode'] ?? $data['mailNo'] ?? $data['waybillNo'] ?? null;
 
         if (! $trackingNumber) {
             Log::channel('jnt_webhooks')->warning('J&T COD webhook missing tracking number', ['data' => $data]);
