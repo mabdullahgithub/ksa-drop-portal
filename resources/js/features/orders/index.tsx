@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { HelpCircle } from 'lucide-react'
 import { Header } from '@/components/layout/header'
 import { NotificationsDropdown } from '@/components/layout/notifications-dropdown'
@@ -25,6 +25,20 @@ export function Orders() {
   })
   const [tableInstance, setTableInstance] = useState<any>(null)
   const [statusInfoModalOpen, setStatusInfoModalOpen] = useState(false)
+  const [stats, setStats] = useState<any>(null)
+
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        const response = await fetch('/api/orders/statistics')
+        const data = await response.json()
+        setStats(data)
+      } catch (error) {
+        console.error('Error fetching statistics:', error)
+      }
+    }
+    fetchStats()
+  }, [])
 
   const activeTab = filters.has_shipment === true ? 'assigned' : filters.has_shipment === false ? 'unassigned' : 'unassigned'
 
@@ -86,6 +100,11 @@ export function Orders() {
             }`}
           >
             All Orders
+            {stats?.unassigned_orders != null && (
+              <span className='ml-1.5 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium tabular-nums'>
+                {stats.unassigned_orders}
+              </span>
+            )}
           </button>
           <button
             onClick={() => handleTabChange('assigned')}
@@ -96,6 +115,11 @@ export function Orders() {
             }`}
           >
             Assigned to Courier
+            {stats?.assigned_orders != null && (
+              <span className='ml-1.5 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium tabular-nums'>
+                {stats.assigned_orders}
+              </span>
+            )}
           </button>
         </div>
 

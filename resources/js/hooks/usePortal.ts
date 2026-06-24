@@ -381,6 +381,21 @@ export function usePortalProduct(productId: number | null) {
   return { product, loading }
 }
 
+export function usePortalOrderFilterOptions() {
+  const [options, setOptions] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    fetch('/api/orders/filter-options')
+      .then((r) => r.json())
+      .then(setOptions)
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [])
+
+  return { options, loading }
+}
+
 export function usePortalProductFilterOptions() {
   const [options, setOptions] = useState<{ vendors: { value: string; label: string }[]; types: { value: string; label: string }[] } | null>(null)
   const [loading, setLoading] = useState(true)

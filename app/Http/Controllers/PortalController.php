@@ -22,6 +22,16 @@ class PortalController extends Controller
         return auth()->user()->client ?? null;
     }
 
+    private function parseMultiValue($value): array
+    {
+        $values = is_array($value) ? $value : explode(',', (string) $value);
+
+        return array_values(array_filter(
+            array_map('trim', $values),
+            fn ($v) => $v !== '' && $v !== 'all'
+        ));
+    }
+
     public function dashboard()
     {
         $client = $this->resolveClient();
@@ -43,6 +53,8 @@ class PortalController extends Controller
             'total_products'      => $client->clientProducts()->count(),
             'verified_products'   => $client->clientProducts()->verified()->count(),
             'pending_verification'=> $client->clientProducts()->pending()->count(),
+            'unassigned_orders'   => $client->orders()->withoutShipment()->count(),
+            'assigned_orders'     => $client->orders()->withShipment()->count(),
             'by_shipment_status'  => DB::table('shipments')
                 ->whereIn('order_id', $client->orders()->pluck('id'))
                 ->select('status', DB::raw('count(*) as count'))
@@ -93,6 +105,26 @@ class PortalController extends Controller
         // Filter by a single tag (used by the "Confirmed Orders" tab)
         if ($request->has('tag') && $request->tag) {
             $query->whereJsonContains('tags', $request->tag);
+        }
+
+        // Filter by shipment status (has shipment or not)
+        if ($request->has('has_shipment')) {
+            $hasShipment = filter_var($request->has_shipment, FILTER_VALIDATE_BOOLEAN);
+            if ($hasShipment) {
+                $query->withShipment();
+            } else {
+                $query->withoutShipment();
+            }
+        }
+
+        // Filter by shipment status values
+        if ($request->has('shipment_status')) {
+            $statuses = $this->parseMultiValue($request->shipment_status);
+            if (!empty($statuses)) {
+                $query->whereHas('shipments', function ($q) use ($statuses) {
+                    $q->whereIn('status', $statuses);
+                });
+            }
         }
 
         $sortBy = $request->get('sort_by', 'created_at');

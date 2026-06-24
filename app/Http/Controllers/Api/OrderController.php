@@ -322,6 +322,8 @@ class OrderController extends Controller
 
         $stats = [
             'total_orders' => $query->count(),
+            'unassigned_orders' => $query->clone()->withoutShipment()->count(),
+            'assigned_orders' => $query->clone()->withShipment()->count(),
             'total_revenue' => round((float) $query->sum('total'), 2),
             'average_order_value' => round((float) $query->avg('total'), 2),
             'by_fulfillment_status' => DB::table('orders')

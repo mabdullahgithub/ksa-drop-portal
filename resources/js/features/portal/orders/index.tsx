@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback } from 'react'
-import { Search as SearchIcon, Download, Upload, CheckCircle2, AlertCircle, FileSpreadsheet, X, Package, DollarSign, Clock, TruckIcon, Copy, XCircle, ShoppingBag, PlusCircle, MessageSquare, HelpCircle } from 'lucide-react'
+import { Download, Upload, CheckCircle2, AlertCircle, FileSpreadsheet, X, Package, DollarSign, Clock, TruckIcon, Copy, XCircle, ShoppingBag, PlusCircle, MessageSquare, HelpCircle } from 'lucide-react'
 import {
   flexRender,
   getCoreRowModel,
@@ -14,6 +14,14 @@ import { Label } from '@/components/ui/label'
 import { Progress } from '@/components/ui/progress'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuCheckboxItem,
+} from '@/components/ui/dropdown-menu'
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -21,7 +29,6 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Header } from '@/components/layout/header'
 import { NotificationsDropdown } from '@/components/layout/notifications-dropdown'
 import { Main } from '@/components/layout/main'
@@ -32,6 +39,8 @@ import { usePortalOrders, usePortalOrderMutations, usePortalDashboard } from '@/
 import { OrdersPagination } from '@/features/orders/components/orders-pagination'
 import { ShipmentStatusInfoModal } from '@/features/orders/components/shipment-status-info-modal'
 import { PortalShipmentStatusCards } from './components/portal-shipment-status-cards'
+import { PortalOrdersFilters } from './components/portal-orders-filters'
+import { usePortalOrderFilterOptions } from '@/hooks/usePortal'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 
@@ -959,15 +968,20 @@ function CreateOrderDialog({
 // ─── main component ───────────────────────────────────────────────────────────
 
 export function PortalOrders() {
-  const [activeTab, setActiveTab] = useState<'all' | 'assigned'>('all')
   const [search, setSearch] = useState('')
   const [importDialogOpen, setImportDialogOpen] = useState(false)
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
   const [statusInfoModalOpen, setStatusInfoModalOpen] = useState(false)
 
-  const { orders, meta, loading, filters, updateFilters, resetFilters, refresh } = usePortalOrders()
+  const { orders, meta, loading, filters, updateFilters, refresh } = usePortalOrders({
+    per_page: 15,
+    sort_by: 'created_at',
+    sort_order: 'desc',
+    has_shipment: false,
+  })
   const { exportOrders } = usePortalOrderMutations()
-  const { data: dashboardData, loading: statsLoading } = usePortalDashboard()
+  const { data: dashboardData } = usePortalDashboard()
+  const { options: filterOptions, loading: filterOptionsLoading } = usePortalOrderFilterOptions()
 
   const table = useReactTable({
     data: orders,
@@ -977,22 +991,18 @@ export function PortalOrders() {
     pageCount: meta?.last_page ?? 0,
   })
 
+  const activeTab = filters.has_shipment === true ? 'assigned' : filters.has_shipment === false ? 'unassigned' : 'unassigned'
+
   const handleSearch = (value: string) => {
     setSearch(value)
     updateFilters({ search: value, page: 1 })
   }
 
-  const handleTabChange = (tab: string) => {
-    const newTab = tab as 'all' | 'assigned'
-    setActiveTab(newTab)
-    setSearch('')
-    // Use resetFilters so no stale values from the previous tab carry over
-    // "Assigned to Courier" = orders that have shipments assigned (has_shipment: true)
-    if (newTab === 'assigned') {
-      resetFilters({ has_shipment: true, page: 1 })
-    } else {
-      resetFilters({ page: 1 })
-    }
+  const handleTabChange = (tab: 'unassigned' | 'assigned') => {
+    updateFilters({
+      has_shipment: tab === 'assigned',
+      page: 1,
+    })
   }
 
   return (
@@ -1038,11 +1048,6 @@ export function PortalOrders() {
           </div>
         </div>
 
-        {/* Stat mini cards */}
-        <div className='mb-6'>
-          <OrderStatCards stats={dashboardData?.stats} loading={statsLoading} />
-        </div>
-
         {/* Shipment Status Distribution */}
         <div className='mb-8'>
           <div className='flex items-center justify-between mb-3'>
@@ -1055,38 +1060,62 @@ export function PortalOrders() {
               Info
             </button>
           </div>
-          <PortalShipmentStatusCards />
+          <PortalShipmentStatusCards
+            onStatusClick={(status) => {
+              updateFilters({ shipment_status: [status], has_shipment: true, page: 1 })
+            }}
+          />
         </div>
 
-        {/* Tabs + search */}
-        <div className='space-y-3'>
-          <div className='flex flex-wrap items-center gap-3'>
-            <Tabs value={activeTab} onValueChange={handleTabChange} className='shrink-0'>
-              <TabsList className='h-9'>
-                <TabsTrigger value='all' className='text-xs px-3'>
-                  All Orders
-                  {dashboardData?.stats?.total_orders != null && (
-                    <span className='ml-1.5 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium tabular-nums'>
-                      {dashboardData.stats.total_orders}
-                    </span>
-                  )}
-                </TabsTrigger>
-                <TabsTrigger value='assigned' className='text-xs px-3'>
-                  Assigned to Courier
-                </TabsTrigger>
-              </TabsList>
-            </Tabs>
+        {/* Tabs with counts + filters + search */}
+        <div className='flex gap-2 border-b border-muted/50 mb-4'>
+          <button
+            onClick={() => handleTabChange('unassigned')}
+            className={`px-4 py-2 text-sm font-medium transition-colors ${
+              activeTab === 'unassigned'
+                ? 'border-b-2 border-primary text-primary -mb-px'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            All Orders
+            {dashboardData?.stats?.total_orders != null && (
+              <span className='ml-1.5 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium tabular-nums'>
+                {dashboardData.stats.total_orders}
+              </span>
+            )}
+          </button>
+          <button
+            onClick={() => handleTabChange('assigned')}
+            className={`px-4 py-2 text-sm font-medium transition-colors ${
+              activeTab === 'assigned'
+                ? 'border-b-2 border-primary text-primary -mb-px'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            Assigned to Courier
+            {dashboardData?.stats?.assigned_orders != null && (
+              <span className='ml-1.5 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium tabular-nums'>
+                {dashboardData.stats.assigned_orders}
+              </span>
+            )}
+          </button>
+        </div>
 
-            <div className='relative flex-1 min-w-[200px] max-w-sm'>
-              <SearchIcon className='absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground' />
-              <Input
-                placeholder='Search orders…'
-                value={search}
-                onChange={(e) => handleSearch(e.target.value)}
-                className='pl-8 h-9'
-              />
-            </div>
+        {/* Filters */}
+        {filterOptionsLoading ? (
+          <div className='h-9 flex items-center'>
+            <Skeleton className='h-8 w-96' />
           </div>
+        ) : (
+          <PortalOrdersFilters
+            filters={filters}
+            onFiltersChange={updateFilters}
+            filterOptions={filterOptions}
+          />
+        )}
+
+        {/* Orders table section */}
+        <div className='space-y-3'>
 
           <div className='overflow-hidden rounded-md border'>
             <Table>
