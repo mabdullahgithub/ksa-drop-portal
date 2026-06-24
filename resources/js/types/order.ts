@@ -160,6 +160,8 @@ export interface OrderFilters {
   per_page?: number
   page?: number
   client_ids?: number[]
+  has_shipment?: boolean
+  shipment_status?: string[]
 }
 
 export interface ClientFilterOption {
@@ -174,6 +176,7 @@ export interface OrderStatistics {
   average_order_value: number
   by_fulfillment_status: Array<{ fulfillment_status: string; count: number }>
   by_financial_status: Array<{ financial_status: string; count: number }>
+  by_shipment_status: Array<{ status: string; count: number }>
   by_payment_method: Array<{ payment_method: string; count: number }>
   by_utm_source: Array<{ utm_source: string; count: number }>
   by_country: Array<{ shipping_country: string; count: number }>
@@ -192,6 +195,7 @@ export interface FilterOption {
 export interface OrderFilterOptions {
   fulfillment_statuses: FilterOption[]
   financial_statuses: FilterOption[]
+  shipment_statuses: FilterOption[]
   payment_methods: FilterOption[]
   utm_sources: FilterOption[]
   countries: FilterOption[]

@@ -26,6 +26,8 @@ export function useOrders(initialFilters: OrderFilters = {}) {
           if (value.length > 0) {
             params.append(key, value.join(','))
           }
+        } else if (typeof value === 'boolean') {
+          params.append(key, value ? '1' : '0')
         } else {
           params.append(key, String(value))
         }
@@ -278,6 +280,8 @@ export function useOrderMutations() {
           if (value.length > 0) {
             params.append(key, value.join(','))
           }
+        } else if (typeof value === 'boolean') {
+          params.append(key, value ? '1' : '0')
         } else {
           params.append(key, String(value))
         }

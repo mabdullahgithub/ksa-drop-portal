@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback } from 'react'
-import { Search as SearchIcon, Download, Upload, CheckCircle2, AlertCircle, FileSpreadsheet, X, Package, DollarSign, Clock, TruckIcon, Copy, XCircle, ShoppingBag, PlusCircle, MessageSquare } from 'lucide-react'
+import { Search as SearchIcon, Download, Upload, CheckCircle2, AlertCircle, FileSpreadsheet, X, Package, DollarSign, Clock, TruckIcon, Copy, XCircle, ShoppingBag, PlusCircle, MessageSquare, HelpCircle } from 'lucide-react'
 import {
   flexRender,
   getCoreRowModel,
@@ -30,6 +30,8 @@ import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
 import { usePortalOrders, usePortalOrderMutations, usePortalDashboard } from '@/hooks/usePortal'
 import { OrdersPagination } from '@/features/orders/components/orders-pagination'
+import { ShipmentStatusInfoModal } from '@/features/orders/components/shipment-status-info-modal'
+import { PortalShipmentStatusCards } from './components/portal-shipment-status-cards'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 
@@ -961,6 +963,7 @@ export function PortalOrders() {
   const [search, setSearch] = useState('')
   const [importDialogOpen, setImportDialogOpen] = useState(false)
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
+  const [statusInfoModalOpen, setStatusInfoModalOpen] = useState(false)
 
   const { orders, meta, loading, filters, updateFilters, resetFilters, refresh } = usePortalOrders()
   const { exportOrders } = usePortalOrderMutations()
@@ -1038,6 +1041,21 @@ export function PortalOrders() {
         {/* Stat mini cards */}
         <div className='mb-4'>
           <OrderStatCards stats={dashboardData?.stats} loading={statsLoading} />
+        </div>
+
+        {/* Shipment Status Distribution */}
+        <div>
+          <div className='flex items-center justify-between mb-3'>
+            <h3 className='text-sm font-semibold'>Shipment Status Distribution</h3>
+            <button
+              onClick={() => setStatusInfoModalOpen(true)}
+              className='inline-flex items-center gap-1.5 rounded-md border border-muted px-2.5 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted/50 transition-colors'
+            >
+              <HelpCircle className='h-3.5 w-3.5' />
+              Info
+            </button>
+          </div>
+          <PortalShipmentStatusCards />
         </div>
 
         {/* Tabs + search */}
@@ -1148,6 +1166,10 @@ export function PortalOrders() {
         open={createDialogOpen}
         onOpenChange={setCreateDialogOpen}
         onSuccess={refresh}
+      />
+      <ShipmentStatusInfoModal
+        open={statusInfoModalOpen}
+        onOpenChange={setStatusInfoModalOpen}
       />
     </>
   )

@@ -106,6 +106,26 @@ class OrderController extends Controller
             }
         }
 
+        // Filter by shipment status
+        if ($request->has('has_shipment')) {
+            $hasShipment = filter_var($request->has_shipment, FILTER_VALIDATE_BOOLEAN);
+            if ($hasShipment) {
+                $query->withShipment();
+            } else {
+                $query->withoutShipment();
+            }
+        }
+
+        // Filter by shipment status values
+        if ($request->has('shipment_status')) {
+            $statuses = $this->multiValue($request->shipment_status);
+            if (!empty($statuses)) {
+                $query->whereHas('shipments', function ($q) use ($statuses) {
+                    $q->whereIn('status', $statuses);
+                });
+            }
+        }
+
         // Sorting
         $sortBy = $request->get('sort_by', 'created_at');
         $sortOrder = $request->get('sort_order', 'desc');
@@ -312,6 +332,11 @@ class OrderController extends Controller
                 ->select('financial_status', DB::raw('count(*) as count'))
                 ->groupBy('financial_status')
                 ->get(),
+            'by_shipment_status' => DB::table('shipments')
+                ->select('status', DB::raw('count(*) as count'))
+                ->groupBy('status')
+                ->orderByDesc('count')
+                ->get(),
             'by_payment_method' => DB::table('orders')
                 ->select('payment_method', DB::raw('count(*) as count'))
                 ->groupBy('payment_method')
@@ -357,6 +382,18 @@ class OrderController extends Controller
                 ['value' => 'paid', 'label' => 'Paid'],
                 ['value' => 'refunded', 'label' => 'Refunded'],
                 ['value' => 'partially_refunded', 'label' => 'Partially Refunded'],
+            ],
+            'shipment_statuses' => [
+                ['value' => 'pending', 'label' => 'Pending'],
+                ['value' => 'info_received', 'label' => 'Info Received'],
+                ['value' => 'in_transit', 'label' => 'In Transit'],
+                ['value' => 'out_for_delivery', 'label' => 'Out for Delivery'],
+                ['value' => 'delivered', 'label' => 'Delivered'],
+                ['value' => 'attempt_fail', 'label' => 'Attempt Failed'],
+                ['value' => 'returned', 'label' => 'Returned'],
+                ['value' => 'exception', 'label' => 'Exception'],
+                ['value' => 'cancelled', 'label' => 'Cancelled'],
+                ['value' => 'failed', 'label' => 'Failed'],
             ],
             'payment_methods' => DB::table('orders')
                 ->select('payment_method')

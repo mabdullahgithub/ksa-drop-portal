@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { HelpCircle } from 'lucide-react'
 import { Header } from '@/components/layout/header'
 import { NotificationsDropdown } from '@/components/layout/notifications-dropdown'
 import { Main } from '@/components/layout/main'
@@ -11,6 +12,8 @@ import { OrdersProvider } from './components/orders-provider'
 import { OrdersTable } from './components/orders-table'
 import { OrdersFilters } from './components/orders-filters'
 import { OrdersStats } from './components/orders-stats'
+import { ShipmentStatusCards } from './components/shipment-status-cards'
+import { ShipmentStatusInfoModal } from './components/shipment-status-info-modal'
 import { useOrders } from '@/hooks/useOrders'
 
 export function Orders() {
@@ -18,8 +21,19 @@ export function Orders() {
     per_page: 15,
     sort_by: 'created_at',
     sort_order: 'desc',
+    has_shipment: false,
   })
   const [tableInstance, setTableInstance] = useState<any>(null)
+  const [statusInfoModalOpen, setStatusInfoModalOpen] = useState(false)
+
+  const activeTab = filters.has_shipment === true ? 'assigned' : filters.has_shipment === false ? 'unassigned' : 'unassigned'
+
+  const handleTabChange = (tab: 'unassigned' | 'assigned') => {
+    updateFilters({
+      has_shipment: tab === 'assigned',
+      page: 1,
+    })
+  }
 
   return (
     <OrdersProvider>
@@ -43,6 +57,48 @@ export function Orders() {
 
         <OrdersStats />
 
+        <div>
+          <div className='flex items-center justify-between mb-3'>
+            <h3 className='text-sm font-semibold'>J&T Shipment Status Distribution</h3>
+            <button
+              onClick={() => setStatusInfoModalOpen(true)}
+              className='inline-flex items-center gap-1.5 rounded-md border border-muted px-2.5 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted/50 transition-colors'
+            >
+              <HelpCircle className='h-3.5 w-3.5' />
+              Info
+            </button>
+          </div>
+          <ShipmentStatusCards
+            onStatusClick={(status) => {
+              updateFilters({ shipment_status: [status], has_shipment: true, page: 1 })
+            }}
+          />
+        </div>
+
+        {/* Tabs for Unassigned / Assigned to Courier */}
+        <div className='flex gap-2 border-b border-muted/50'>
+          <button
+            onClick={() => handleTabChange('unassigned')}
+            className={`px-4 py-2 text-sm font-medium transition-colors ${
+              activeTab === 'unassigned'
+                ? 'border-b-2 border-primary text-primary -mb-px'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            All Orders
+          </button>
+          <button
+            onClick={() => handleTabChange('assigned')}
+            className={`px-4 py-2 text-sm font-medium transition-colors ${
+              activeTab === 'assigned'
+                ? 'border-b-2 border-primary text-primary -mb-px'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            Assigned to Courier
+          </button>
+        </div>
+
         <OrdersFilters
           filters={filters}
           onFiltersChange={updateFilters}
@@ -62,6 +118,7 @@ export function Orders() {
       </Main>
 
       <OrdersDialogs onSuccess={refresh} />
+      <ShipmentStatusInfoModal open={statusInfoModalOpen} onOpenChange={setStatusInfoModalOpen} />
     </OrdersProvider>
   )
 }

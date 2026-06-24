@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Search, X, SlidersHorizontal, PackageCheck, CreditCard, Tag } from 'lucide-react'
+import { Search, X, SlidersHorizontal, PackageCheck, CreditCard, Tag, Truck } from 'lucide-react'
 import { type Table } from '@tanstack/react-table'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -49,6 +49,8 @@ export function OrdersFilters({ filters, onFiltersChange, table }: OrdersFilters
       start_date: undefined,
       end_date: undefined,
       client_ids: [],
+      has_shipment: false,
+      shipment_status: [],
       page: 1,
     })
   }
@@ -59,7 +61,8 @@ export function OrdersFilters({ filters, onFiltersChange, table }: OrdersFilters
     (filters.financial_status && filters.financial_status.length > 0) ||
     (filters.tags && filters.tags.length > 0) ||
     filters.country ||
-    (filters.client_ids && filters.client_ids.length > 0)
+    (filters.client_ids && filters.client_ids.length > 0) ||
+    (filters.shipment_status && filters.shipment_status.length > 0)
 
   if (loading) {
     return <OrdersFiltersSkeleton />
@@ -94,6 +97,15 @@ export function OrdersFilters({ filters, onFiltersChange, table }: OrdersFilters
         options={options?.financial_statuses ?? []}
         selected={filters.financial_status ?? []}
         onChange={(values) => onFiltersChange({ financial_status: values, page: 1 })}
+      />
+
+      {/* Shipment Status */}
+      <MultiSelectFilter
+        label='Shipment Status'
+        icon={Truck}
+        options={options?.shipment_statuses ?? []}
+        selected={filters.shipment_status ?? []}
+        onChange={(values) => onFiltersChange({ shipment_status: values, page: 1 })}
       />
 
       {/* Tags */}

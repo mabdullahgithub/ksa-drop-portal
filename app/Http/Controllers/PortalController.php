@@ -43,6 +43,12 @@ class PortalController extends Controller
             'total_products'      => $client->clientProducts()->count(),
             'verified_products'   => $client->clientProducts()->verified()->count(),
             'pending_verification'=> $client->clientProducts()->pending()->count(),
+            'by_shipment_status'  => DB::table('shipments')
+                ->whereIn('order_id', $client->orders()->pluck('id'))
+                ->select('status', DB::raw('count(*) as count'))
+                ->groupBy('status')
+                ->orderByDesc('count')
+                ->get(),
         ];
 
         $recentOrders = $client->orders()

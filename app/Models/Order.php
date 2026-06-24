@@ -157,6 +157,22 @@ class Order extends Model
     }
 
     /**
+     * Scope a query to only include orders with shipments assigned to a courier.
+     */
+    public function scopeWithShipment($query)
+    {
+        return $query->whereHas('shipments');
+    }
+
+    /**
+     * Scope a query to only include orders without shipments (not assigned to courier).
+     */
+    public function scopeWithoutShipment($query)
+    {
+        return $query->whereDoesntHave('shipments');
+    }
+
+    /**
      * Get the formatted total attribute.
      */
     public function getFormattedTotalAttribute()
