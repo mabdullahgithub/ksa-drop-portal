@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback } from 'react'
-import { Search as SearchIcon, Download, Upload, CheckCircle2, AlertCircle, FileSpreadsheet, X, Package, DollarSign, Clock, TruckIcon, Copy, XCircle, ShoppingBag } from 'lucide-react'
+import { Search as SearchIcon, Download, Upload, CheckCircle2, AlertCircle, FileSpreadsheet, X, Package, DollarSign, Clock, TruckIcon, Copy, XCircle, ShoppingBag, PlusCircle, MessageSquare } from 'lucide-react'
 import {
   flexRender,
   getCoreRowModel,
@@ -9,6 +9,8 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
+import { Label } from '@/components/ui/label'
 import { Progress } from '@/components/ui/progress'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import {
@@ -255,6 +257,7 @@ function PortalOrdersImportDialog({
   const [progress, setProgress] = useState(0)
   const [isDragging, setIsDragging] = useState(false)
   const [result, setResult] = useState<ImportResult | null>(null)
+  const [importNote, setImportNote] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
   const dragCounter = useRef(0)
 
@@ -320,7 +323,7 @@ function PortalOrdersImportDialog({
     )
 
     try {
-      const data = await importOrders(file)
+      const data = await importOrders(file, importNote)
       clearInterval(interval)
       setProgress(100)
 
@@ -354,6 +357,7 @@ function PortalOrdersImportDialog({
     setResult(null)
     setProgress(0)
     setIsDragging(false)
+    setImportNote('')
     dragCounter.current = 0
   }
 
@@ -400,6 +404,30 @@ function PortalOrdersImportDialog({
                 <Download className='mr-2 h-4 w-4' />
                 Template
               </Button>
+            </div>
+          )}
+
+          {/* Import Note */}
+          {!result && (
+            <div className='space-y-1.5'>
+              <Label htmlFor='import-note' className='text-sm font-medium flex items-center gap-1.5'>
+                <MessageSquare className='h-3.5 w-3.5 text-muted-foreground' />
+                Import Note
+                <span className='text-xs text-muted-foreground font-normal'>(optional)</span>
+              </Label>
+              <Textarea
+                id='import-note'
+                placeholder='Add a note that will be saved to all imported orders, e.g. "Batch from June campaign"'
+                value={importNote}
+                onChange={(e) => setImportNote(e.target.value)}
+                rows={2}
+                maxLength={2000}
+                className='resize-none text-sm'
+                disabled={uploading}
+              />
+              {importNote.length > 0 && (
+                <p className='text-xs text-muted-foreground text-right'>{importNote.length}/2000</p>
+              )}
             </div>
           )}
 
@@ -659,12 +687,280 @@ function OrderStatCards({ stats, loading }: { stats: any; loading: boolean }) {
   )
 }
 
+// ─── create order dialog ─────────────────────────────────────────────────────
+
+function CreateOrderDialog({
+  open,
+  onOpenChange,
+  onSuccess,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  onSuccess?: () => void
+}) {
+  const { createOrder } = usePortalOrderMutations()
+  const [saving, setSaving] = useState(false)
+  const [errors, setErrors] = useState<Record<string, string>>({})
+
+  const [form, setForm] = useState({
+    customer_name: '',
+    customer_phone: '',
+    customer_email: '',
+    notes: '',
+    shipping_address1: '',
+    shipping_city: '',
+    shipping_country: 'SA',
+    total: '',
+    payment_method: '',
+    lineitem_name: '',
+    lineitem_quantity: '1',
+    lineitem_price: '',
+    lineitem_sku: '',
+  })
+
+  const set = (field: string, value: string) => {
+    setForm((prev) => ({ ...prev, [field]: value }))
+    setErrors((prev) => { const e = { ...prev }; delete e[field]; return e })
+  }
+
+  const handleClose = () => {
+    if (saving) return
+    setForm({
+      customer_name: '',
+      customer_phone: '',
+      customer_email: '',
+      notes: '',
+      shipping_address1: '',
+      shipping_city: '',
+      shipping_country: 'SA',
+      total: '',
+      payment_method: '',
+      lineitem_name: '',
+      lineitem_quantity: '1',
+      lineitem_price: '',
+      lineitem_sku: '',
+    })
+    setErrors({})
+    onOpenChange(false)
+  }
+
+  const handleSubmit = async () => {
+    const errs: Record<string, string> = {}
+    if (!form.customer_name.trim()) errs.customer_name = 'Customer name is required.'
+    if (!form.customer_phone.trim()) errs.customer_phone = 'Phone number is required.'
+    if (Object.keys(errs).length) { setErrors(errs); return }
+
+    setSaving(true)
+    try {
+      const payload: Record<string, unknown> = {
+        customer_name: form.customer_name.trim(),
+        customer_phone: form.customer_phone.trim(),
+        customer_email: form.customer_email.trim() || undefined,
+        notes: form.notes.trim() || undefined,
+        shipping_address1: form.shipping_address1.trim() || undefined,
+        shipping_city: form.shipping_city.trim() || undefined,
+        shipping_country: form.shipping_country.trim() || undefined,
+        total: form.total ? parseFloat(form.total) : undefined,
+        payment_method: form.payment_method.trim() || undefined,
+        lineitem_name: form.lineitem_name.trim() || undefined,
+        lineitem_quantity: form.lineitem_name.trim() ? parseInt(form.lineitem_quantity || '1') : undefined,
+        lineitem_price: form.lineitem_price ? parseFloat(form.lineitem_price) : undefined,
+        lineitem_sku: form.lineitem_sku.trim() || undefined,
+      }
+      const result = await createOrder(payload)
+      if (result?.success) {
+        onSuccess?.()
+        handleClose()
+      } else if (result?.errors) {
+        // Map laravel validation errors
+        const mapped: Record<string, string> = {}
+        Object.entries(result.errors as Record<string, string[]>).forEach(([k, v]) => { mapped[k] = v[0] })
+        setErrors(mapped)
+      } else {
+        setErrors({ _global: result?.message || 'Failed to create order. Please try again.' })
+      }
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const field = (label: string, id: string, props: React.InputHTMLAttributes<HTMLInputElement> & { error?: string }) => {
+    const { error, ...inputProps } = props
+    return (
+      <div className='space-y-1'>
+        <Label htmlFor={id} className='text-xs font-medium'>{label}</Label>
+        <Input id={id} className='h-8 text-sm' {...inputProps} />
+        {error && <p className='text-xs text-destructive'>{error}</p>}
+      </div>
+    )
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={handleClose}>
+      <DialogContent className='sm:max-w-[560px] max-h-[90vh] overflow-y-auto'>
+        <DialogHeader>
+          <DialogTitle className='flex items-center gap-2'>
+            <PlusCircle className='h-5 w-5 text-primary' />
+            Create Order
+          </DialogTitle>
+          <DialogDescription>
+            Enter the order details below. Customer name and phone are required; all other fields are optional.
+          </DialogDescription>
+        </DialogHeader>
+
+        {errors._global && (
+          <Alert variant='destructive'>
+            <AlertCircle className='h-4 w-4' />
+            <AlertDescription>{errors._global}</AlertDescription>
+          </Alert>
+        )}
+
+        <div className='space-y-4'>
+          {/* Customer */}
+          <div>
+            <p className='text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2'>Customer</p>
+            <div className='grid grid-cols-2 gap-3'>
+              {field('Name *', 'co-name', {
+                placeholder: 'Full name',
+                value: form.customer_name,
+                onChange: (e) => set('customer_name', e.target.value),
+                error: errors.customer_name,
+              })}
+              {field('Phone *', 'co-phone', {
+                placeholder: '+966 5XX XXX XXXX',
+                value: form.customer_phone,
+                onChange: (e) => set('customer_phone', e.target.value),
+                error: errors.customer_phone,
+              })}
+            </div>
+            <div className='mt-3'>
+              {field('Email', 'co-email', {
+                type: 'email',
+                placeholder: 'customer@example.com',
+                value: form.customer_email,
+                onChange: (e) => set('customer_email', e.target.value),
+                error: errors.customer_email,
+              })}
+            </div>
+          </div>
+
+          {/* Description / Note */}
+          <div className='space-y-1'>
+            <Label htmlFor='co-notes' className='text-xs font-medium flex items-center gap-1.5'>
+              <MessageSquare className='h-3.5 w-3.5 text-muted-foreground' />
+              Description / Note
+            </Label>
+            <Textarea
+              id='co-notes'
+              placeholder='Any relevant notes, special instructions, or a description for this order…'
+              value={form.notes}
+              onChange={(e) => set('notes', e.target.value)}
+              rows={3}
+              maxLength={5000}
+              className='resize-none text-sm'
+            />
+            {form.notes.length > 0 && (
+              <p className='text-xs text-muted-foreground text-right'>{form.notes.length}/5000</p>
+            )}
+          </div>
+
+          {/* Shipping */}
+          <div>
+            <p className='text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2'>Shipping Address</p>
+            <div className='space-y-3'>
+              {field('Address', 'co-addr', {
+                placeholder: 'Street address',
+                value: form.shipping_address1,
+                onChange: (e) => set('shipping_address1', e.target.value),
+              })}
+              <div className='grid grid-cols-2 gap-3'>
+                {field('City', 'co-city', {
+                  placeholder: 'City',
+                  value: form.shipping_city,
+                  onChange: (e) => set('shipping_city', e.target.value),
+                })}
+                {field('Country', 'co-country', {
+                  placeholder: 'SA',
+                  maxLength: 2,
+                  value: form.shipping_country,
+                  onChange: (e) => set('shipping_country', e.target.value.toUpperCase()),
+                })}
+              </div>
+            </div>
+          </div>
+
+          {/* Order value */}
+          <div>
+            <p className='text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2'>Order Value</p>
+            <div className='grid grid-cols-2 gap-3'>
+              {field('Total (SAR)', 'co-total', {
+                type: 'number',
+                min: '0',
+                step: '0.01',
+                placeholder: '0.00',
+                value: form.total,
+                onChange: (e) => set('total', e.target.value),
+              })}
+              {field('Payment Method', 'co-payment', {
+                placeholder: 'Cash on Delivery',
+                value: form.payment_method,
+                onChange: (e) => set('payment_method', e.target.value),
+              })}
+            </div>
+          </div>
+
+          {/* Line item */}
+          <div>
+            <p className='text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2'>Product / Line Item <span className='normal-case font-normal'>(optional)</span></p>
+            <div className='space-y-3'>
+              {field('Product Name', 'co-item-name', {
+                placeholder: 'e.g. T-Shirt – Blue / L',
+                value: form.lineitem_name,
+                onChange: (e) => set('lineitem_name', e.target.value),
+              })}
+              <div className='grid grid-cols-3 gap-3'>
+                {field('Qty', 'co-item-qty', {
+                  type: 'number',
+                  min: '1',
+                  value: form.lineitem_quantity,
+                  onChange: (e) => set('lineitem_quantity', e.target.value),
+                })}
+                {field('Price (SAR)', 'co-item-price', {
+                  type: 'number',
+                  min: '0',
+                  step: '0.01',
+                  placeholder: '0.00',
+                  value: form.lineitem_price,
+                  onChange: (e) => set('lineitem_price', e.target.value),
+                })}
+                {field('SKU', 'co-item-sku', {
+                  placeholder: 'SKU-001',
+                  value: form.lineitem_sku,
+                  onChange: (e) => set('lineitem_sku', e.target.value),
+                })}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className='flex justify-end gap-2 pt-2'>
+          <Button variant='outline' onClick={handleClose} disabled={saving}>Cancel</Button>
+          <Button onClick={handleSubmit} disabled={saving}>
+            {saving ? 'Creating…' : 'Create Order'}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 // ─── main component ───────────────────────────────────────────────────────────
 
 export function PortalOrders() {
   const [activeTab, setActiveTab] = useState<'all' | 'confirmed'>('all')
   const [search, setSearch] = useState('')
   const [importDialogOpen, setImportDialogOpen] = useState(false)
+  const [createDialogOpen, setCreateDialogOpen] = useState(false)
 
   const { orders, meta, loading, filters, updateFilters, resetFilters, refresh } = usePortalOrders()
   const { exportOrders } = usePortalOrderMutations()
@@ -713,6 +1009,13 @@ export function PortalOrders() {
             <p className='text-muted-foreground'>Track and manage all your orders</p>
           </div>
           <div className='flex items-center gap-2'>
+            <Button
+              size='sm'
+              onClick={() => setCreateDialogOpen(true)}
+            >
+              <PlusCircle className='mr-2 h-4 w-4' />
+              Create Order
+            </Button>
             <Button
               variant='outline'
               size='sm'
@@ -839,6 +1142,11 @@ export function PortalOrders() {
       <PortalOrdersImportDialog
         open={importDialogOpen}
         onOpenChange={setImportDialogOpen}
+        onSuccess={refresh}
+      />
+      <CreateOrderDialog
+        open={createDialogOpen}
+        onOpenChange={setCreateDialogOpen}
         onSuccess={refresh}
       />
     </>

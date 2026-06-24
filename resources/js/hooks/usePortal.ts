@@ -125,9 +125,12 @@ export function usePortalOrderMutations() {
   const getCsrfToken = () =>
     document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
 
-  const importOrders = async (file: File): Promise<any> => {
+  const importOrders = async (file: File, importNote?: string): Promise<any> => {
     const formData = new FormData()
     formData.append('file', file)
+    if (importNote && importNote.trim()) {
+      formData.append('import_note', importNote.trim())
+    }
 
     const response = await fetch('/portal/api/orders/import', {
       method: 'POST',
@@ -157,7 +160,25 @@ export function usePortalOrderMutations() {
     window.location.href = '/portal/api/orders/import-template'
   }
 
-  return { importOrders, exportOrders, downloadOrdersTemplate }
+  const createOrder = async (payload: Record<string, unknown>): Promise<any> => {
+    const response = await fetch('/portal/api/orders', {
+      method: 'POST',
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+        'X-CSRF-TOKEN': getCsrfToken(),
+      },
+      body: JSON.stringify(payload),
+    })
+    const text = await response.text()
+    try {
+      return JSON.parse(text)
+    } catch {
+      return { success: false, message: `Server error (${response.status})` }
+    }
+  }
+
+  return { importOrders, exportOrders, downloadOrdersTemplate, createOrder }
 }
 
 export function usePortalOrders(initialFilters: Record<string, any> = {}) {

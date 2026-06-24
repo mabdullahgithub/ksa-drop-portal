@@ -107,8 +107,11 @@ class PortalController extends Controller
         }
 
         $request->validate([
-            'file' => 'required|file|mimes:csv,txt|max:51200',
+            'file'        => 'required|file|mimes:csv,txt|max:51200',
+            'import_note' => 'nullable|string|max:2000',
         ]);
+
+        $importNote = trim($request->input('import_note', ''));
 
         $file = $request->file('file');
         $path = $file->getRealPath();
@@ -252,7 +255,9 @@ class PortalController extends Controller
                         'shipping_province' => $data['Shipping Province'] ?? null,
                         'shipping_country' => $data['Shipping Country'] ?? null,
                         'shipping_phone' => $data['Shipping Phone'] ?? null,
-                        'notes' => $data['Notes'] ?? null,
+                        'notes' => $importNote !== ''
+                            ? ($importNote . (($data['Notes'] ?? '') !== '' ? "\n" . $data['Notes'] : ''))
+                            : ($data['Notes'] ?? null),
                         'note_attributes' => $data['Note Attributes'] ?? null,
                         'payment_method' => $data['Payment Method'] ?? null,
                         'payment_reference' => $data['Payment Reference'] ?? null,
@@ -317,6 +322,81 @@ class PortalController extends Controller
             DB::rollBack();
             return response()->json(['success' => false, 'message' => 'Import failed: ' . $e->getMessage(), 'errors' => $errors], 422);
         }
+    }
+
+    public function storeOrder(Request $request)
+    {
+        $client = $this->resolveClient();
+
+        if (!$client || !in_array('orders', $client->portal_features ?? [])) {
+            abort(403);
+        }
+
+        $validated = $request->validate([
+            'customer_name'      => 'required|string|max:255',
+            'customer_phone'     => 'required|string|max:50',
+            'customer_email'     => 'nullable|email|max:255',
+            'notes'              => 'nullable|string|max:5000',
+            'shipping_name'      => 'nullable|string|max:255',
+            'shipping_address1'  => 'nullable|string|max:500',
+            'shipping_city'      => 'nullable|string|max:255',
+            'shipping_country'   => 'nullable|string|max:2',
+            'shipping_phone'     => 'nullable|string|max:50',
+            'total'              => 'nullable|numeric|min:0',
+            'currency'           => 'nullable|string|max:3',
+            'payment_method'     => 'nullable|string|max:255',
+            'lineitem_name'      => 'nullable|string|max:500',
+            'lineitem_quantity'  => 'nullable|integer|min:1',
+            'lineitem_price'     => 'nullable|numeric|min:0',
+            'lineitem_sku'       => 'nullable|string|max:255',
+        ]);
+
+        $prefix    = $client->short_id ?: 'CL' . $client->id;
+        $orderNumber = $prefix . date('YmdHis') . rand(10, 99);
+
+        // Ensure uniqueness in the unlikely case of a collision
+        while (\App\Models\Order::where('order_number', $orderNumber)->exists()) {
+            $orderNumber = $prefix . date('YmdHis') . rand(10, 99);
+        }
+
+        $order = \App\Models\Order::create([
+            'client_id'       => $client->id,
+            'order_number'    => $orderNumber,
+            'customer_name'   => $validated['customer_name'],
+            'customer_phone'  => $validated['customer_phone'],
+            'customer_email'  => $validated['customer_email'] ?? null,
+            'notes'           => $validated['notes'] ?? null,
+            'shipping_name'   => $validated['shipping_name'] ?? $validated['customer_name'],
+            'shipping_address1' => $validated['shipping_address1'] ?? null,
+            'shipping_city'   => $validated['shipping_city'] ?? null,
+            'shipping_country'=> $validated['shipping_country'] ?? null,
+            'shipping_phone'  => $validated['shipping_phone'] ?? $validated['customer_phone'],
+            'total'           => $validated['total'] ?? 0,
+            'subtotal'        => $validated['total'] ?? 0,
+            'currency'        => $validated['currency'] ?? 'SAR',
+            'payment_method'  => $validated['payment_method'] ?? null,
+            'financial_status'   => 'pending',
+            'fulfillment_status' => 'unfulfilled',
+            'tags'            => [],
+        ]);
+
+        if (!empty($validated['lineitem_name'])) {
+            $order->items()->create([
+                'lineitem_name'               => $validated['lineitem_name'],
+                'lineitem_quantity'           => $validated['lineitem_quantity'] ?? 1,
+                'lineitem_price'              => $validated['lineitem_price'] ?? 0,
+                'lineitem_sku'                => $validated['lineitem_sku'] ?? null,
+                'lineitem_requires_shipping'  => true,
+                'lineitem_taxable'            => false,
+                'lineitem_fulfillment_status' => 'unfulfilled',
+            ]);
+        }
+
+        return response()->json([
+            'success'      => true,
+            'message'      => 'Order created successfully.',
+            'order_number' => $orderNumber,
+        ]);
     }
 
     public function ordersImportTemplate(Request $request)
