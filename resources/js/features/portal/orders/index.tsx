@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback } from 'react'
-import { Search as SearchIcon, Download, Upload, CheckCircle2, AlertCircle, FileSpreadsheet, X, Package, DollarSign, Clock, TruckIcon, Copy } from 'lucide-react'
+import { Search as SearchIcon, Download, Upload, CheckCircle2, AlertCircle, FileSpreadsheet, X, Package, DollarSign, Clock, TruckIcon, Copy, XCircle, ShoppingBag } from 'lucide-react'
 import {
   flexRender,
   getCoreRowModel,
@@ -19,6 +19,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Header } from '@/components/layout/header'
 import { NotificationsDropdown } from '@/components/layout/notifications-dropdown'
 import { Main } from '@/components/layout/main'
@@ -28,6 +29,7 @@ import { ThemeSwitch } from '@/components/theme-switch'
 import { usePortalOrders, usePortalOrderMutations, usePortalDashboard } from '@/hooks/usePortal'
 import { OrdersPagination } from '@/features/orders/components/orders-pagination'
 import { Card, CardContent } from '@/components/ui/card'
+import { Skeleton } from '@/components/ui/skeleton'
 
 const MAX_FILE_SIZE_MB = 10
 const ALLOWED_MIME = ['text/csv', 'application/vnd.ms-excel', 'application/csv']
@@ -42,6 +44,65 @@ type ImportResult = {
   has_errors?: boolean
   errors?: Array<{ row: number; order_number?: string; reason: string; details: string }>
 }
+
+// ─── stat card config ─────────────────────────────────────────────────────────
+
+interface StatCard {
+  label: string
+  key: string
+  icon: React.ElementType
+  iconClass: string
+  bgClass: string
+  format?: 'number' | 'currency'
+}
+
+const STAT_CARDS: StatCard[] = [
+  {
+    label: 'Total Orders',
+    key: 'total_orders',
+    icon: ShoppingBag,
+    iconClass: 'text-blue-600 dark:text-blue-400',
+    bgClass: 'bg-blue-100 dark:bg-blue-900/30',
+  },
+  {
+    label: 'Confirmed',
+    key: 'confirmed_orders',
+    icon: CheckCircle2,
+    iconClass: 'text-green-600 dark:text-green-400',
+    bgClass: 'bg-green-100 dark:bg-green-900/30',
+  },
+  {
+    label: 'Fulfilled',
+    key: 'fulfilled_orders',
+    icon: TruckIcon,
+    iconClass: 'text-purple-600 dark:text-purple-400',
+    bgClass: 'bg-purple-100 dark:bg-purple-900/30',
+  },
+  {
+    label: 'Pending',
+    key: 'pending_orders',
+    icon: Clock,
+    iconClass: 'text-yellow-600 dark:text-yellow-400',
+    bgClass: 'bg-yellow-100 dark:bg-yellow-900/30',
+  },
+  {
+    label: 'Cancelled',
+    key: 'cancelled_orders',
+    icon: XCircle,
+    iconClass: 'text-red-600 dark:text-red-400',
+    bgClass: 'bg-red-100 dark:bg-red-900/30',
+  },
+  {
+    label: 'Total Revenue',
+    key: 'total_revenue',
+    icon: DollarSign,
+    iconClass: 'text-emerald-600 dark:text-emerald-400',
+    bgClass: 'bg-emerald-100 dark:bg-emerald-900/30',
+    format: 'currency',
+  },
+]
+
+// ─── columns ─────────────────────────────────────────────────────────────────
 
 const columns: ColumnDef<any>[] = [
   {
@@ -545,12 +606,69 @@ function PortalOrdersImportDialog({
   )
 }
 
+// ─── stat mini cards ──────────────────────────────────────────────────────────
+
+function OrderStatCards({ stats, loading }: { stats: any; loading: boolean }) {
+  if (loading) {
+    return (
+      <div className='grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-6'>
+        {Array.from({ length: 6 }).map((_, i) => (
+          <Card key={i} className='border-muted/50'>
+            <CardContent className='p-4 space-y-2'>
+              <div className='flex items-center justify-between'>
+                <Skeleton className='h-3 w-16' />
+                <Skeleton className='h-8 w-8 rounded-lg' />
+              </div>
+              <Skeleton className='h-6 w-14' />
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    )
+  }
+
+  if (!stats) return null
+
+  return (
+    <div className='grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-6'>
+      {STAT_CARDS.map((card) => {
+        const Icon = card.icon
+        const raw = stats[card.key] ?? 0
+        const display =
+          card.format === 'currency'
+            ? `SAR ${Number(raw).toLocaleString(undefined, { maximumFractionDigits: 0 })}`
+            : Number(raw).toLocaleString()
+
+        return (
+          <Card key={card.key} className='border-muted/50 transition-shadow hover:shadow-sm'>
+            <CardContent className='p-4'>
+              <div className='flex items-start justify-between gap-2 mb-2'>
+                <p className='text-xs font-medium text-muted-foreground leading-tight'>
+                  {card.label}
+                </p>
+                <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${card.bgClass}`}>
+                  <Icon className={`h-4 w-4 ${card.iconClass}`} />
+                </div>
+              </div>
+              <p className='text-lg font-bold tabular-nums leading-none'>{display}</p>
+            </CardContent>
+          </Card>
+        )
+      })}
+    </div>
+  )
+}
+
+// ─── main component ───────────────────────────────────────────────────────────
+
 export function PortalOrders() {
-  const { orders, meta, loading, filters, updateFilters, refresh } = usePortalOrders()
-  const { exportOrders } = usePortalOrderMutations()
-  const { data: dashboardData } = usePortalDashboard()
+  const [activeTab, setActiveTab] = useState<'all' | 'confirmed'>('all')
   const [search, setSearch] = useState('')
   const [importDialogOpen, setImportDialogOpen] = useState(false)
+
+  const { orders, meta, loading, filters, updateFilters, resetFilters, refresh } = usePortalOrders()
+  const { exportOrders } = usePortalOrderMutations()
+  const { data: dashboardData, loading: statsLoading } = usePortalDashboard()
 
   const table = useReactTable({
     data: orders,
@@ -565,6 +683,19 @@ export function PortalOrders() {
     updateFilters({ search: value, page: 1 })
   }
 
+  const handleTabChange = (tab: string) => {
+    const newTab = tab as 'all' | 'confirmed'
+    setActiveTab(newTab)
+    setSearch('')
+    // Use resetFilters so no stale values from the previous tab carry over
+    // "Confirmed" = orders that have the 'confirmed' tag assigned
+    if (newTab === 'confirmed') {
+      resetFilters({ tag: 'confirmed', page: 1 })
+    } else {
+      resetFilters({ page: 1 })
+    }
+  }
+
   return (
     <>
       <Header>
@@ -574,7 +705,8 @@ export function PortalOrders() {
         <ProfileDropdown />
       </Header>
 
-      <Main fixed>
+      <Main>
+        {/* Page header */}
         <div className='mb-4 flex items-center justify-between gap-4 flex-wrap'>
           <div>
             <h1 className='text-2xl font-bold tracking-tight'>My Orders</h1>
@@ -600,64 +732,44 @@ export function PortalOrders() {
           </div>
         </div>
 
-        {dashboardData?.stats && (
-          <div className='mb-4 grid gap-4 grid-cols-2 lg:grid-cols-4'>
-            <Card>
-              <CardContent className='flex items-center gap-3 p-4'>
-                <div className='flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-100 dark:bg-blue-900/30'>
-                  <Package className='h-5 w-5 text-blue-600 dark:text-blue-400' />
-                </div>
-                <div>
-                  <p className='text-sm text-muted-foreground'>Total Orders</p>
-                  <p className='text-xl font-bold'>{dashboardData.stats.total_orders}</p>
-                </div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className='flex items-center gap-3 p-4'>
-                <div className='flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-green-100 dark:bg-green-900/30'>
-                  <DollarSign className='h-5 w-5 text-green-600 dark:text-green-400' />
-                </div>
-                <div>
-                  <p className='text-sm text-muted-foreground'>Total Revenue</p>
-                  <p className='text-xl font-bold'>SAR {dashboardData.stats.total_revenue?.toLocaleString()}</p>
-                </div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className='flex items-center gap-3 p-4'>
-                <div className='flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-yellow-100 dark:bg-yellow-900/30'>
-                  <Clock className='h-5 w-5 text-yellow-600 dark:text-yellow-400' />
-                </div>
-                <div>
-                  <p className='text-sm text-muted-foreground'>Pending</p>
-                  <p className='text-xl font-bold'>{dashboardData.stats.pending_orders}</p>
-                </div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className='flex items-center gap-3 p-4'>
-                <div className='flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-purple-100 dark:bg-purple-900/30'>
-                  <TruckIcon className='h-5 w-5 text-purple-600 dark:text-purple-400' />
-                </div>
-                <div>
-                  <p className='text-sm text-muted-foreground'>Fulfilled</p>
-                  <p className='text-xl font-bold'>{(dashboardData.stats.total_orders ?? 0) - (dashboardData.stats.pending_orders ?? 0)}</p>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        )}
+        {/* Stat mini cards */}
+        <div className='mb-4'>
+          <OrderStatCards stats={dashboardData?.stats} loading={statsLoading} />
+        </div>
 
-        <div className='space-y-4'>
-          <div className='relative max-w-sm'>
-            <SearchIcon className='absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground' />
-            <Input
-              placeholder='Search orders…'
-              value={search}
-              onChange={(e) => handleSearch(e.target.value)}
-              className='pl-8'
-            />
+        {/* Tabs + search */}
+        <div className='space-y-3'>
+          <div className='flex flex-wrap items-center gap-3'>
+            <Tabs value={activeTab} onValueChange={handleTabChange} className='shrink-0'>
+              <TabsList className='h-9'>
+                <TabsTrigger value='all' className='text-xs px-3'>
+                  All Orders
+                  {dashboardData?.stats?.total_orders != null && (
+                    <span className='ml-1.5 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium tabular-nums'>
+                      {dashboardData.stats.total_orders}
+                    </span>
+                  )}
+                </TabsTrigger>
+                <TabsTrigger value='confirmed' className='text-xs px-3'>
+                  Confirmed
+                  {dashboardData?.stats?.confirmed_orders != null && (
+                    <span className='ml-1.5 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium tabular-nums'>
+                      {dashboardData.stats.confirmed_orders}
+                    </span>
+                  )}
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
+
+            <div className='relative flex-1 min-w-[200px] max-w-sm'>
+              <SearchIcon className='absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground' />
+              <Input
+                placeholder='Search orders…'
+                value={search}
+                onChange={(e) => handleSearch(e.target.value)}
+                className='pl-8 h-9'
+              />
+            </div>
           </div>
 
           <div className='overflow-hidden rounded-md border'>
@@ -698,8 +810,15 @@ export function PortalOrders() {
                   ))
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={columns.length} className='h-24 text-center'>
-                      No orders found.
+                    <TableCell colSpan={columns.length} className='h-32 text-center'>
+                      <div className='flex flex-col items-center gap-2 text-muted-foreground'>
+                        <Package className='h-8 w-8 text-muted-foreground/30' />
+                        <p className='text-sm'>
+                          {activeTab === 'confirmed'
+                            ? 'No orders with the "confirmed" tag found.'
+                            : 'No orders found.'}
+                        </p>
+                      </div>
                     </TableCell>
                   </TableRow>
                 )}

@@ -99,7 +99,7 @@ export function PortalDashboard() {
         <ProfileDropdown />
       </Header>
 
-      <Main fixed>
+      <Main>
         <div className='mb-4'>
           <h1 className='text-2xl font-bold tracking-tight'>
             Welcome{data?.client?.company_name ? `, ${data.client.company_name}` : ''}

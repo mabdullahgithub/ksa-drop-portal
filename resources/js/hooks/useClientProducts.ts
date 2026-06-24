@@ -108,6 +108,7 @@ export function useClientProductMutations() {
     setLoading(true)
     try {
       const body = new FormData()
+      body.append('_method', 'PATCH')
       body.append('action', action)
       if (rejectionReason) body.append('rejection_reason', rejectionReason)
       body.append('is_out_of_stock', isOutOfStock ? '1' : '0')
@@ -116,7 +117,7 @@ export function useClientProductMutations() {
       }
 
       const response = await fetch(`/api/clients/${clientId}/products/${productId}/review`, {
-        method: 'PATCH',
+        method: 'POST',
         headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': getCsrfToken() },
         body,
       })

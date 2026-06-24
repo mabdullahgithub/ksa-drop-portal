@@ -624,11 +624,43 @@ export function PortalProducts() {
   const [dialogOpen, setDialogOpen] = useState(false)
   const { auth } = usePage().props as any
   const charges = auth?.client?.charges ?? null
-  const { products, meta, loading, filters, updateFilters } = usePortalProducts()
+  const { products, meta, loading, error, filters, updateFilters } = usePortalProducts()
 
   const handleView = (p: Product) => {
     setSelectedProduct(p)
     setDialogOpen(true)
+  }
+
+  // ── Forbidden / error state ────────────────────────────────────────────────
+  if (!loading && error) {
+    return (
+      <>
+        <Header fixed>
+          <SearchBar className='me-auto' />
+          <ThemeSwitch />
+          <NotificationsDropdown />
+          <ProfileDropdown />
+        </Header>
+
+        <Main className='flex flex-1 flex-col items-center justify-center'>
+          <div className='flex max-w-sm flex-col items-center gap-4 text-center'>
+            <div className='flex h-16 w-16 items-center justify-center rounded-full bg-muted/50'>
+              <Package className='h-8 w-8 text-muted-foreground/40' />
+            </div>
+            <div>
+              <h2 className='text-xl font-semibold tracking-tight'>
+                {error.forbidden ? 'Products Not Available' : 'Something Went Wrong'}
+              </h2>
+              <p className='mt-1.5 text-sm text-muted-foreground'>
+                {error.forbidden
+                  ? 'The Products feature is not enabled for your account. Please contact your account manager to get access.'
+                  : (error.message ?? 'An unexpected error occurred. Please try refreshing the page.')}
+              </p>
+            </div>
+          </div>
+        </Main>
+      </>
+    )
   }
 
   return (
@@ -694,3 +726,4 @@ export function PortalProducts() {
     </>
   )
 }
+

@@ -30,6 +30,8 @@ export function useNavGroups(): NavGroupType[] {
         if (!('url' in item) || !item.url) return true
         // Hide "My Inventory" from dropshippers — that tab is for fulfilment clients only
         if (item.url === '/portal/inventory' && isDropshipper) return false
+        // Always show Products for dropshippers — backend guards by is_dropshipper
+        if (item.url === '/portal/products' && isDropshipper) return true
         const featureKey = Object.entries(portalFeatureUrlMap).find(
           ([, url]) => url === item.url
         )?.[0]

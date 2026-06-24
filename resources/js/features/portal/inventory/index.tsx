@@ -135,7 +135,7 @@ export function PortalInventory() {
         <ProfileDropdown />
       </Header>
 
-      <Main fixed>
+      <Main>
         <div className='mb-4 flex items-start justify-between'>
           <div>
             <h1 className='text-2xl font-bold tracking-tight'>My Inventory</h1>

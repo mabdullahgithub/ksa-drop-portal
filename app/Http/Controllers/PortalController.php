@@ -30,13 +30,19 @@ class PortalController extends Controller
             abort(403);
         }
 
+        $ordersBase = $client->orders();
+
         $stats = [
-            'total_orders' => $client->orders()->count(),
-            'total_revenue' => round((float) $client->orders()->where('financial_status', 'paid')->sum('total'), 2),
-            'pending_orders' => $client->orders()->where('fulfillment_status', 'pending')->count(),
-            'total_products' => $client->clientProducts()->count(),
-            'verified_products' => $client->clientProducts()->verified()->count(),
-            'pending_verification' => $client->clientProducts()->pending()->count(),
+            'total_orders'        => $client->orders()->count(),
+            'total_revenue'       => round((float) $client->orders()->where('financial_status', 'paid')->sum('total'), 2),
+            'pending_orders'      => $client->orders()->where('fulfillment_status', 'pending')->count(),
+            'confirmed_orders'    => $client->orders()->whereJsonContains('tags', 'confirmed')->count(),
+            'fulfilled_orders'    => $client->orders()->where('fulfillment_status', 'fulfilled')->count(),
+            'cancelled_orders'    => $client->orders()->where('fulfillment_status', 'cancelled')->count(),
+            'unfulfilled_orders'  => $client->orders()->where('fulfillment_status', 'unfulfilled')->count(),
+            'total_products'      => $client->clientProducts()->count(),
+            'verified_products'   => $client->clientProducts()->verified()->count(),
+            'pending_verification'=> $client->clientProducts()->pending()->count(),
         ];
 
         $recentOrders = $client->orders()
@@ -76,6 +82,11 @@ class PortalController extends Controller
 
         if ($request->has('financial_status') && $request->financial_status !== 'all') {
             $query->where('financial_status', $request->financial_status);
+        }
+
+        // Filter by a single tag (used by the "Confirmed Orders" tab)
+        if ($request->has('tag') && $request->tag) {
+            $query->whereJsonContains('tags', $request->tag);
         }
 
         $sortBy = $request->get('sort_by', 'created_at');
@@ -476,7 +487,7 @@ class PortalController extends Controller
     {
         $client = $this->resolveClient();
 
-        if (!$client || !$client->is_dropshipper || !in_array('products', $client->portal_features ?? [])) {
+        if (!$client || !$client->is_dropshipper) {
             abort(403);
         }
 
@@ -507,7 +518,7 @@ class PortalController extends Controller
     {
         $client = $this->resolveClient();
 
-        if (!$client || !$client->is_dropshipper || !in_array('products', $client->portal_features ?? [])) {
+        if (!$client || !$client->is_dropshipper) {
             abort(403);
         }
 
@@ -524,7 +535,7 @@ class PortalController extends Controller
     {
         $client = $this->resolveClient();
 
-        if (!$client || !$client->is_dropshipper || !in_array('products', $client->portal_features ?? [])) {
+        if (!$client || !$client->is_dropshipper) {
             abort(403);
         }
 

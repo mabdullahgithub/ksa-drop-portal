@@ -195,6 +195,12 @@ export function usePortalOrders(initialFilters: Record<string, any> = {}) {
     fetchOrders(merged)
   }, [filters, fetchOrders])
 
+  // Reset to a completely new filter set (used when switching tabs)
+  const resetFilters = useCallback((newFilters: Record<string, any>) => {
+    setFilters(newFilters)
+    fetchOrders(newFilters)
+  }, [fetchOrders])
+
   return {
     orders: orders?.data || [],
     meta: orders ? {
@@ -208,9 +214,11 @@ export function usePortalOrders(initialFilters: Record<string, any> = {}) {
     loading,
     filters,
     updateFilters,
+    resetFilters,
     refresh: () => fetchOrders(),
   }
 }
+
 
 export function usePortalInventory(initialFilters: Record<string, any> = {}) {
   const [products, setProducts] = useState<any>(null)
@@ -272,9 +280,11 @@ export function usePortalProducts(initialFilters: Record<string, any> = {
   const [products, setProducts] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [filters, setFilters] = useState(initialFilters)
+  const [error, setError] = useState<{ forbidden?: boolean; message?: string } | null>(null)
 
   const fetchProducts = useCallback(async (newFilters?: Record<string, any>) => {
     setLoading(true)
+    setError(null)
     const params = new URLSearchParams()
     const activeFilters = newFilters || filters
 
@@ -286,10 +296,21 @@ export function usePortalProducts(initialFilters: Record<string, any> = {
 
     try {
       const response = await fetch(`/portal/api/products?${params}`)
+      if (response.status === 403) {
+        setError({ forbidden: true })
+        setProducts(null)
+        return
+      }
+      if (!response.ok) {
+        setError({ message: `Request failed (${response.status})` })
+        setProducts(null)
+        return
+      }
       const data = await response.json()
       setProducts(data)
-    } catch (error) {
-      console.error('Error fetching portal products:', error)
+    } catch (err) {
+      console.error('Error fetching portal products:', err)
+      setError({ message: 'Failed to load products.' })
     } finally {
       setLoading(false)
     }
@@ -314,11 +335,13 @@ export function usePortalProducts(initialFilters: Record<string, any> = {
       to: products.to,
     } : null,
     loading,
+    error,
     filters,
     updateFilters,
     refresh: () => fetchProducts(),
   }
 }
+
 
 export function usePortalProduct(productId: number | null) {
   const [product, setProduct] = useState<any>(null)

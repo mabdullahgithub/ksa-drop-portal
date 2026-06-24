@@ -31,7 +31,7 @@ export function PortalSettings({ children }: { children?: React.ReactNode }) {
         <ProfileDropdown />
       </Header>
 
-      <Main fixed>
+      <Main>
         <div className='space-y-0.5 shrink-0'>
           <h1 className='text-2xl font-bold tracking-tight md:text-3xl'>
             Settings
