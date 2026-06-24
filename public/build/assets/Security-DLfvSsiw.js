@@ -1,0 +1,1 @@
+import{n as e,t}from"./app-O_NimyLt.js";import{t as n}from"./AuthenticatedLayout-1B8NTZ8A.js";import{t as r}from"./security-form-Bq-em8yi.js";import{t as i}from"./settings-Rl4uW7BW.js";var a=t();function o(){return(0,a.jsxs)(n,{children:[(0,a.jsx)(e,{title:`Security`}),(0,a.jsx)(i,{children:(0,a.jsx)(r,{})})]})}export{o as default};

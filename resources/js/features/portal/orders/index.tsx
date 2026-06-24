@@ -959,7 +959,7 @@ function CreateOrderDialog({
 // ─── main component ───────────────────────────────────────────────────────────
 
 export function PortalOrders() {
-  const [activeTab, setActiveTab] = useState<'all' | 'confirmed'>('all')
+  const [activeTab, setActiveTab] = useState<'all' | 'assigned'>('all')
   const [search, setSearch] = useState('')
   const [importDialogOpen, setImportDialogOpen] = useState(false)
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
@@ -983,13 +983,13 @@ export function PortalOrders() {
   }
 
   const handleTabChange = (tab: string) => {
-    const newTab = tab as 'all' | 'confirmed'
+    const newTab = tab as 'all' | 'assigned'
     setActiveTab(newTab)
     setSearch('')
     // Use resetFilters so no stale values from the previous tab carry over
-    // "Confirmed" = orders that have the 'confirmed' tag assigned
-    if (newTab === 'confirmed') {
-      resetFilters({ tag: 'confirmed', page: 1 })
+    // "Assigned to Courier" = orders that have shipments assigned (has_shipment: true)
+    if (newTab === 'assigned') {
+      resetFilters({ has_shipment: true, page: 1 })
     } else {
       resetFilters({ page: 1 })
     }
@@ -1039,12 +1039,12 @@ export function PortalOrders() {
         </div>
 
         {/* Stat mini cards */}
-        <div className='mb-4'>
+        <div className='mb-6'>
           <OrderStatCards stats={dashboardData?.stats} loading={statsLoading} />
         </div>
 
         {/* Shipment Status Distribution */}
-        <div>
+        <div className='mb-8'>
           <div className='flex items-center justify-between mb-3'>
             <h3 className='text-sm font-semibold'>Shipment Status Distribution</h3>
             <button
@@ -1071,13 +1071,8 @@ export function PortalOrders() {
                     </span>
                   )}
                 </TabsTrigger>
-                <TabsTrigger value='confirmed' className='text-xs px-3'>
-                  Confirmed
-                  {dashboardData?.stats?.confirmed_orders != null && (
-                    <span className='ml-1.5 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium tabular-nums'>
-                      {dashboardData.stats.confirmed_orders}
-                    </span>
-                  )}
+                <TabsTrigger value='assigned' className='text-xs px-3'>
+                  Assigned to Courier
                 </TabsTrigger>
               </TabsList>
             </Tabs>
@@ -1135,8 +1130,8 @@ export function PortalOrders() {
                       <div className='flex flex-col items-center gap-2 text-muted-foreground'>
                         <Package className='h-8 w-8 text-muted-foreground/30' />
                         <p className='text-sm'>
-                          {activeTab === 'confirmed'
-                            ? 'No orders with the "confirmed" tag found.'
+                          {activeTab === 'assigned'
+                            ? 'No orders assigned to courier found.'
                             : 'No orders found.'}
                         </p>
                       </div>
