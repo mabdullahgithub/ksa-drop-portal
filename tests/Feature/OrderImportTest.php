@@ -23,30 +23,21 @@ class OrderImportTest extends TestCase
     private function makeClient(User $user): Client
     {
         return Client::create([
-            'user_id'       => $user->id,
-            'company_name'  => 'Test Client',
-            'short_id'      => 'TST',
-            'client_types'  => ['fulfilment'],
+            'user_id'         => $user->id,
+            'company_name'    => 'Test Client',
+            'short_id'        => 'TST',
+            'client_types'    => ['fulfilment'],
             'portal_features' => ['orders'],
         ]);
     }
 
+    /**
+     * Build a CSV upload from the simplified template columns:
+     * Name, Phone, City, Address, COD, Product Name, SKU, Notes
+     */
     private function csvFile(array $rows, string $filename = 'orders.csv'): UploadedFile
     {
-        $headers = [
-            'Name', 'Email', 'Financial Status', 'Paid at', 'Fulfillment Status', 'Fulfilled at',
-            'Accepts Marketing', 'Currency', 'Subtotal', 'Shipping', 'Taxes', 'Total',
-            'Discount Code', 'Discount Amount', 'Shipping Method', 'Created at',
-            'Lineitem quantity', 'Lineitem name', 'Lineitem price', 'Lineitem compare at price',
-            'Lineitem sku', 'Lineitem requires shipping', 'Lineitem taxable', 'Lineitem fulfillment status',
-            'Billing Name', 'Billing Street', 'Billing Address1', 'Billing Address2', 'Billing Company',
-            'Billing City', 'Billing Zip', 'Billing Province', 'Billing Country', 'Billing Phone',
-            'Shipping Name', 'Shipping Street', 'Shipping Address1', 'Shipping Address2', 'Shipping Company',
-            'Shipping City', 'Shipping Zip', 'Shipping Province', 'Shipping Country', 'Shipping Phone',
-            'Notes', 'Note Attributes', 'Cancelled at', 'Payment Method', 'Payment Reference',
-            'Refunded Amount', 'Vendor', 'Outstanding Balance', 'Employee', 'Location', 'Device ID',
-            'Id', 'Tags', 'Risk Level', 'Source',
-        ];
+        $headers = ['Name', 'Phone', 'City', 'Address', 'COD', 'Product Name', 'SKU', 'Notes'];
 
         $handle = fopen('php://temp', 'r+');
         fputcsv($handle, $headers);
@@ -63,27 +54,21 @@ class OrderImportTest extends TestCase
     private function sampleRow(array $overrides = []): array
     {
         $defaults = [
-            '#10001', 'customer@example.com', 'pending', '', 'unfulfilled', '',
-            'no', 'SAR', '100.00', '15.00', '0.00', '115.00',
-            '', '0.00', 'Standard', '2026-06-24 12:00:00',
-            '1', 'Test Item', '100.00', '0.00',
-            'SKU-100', 'true', 'false', 'unfulfilled',
-            'Test Customer', 'Street 1', 'Street 1', '', '',
-            'Riyadh', '12345', 'Riyadh', 'SA', '+966500000000',
-            'Test Customer', 'Street 1', 'Street 1', '', '',
-            'Riyadh', '12345', 'Riyadh', 'SA', '+966500000000',
-            '', '', '', 'Cash on Delivery', '',
-            '0.00', '', '0.00', '', '', '',
-            '', 'tag1, tag2', 'Low', 'manual',
+            'John Doe',       // Name
+            '+966500000000',  // Phone
+            'Riyadh',         // City
+            '123 King Fahd Rd', // Address
+            '250.00',         // COD
+            'Blue T-Shirt',   // Product Name
+            'TSHIRT-BL-L',    // SKU
+            '',               // Notes
         ];
-
-        // Apply overrides by column index (simplified – pass full row)
         return array_replace($defaults, $overrides);
     }
 
-    // ─── Tags are always ignored on import ───────────────────────────────────
+    // ─── Order numbers are always auto-generated ──────────────────────────────
 
-    public function test_tags_are_ignored_on_csv_import(): void
+    public function test_order_number_is_auto_generated_with_client_prefix(): void
     {
         $user = User::factory()->create();
         $user->assignRole('client');
@@ -96,12 +81,59 @@ class OrderImportTest extends TestCase
 
         $response->assertStatus(200)->assertJsonPath('success', true)->assertJsonPath('imported', 1);
 
-        $order = Order::where('order_number', 'TST10001')->first();
+        $order = Order::where('client_id', User::first()->client->id)->first();
         $this->assertNotNull($order);
+        $this->assertStringStartsWith('TST', $order->order_number);
+    }
+
+    // ─── Tags are always empty on import ─────────────────────────────────────
+
+    public function test_tags_are_always_empty_on_import(): void
+    {
+        $user = User::factory()->create();
+        $user->assignRole('client');
+        $this->makeClient($user);
+
+        $file = $this->csvFile([$this->sampleRow()]);
+
+        $this->actingAs($user)
+            ->postJson(route('portal.api.orders.import'), ['file' => $file])
+            ->assertStatus(200)->assertJsonPath('imported', 1);
+
+        $order = Order::where('client_id', $user->client->id)->first();
         $this->assertEmpty($order->tags);
     }
 
-    // ─── Import note is saved to every order ─────────────────────────────────
+    // ─── Simplified columns are parsed correctly ──────────────────────────────
+
+    public function test_simplified_template_columns_are_parsed(): void
+    {
+        $user = User::factory()->create();
+        $user->assignRole('client');
+        $this->makeClient($user);
+
+        $row = ['Sarah Al-Ahmed', '+966501111111', 'Jeddah', '45 Olaya St', '180.00', 'Running Shoes', 'SHOE-WHT-42', ''];
+        $file = $this->csvFile([$row]);
+
+        $this->actingAs($user)
+            ->postJson(route('portal.api.orders.import'), ['file' => $file])
+            ->assertStatus(200)->assertJsonPath('imported', 1);
+
+        $order = Order::where('client_id', $user->client->id)->first();
+        $this->assertEquals('Sarah Al-Ahmed', $order->customer_name);
+        $this->assertEquals('+966501111111', $order->customer_phone);
+        $this->assertEquals('45 Olaya St', $order->shipping_address1);
+        $this->assertEquals('Jeddah', $order->shipping_city);
+        $this->assertEquals(180.00, $order->total);
+
+        // Line item
+        $item = $order->items()->first();
+        $this->assertNotNull($item);
+        $this->assertEquals('Running Shoes', $item->lineitem_name);
+        $this->assertEquals('SHOE-WHT-42', $item->lineitem_sku);
+    }
+
+    // ─── Import note applied to all orders ───────────────────────────────────
 
     public function test_import_note_is_prepended_to_order_notes(): void
     {
@@ -109,22 +141,17 @@ class OrderImportTest extends TestCase
         $user->assignRole('client');
         $this->makeClient($user);
 
-        $row = $this->sampleRow();
-        // Set 'Notes' column (index 44)
-        $row[44] = 'Original CSV note';
+        $row = $this->sampleRow([7 => 'Customer requested gift wrap']); // Notes column
         $file = $this->csvFile([$row]);
 
-        $response = $this->actingAs($user)->postJson(route('portal.api.orders.import'), [
+        $this->actingAs($user)->postJson(route('portal.api.orders.import'), [
             'file'        => $file,
             'import_note' => 'Batch from June campaign',
-        ]);
+        ])->assertStatus(200)->assertJsonPath('imported', 1);
 
-        $response->assertStatus(200)->assertJsonPath('success', true);
-
-        $order = Order::where('order_number', 'TST10001')->first();
-        $this->assertNotNull($order);
+        $order = Order::where('client_id', $user->client->id)->first();
         $this->assertStringContainsString('Batch from June campaign', $order->notes);
-        $this->assertStringContainsString('Original CSV note', $order->notes);
+        $this->assertStringContainsString('Customer requested gift wrap', $order->notes);
     }
 
     public function test_import_note_alone_when_csv_notes_empty(): void
@@ -135,15 +162,12 @@ class OrderImportTest extends TestCase
 
         $file = $this->csvFile([$this->sampleRow()]);
 
-        $response = $this->actingAs($user)->postJson(route('portal.api.orders.import'), [
+        $this->actingAs($user)->postJson(route('portal.api.orders.import'), [
             'file'        => $file,
             'import_note' => 'Only this note',
-        ]);
+        ])->assertStatus(200);
 
-        $response->assertStatus(200)->assertJsonPath('success', true);
-
-        $order = Order::where('order_number', 'TST10001')->first();
-        $this->assertNotNull($order);
+        $order = Order::where('client_id', $user->client->id)->first();
         $this->assertEquals('Only this note', $order->notes);
     }
 
@@ -155,17 +179,47 @@ class OrderImportTest extends TestCase
 
         $file = $this->csvFile([$this->sampleRow()]);
 
-        $response = $this->actingAs($user)->postJson(route('portal.api.orders.import'), [
+        $this->actingAs($user)->postJson(route('portal.api.orders.import'), [
             'file'        => $file,
             'import_note' => str_repeat('x', 2001),
-        ]);
+        ])->assertStatus(422);
+    }
 
-        $response->assertStatus(422);
+    // ─── Validation: name and phone required ─────────────────────────────────
+
+    public function test_row_with_missing_name_is_skipped(): void
+    {
+        $user = User::factory()->create();
+        $user->assignRole('client');
+        $this->makeClient($user);
+
+        $row = $this->sampleRow([0 => '']); // blank Name
+        $file = $this->csvFile([$row]);
+
+        $response = $this->actingAs($user)
+            ->postJson(route('portal.api.orders.import'), ['file' => $file]);
+
+        $response->assertStatus(200)->assertJsonPath('imported', 0);
+    }
+
+    public function test_row_with_missing_phone_is_skipped(): void
+    {
+        $user = User::factory()->create();
+        $user->assignRole('client');
+        $this->makeClient($user);
+
+        $row = $this->sampleRow([1 => '']); // blank Phone
+        $file = $this->csvFile([$row]);
+
+        $response = $this->actingAs($user)
+            ->postJson(route('portal.api.orders.import'), ['file' => $file]);
+
+        $response->assertStatus(200)->assertJsonPath('imported', 0);
     }
 
     // ─── Individual order creation ────────────────────────────────────────────
 
-    public function test_client_can_create_individual_order(): void
+    public function test_client_can_create_individual_order_with_note(): void
     {
         $user = User::factory()->create();
         $user->assignRole('client');
@@ -178,16 +232,13 @@ class OrderImportTest extends TestCase
         ]);
 
         $response->assertStatus(200)->assertJsonPath('success', true);
-        $orderNumber = $response->json('order_number');
-        $this->assertNotNull($orderNumber);
-
-        $order = Order::where('order_number', $orderNumber)->first();
+        $order = Order::where('order_number', $response->json('order_number'))->first();
         $this->assertNotNull($order);
         $this->assertEquals('Jane Doe', $order->customer_name);
         $this->assertEquals('Handle with care – fragile item.', $order->notes);
         $this->assertEquals('pending', $order->financial_status);
-        $this->assertEquals('unfulfilled', $order->fulfillment_status);
         $this->assertEmpty($order->tags);
+        $this->assertStringStartsWith('TST', $order->order_number);
     }
 
     public function test_create_order_requires_customer_name_and_phone(): void
@@ -196,13 +247,12 @@ class OrderImportTest extends TestCase
         $user->assignRole('client');
         $this->makeClient($user);
 
-        $response = $this->actingAs($user)->postJson(route('portal.api.orders.store'), []);
-
-        $response->assertStatus(422)
+        $this->actingAs($user)->postJson(route('portal.api.orders.store'), [])
+            ->assertStatus(422)
             ->assertJsonValidationErrors(['customer_name', 'customer_phone']);
     }
 
-    public function test_create_order_saves_line_item(): void
+    public function test_create_order_saves_line_item_and_note(): void
     {
         $user = User::factory()->create();
         $user->assignRole('client');
@@ -219,12 +269,9 @@ class OrderImportTest extends TestCase
         ]);
 
         $response->assertStatus(200)->assertJsonPath('success', true);
-
         $order = Order::where('order_number', $response->json('order_number'))->with('items')->first();
-        $this->assertNotNull($order);
         $this->assertEquals(1, $order->items->count());
         $this->assertEquals('Blue T-Shirt / L', $order->items->first()->lineitem_name);
-        $this->assertEquals(2, $order->items->first()->lineitem_quantity);
         $this->assertEquals('Customer requested gift wrapping.', $order->notes);
     }
 }

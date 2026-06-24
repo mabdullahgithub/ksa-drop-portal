@@ -133,11 +133,9 @@ class PortalController extends Controller
         $invalidRows = 0;
         $totalRows = 0;
 
-        // Always prefix imported order numbers with a client identifier so they
-        // stay unique across clients (order_number has a global unique index).
-        // Prefer the human-friendly short_id; fall back to the client id so a
-        // missing short_id can never produce an unprefixed, collision-prone number.
-        // Format: "{prefix}{number}" e.g. "EVENIE31902".
+        // Always auto-generate order numbers prefixed with the client identifier
+        // so they stay unique across clients (order_number has a global unique index).
+        // Format: "{prefix}{YmdHis}{2-digit-rand}" e.g. "EVENIE2026062412345678".
         $prefix = $client->short_id ?: 'CL' . $client->id;
 
         DB::beginTransaction();
@@ -161,46 +159,67 @@ class PortalController extends Controller
                     }
 
                     $data = array_combine($headers, $row);
-                    $rawOrderNumber = $data['Name'] ?? null;
 
-                    if (!$rawOrderNumber) {
-                        $invalidRows++;
-                        $errors[] = ['row' => $totalRows, 'reason' => 'Missing order number', 'details' => 'Order number (Name) field is required'];
-                        continue;
-                    }
+                    // ── Resolve customer name ────────────────────────────────────
+                    // Simplified template uses "Name" for customer name.
+                    // Shopify exports use "Billing Name" / "Shipping Name".
+                    $customerName = trim(
+                        (string) ($data['Name'] ?? $data['Billing Name'] ?? $data['Shipping Name'] ?? '')
+                    );
 
-                    // Customer name and phone are required so every order is deliverable.
-                    // All other fields are optional.
-                    $customerName = trim((string) ($data['Billing Name'] ?? $data['Shipping Name'] ?? ''));
-                    $customerPhone = trim((string) ($data['Phone'] ?? $data['Billing Phone'] ?? $data['Shipping Phone'] ?? ''));
+                    // ── Resolve phone ────────────────────────────────────────────
+                    $customerPhone = trim(
+                        (string) ($data['Phone'] ?? $data['Billing Phone'] ?? $data['Shipping Phone'] ?? '')
+                    );
 
                     if ($customerName === '') {
                         $invalidRows++;
-                        $errors[] = ['row' => $totalRows, 'order_number' => $rawOrderNumber, 'reason' => 'Missing customer name', 'details' => 'Customer name (Billing Name or Shipping Name) is required'];
+                        $errors[] = ['row' => $totalRows, 'reason' => 'Missing customer name', 'details' => 'Name column is required'];
                         continue;
                     }
 
                     if ($customerPhone === '') {
                         $invalidRows++;
-                        $errors[] = ['row' => $totalRows, 'order_number' => $rawOrderNumber, 'reason' => 'Missing phone', 'details' => 'Phone (Phone, Billing Phone or Shipping Phone) is required'];
+                        $errors[] = ['row' => $totalRows, 'reason' => 'Missing phone', 'details' => 'Phone column is required'];
                         continue;
                     }
 
-                    // Prefix with the client identifier so orders from different
-                    // clients are distinguishable and unique. The raw Shopify name
-                    // (e.g. "#31902") is stripped to its digits and joined directly
-                    // to the prefix, e.g. client EVENIE → "EVENIE31902".
-                    $rawDigits = preg_replace('/\D+/', '', (string) $rawOrderNumber);
-                    // Fall back to the trimmed raw value when there are no digits,
-                    // so non-numeric names don't collapse into a bare prefix.
-                    $orderSuffix = $rawDigits !== '' ? $rawDigits : ltrim(trim((string) $rawOrderNumber), '#');
-                    $orderNumber = $prefix . $orderSuffix;
+                    // ── Auto-generate a unique order number ──────────────────────
+                    do {
+                        $orderNumber = $prefix . date('YmdHis') . rand(10, 99);
+                    } while (\App\Models\Order::where('order_number', $orderNumber)->exists());
 
-                    if (\App\Models\Order::where('order_number', $orderNumber)->exists()) {
-                        $duplicates++;
-                        continue;
-                    }
+                    // ── Resolve address fields ───────────────────────────────────
+                    // Simplified template: Address, City
+                    // Shopify format:      Shipping Address1, Shipping City, …
+                    $shippingAddress1 = trim(
+                        (string) ($data['Address'] ?? $data['Shipping Address1'] ?? $data['Billing Address1'] ?? '')
+                    ) ?: null;
+                    $shippingCity = trim(
+                        (string) ($data['City'] ?? $data['Shipping City'] ?? $data['Billing City'] ?? '')
+                    ) ?: null;
+                    $shippingCountry = trim(
+                        (string) ($data['Shipping Country'] ?? $data['Billing Country'] ?? '')
+                    ) ?: null;
 
+                    // ── Resolve COD / selling price ──────────────────────────────
+                    // Simplified template: COD
+                    // Shopify format:      Total
+                    $total = floatval($data['COD'] ?? $data['Total'] ?? 0);
+
+                    // ── Resolve product fields ───────────────────────────────────
+                    // Simplified template: Product Name, SKU
+                    // Shopify format:      Lineitem name, Lineitem sku
+                    $lineitemName = trim(
+                        (string) ($data['Product Name'] ?? $data['Lineitem name'] ?? '')
+                    ) ?: null;
+                    $lineitemSku = trim(
+                        (string) ($data['SKU'] ?? $data['Lineitem sku'] ?? '')
+                    ) ?: null;
+                    $lineitemQty  = intval($data['Lineitem quantity'] ?? 1);
+                    $lineitemPrice = floatval($data['Lineitem price'] ?? ($data['COD'] ?? 0));
+
+                    // ── Timestamps ───────────────────────────────────────────────
                     $createdAt = now();
                     if (!empty($data['Created at'])) {
                         try { $createdAt = date('Y-m-d H:i:s', strtotime($data['Created at'])); } catch (\Exception $e) {}
@@ -218,81 +237,63 @@ class PortalController extends Controller
                         try { $cancelledAt = date('Y-m-d H:i:s', strtotime($data['Cancelled at'])); } catch (\Exception $e) {}
                     }
 
+                    // ── Notes: merge import note + optional CSV notes ─────────────
+                    $csvNotes = trim((string) ($data['Notes'] ?? ''));
+                    $notes = $importNote !== ''
+                        ? ($importNote . ($csvNotes !== '' ? "\n" . $csvNotes : ''))
+                        : ($csvNotes ?: null);
+
                     $order = \App\Models\Order::create([
-                        'client_id' => $client->id,
-                        'order_number' => $orderNumber,
-                        'customer_name' => $customerName,
-                        'customer_email' => $data['Email'] ?? null,
-                        'customer_phone' => $customerPhone,
-                        'financial_status' => strtolower($data['Financial Status'] ?? 'pending'),
+                        'client_id'          => $client->id,
+                        'order_number'       => $orderNumber,
+                        'customer_name'      => $customerName,
+                        'customer_email'     => $data['Email'] ?? null,
+                        'customer_phone'     => $customerPhone,
+                        'financial_status'   => strtolower($data['Financial Status'] ?? 'pending'),
                         'fulfillment_status' => strtolower($data['Fulfillment Status'] ?? 'unfulfilled'),
-                        'accepts_marketing' => strtolower($data['Accepts Marketing'] ?? 'no') === 'yes',
-                        'currency' => $data['Currency'] ?? 'SAR',
-                        'subtotal' => floatval($data['Subtotal'] ?? 0),
-                        'shipping_cost' => floatval($data['Shipping'] ?? 0),
-                        'taxes' => floatval($data['Taxes'] ?? 0),
-                        'total' => floatval($data['Total'] ?? 0),
-                        'discount_code' => $data['Discount Code'] ?? null,
-                        'discount_amount' => floatval($data['Discount Amount'] ?? 0),
-                        'shipping_method' => $data['Shipping Method'] ?? null,
-                        'billing_name' => $data['Billing Name'] ?? null,
-                        'billing_street' => $data['Billing Street'] ?? null,
-                        'billing_address1' => $data['Billing Address1'] ?? null,
-                        'billing_address2' => $data['Billing Address2'] ?? null,
-                        'billing_company' => $data['Billing Company'] ?? null,
-                        'billing_city' => $data['Billing City'] ?? null,
-                        'billing_zip' => $data['Billing Zip'] ?? null,
-                        'billing_province' => $data['Billing Province'] ?? null,
-                        'billing_country' => $data['Billing Country'] ?? null,
-                        'billing_phone' => $data['Billing Phone'] ?? null,
-                        'shipping_name' => $data['Shipping Name'] ?? null,
-                        'shipping_street' => $data['Shipping Street'] ?? null,
-                        'shipping_address1' => $data['Shipping Address1'] ?? null,
-                        'shipping_address2' => $data['Shipping Address2'] ?? null,
-                        'shipping_company' => $data['Shipping Company'] ?? null,
-                        'shipping_city' => $data['Shipping City'] ?? null,
-                        'shipping_zip' => $data['Shipping Zip'] ?? null,
-                        'shipping_province' => $data['Shipping Province'] ?? null,
-                        'shipping_country' => $data['Shipping Country'] ?? null,
-                        'shipping_phone' => $data['Shipping Phone'] ?? null,
-                        'notes' => $importNote !== ''
-                            ? ($importNote . (($data['Notes'] ?? '') !== '' ? "\n" . $data['Notes'] : ''))
-                            : ($data['Notes'] ?? null),
-                        'note_attributes' => $data['Note Attributes'] ?? null,
-                        'payment_method' => $data['Payment Method'] ?? null,
-                        'payment_reference' => $data['Payment Reference'] ?? null,
-                        'refunded_amount' => floatval($data['Refunded Amount'] ?? 0),
-                        'vendor' => $data['Vendor'] ?? null,
-                        'outstanding_balance' => floatval($data['Outstanding Balance'] ?? 0),
-                        'employee' => $data['Employee'] ?? null,
-                        'location' => $data['Location'] ?? null,
-                        'device_id' => $data['Device ID'] ?? null,
-                        'tags' => [],
-                        'risk_level' => $data['Risk Level'] ?? 'Low',
-                        'source' => $data['Source'] ?? null,
-                        'paid_at' => $paidAt,
-                        'fulfilled_at' => $fulfilledAt,
-                        'cancelled_at' => $cancelledAt,
-                        'created_at' => $createdAt,
+                        'accepts_marketing'  => strtolower($data['Accepts Marketing'] ?? 'no') === 'yes',
+                        'currency'           => $data['Currency'] ?? 'SAR',
+                        'subtotal'           => $total,
+                        'total'              => $total,
+                        'shipping_cost'      => floatval($data['Shipping'] ?? 0),
+                        'taxes'              => floatval($data['Taxes'] ?? 0),
+                        'discount_code'      => $data['Discount Code'] ?? null,
+                        'discount_amount'    => floatval($data['Discount Amount'] ?? 0),
+                        'shipping_method'    => $data['Shipping Method'] ?? null,
+                        'billing_name'       => $customerName,
+                        'billing_phone'      => $customerPhone,
+                        'shipping_name'      => $customerName,
+                        'shipping_address1'  => $shippingAddress1,
+                        'shipping_city'      => $shippingCity,
+                        'shipping_country'   => $shippingCountry,
+                        'shipping_phone'     => $customerPhone,
+                        'payment_method'     => $data['Payment Method'] ?? 'Cash on Delivery',
+                        'notes'              => $notes,
+                        'tags'               => [],
+                        'risk_level'         => $data['Risk Level'] ?? 'Low',
+                        'source'             => $data['Source'] ?? null,
+                        'paid_at'            => $paidAt,
+                        'fulfilled_at'       => $fulfilledAt,
+                        'cancelled_at'       => $cancelledAt,
+                        'created_at'         => $createdAt,
                     ]);
 
-                    if (!empty($data['Lineitem name'])) {
+                    if ($lineitemName) {
                         $order->items()->create([
-                            'lineitem_quantity' => intval($data['Lineitem quantity'] ?? 1),
-                            'lineitem_name' => $data['Lineitem name'],
-                            'lineitem_price' => floatval($data['Lineitem price'] ?? 0),
-                            'lineitem_compare_at_price' => floatval($data['Lineitem compare at price'] ?? 0),
-                            'lineitem_sku' => $data['Lineitem sku'] ?? null,
-                            'lineitem_requires_shipping' => strtolower($data['Lineitem requires shipping'] ?? 'false') === 'true',
-                            'lineitem_taxable' => strtolower($data['Lineitem taxable'] ?? 'false') === 'true',
-                            'lineitem_fulfillment_status' => $data['Lineitem fulfillment status'] ?? 'unfulfilled',
+                            'lineitem_quantity'           => $lineitemQty,
+                            'lineitem_name'               => $lineitemName,
+                            'lineitem_price'              => $lineitemPrice,
+                            'lineitem_sku'                => $lineitemSku,
+                            'lineitem_requires_shipping'  => true,
+                            'lineitem_taxable'            => false,
+                            'lineitem_fulfillment_status' => 'unfulfilled',
                         ]);
                     }
 
                     $imported++;
                 } catch (\Exception $rowError) {
                     $invalidRows++;
-                    $errors[] = ['row' => $totalRows, 'order_number' => $orderNumber ?? 'Unknown', 'reason' => 'Processing error', 'details' => $rowError->getMessage()];
+                    $errors[] = ['row' => $totalRows, 'reason' => 'Processing error', 'details' => $rowError->getMessage()];
                     continue;
                 }
             }
@@ -407,47 +408,37 @@ class PortalController extends Controller
             abort(403);
         }
 
+        // Simplified client-facing columns.
+        // Order ID is always auto-generated — clients do NOT need to fill it in.
         $columns = [
-            'Name', 'Email', 'Financial Status', 'Paid at', 'Fulfillment Status', 'Fulfilled at',
-            'Accepts Marketing', 'Currency', 'Subtotal', 'Shipping', 'Taxes', 'Total',
-            'Discount Code', 'Discount Amount', 'Shipping Method', 'Created at',
-            'Lineitem quantity', 'Lineitem name', 'Lineitem price', 'Lineitem compare at price',
-            'Lineitem sku', 'Lineitem requires shipping', 'Lineitem taxable', 'Lineitem fulfillment status',
-            'Billing Name', 'Billing Street', 'Billing Address1', 'Billing Address2', 'Billing Company',
-            'Billing City', 'Billing Zip', 'Billing Province', 'Billing Country', 'Billing Phone',
-            'Shipping Name', 'Shipping Street', 'Shipping Address1', 'Shipping Address2', 'Shipping Company',
-            'Shipping City', 'Shipping Zip', 'Shipping Province', 'Shipping Country', 'Shipping Phone',
-            'Notes', 'Note Attributes', 'Cancelled at', 'Payment Method', 'Payment Reference',
-            'Refunded Amount', 'Vendor', 'Outstanding Balance', 'Employee', 'Location', 'Device ID',
-            'Id', 'Tags', 'Risk Level', 'Source',
+            'Name',         // Customer full name (required)
+            'Phone',        // Customer phone (required)
+            'City',         // Shipping city (optional)
+            'Address',      // Shipping street address (optional)
+            'COD',          // Selling price / Cash-on-Delivery amount (optional)
+            'Product Name', // Product / item name (optional)
+            'SKU',          // Product SKU (optional)
+            'Notes',        // Any order notes or description (optional)
         ];
 
-        // A sample row so clients can see the expected format/values for each column.
-        $sample = [
-            '#1001', 'customer@example.com', 'pending', '', 'unfulfilled', '',
-            'no', 'SAR', '100.00', '15.00', '0.00', '115.00',
-            '', '0.00', 'Standard', date('Y-m-d H:i:s'),
-            '1', 'Sample Product', '100.00', '0.00',
-            'SKU-001', 'true', 'false', 'unfulfilled',
-            'John Doe', '123 King Fahd Rd', '123 King Fahd Rd', '', '',
-            'Riyadh', '12345', 'Riyadh', 'SA', '+966500000000',
-            'John Doe', '123 King Fahd Rd', '123 King Fahd Rd', '', '',
-            'Riyadh', '12345', 'Riyadh', 'SA', '+966500000000',
-            '', '', '', 'Cash on Delivery', '',
-            '0.00', '', '0.00', '', '', '',
-            '', '', 'Low', 'manual',
+        // Two sample rows to show the expected format.
+        $samples = [
+            ['John Doe',        '+966500000000', 'Riyadh', '123 King Fahd Rd', '250.00', 'Blue T-Shirt / L', 'TSHIRT-BL-L', 'Handle with care'],
+            ['Sarah Al-Ahmed',  '+966501111111', 'Jeddah', '45 Olaya St',      '180.00', 'Running Shoes',    'SHOE-WHT-42', ''],
         ];
 
         $filename = 'orders_import_template.csv';
         $headers = [
-            'Content-Type' => 'text/csv',
+            'Content-Type'        => 'text/csv',
             'Content-Disposition' => "attachment; filename=\"{$filename}\"",
         ];
 
-        $callback = function () use ($columns, $sample) {
+        $callback = function () use ($columns, $samples) {
             $file = fopen('php://output', 'w');
             fputcsv($file, $columns);
-            fputcsv($file, $sample);
+            foreach ($samples as $sample) {
+                fputcsv($file, $sample);
+            }
             fclose($file);
         };
 
