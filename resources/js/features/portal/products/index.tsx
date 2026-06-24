@@ -562,7 +562,7 @@ function ProductFilters({ filters, onFiltersChange, viewMode, onViewModeChange }
           </SelectTrigger>
           <SelectContent>
             <SelectItem value='all'>All Vendors</SelectItem>
-            {options.vendors.map((v) => (
+            {options.vendors.filter((v) => v.value && v.value !== '').map((v) => (
               <SelectItem key={v.value} value={v.value}>{v.label}</SelectItem>
             ))}
           </SelectContent>
@@ -579,7 +579,7 @@ function ProductFilters({ filters, onFiltersChange, viewMode, onViewModeChange }
           </SelectTrigger>
           <SelectContent>
             <SelectItem value='all'>All Types</SelectItem>
-            {options.types.map((t) => (
+            {options.types.filter((t) => t.value && t.value !== '').map((t) => (
               <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
             ))}
           </SelectContent>

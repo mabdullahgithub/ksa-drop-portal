@@ -1,1 +1,0 @@
-import{n as e,t}from"./app-Dn--bt7s.js";import{t as n}from"./AuthenticatedLayout-BOaDVuO3.js";import{t as r}from"./security-form-DWaexBSj.js";import{t as i}from"./settings-DrlPNGWS.js";var a=t();function o(){return(0,a.jsxs)(n,{children:[(0,a.jsx)(e,{title:`Security`}),(0,a.jsx)(i,{children:(0,a.jsx)(r,{})})]})}export{o as default};

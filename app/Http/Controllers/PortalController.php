@@ -545,6 +545,7 @@ class PortalController extends Controller
             ->select('vendor')
             ->distinct()
             ->whereNotNull('vendor')
+            ->where('vendor', '!=', '')
             ->orderBy('vendor')
             ->pluck('vendor')
             ->map(fn($v) => ['value' => $v, 'label' => $v]);
@@ -553,6 +554,7 @@ class PortalController extends Controller
             ->select('type')
             ->distinct()
             ->whereNotNull('type')
+            ->where('type', '!=', '')
             ->orderBy('type')
             ->pluck('type')
             ->map(fn($t) => ['value' => $t, 'label' => $t]);
