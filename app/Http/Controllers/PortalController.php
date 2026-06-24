@@ -262,7 +262,7 @@ class PortalController extends Controller
                         'employee' => $data['Employee'] ?? null,
                         'location' => $data['Location'] ?? null,
                         'device_id' => $data['Device ID'] ?? null,
-                        'tags' => !empty($data['Tags']) ? explode(', ', $data['Tags']) : [],
+                        'tags' => [],
                         'risk_level' => $data['Risk Level'] ?? 'Low',
                         'source' => $data['Source'] ?? null,
                         'paid_at' => $paidAt,
