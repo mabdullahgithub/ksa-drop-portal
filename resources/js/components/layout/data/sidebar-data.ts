@@ -19,6 +19,7 @@ import {
   Tag,
   Wallet,
   Truck,
+  Plug,
 } from 'lucide-react'
 import { type SidebarData } from '../types'
 
@@ -137,6 +138,12 @@ export const sidebarData: SidebarData = {
           title: 'Products',
           url: '/portal/products',
           icon: Package,
+          role: 'client',
+        },
+        {
+          title: 'Integrations',
+          url: '/portal/connectors',
+          icon: Plug,
           role: 'client',
         },
         {

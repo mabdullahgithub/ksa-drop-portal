@@ -17,4 +17,15 @@ class ConnectorController extends Controller
         $connector->update(['enabled' => !$connector->enabled]);
         return response()->json($connector);
     }
+
+    public function enabledWithComingSoon()
+    {
+        $connectors = Connector::where('enabled', true)->get();
+        $comingSoon = Connector::where('key', 'coming_soon')->where('enabled', true)->exists();
+
+        return response()->json([
+            'connectors' => $connectors->filter(fn ($c) => !in_array($c->key, ['coming_soon', 'jnt_express']))->values(),
+            'coming_soon' => $comingSoon,
+        ]);
+    }
 }

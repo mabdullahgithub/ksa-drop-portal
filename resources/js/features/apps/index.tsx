@@ -1,6 +1,6 @@
 import { type ChangeEvent, useState } from 'react'
 import { router } from '@inertiajs/react'
-import { SlidersHorizontal, ArrowUpAZ, ArrowDownAZ, ChevronDown, Loader2, Settings } from 'lucide-react'
+import { SlidersHorizontal, ArrowUpAZ, ArrowDownAZ, ChevronDown, Loader2, Settings, Sparkles } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import {
   Select,
@@ -44,10 +44,13 @@ export function Apps() {
   const { connectors, loading, toggling, toggle } = useConnectors()
 
   const filteredConnectors = [...connectors]
+    .filter((c) => c.key !== 'coming_soon')
     .sort((a, b) =>
       sort === 'asc' ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name)
     )
     .filter((c) => c.name.toLowerCase().includes(searchTerm.toLowerCase()))
+
+  const comingSoonConnector = connectors.find((c) => c.key === 'coming_soon')
 
   return (
     <>
@@ -115,6 +118,14 @@ export function Apps() {
                 onToggle={() => toggle(connector)}
               />
             ))}
+            {comingSoonConnector && (
+              <ComingSoonCard
+                connector={comingSoonConnector}
+                canEdit={can('edit apps')}
+                isToggling={toggling === comingSoonConnector.id}
+                onToggle={() => toggle(comingSoonConnector)}
+              />
+            )}
           </ul>
         )}
       </Main>
@@ -192,6 +203,71 @@ function ConnectorCard({ connector, logo, canEdit, isToggling, onToggle }: Conne
           Configure
         </button>
       )}
+    </li>
+  )
+}
+
+interface ComingSoonCardProps {
+  connector: Connector
+  canEdit: boolean
+  isToggling: boolean
+  onToggle: () => void
+}
+
+function ComingSoonCard({ connector, canEdit, isToggling, onToggle }: ComingSoonCardProps) {
+  return (
+    <li className='rounded-lg border border-dashed border-amber-300 bg-gradient-to-br from-amber-50 to-orange-50 p-4 dark:border-amber-600 dark:from-amber-950 dark:to-orange-950'>
+      <div className='mb-8 flex items-center justify-between'>
+        <div className='flex size-10 items-center justify-center rounded-lg bg-amber-100 dark:bg-amber-900'>
+          <Sparkles className='h-5 w-5 text-amber-600 dark:text-amber-400' />
+        </div>
+        {canEdit && (
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              disabled={isToggling}
+              className={cn(
+                'inline-flex cursor-pointer items-center gap-1 rounded-md border px-2 py-0.5 text-xs font-medium transition-colors outline-none',
+                connector.enabled
+                  ? 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-400 dark:hover:bg-emerald-900'
+                  : 'border-amber-300 bg-amber-100 text-amber-700 hover:bg-amber-200 dark:border-amber-600 dark:bg-amber-900 dark:text-amber-400 dark:hover:bg-amber-800'
+              )}
+            >
+              {isToggling ? (
+                <Loader2 className='h-3 w-3 animate-spin' />
+              ) : (
+                <>
+                  {connector.enabled ? 'Visible' : 'Hidden'}
+                  <ChevronDown className='h-3 w-3 opacity-50' />
+                </>
+              )}
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align='end' className='min-w-28'>
+              <DropdownMenuItem
+                disabled={connector.enabled}
+                onSelect={onToggle}
+                className='text-xs text-emerald-700 focus:text-emerald-700 dark:text-emerald-400'
+              >
+                Show to Clients
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={!connector.enabled}
+                onSelect={onToggle}
+                className='text-xs text-amber-700 focus:text-amber-700 dark:text-amber-400'
+              >
+                Hide from Clients
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
+      </div>
+      <div>
+        <h2 className='mb-1 font-semibold text-gray-800 dark:text-gray-200'>
+          {connector.name}
+        </h2>
+        <p className='line-clamp-2 text-sm text-gray-600 dark:text-gray-400'>
+          {connector.description}
+        </p>
+      </div>
     </li>
   )
 }

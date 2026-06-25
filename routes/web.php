@@ -214,6 +214,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/impersonate/{client}', [ImpersonateController::class, 'impersonate'])->name('impersonate.start');
 });
 
+// Shared API endpoints
+Route::middleware(['auth', 'verified'])->group(function () {
+    Route::get('/api/connectors/enabled', [ConnectorController::class, 'enabledWithComingSoon'])->name('api.connectors.enabled');
+});
+
 // Client Portal - account restricted page (no role:client check so suspended clients can see it)
 Route::middleware(['auth', 'verified'])->get('/portal/suspended', fn () => Inertia::render('Portal/Suspended'))->name('portal.suspended');
 
@@ -225,6 +230,7 @@ Route::prefix('portal')->middleware(['auth', 'verified', 'role:client'])->group(
     Route::get('/revenue', fn () => Inertia::render('Portal/Revenue'))->name('portal.revenue');
     Route::get('/finance', fn () => Inertia::render('Portal/Finance'))->name('portal.finance');
     Route::get('/products', fn () => Inertia::render('Portal/Products'))->name('portal.products');
+    Route::get('/connectors', fn () => Inertia::render('Portal/Connectors'))->name('portal.connectors');
     Route::get('/settings', fn () => Inertia::render('Portal/Settings/CompanyProfile'))->name('portal.settings');
     Route::get('/settings/security', [SettingsController::class, 'portalSecurity'])->name('portal.settings.security');
 
