@@ -1139,15 +1139,17 @@ export function PortalOrders() {
           <>
         {/* Filters */}
         {filterOptionsLoading ? (
-          <div className='h-9 flex items-center'>
+          <div className='h-9 flex items-center mb-4'>
             <Skeleton className='h-8 w-96' />
           </div>
         ) : (
-          <PortalOrdersFilters
-            filters={filters}
-            onFiltersChange={updateFilters}
-            filterOptions={filterOptions}
-          />
+          <div className='mb-4'>
+            <PortalOrdersFilters
+              filters={filters}
+              onFiltersChange={updateFilters}
+              filterOptions={filterOptions}
+            />
+          </div>
         )}
 
         {/* Orders table section */}
