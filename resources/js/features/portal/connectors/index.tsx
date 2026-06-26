@@ -336,7 +336,7 @@ function ShopifyConnectorCard({
         )}
       </div>
 
-      <ShopifyConnectDialog open={showConnect} onClose={() => setShowConnect(false)} />
+      <ShopifyConnectDialog open={showConnect} onClose={() => setShowConnect(false)} lastShopDomain={connector.shop_domain} />
     </li>
   )
 }
