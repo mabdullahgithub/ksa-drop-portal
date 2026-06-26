@@ -143,7 +143,11 @@ class ShopifyController extends Controller
             return response()->json(['message' => 'No connection found.'], 404);
         }
 
-        $connection->delete();
+        $connection->update([
+            'status' => 'disconnected',
+            'access_token' => null,
+            'refresh_token' => null,
+        ]);
 
         return response()->json(['message' => 'Shopify store disconnected.']);
     }

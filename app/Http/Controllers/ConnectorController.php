@@ -62,6 +62,7 @@ class ConnectorController extends Controller
         $connector->shop_domain        = $conn?->shop_domain;
         $connector->sync_mode          = $conn?->sync_mode;
         $connector->last_synced_at     = $conn?->last_synced_at?->toISOString();
+        $connector->connected_at       = $conn?->connected_at?->toISOString();
         $connector->needs_reconnect    = $conn?->status === 'error';
         $connector->webhooks_registered = (bool) ($conn?->webhooks_registered);
 

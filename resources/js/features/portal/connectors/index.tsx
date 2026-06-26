@@ -173,13 +173,16 @@ function ShopifyConnectorCard({
   const lastSynced = connector.last_synced_at
     ? new Date(connector.last_synced_at).toLocaleString()
     : null
+  const lastConnected = connector.connected_at
+    ? new Date(connector.connected_at).toLocaleString()
+    : null
 
   // ── Connected: show the store information card ──
   if (connected) {
     return (
       <li className='rounded-lg border p-4 hover:shadow-md'>
         <div className='mb-4 flex items-center justify-between'>
-          <div className='bg-muted flex size-10 items-center justify-center rounded-lg p-2'>
+          <div className='bg-muted flex size-16 items-center justify-center rounded-lg overflow-hidden'>
             {logo}
           </div>
           <DropdownMenu>
@@ -316,6 +319,11 @@ function ShopifyConnectorCard({
       <div>
         <h2 className='mb-1 font-semibold'>{connector.name}</h2>
         <p className='line-clamp-2 text-gray-500'>{connector.description}</p>
+        {lastConnected && (
+          <p className='text-muted-foreground mt-2 text-xs'>
+            Last connected: {lastConnected}
+          </p>
+        )}
         {needsReconnect && (
           <Button
             size='sm'
@@ -337,8 +345,8 @@ function ComingSoonCard() {
   return (
     <li className='rounded-lg border border-dashed border-amber-300 bg-gradient-to-br from-amber-50 to-orange-50 p-4 opacity-75 dark:border-amber-600 dark:from-amber-950 dark:to-orange-950'>
       <div className='mb-8 flex items-center justify-between'>
-        <div className='flex size-10 items-center justify-center rounded-lg bg-amber-100 dark:bg-amber-900'>
-          <Sparkles className='h-5 w-5 text-amber-600 dark:text-amber-400' />
+        <div className='flex size-16 items-center justify-center rounded-lg bg-amber-100 dark:bg-amber-900'>
+          <Sparkles className='h-8 w-8 text-amber-600 dark:text-amber-400' />
         </div>
         <span className='inline-flex items-center rounded-md border border-amber-300 bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700 dark:border-amber-600 dark:bg-amber-900 dark:text-amber-400'>
           Coming Soon
