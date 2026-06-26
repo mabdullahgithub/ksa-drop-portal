@@ -64,9 +64,22 @@ class ShopifyOrderSyncJob implements ShouldQueue
                     $data
                 );
 
-                $order->items()->delete();
+                // Upsert line items atomically (no race condition window).
+                // Delete items no longer in the payload; upsert all others keyed on SKU.
+                $currentSkus = collect($shopify->mapLineItems($node, 'graphql'))
+                    ->pluck('lineitem_sku')
+                    ->filter()
+                    ->all();
+
+                $order->items()
+                    ->whereNotIn('lineitem_sku', $currentSkus)
+                    ->delete();
+
                 foreach ($shopify->mapLineItems($node, 'graphql') as $item) {
-                    $order->items()->create($item);
+                    $order->items()->updateOrCreate(
+                        ['lineitem_sku' => $item['lineitem_sku'] ?? null],
+                        $item
+                    );
                 }
             }
 

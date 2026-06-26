@@ -35,7 +35,7 @@ class ShopifyController extends Controller
         $shop = $this->shopify->normalizeShopDomain($request->shop);
 
         if (! $this->shopify->isValidShopDomain($shop)) {
-            return redirect()->route('portal.apps')
+            return redirect()->route('portal.connectors')
                 ->with('error', 'That does not look like a valid Shopify store URL.');
         }
 
@@ -82,7 +82,7 @@ class ShopifyController extends Controller
             ->first();
 
         if ($existing) {
-            return redirect()->route('portal.apps')
+            return redirect()->route('portal.connectors')
                 ->with('error', 'This Shopify store is already connected to another account.');
         }
 
@@ -91,7 +91,7 @@ class ShopifyController extends Controller
         } catch (\Throwable $e) {
             Log::error('Shopify OAuth exchange failed', ['shop' => $shop, 'error' => $e->getMessage()]);
 
-            return redirect()->route('portal.apps')
+            return redirect()->route('portal.connectors')
                 ->with('error', 'Failed to connect Shopify store. Please try again.');
         }
 
@@ -127,7 +127,7 @@ class ShopifyController extends Controller
 
         session()->forget(['shopify_oauth_nonce', 'shopify_oauth_shop']);
 
-        return redirect()->route('portal.apps')
+        return redirect()->route('portal.connectors')
             ->with('success', 'Shopify store connected. Recent orders are syncing in the background.');
     }
 
@@ -146,6 +146,42 @@ class ShopifyController extends Controller
         $connection->delete();
 
         return response()->json(['message' => 'Shopify store disconnected.']);
+    }
+
+    /**
+     * Re-attempt webhook registration on an existing connection. Used after the
+     * app is approved for protected customer data (order webhooks are gated on it).
+     */
+    public function retryWebhooks(Request $request)
+    {
+        $client = $this->resolveClient();
+        $connection = $client?->shopifyConnection;
+
+        if (! $connection) {
+            return response()->json(['message' => 'No connection found.'], 404);
+        }
+
+        try {
+            $token   = $this->shopify->getValidToken($connection);
+            $results = $this->shopify->registerWebhooks($connection->shop_domain, $token);
+            $allOk   = ! in_array(false, $results, true);
+
+            $connection->update(['webhooks_registered' => $allOk]);
+
+            return response()->json([
+                'webhooks_registered' => $allOk,
+                'results'             => $results,
+                'message' => $allOk
+                    ? 'Live order sync is now active.'
+                    : 'Some webhooks could not be registered. Check that the app is approved for protected customer data.',
+            ], $allOk ? 200 : 422);
+        } catch (\Throwable $e) {
+            Log::warning('Shopify retryWebhooks failed', [
+                'shop' => $connection->shop_domain, 'error' => $e->getMessage(),
+            ]);
+
+            return response()->json(['message' => 'Could not register webhooks. Please try again.'], 422);
+        }
     }
 
     /**

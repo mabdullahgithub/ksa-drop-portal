@@ -268,6 +268,7 @@ Route::prefix('portal')->middleware(['auth', 'verified', 'role:client'])->group(
     Route::get('/shopify/connect', [ShopifyController::class, 'redirect'])->name('portal.shopify.connect');
     Route::delete('/api/shopify/disconnect', [ShopifyController::class, 'disconnect'])->name('portal.shopify.disconnect');
     Route::put('/api/shopify/sync-mode', [ShopifyController::class, 'updateSyncMode'])->name('portal.shopify.sync-mode');
+    Route::post('/api/shopify/retry-webhooks', [ShopifyController::class, 'retryWebhooks'])->name('portal.shopify.retry-webhooks');
 
     // Shopify — manual-approval queue
     Route::get('/api/shopify/pending', [ShopifyPendingOrderController::class, 'index'])->name('portal.shopify.pending.index');

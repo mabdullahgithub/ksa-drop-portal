@@ -100,7 +100,7 @@ function ConnectorCard({ connector, logo }: ConnectorCardProps) {
   return (
     <li className='rounded-lg border p-4 hover:shadow-md'>
       <div className='mb-8 flex items-center justify-between'>
-        <div className='bg-muted flex size-10 items-center justify-center rounded-lg p-2'>
+        <div className='bg-muted flex size-16 items-center justify-center rounded-lg overflow-hidden'>
           {logo}
         </div>
         <span className='inline-flex items-center rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-400'>
@@ -121,12 +121,29 @@ function ShopifyConnectorCard({
   onChanged,
 }: ConnectorCardProps & { onChanged: () => void }) {
   const [showConnect, setShowConnect] = useState(false)
-  const { disconnect, disconnecting, updateSyncMode, updatingSyncMode } =
-    useShopifyConnection()
+  const {
+    disconnect,
+    disconnecting,
+    updateSyncMode,
+    updatingSyncMode,
+    retryWebhooks,
+    retrying,
+  } = useShopifyConnection()
 
   const connected = !!connector.client_connected
   const needsReconnect = !!connector.needs_reconnect
   const isManual = connector.sync_mode === 'manual_approval'
+  const webhooksOk = connector.webhooks_registered !== false
+
+  const handleRetryWebhooks = async () => {
+    const { ok, message } = await retryWebhooks()
+    if (ok) {
+      toast.success(message || 'Live order sync is now active.')
+      onChanged()
+    } else {
+      toast.error(message || 'Could not enable live order sync.')
+    }
+  }
 
   const handleDisconnect = async () => {
     const ok = await disconnect()
@@ -223,6 +240,35 @@ function ShopifyConnectorCard({
           </p>
         </div>
 
+        {/* Webhook setup warning — live order sync not active yet */}
+        {!webhooksOk && (
+          <div className='mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300'>
+            <div className='flex items-start gap-2'>
+              <AlertTriangle className='mt-0.5 h-3.5 w-3.5 shrink-0' />
+              <div className='space-y-1.5'>
+                <p className='font-medium'>Live order sync is not active yet.</p>
+                <p>
+                  New orders won&apos;t appear automatically until webhook setup
+                  completes. This usually requires protected customer data approval
+                  on the Shopify app.
+                </p>
+                <Button
+                  size='sm'
+                  variant='outline'
+                  className='h-6 text-[11px]'
+                  disabled={retrying}
+                  onClick={handleRetryWebhooks}
+                >
+                  {retrying ? (
+                    <Loader2 className='mr-1 h-3 w-3 animate-spin' />
+                  ) : null}
+                  Retry setup
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Pending review banner (manual mode only) */}
         {isManual && (connector.pending_count ?? 0) > 0 && (
           <button
@@ -247,7 +293,7 @@ function ShopifyConnectorCard({
   return (
     <li className='rounded-lg border p-4 hover:shadow-md'>
       <div className='mb-8 flex items-center justify-between'>
-        <div className='bg-muted flex size-10 items-center justify-center rounded-lg p-2'>
+        <div className='bg-muted flex size-16 items-center justify-center rounded-lg overflow-hidden'>
           {logo}
         </div>
         {needsReconnect ? (

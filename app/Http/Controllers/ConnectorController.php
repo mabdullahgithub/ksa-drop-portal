@@ -58,11 +58,12 @@ class ConnectorController extends Controller
     {
         $conn = $client->shopifyConnection;
 
-        $connector->client_connected = $conn?->status === 'active';
-        $connector->shop_domain      = $conn?->shop_domain;
-        $connector->sync_mode        = $conn?->sync_mode;
-        $connector->last_synced_at   = $conn?->last_synced_at?->toISOString();
-        $connector->needs_reconnect  = $conn?->status === 'error';
+        $connector->client_connected   = $conn?->status === 'active';
+        $connector->shop_domain        = $conn?->shop_domain;
+        $connector->sync_mode          = $conn?->sync_mode;
+        $connector->last_synced_at     = $conn?->last_synced_at?->toISOString();
+        $connector->needs_reconnect    = $conn?->status === 'error';
+        $connector->webhooks_registered = (bool) ($conn?->webhooks_registered);
 
         $connector->pending_count = ($conn?->status === 'active' && $conn?->sync_mode === 'manual_approval')
             ? Order::withoutGlobalScope('shopify_visible')

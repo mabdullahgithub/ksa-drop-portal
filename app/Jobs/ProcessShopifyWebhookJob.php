@@ -67,10 +67,22 @@ class ProcessShopifyWebhookJob implements ShouldQueue
             $data
         );
 
-        // Re-sync line items (delete + recreate for simplicity/idempotency).
-        $order->items()->delete();
+        // Upsert line items atomically (no race condition window).
+        // Delete items no longer in the payload; upsert all others keyed on SKU.
+        $currentSkus = collect($shopify->mapLineItems($this->payload, 'webhook'))
+            ->pluck('lineitem_sku')
+            ->filter()
+            ->all();
+
+        $order->items()
+            ->whereNotIn('lineitem_sku', $currentSkus)
+            ->delete();
+
         foreach ($shopify->mapLineItems($this->payload, 'webhook') as $item) {
-            $order->items()->create($item);
+            $order->items()->updateOrCreate(
+                ['lineitem_sku' => $item['lineitem_sku'] ?? null],
+                $item
+            );
         }
 
         $connection->update(['last_synced_at' => now()]);

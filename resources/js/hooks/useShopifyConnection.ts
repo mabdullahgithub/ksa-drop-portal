@@ -26,6 +26,22 @@ export function useShopifyConnection() {
     }
   }, [])
 
+  const [retrying, setRetrying] = useState(false)
+
+  const retryWebhooks = useCallback(async (): Promise<{ ok: boolean; message?: string }> => {
+    setRetrying(true)
+    try {
+      const res = await fetch('/portal/api/shopify/retry-webhooks', {
+        method: 'POST',
+        headers: { Accept: 'application/json', 'X-CSRF-TOKEN': getCsrfToken() },
+      })
+      const data = await res.json().catch(() => ({}))
+      return { ok: res.ok, message: data?.message }
+    } finally {
+      setRetrying(false)
+    }
+  }, [])
+
   const updateSyncMode = useCallback(async (mode: SyncMode): Promise<boolean> => {
     setUpdatingSyncMode(true)
     try {
@@ -44,5 +60,12 @@ export function useShopifyConnection() {
     }
   }, [])
 
-  return { disconnect, disconnecting, updateSyncMode, updatingSyncMode }
+  return {
+    disconnect,
+    disconnecting,
+    updateSyncMode,
+    updatingSyncMode,
+    retryWebhooks,
+    retrying,
+  }
 }

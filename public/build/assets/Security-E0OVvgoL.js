@@ -1,1 +1,0 @@
-import{n as e,t}from"./app-DvNunbyD.js";import{t as n}from"./AuthenticatedLayout-Gt6K1X9e.js";import{t as r}from"./security-form-DVMrGpp2.js";import{t as i}from"./settings-kncoMuwR.js";var a=t();function o(){return(0,a.jsxs)(n,{children:[(0,a.jsx)(e,{title:`Security`}),(0,a.jsx)(i,{children:(0,a.jsx)(r,{})})]})}export{o as default};

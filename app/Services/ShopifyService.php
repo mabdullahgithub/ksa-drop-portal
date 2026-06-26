@@ -193,7 +193,9 @@ class ShopifyService
             'Content-Type'           => 'application/json',
         ])->post(
             "https://{$shop}/admin/api/" . self::API_VERSION . '/graphql.json',
-            ['query' => $query, 'variables' => $variables]
+            // Cast to object so empty variables serialize as {} (a JSON object),
+            // not [] (a JSON array) — Shopify rejects the latter.
+            ['query' => $query, 'variables' => (object) $variables]
         );
 
         if (! $response->successful()) {
@@ -510,7 +512,7 @@ class ShopifyService
         return [
             'client_id'        => $client->id,
             'shopify_order_id' => $shopifyOrderId,
-            'order_number'     => $prefix . '-' . $shopifyNumber,
+            'order_number'     => $prefix . $shopifyNumber,
             'source'           => 'shopify',
         ];
     }
