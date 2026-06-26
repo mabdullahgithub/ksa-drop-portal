@@ -476,3 +476,114 @@ export function usePortalFinance(initialFilters: Record<string, any> = {}) {
     refresh: () => fetchFinance(),
   }
 }
+
+// ─── Shopify manual-approval queue ─────────────────────────────────────────────
+
+export function useShopifyPendingOrders(initialFilters: Record<string, any> = {}) {
+  const [data, setData] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
+  const [filters, setFilters] = useState<Record<string, any>>(initialFilters)
+
+  const fetchPending = useCallback(async (newFilters?: Record<string, any>) => {
+    setLoading(true)
+    const params = new URLSearchParams()
+    const activeFilters = newFilters || filters
+
+    Object.entries(activeFilters).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') {
+        params.append(key, String(value))
+      }
+    })
+
+    try {
+      const response = await fetch(`/portal/api/shopify/pending?${params}`, {
+        headers: { Accept: 'application/json' },
+      })
+      const json = await response.json()
+      setData(json)
+    } catch (error) {
+      console.error('Error fetching Shopify pending orders:', error)
+    } finally {
+      setLoading(false)
+    }
+  }, [filters])
+
+  useEffect(() => { fetchPending() }, [])
+
+  const updateFilters = useCallback((newFilters: Record<string, any>) => {
+    const merged = { ...filters, ...newFilters }
+    setFilters(merged)
+    fetchPending(merged)
+  }, [filters, fetchPending])
+
+  return {
+    orders: data?.data || [],
+    meta: data ? {
+      current_page: data.current_page,
+      last_page: data.last_page,
+      per_page: data.per_page,
+      total: data.total,
+      from: data.from,
+      to: data.to,
+    } : null,
+    loading,
+    filters,
+    updateFilters,
+    refresh: () => fetchPending(),
+  }
+}
+
+export function useShopifyPendingMutations() {
+  const [loading, setLoading] = useState(false)
+
+  const getCsrfToken = () =>
+    document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
+
+  const submit = useCallback(async (orderId: number): Promise<boolean> => {
+    setLoading(true)
+    try {
+      const res = await fetch(`/portal/api/shopify/pending/${orderId}/submit`, {
+        method: 'POST',
+        headers: { Accept: 'application/json', 'X-CSRF-TOKEN': getCsrfToken() },
+      })
+      return res.ok
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  const submitBulk = useCallback(async (ids: number[]): Promise<number> => {
+    setLoading(true)
+    try {
+      const res = await fetch('/portal/api/shopify/pending/submit-bulk', {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+          'X-CSRF-TOKEN': getCsrfToken(),
+        },
+        body: JSON.stringify({ ids }),
+      })
+      if (!res.ok) return 0
+      const json = await res.json()
+      return json.submitted ?? 0
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  const dismiss = useCallback(async (orderId: number): Promise<boolean> => {
+    setLoading(true)
+    try {
+      const res = await fetch(`/portal/api/shopify/pending/${orderId}/dismiss`, {
+        method: 'DELETE',
+        headers: { Accept: 'application/json', 'X-CSRF-TOKEN': getCsrfToken() },
+      })
+      return res.ok
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  return { submit, submitBulk, dismiss, loading }
+}
