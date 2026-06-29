@@ -1,0 +1,1 @@
+import{n as e,o as t,t as n}from"./app-4Fqm3FM3.js";import{t as r}from"./AuthenticatedLayout-Beo1dLhk.js";import{t as i}from"./users-C5tPgyQ9.js";var a=n();function o(){let{users:n,roles:o,permissions:s}=t().props;return(0,a.jsxs)(r,{children:[(0,a.jsx)(e,{title:`Users - Team Management`}),(0,a.jsx)(i,{users:n,availableRoles:o,availablePermissions:s})]})}export{o as default};
