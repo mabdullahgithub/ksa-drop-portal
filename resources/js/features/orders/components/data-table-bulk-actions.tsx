@@ -29,6 +29,7 @@ import { DataTableBulkActions as BulkActionsToolbar } from '@/components/data-ta
 import { type Order } from '@/types/order'
 import { useOrderMutations } from '@/hooks/useOrders'
 import { usePermissions } from '@/hooks/use-permissions'
+import { useOrdersContext } from './orders-provider'
 import { OrderTagsDialog } from './order-tags-dialog'
 
 interface Warehouse {
@@ -53,6 +54,7 @@ export function DataTableBulkActions<TData>({
   const selectedRows = table.getFilteredSelectedRowModel().rows
   const { bulkUpdate } = useOrderMutations()
   const { can } = usePermissions()
+  const { refresh } = useOrdersContext()
   const [showTagDialog, setShowTagDialog] = useState(false)
   const [isSavingTags, setIsSavingTags] = useState(false)
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
@@ -108,7 +110,7 @@ export function DataTableBulkActions<TData>({
     setShowShipmentDialog(false)
     if (shipmentResult && shipmentResult.created.length > 0) {
       table.resetRowSelection()
-      window.location.reload()
+      refresh()
     }
     setShipmentResult(null)
   }
@@ -126,7 +128,7 @@ export function DataTableBulkActions<TData>({
         loading: 'Updating fulfillment status...',
         success: () => {
           table.resetRowSelection()
-          window.location.reload()
+          refresh()
           return `Updated ${selectedOrders.length} order${selectedOrders.length > 1 ? 's' : ''}`
         },
         error: 'Failed to update orders',
@@ -147,7 +149,7 @@ export function DataTableBulkActions<TData>({
         loading: 'Updating payment status...',
         success: () => {
           table.resetRowSelection()
-          window.location.reload()
+          refresh()
           return `Updated ${selectedOrders.length} order${selectedOrders.length > 1 ? 's' : ''}`
         },
         error: 'Failed to update orders',
@@ -173,7 +175,7 @@ export function DataTableBulkActions<TData>({
       table.resetRowSelection()
       setShowTagDialog(false)
       toast.success(`Added tags to ${selectedOrders.length} order${selectedOrders.length > 1 ? 's' : ''}`)
-      window.location.reload()
+      refresh()
     } catch {
       toast.error('Failed to add tags')
     } finally {
@@ -194,7 +196,7 @@ export function DataTableBulkActions<TData>({
         success: () => {
           table.resetRowSelection()
           setShowDeleteDialog(false)
-          window.location.reload()
+          refresh()
           return `Cancelled ${selectedOrders.length} order${selectedOrders.length > 1 ? 's' : ''}`
         },
         error: 'Failed to cancel orders',

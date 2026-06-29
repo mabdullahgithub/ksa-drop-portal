@@ -1,4 +1,4 @@
-import { useState, useRef, KeyboardEvent } from 'react'
+import { useState, useRef, useEffect, KeyboardEvent } from 'react'
 import { X, Plus, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -43,9 +43,14 @@ export function OrderTagsDialog({
   const [freeInput, setFreeInput] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
 
-  // Sync when dialog opens with a potentially different order
+  useEffect(() => {
+    if (open) {
+      setSelected(currentTags)
+      setFreeInput('')
+    }
+  }, [open])
+
   const handleOpenChange = (open: boolean) => {
-    if (open) setSelected(currentTags)
     onOpenChange(open)
   }
 

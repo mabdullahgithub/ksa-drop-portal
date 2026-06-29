@@ -55,7 +55,7 @@ export function useOrders(initialFilters: OrderFilters = {}) {
   }, [filters, fetchOrders])
 
   const refresh = useCallback(() => {
-    fetchOrders()
+    return fetchOrders()
   }, [fetchOrders])
 
   const meta = orders ? {

@@ -2,15 +2,17 @@ import { Download, RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Can } from '@/components/can'
 import { useOrderMutations } from '@/hooks/useOrders'
+import { useOrdersContext } from './orders-provider'
 import { useState } from 'react'
 
 export function OrdersPrimaryButtons() {
   const { exportOrders } = useOrderMutations()
+  const { refresh } = useOrdersContext()
   const [isRefreshing, setIsRefreshing] = useState(false)
 
   const handleRefresh = () => {
     setIsRefreshing(true)
-    window.location.reload()
+    refresh().finally(() => setIsRefreshing(false))
   }
 
   const handleExport = () => {
