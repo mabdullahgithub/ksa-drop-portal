@@ -1,1 +1,0 @@
-import{n as e,t}from"./app-CiIfn42y.js";import{t as n}from"./AuthenticatedLayout-BBC7_2ne.js";import{t as r}from"./security-form-B2oYU0cL.js";import{t as i}from"./settings-C2Tr9WLC.js";var a=t();function o(){return(0,a.jsxs)(n,{children:[(0,a.jsx)(e,{title:`Security`}),(0,a.jsx)(i,{children:(0,a.jsx)(r,{})})]})}export{o as default};

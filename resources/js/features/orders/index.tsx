@@ -50,7 +50,7 @@ export function Orders() {
   }
 
   return (
-    <OrdersProvider>
+    <OrdersProvider refresh={refresh}>
       <Header fixed>
         <Search className='me-auto' />
         <ThemeSwitch />

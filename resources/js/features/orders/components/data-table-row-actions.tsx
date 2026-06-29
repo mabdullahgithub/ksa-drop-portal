@@ -26,7 +26,7 @@ type DataTableRowActionsProps<TData> = {
 
 export function DataTableRowActions<TData>({ row }: DataTableRowActionsProps<TData>) {
   const order = row.original as Order
-  const { setOpen, setCurrentRow } = useOrdersContext()
+  const { setOpen, setCurrentRow, refresh } = useOrdersContext()
   const { can } = usePermissions()
   const { updateFulfillmentStatus, updateFinancialStatus, updateOrder } = useOrderMutations()
   const [showTagDialog, setShowTagDialog] = useState(false)
@@ -39,7 +39,7 @@ export function DataTableRowActions<TData>({ row }: DataTableRowActionsProps<TDa
     const success = await updateFulfillmentStatus(order.id, status)
     if (success) {
       toast.success('Order status updated')
-      window.location.reload()
+      refresh()
     } else {
       toast.error('Failed to update status')
     }
@@ -49,7 +49,7 @@ export function DataTableRowActions<TData>({ row }: DataTableRowActionsProps<TDa
     const success = await updateFinancialStatus(order.id, status)
     if (success) {
       toast.success('Payment status updated')
-      window.location.reload()
+      refresh()
     } else {
       toast.error('Failed to update status')
     }
@@ -62,7 +62,7 @@ export function DataTableRowActions<TData>({ row }: DataTableRowActionsProps<TDa
     if (success) {
       toast.success('Tags updated')
       setShowTagDialog(false)
-      window.location.reload()
+      refresh()
     } else {
       toast.error('Failed to update tags')
     }
