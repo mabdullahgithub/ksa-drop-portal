@@ -17,10 +17,11 @@ function hexToRgba(hex: string | null | undefined, alpha: number) {
 
 function TagsCell({ tags }: { tags: string[] | null }) {
   const { tags: predefined } = useAvailableTags()
-  if (!tags || tags.length === 0) return <span className='text-xs text-muted-foreground'>—</span>
+  const tagList = Array.isArray(tags) ? tags : []
+  if (tagList.length === 0) return <span className='text-xs text-muted-foreground'>—</span>
   return (
     <div className='flex flex-wrap gap-1'>
-      {tags.map((name) => {
+      {tagList.map((name) => {
         const meta = predefined.find((t) => t.name === name)
         return meta ? (
           <span

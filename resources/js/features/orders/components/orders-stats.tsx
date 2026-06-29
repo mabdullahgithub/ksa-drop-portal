@@ -10,7 +10,7 @@ export function OrdersStats() {
     return <OrdersStatsSkeleton />
   }
 
-  if (!statistics) return null
+  if (!statistics || statistics.total_orders == null) return null
 
   const fulfillmentCounts = (statistics.by_fulfillment_status ?? []).reduce(
     (acc, item) => {
@@ -28,6 +28,9 @@ export function OrdersStats() {
     {} as Record<string, number>
   )
 
+  const totalRevenue = Number(statistics.total_revenue ?? 0)
+  const avgOrderValue = Number(statistics.average_order_value ?? 0)
+
   return (
     <div className='grid gap-3 md:grid-cols-2 lg:grid-cols-4'>
       <Card className='border-muted/50'>
@@ -36,7 +39,7 @@ export function OrdersStats() {
           <ShoppingCart className='h-5 w-5 text-muted-foreground' />
         </CardHeader>
         <CardContent className='pb-0 -mt-3'>
-          <div className='text-xl font-bold'>{statistics.total_orders}</div>
+          <div className='text-xl font-bold'>{statistics.total_orders ?? 0}</div>
           <p className='text-[11px] text-muted-foreground mt-0'>
             {fulfillmentCounts.pending || 0} pending, {fulfillmentCounts.unfulfilled || 0} unfulfilled
           </p>
@@ -50,7 +53,7 @@ export function OrdersStats() {
         </CardHeader>
         <CardContent className='pb-0 -mt-3'>
           <div className='text-xl font-bold'>
-            SAR {statistics.total_revenue.toLocaleString('en-US', {
+            SAR {totalRevenue.toLocaleString('en-US', {
               minimumFractionDigits: 2,
               maximumFractionDigits: 2,
             })}
@@ -68,7 +71,7 @@ export function OrdersStats() {
         </CardHeader>
         <CardContent className='pb-0 -mt-3'>
           <div className='text-xl font-bold'>
-            SAR {statistics.average_order_value.toLocaleString('en-US', {
+            SAR {avgOrderValue.toLocaleString('en-US', {
               minimumFractionDigits: 2,
               maximumFractionDigits: 2,
             })}

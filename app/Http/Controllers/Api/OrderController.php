@@ -471,8 +471,8 @@ class OrderController extends Controller
                     break;
 
                 case 'add_tags':
-                    $existingTags = $order->tags ?? [];
-                    $newTags = array_unique(array_merge($existingTags, $request->tags));
+                    $existingTags = is_array($order->tags) ? $order->tags : [];
+                    $newTags = array_values(array_unique(array_merge($existingTags, $request->tags)));
                     $order->update(['tags' => $newTags]);
                     break;
 
