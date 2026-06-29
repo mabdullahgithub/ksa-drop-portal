@@ -11,17 +11,18 @@ type OrdersContextType = {
   setCurrentRow: React.Dispatch<React.SetStateAction<Order | null>>
   selectedRows: number[]
   setSelectedRows: React.Dispatch<React.SetStateAction<number[]>>
+  refresh: () => void
 }
 
 const OrdersContext = React.createContext<OrdersContextType | null>(null)
 
-export function OrdersProvider({ children }: { children: React.ReactNode }) {
+export function OrdersProvider({ children, refresh }: { children: React.ReactNode; refresh: () => void }) {
   const [open, setOpen] = useDialogState<OrdersDialogType>(null)
   const [currentRow, setCurrentRow] = useState<Order | null>(null)
   const [selectedRows, setSelectedRows] = useState<number[]>([])
 
   return (
-    <OrdersContext value={{ open, setOpen, currentRow, setCurrentRow, selectedRows, setSelectedRows }}>
+    <OrdersContext value={{ open, setOpen, currentRow, setCurrentRow, selectedRows, setSelectedRows, refresh }}>
       {children}
     </OrdersContext>
   )
