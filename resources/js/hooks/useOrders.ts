@@ -266,7 +266,7 @@ export function useOrderMutations() {
       return true
     } catch (error) {
       console.error('Error bulk updating orders:', error)
-      return false
+      throw error
     } finally {
       setLoading(false)
     }

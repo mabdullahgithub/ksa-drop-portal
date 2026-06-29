@@ -12,7 +12,7 @@ export function OrdersStats() {
 
   if (!statistics) return null
 
-  const fulfillmentCounts = statistics.by_fulfillment_status.reduce(
+  const fulfillmentCounts = (statistics.by_fulfillment_status ?? []).reduce(
     (acc, item) => {
       acc[item.fulfillment_status] = item.count
       return acc
@@ -20,7 +20,7 @@ export function OrdersStats() {
     {} as Record<string, number>
   )
 
-  const financialCounts = statistics.by_financial_status.reduce(
+  const financialCounts = (statistics.by_financial_status ?? []).reduce(
     (acc, item) => {
       acc[item.financial_status] = item.count
       return acc

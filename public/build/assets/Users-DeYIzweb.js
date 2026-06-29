@@ -1,0 +1,1 @@
+import{n as e,t}from"./app-D5eX_AeS.js";import{t as n}from"./AuthenticatedLayout-D2i-J7PU.js";import{t as r}from"./users-Cg6cgqyd.js";var i=t();function a(){return(0,i.jsxs)(n,{children:[(0,i.jsx)(e,{title:`Users`}),(0,i.jsx)(r,{})]})}export{a as default};

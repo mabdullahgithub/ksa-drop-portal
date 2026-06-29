@@ -14,7 +14,8 @@ import { Separator } from '@/components/ui/separator'
 import { useAvailableTags } from '@/hooks/useTags'
 import { type Tag } from '@/features/tags/data/schema'
 
-function hexToRgba(hex: string, alpha: number) {
+function hexToRgba(hex: string | null | undefined, alpha: number) {
+  if (!hex || hex.length < 4) return `rgba(128, 128, 128, ${alpha})`
   const r = parseInt(hex.slice(1, 3), 16)
   const g = parseInt(hex.slice(3, 5), 16)
   const b = parseInt(hex.slice(5, 7), 16)
