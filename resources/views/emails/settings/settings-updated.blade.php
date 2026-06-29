@@ -13,7 +13,7 @@
 
     @component('emails.components.alert', ['type' => 'success'])
         <p style="margin: 0; color: #065f46;">
-            <strong>✓ Changes saved</strong><br>
+            <strong>Changes saved</strong><br>
             Your settings were updated on {{ now()->format('F j, Y \a\t g:i A') }}
         </p>
     @endcomponent

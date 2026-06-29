@@ -2,15 +2,15 @@
 
 namespace App\Mail\Auth;
 
+use App\Mail\BaseMailable;
 use App\Models\User;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
-use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Content;
 use Illuminate\Mail\Mailables\Envelope;
 use Illuminate\Queue\SerializesModels;
 
-class ResetPasswordMail extends Mailable implements ShouldQueue
+class ResetPasswordMail extends BaseMailable implements ShouldQueue
 {
     use Queueable, SerializesModels;
 
@@ -23,7 +23,8 @@ class ResetPasswordMail extends Mailable implements ShouldQueue
     public function envelope(): Envelope
     {
         return new Envelope(
-            subject: 'Reset Your Password',
+            subject: 'Your ' . config('app.name') . ' password reset link',
+            replyTo: [config('mail.from.address')],
         );
     }
 
@@ -31,11 +32,12 @@ class ResetPasswordMail extends Mailable implements ShouldQueue
     {
         return new Content(
             view: 'emails.auth.reset-password',
+            text: 'emails.auth.reset-password-text',
             with: [
-                'user' => $this->user,
-                'resetUrl' => $this->resetUrl,
-                'expirationTime' => $this->expirationTime,
-                'recipient' => $this->user->email,
+                'user'            => $this->user,
+                'resetUrl'        => $this->resetUrl,
+                'expirationTime'  => $this->expirationTime,
+                'recipient'       => $this->user->email,
                 'isSecurityEmail' => true,
             ],
         );

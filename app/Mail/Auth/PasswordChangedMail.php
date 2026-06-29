@@ -2,15 +2,15 @@
 
 namespace App\Mail\Auth;
 
+use App\Mail\BaseMailable;
 use App\Models\User;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
-use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Content;
 use Illuminate\Mail\Mailables\Envelope;
 use Illuminate\Queue\SerializesModels;
 
-class PasswordChangedMail extends Mailable implements ShouldQueue
+class PasswordChangedMail extends BaseMailable implements ShouldQueue
 {
     use Queueable, SerializesModels;
 
@@ -22,7 +22,8 @@ class PasswordChangedMail extends Mailable implements ShouldQueue
     public function envelope(): Envelope
     {
         return new Envelope(
-            subject: 'Password Successfully Changed',
+            subject: 'Your ' . config('app.name') . ' password has been updated',
+            replyTo: [config('mail.from.address')],
         );
     }
 
@@ -30,10 +31,11 @@ class PasswordChangedMail extends Mailable implements ShouldQueue
     {
         return new Content(
             view: 'emails.auth.password-changed',
+            text: 'emails.auth.password-changed-text',
             with: [
-                'user' => $this->user,
-                'ipAddress' => $this->ipAddress,
-                'recipient' => $this->user->email,
+                'user'            => $this->user,
+                'ipAddress'       => $this->ipAddress,
+                'recipient'       => $this->user->email,
                 'isSecurityEmail' => true,
             ],
         );

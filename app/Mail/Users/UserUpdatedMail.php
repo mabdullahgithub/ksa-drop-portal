@@ -2,15 +2,15 @@
 
 namespace App\Mail\Users;
 
+use App\Mail\BaseMailable;
 use App\Models\User;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
-use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Content;
 use Illuminate\Mail\Mailables\Envelope;
 use Illuminate\Queue\SerializesModels;
 
-class UserUpdatedMail extends Mailable implements ShouldQueue
+class UserUpdatedMail extends BaseMailable implements ShouldQueue
 {
     use Queueable, SerializesModels;
 
@@ -25,7 +25,8 @@ class UserUpdatedMail extends Mailable implements ShouldQueue
     public function envelope(): Envelope
     {
         return new Envelope(
-            subject: 'User Account Updated',
+            subject: 'Team member account updated: ' . $this->updatedUser->name,
+            replyTo: [config('mail.from.address')],
         );
     }
 
@@ -33,13 +34,14 @@ class UserUpdatedMail extends Mailable implements ShouldQueue
     {
         return new Content(
             view: 'emails.users.user-updated',
+            text: 'emails.users.user-updated-text',
             with: [
-                'admin' => $this->admin,
+                'admin'       => $this->admin,
                 'updatedUser' => $this->updatedUser,
-                'updatedBy' => $this->updatedBy,
-                'changes' => $this->changes,
-                'userUrl' => $this->userUrl,
-                'recipient' => $this->admin->email,
+                'updatedBy'   => $this->updatedBy,
+                'changes'     => $this->changes,
+                'userUrl'     => $this->userUrl,
+                'recipient'   => $this->admin->email,
             ],
         );
     }

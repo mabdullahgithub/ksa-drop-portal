@@ -192,10 +192,13 @@
                                 {{ config('app.name') }}
                             </p>
                             <p class="text-muted" style="margin:0 0 8px 0; color:#9ca3af; font-size:13px;">
-                                Kingdom of Saudi Arabia
+                                Riyadh, Kingdom of Saudi Arabia
                             </p>
                             <p class="text-muted" style="margin:0 0 12px 0; color:#9ca3af; font-size:12px; line-height:1.6;">
                                 This email was sent to {{ $recipient ?? 'you' }} because an action was taken on your account.
+                            </p>
+                            <p class="text-muted" style="margin:0 0 10px 0; color:#b3b8c2; font-size:12px;">
+                                <a href="{{ rtrim(config('app.url'), '/') }}/settings/email" style="color:#b3b8c2; text-decoration:underline;">Manage email preferences</a>
                             </p>
                             <p class="text-muted" style="margin:0; color:#b3b8c2; font-size:12px;">
                                 &copy; {{ date('Y') }} {{ config('app.name') }}. All rights reserved.

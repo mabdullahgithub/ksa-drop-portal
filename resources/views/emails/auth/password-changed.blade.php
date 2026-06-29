@@ -13,7 +13,7 @@
 
     @component('emails.components.alert', ['type' => 'success'])
         <p style="margin: 0; color: #065f46;">
-            <strong>✓ Your password has been updated</strong><br>
+            <strong>Your password has been updated</strong><br>
             You can now use your new password to sign in to your account.
         </p>
     @endcomponent

@@ -2,44 +2,37 @@
 
 namespace App\Mail\Auth;
 
+use App\Mail\BaseMailable;
 use App\Models\User;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
-use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Content;
 use Illuminate\Mail\Mailables\Envelope;
 use Illuminate\Queue\SerializesModels;
 
-class WelcomeMail extends Mailable implements ShouldQueue
+class WelcomeMail extends BaseMailable implements ShouldQueue
 {
     use Queueable, SerializesModels;
 
-    /**
-     * Create a new message instance.
-     */
     public function __construct(
         public User $user
     ) {}
 
-    /**
-     * Get the message envelope.
-     */
     public function envelope(): Envelope
     {
         return new Envelope(
-            subject: 'Welcome to ' . config('app.name') . '!',
+            subject: 'Welcome to ' . config('app.name'),
+            replyTo: [config('mail.from.address')],
         );
     }
 
-    /**
-     * Get the message content definition.
-     */
     public function content(): Content
     {
         return new Content(
             view: 'emails.auth.welcome',
+            text: 'emails.auth.welcome-text',
             with: [
-                'user' => $this->user,
+                'user'      => $this->user,
                 'recipient' => $this->user->email,
             ],
         );
