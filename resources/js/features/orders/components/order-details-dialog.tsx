@@ -35,8 +35,6 @@ interface OrderDetailsDialogProps {
 // Fields the admin can edit. Mirrors the validation in OrderController::update.
 const EDITABLE_FIELDS = [
   'customer_name', 'customer_email', 'customer_phone',
-  'billing_name', 'billing_phone', 'billing_address1', 'billing_address2',
-  'billing_city', 'billing_province', 'billing_zip', 'billing_country',
   'shipping_name', 'shipping_phone', 'shipping_address1', 'shipping_address2',
   'shipping_city', 'shipping_province', 'shipping_zip', 'shipping_country',
   'fulfillment_status', 'financial_status', 'risk_level',
@@ -249,23 +247,6 @@ export function OrderDetailsDialog({ order, open, onOpenChange, onSaved, startIn
                 {renderField('Province', 'shipping_province')}
                 {renderField('Zip', 'shipping_zip')}
                 {renderField('Country', 'shipping_country')}
-              </div>
-            </div>
-
-            <Separator />
-
-            {/* Billing address */}
-            <div>
-              <h3 className='font-semibold mb-3'>Billing Address</h3>
-              <div className='grid grid-cols-2 gap-4'>
-                {renderField('Name', 'billing_name')}
-                {renderField('Phone', 'billing_phone')}
-                {renderField('Address 1', 'billing_address1')}
-                {renderField('Address 2', 'billing_address2')}
-                {renderField('City', 'billing_city')}
-                {renderField('Province', 'billing_province')}
-                {renderField('Zip', 'billing_zip')}
-                {renderField('Country', 'billing_country')}
               </div>
             </div>
 

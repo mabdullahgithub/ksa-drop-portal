@@ -13,6 +13,24 @@ use Illuminate\Support\Facades\Storage;
 
 class PortalController extends Controller
 {
+    private function generateOrderNumber(string $prefix): string
+    {
+        // Count existing orders with this prefix to derive the next sequential number.
+        // Keeps IDs short and human-readable: e.g. ASCXAS00001, ASCXAS00002 …
+        $count = \App\Models\Order::where('order_number', 'like', $prefix . '%')->count();
+        $next  = $count + 1;
+
+        $candidate = $prefix . str_pad($next, 5, '0', STR_PAD_LEFT);
+
+        // Resolve collisions (concurrent requests, gaps from deletions, etc.)
+        while (\App\Models\Order::where('order_number', $candidate)->exists()) {
+            $next++;
+            $candidate = $prefix . str_pad($next, 5, '0', STR_PAD_LEFT);
+        }
+
+        return $candidate;
+    }
+
     private function resolveClient(): ?Client
     {
         if (session()->has('impersonate.client_id')) {
@@ -173,7 +191,7 @@ class PortalController extends Controller
 
         // Always auto-generate order numbers prefixed with the client identifier
         // so they stay unique across clients (order_number has a global unique index).
-        // Format: "{prefix}{YmdHis}{2-digit-rand}" e.g. "EVENIE2026062412345678".
+        // Format: "{prefix}{5-digit-seq}" e.g. "EVENIE00001".
         $prefix = $client->short_id ?: 'CL' . $client->id;
 
         DB::beginTransaction();
@@ -223,9 +241,7 @@ class PortalController extends Controller
                     }
 
                     // ── Auto-generate a unique order number ──────────────────────
-                    do {
-                        $orderNumber = $prefix . date('YmdHis') . rand(10, 99);
-                    } while (\App\Models\Order::where('order_number', $orderNumber)->exists());
+                    $orderNumber = $this->generateOrderNumber($prefix);
 
                     // ── Resolve address fields ───────────────────────────────────
                     // Simplified template: Address, City
@@ -390,13 +406,8 @@ class PortalController extends Controller
             'lineitem_sku'       => 'nullable|string|max:255',
         ]);
 
-        $prefix    = $client->short_id ?: 'CL' . $client->id;
-        $orderNumber = $prefix . date('YmdHis') . rand(10, 99);
-
-        // Ensure uniqueness in the unlikely case of a collision
-        while (\App\Models\Order::where('order_number', $orderNumber)->exists()) {
-            $orderNumber = $prefix . date('YmdHis') . rand(10, 99);
-        }
+        $prefix      = $client->short_id ?: 'CL' . $client->id;
+        $orderNumber = $this->generateOrderNumber($prefix);
 
         $order = \App\Models\Order::create([
             'client_id'       => $client->id,
