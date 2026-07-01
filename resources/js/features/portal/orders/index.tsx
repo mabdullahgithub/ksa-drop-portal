@@ -45,6 +45,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
 
 const MAX_FILE_SIZE_MB = 10
@@ -1057,11 +1058,21 @@ function CreateOrderDialog({
                 />
                 {errors.total && <p className='text-xs text-destructive'>{errors.total}</p>}
               </div>
-              {field('Payment Method', 'co-payment', {
-                placeholder: 'Cash on Delivery',
-                value: form.payment_method,
-                onChange: (e) => set('payment_method', e.target.value),
-              })}
+              <div className='space-y-1'>
+                <Label htmlFor='co-payment' className='text-xs font-medium'>Payment Method</Label>
+                <Select
+                  value={form.payment_method}
+                  onValueChange={(v) => set('payment_method', v)}
+                >
+                  <SelectTrigger id='co-payment' className='h-8 text-sm'>
+                    <SelectValue placeholder='Select…' />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value='Cash on Delivery'>Cash on Delivery</SelectItem>
+                    <SelectItem value='Prepaid'>Prepaid</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           </div>
 
