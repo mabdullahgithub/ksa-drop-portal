@@ -17,6 +17,7 @@ class Warehouse extends Model
         'city',
         'area',
         'address',
+        'short_address',
         'post_code',
         'country_code',
         'is_default',

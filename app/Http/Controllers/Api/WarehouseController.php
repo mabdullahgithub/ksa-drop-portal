@@ -20,16 +20,17 @@ class WarehouseController extends Controller
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'name' => 'required|string|max:255',
-            'contact_name' => 'required|string|max:255',
-            'phone' => 'required|string|max:20',
-            'province' => 'required|string|max:255',
-            'city' => 'required|string|max:255',
-            'area' => 'nullable|string|max:255',
-            'address' => 'required|string|max:500',
-            'post_code' => 'nullable|string|max:20',
-            'country_code' => 'string|max:5',
-            'is_default' => 'boolean',
+            'name'          => 'required|string|max:255',
+            'contact_name'  => 'required|string|max:255',
+            'phone'         => 'required|string|max:20',
+            'province'      => 'required|string|max:255',
+            'city'          => 'required|string|max:255',
+            'area'          => 'nullable|string|max:255',
+            'address'       => 'required|string|max:500',
+            'short_address' => 'nullable|string|max:50',
+            'post_code'     => 'nullable|string|max:20',
+            'country_code'  => 'string|max:5',
+            'is_default'    => 'boolean',
         ]);
 
         if ($validated['is_default'] ?? false) {
@@ -44,17 +45,18 @@ class WarehouseController extends Controller
     public function update(Request $request, Warehouse $warehouse)
     {
         $validated = $request->validate([
-            'name' => 'required|string|max:255',
-            'contact_name' => 'required|string|max:255',
-            'phone' => 'required|string|max:20',
-            'province' => 'required|string|max:255',
-            'city' => 'required|string|max:255',
-            'area' => 'nullable|string|max:255',
-            'address' => 'required|string|max:500',
-            'post_code' => 'nullable|string|max:20',
-            'country_code' => 'string|max:5',
-            'is_default' => 'boolean',
-            'is_active' => 'boolean',
+            'name'          => 'required|string|max:255',
+            'contact_name'  => 'required|string|max:255',
+            'phone'         => 'required|string|max:20',
+            'province'      => 'required|string|max:255',
+            'city'          => 'required|string|max:255',
+            'area'          => 'nullable|string|max:255',
+            'address'       => 'required|string|max:500',
+            'short_address' => 'nullable|string|max:50',
+            'post_code'     => 'nullable|string|max:20',
+            'country_code'  => 'string|max:5',
+            'is_default'    => 'boolean',
+            'is_active'     => 'boolean',
         ]);
 
         if ($validated['is_default'] ?? false) {

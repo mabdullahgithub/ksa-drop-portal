@@ -55,41 +55,47 @@ class JntExpressDriver implements CourierDriver
         }
 
         $bizContent = [
-            'customerCode' => $credentials['customer_code'],
-            'digest'       => $this->buildInnerDigest(),
-            'txlogisticId' => $data->txlogisticId,
-            'orderType' => '1',
-            'serviceType' => $data->serviceType,
-            'deliveryType' => '03',
-            'operateType' => '1',
-            'expressType' => 'EZKSA',
-            'goodsType' => 'ITN1',
-            'weight' => (string) $data->weight,
-            'itemName' => $data->itemDescription,
+            'customerCode'  => $credentials['customer_code'],
+            'digest'        => $this->buildInnerDigest(),
+            'txlogisticId'  => $data->txlogisticId,
+            'orderType'     => '1',
+            'serviceType'   => $data->serviceType,
+            'deliveryType'  => '04',
+            'operateType'   => (string) $data->operateType,
+            'expressType'   => 'EZKSA',
+            'goodsType'     => $data->goodsType,
+            'weight'        => (string) $data->weight,
+            'itemName'      => $data->itemDescription,
             'totalQuantity' => (string) $data->quantity,
-            'sender' => [
-                'name' => $data->sender['name'],
-                'phone' => $data->sender['phone'],
-                'mobile' => $data->sender['phone'],
-                'countryCode' => $this->normalizeCountryCode($data->sender['countryCode'] ?? null),
-                'prov' => $senderProvince,
-                'city' => $data->sender['city'],
-                'area' => $data->sender['area'] ?? '',
-                'address' => $data->sender['address'],
-                'postCode' => $data->sender['postCode'] ?? '',
-            ],
-            'receiver' => [
-                'name' => $data->receiver['name'],
-                'phone' => $data->receiver['phone'],
-                'mobile' => $data->receiver['phone'],
-                'countryCode' => $this->normalizeCountryCode($data->receiver['countryCode'] ?? null),
-                'prov' => $receiverProvince,
-                'city' => $data->receiver['city'],
-                'area' => $data->receiver['area'] ?? '',
-                'address' => $data->receiver['address'],
-                'postCode' => $data->receiver['postCode'] ?? '',
-            ],
+            'sender'        => array_filter([
+                'name'         => $data->sender['name'],
+                'phone'        => $data->sender['phone'],
+                'mobile'       => $data->sender['phone'],
+                'countryCode'  => $this->normalizeCountryCode($data->sender['countryCode'] ?? null),
+                'prov'         => $senderProvince,
+                'city'         => $data->sender['city'],
+                'area'         => $data->sender['area'] ?? '',
+                'address'      => $data->sender['address'],
+                'postCode'     => $data->sender['postCode'] ?? '',
+                'shortAddress' => $data->sender['shortAddress'] ?? '',
+            ], fn ($v) => $v !== null && $v !== ''),
+            'receiver'      => array_filter([
+                'name'         => $data->receiver['name'],
+                'phone'        => $data->receiver['phone'],
+                'mobile'       => $data->receiver['phone'],
+                'countryCode'  => $this->normalizeCountryCode($data->receiver['countryCode'] ?? null),
+                'prov'         => $receiverProvince,
+                'city'         => $data->receiver['city'],
+                'area'         => $data->receiver['area'] ?? '',
+                'address'      => $data->receiver['address'],
+                'postCode'     => $data->receiver['postCode'] ?? '',
+                'shortAddress' => $data->receiver['shortAddress'] ?? '',
+            ], fn ($v) => $v !== null && $v !== ''),
         ];
+
+        if ($data->billCode) {
+            $bizContent['billCode'] = $data->billCode;
+        }
 
         if ($data->length) {
             $bizContent['length'] = (string) $data->length;
@@ -99,6 +105,21 @@ class JntExpressDriver implements CourierDriver
         }
         if ($data->height) {
             $bizContent['height'] = (string) $data->height;
+        }
+
+        if ($data->remark) {
+            $bizContent['remark'] = $data->remark;
+        }
+
+        if (! empty($data->items)) {
+            $bizContent['items'] = array_map(fn ($item) => [
+                'itemName'      => $item['name'],
+                'itemType'      => $item['type'] ?? 'ITN4',
+                'number'        => $item['quantity'] ?? 1,
+                'itemValue'     => (string) ($item['value'] ?? '0'),
+                'priceCurrency' => $item['currency'] ?? 'SAR',
+                'desc'          => $item['description'] ?? '',
+            ], $data->items);
         }
 
         $response = $this->makeRequest('/webopenplatformapi/api/order/addOrder', $bizContent);

@@ -59,20 +59,23 @@ class ShipmentController extends Controller
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'order_id' => 'required|exists:orders,id',
-            'warehouse_id' => 'required|exists:warehouses,id',
-            'weight' => 'nullable|numeric|min:0.1',
-            'length' => 'nullable|numeric|min:0',
-            'width' => 'nullable|numeric|min:0',
-            'height' => 'nullable|numeric|min:0',
-            'service_type' => 'nullable|in:01,02',
-            'receiver_name' => 'nullable|string|max:255',
-            'receiver_phone' => 'nullable|string|max:20',
-            'receiver_province' => 'nullable|string|max:255',
-            'receiver_city' => 'nullable|string|max:255',
-            'receiver_area' => 'nullable|string|max:255',
-            'receiver_address' => 'nullable|string|max:500',
-            'receiver_post_code' => 'nullable|string|max:20',
+            'order_id'               => 'required|exists:orders,id',
+            'warehouse_id'           => 'required|exists:warehouses,id',
+            'weight'                 => 'nullable|numeric|min:0.1',
+            'length'                 => 'nullable|numeric|min:0',
+            'width'                  => 'nullable|numeric|min:0',
+            'height'                 => 'nullable|numeric|min:0',
+            'service_type'           => 'nullable|in:01,02',
+            'goods_type'             => 'nullable|in:ITN1,ITN2,ITN3,ITN4,ITN5,ITN6,ITN7',
+            'remark'                 => 'nullable|string|max:200',
+            'receiver_name'          => 'nullable|string|max:255',
+            'receiver_phone'         => 'nullable|string|max:20',
+            'receiver_province'      => 'nullable|string|max:255',
+            'receiver_city'          => 'nullable|string|max:255',
+            'receiver_area'          => 'nullable|string|max:255',
+            'receiver_address'       => 'nullable|string|max:500',
+            'receiver_post_code'     => 'nullable|string|max:20',
+            'receiver_short_address' => 'nullable|string|max:50',
         ]);
 
         $order = Order::with('items')->findOrFail($validated['order_id']);
@@ -126,11 +129,13 @@ class ShipmentController extends Controller
     public function bulkStore(Request $request)
     {
         $validated = $request->validate([
-            'order_ids' => 'required|array|min:1',
-            'order_ids.*' => 'exists:orders,id',
+            'order_ids'    => 'required|array|min:1',
+            'order_ids.*'  => 'exists:orders,id',
             'warehouse_id' => 'required|exists:warehouses,id',
-            'weight' => 'nullable|numeric|min:0.1',
+            'weight'       => 'nullable|numeric|min:0.1',
             'service_type' => 'nullable|in:01,02',
+            'goods_type'   => 'nullable|in:ITN1,ITN2,ITN3,ITN4,ITN5,ITN6,ITN7',
+            'remark'       => 'nullable|string|max:200',
         ]);
 
         $warehouse = Warehouse::findOrFail($validated['warehouse_id']);
@@ -153,8 +158,10 @@ class ShipmentController extends Controller
             }
 
             $options = array_filter([
-                'weight' => $validated['weight'] ?? null,
+                'weight'       => $validated['weight'] ?? null,
                 'service_type' => $validated['service_type'] ?? null,
+                'goods_type'   => $validated['goods_type'] ?? null,
+                'remark'       => $validated['remark'] ?? null,
             ]);
 
             $shipmentData = ShipmentData::fromOrder($order, $warehouse, $options);
@@ -185,6 +192,70 @@ class ShipmentController extends Controller
             'message' => count($created) . ' shipment(s) created, ' . count($failed) . ' failed.',
             'created' => $created,
             'failed' => $failed,
+        ]);
+    }
+
+    public function update(Request $request, Shipment $shipment)
+    {
+        $validated = $request->validate([
+            'warehouse_id'           => 'required|exists:warehouses,id',
+            'weight'                 => 'nullable|numeric|min:0.1',
+            'length'                 => 'nullable|numeric|min:0',
+            'width'                  => 'nullable|numeric|min:0',
+            'height'                 => 'nullable|numeric|min:0',
+            'service_type'           => 'nullable|in:01,02',
+            'goods_type'             => 'nullable|in:ITN1,ITN2,ITN3,ITN4,ITN5,ITN6,ITN7',
+            'remark'                 => 'nullable|string|max:200',
+            'receiver_name'          => 'nullable|string|max:255',
+            'receiver_phone'         => 'nullable|string|max:20',
+            'receiver_province'      => 'nullable|string|max:255',
+            'receiver_city'          => 'nullable|string|max:255',
+            'receiver_area'          => 'nullable|string|max:255',
+            'receiver_address'       => 'nullable|string|max:500',
+            'receiver_post_code'     => 'nullable|string|max:20',
+            'receiver_short_address' => 'nullable|string|max:50',
+        ]);
+
+        if ($shipment->status_enum->isTerminal()) {
+            return response()->json(['message' => 'Cannot modify a shipment with status: ' . $shipment->status_label], 422);
+        }
+
+        $order     = $shipment->order()->with('items')->firstOrFail();
+        $warehouse = Warehouse::findOrFail($validated['warehouse_id']);
+
+        $options = array_merge($validated, [
+            'operate_type'  => 2,
+            'bill_code'     => $shipment->tracking_number,
+            'txlogistic_id' => $shipment->txlogistic_id,
+        ]);
+
+        $shipmentData = ShipmentData::fromOrder($order, $warehouse, $options);
+
+        $driver = $this->courierManager->driver('jnt_express');
+        $result = $driver->createShipment($shipmentData);
+
+        if (! $result->success) {
+            return response()->json([
+                'message'    => 'Failed to modify shipment at J&T Express.',
+                'error'      => $result->errorMessage,
+                'error_code' => $result->errorCode,
+            ], 422);
+        }
+
+        $shipment->update(array_filter([
+            'tracking_number' => $result->trackingNumber ?: $shipment->tracking_number,
+            'sorting_code'    => $result->sortingCode,
+            'weight'          => $shipmentData->weight,
+            'length'          => $shipmentData->length,
+            'width'           => $shipmentData->width,
+            'height'          => $shipmentData->height,
+            'service_type'    => $shipmentData->serviceType,
+            'api_response'    => $result->rawResponse,
+        ], fn ($v) => $v !== null));
+
+        return response()->json([
+            'message'  => 'Shipment updated successfully.',
+            'shipment' => $shipment->fresh(),
         ]);
     }
 

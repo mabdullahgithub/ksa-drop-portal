@@ -45,6 +45,8 @@ export function CreateShipmentDialog({ order, open, onOpenChange, onSuccess }: C
     width: '',
     height: '',
     service_type: '02',
+    goods_type: 'ITN1',
+    remark: '',
     receiver_name: '',
     receiver_phone: '',
     receiver_province: '',
@@ -52,6 +54,7 @@ export function CreateShipmentDialog({ order, open, onOpenChange, onSuccess }: C
     receiver_area: '',
     receiver_address: '',
     receiver_post_code: '',
+    receiver_short_address: '',
   })
 
   useEffect(() => {
@@ -108,6 +111,7 @@ export function CreateShipmentDialog({ order, open, onOpenChange, onSuccess }: C
         warehouse_id: selectedWarehouse,
         weight: parseFloat(form.weight) || 0.5,
         service_type: form.service_type,
+        goods_type: form.goods_type,
         receiver_name: form.receiver_name,
         receiver_phone: form.receiver_phone,
         receiver_province: form.receiver_province,
@@ -115,6 +119,8 @@ export function CreateShipmentDialog({ order, open, onOpenChange, onSuccess }: C
         receiver_area: form.receiver_area,
         receiver_address: form.receiver_address,
         receiver_post_code: form.receiver_post_code,
+        receiver_short_address: form.receiver_short_address || undefined,
+        remark: form.remark || undefined,
       }
 
       if (form.length) payload.length = parseFloat(form.length)
@@ -213,17 +219,26 @@ export function CreateShipmentDialog({ order, open, onOpenChange, onSuccess }: C
                   />
                 </div>
                 <div className='space-y-1'>
-                  <Label className='text-xs text-muted-foreground'>Area / District</Label>
+                  <Label className='text-xs text-muted-foreground'>Area / District <span className='italic'>(optional)</span></Label>
                   <Input
                     value={form.receiver_area}
                     onChange={(e) => setForm({ ...form, receiver_area: e.target.value })}
                   />
                 </div>
                 <div className='space-y-1'>
-                  <Label className='text-xs text-muted-foreground'>Postal Code</Label>
+                  <Label className='text-xs text-muted-foreground'>Postal Code <span className='italic'>(optional)</span></Label>
                   <Input
                     value={form.receiver_post_code}
                     onChange={(e) => setForm({ ...form, receiver_post_code: e.target.value })}
+                  />
+                </div>
+                <div className='space-y-1 md:col-span-2'>
+                  <Label className='text-xs text-muted-foreground'>Short Address (Saudi National Address — optional)</Label>
+                  <Input
+                    value={form.receiver_short_address}
+                    onChange={(e) => setForm({ ...form, receiver_short_address: e.target.value })}
+                    placeholder='e.g. BLDN1234'
+                    maxLength={50}
                   />
                 </div>
                 <div className='space-y-1 md:col-span-2'>
@@ -252,43 +267,67 @@ export function CreateShipmentDialog({ order, open, onOpenChange, onSuccess }: C
                   />
                 </div>
                 <div className='space-y-1'>
-                  <Label className='text-xs text-muted-foreground'>Length (cm)</Label>
+                  <Label className='text-xs text-muted-foreground'>Length (cm) <span className='italic'>(optional)</span></Label>
                   <Input
                     type='number'
                     value={form.length}
                     onChange={(e) => setForm({ ...form, length: e.target.value })}
-                    placeholder='Optional'
                   />
                 </div>
                 <div className='space-y-1'>
-                  <Label className='text-xs text-muted-foreground'>Width (cm)</Label>
+                  <Label className='text-xs text-muted-foreground'>Width (cm) <span className='italic'>(optional)</span></Label>
                   <Input
                     type='number'
                     value={form.width}
                     onChange={(e) => setForm({ ...form, width: e.target.value })}
-                    placeholder='Optional'
                   />
                 </div>
                 <div className='space-y-1'>
-                  <Label className='text-xs text-muted-foreground'>Height (cm)</Label>
+                  <Label className='text-xs text-muted-foreground'>Height (cm) <span className='italic'>(optional)</span></Label>
                   <Input
                     type='number'
                     value={form.height}
                     onChange={(e) => setForm({ ...form, height: e.target.value })}
-                    placeholder='Optional'
                   />
                 </div>
               </div>
-              <div className='space-y-1 max-w-xs'>
-                <Label className='text-xs text-muted-foreground'>Service Type</Label>
-                <select
-                  className='flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm'
-                  value={form.service_type}
-                  onChange={(e) => setForm({ ...form, service_type: e.target.value })}
-                >
-                  <option value='01'>Express</option>
-                  <option value='02'>Standard</option>
-                </select>
+              <div className='grid gap-3 md:grid-cols-2'>
+                <div className='space-y-1'>
+                  <Label className='text-xs text-muted-foreground'>Service Type</Label>
+                  <select
+                    className='flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm'
+                    value={form.service_type}
+                    onChange={(e) => setForm({ ...form, service_type: e.target.value })}
+                  >
+                    <option value='01'>Express (pickup at door)</option>
+                    <option value='02'>Standard (drop at J&amp;T store)</option>
+                  </select>
+                </div>
+                <div className='space-y-1'>
+                  <Label className='text-xs text-muted-foreground'>Goods Type</Label>
+                  <select
+                    className='flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm'
+                    value={form.goods_type}
+                    onChange={(e) => setForm({ ...form, goods_type: e.target.value })}
+                  >
+                    <option value='ITN1'>Clothes (ITN1)</option>
+                    <option value='ITN2'>Document (ITN2)</option>
+                    <option value='ITN3'>Food (ITN3)</option>
+                    <option value='ITN4'>Others (ITN4)</option>
+                    <option value='ITN5'>Digital Product (ITN5)</option>
+                    <option value='ITN6'>Daily Necessities (ITN6)</option>
+                    <option value='ITN7'>Fragile Items (ITN7)</option>
+                  </select>
+                </div>
+              </div>
+              <div className='space-y-1'>
+                <Label className='text-xs text-muted-foreground'>Remark (optional, forwarded to J&amp;T)</Label>
+                <Input
+                  value={form.remark}
+                  onChange={(e) => setForm({ ...form, remark: e.target.value })}
+                  placeholder='Order notes or special instructions'
+                  maxLength={200}
+                />
               </div>
             </div>
           </div>

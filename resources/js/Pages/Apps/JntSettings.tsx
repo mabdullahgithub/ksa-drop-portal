@@ -50,6 +50,7 @@ interface Warehouse {
   city: string
   area: string | null
   address: string
+  short_address: string | null
   post_code: string | null
   country_code: string
   is_default: boolean
@@ -79,6 +80,7 @@ export default function JntSettings() {
     city: '',
     area: '',
     address: '',
+    short_address: '',
     post_code: '',
     country_code: 'SA',
     is_default: false,
@@ -177,6 +179,7 @@ export default function JntSettings() {
         city: '',
         area: '',
         address: '',
+        short_address: '',
         post_code: '',
         country_code: 'SA',
         is_default: false,
@@ -198,6 +201,7 @@ export default function JntSettings() {
       city: warehouse.city,
       area: warehouse.area || '',
       address: warehouse.address,
+      short_address: warehouse.short_address || '',
       post_code: warehouse.post_code || '',
       country_code: warehouse.country_code,
       is_default: warehouse.is_default,
@@ -480,6 +484,17 @@ export default function JntSettings() {
                       />
                     </div>
                     <div className='space-y-2'>
+                      <Label>
+                        Short Address <span className='text-xs text-muted-foreground font-normal'>(Saudi National Address — optional)</span>
+                      </Label>
+                      <Input
+                        value={warehouseForm.short_address}
+                        onChange={(e) => setWarehouseForm({ ...warehouseForm, short_address: e.target.value })}
+                        placeholder='e.g. BLDN1234'
+                        maxLength={50}
+                      />
+                    </div>
+                    <div className='space-y-2'>
                       <Label>Postal Code</Label>
                       <Input
                         value={warehouseForm.post_code}
@@ -553,6 +568,7 @@ export default function JntSettings() {
                             </p>
                             <p className='text-sm text-muted-foreground'>
                               {w.address}, {w.area ? `${w.area}, ` : ''}{w.city}, {w.province}
+                              {w.short_address && <span className='ml-1 text-xs'>· {w.short_address}</span>}
                             </p>
                           </div>
                           <div className='flex gap-2'>
