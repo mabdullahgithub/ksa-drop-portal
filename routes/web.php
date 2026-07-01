@@ -242,6 +242,7 @@ Route::prefix('portal')->middleware(['auth', 'verified', 'role:client'])->group(
     Route::post('/api/orders', [PortalController::class, 'storeOrder'])->name('portal.api.orders.store');
     Route::get('/api/orders/import-template', [PortalController::class, 'ordersImportTemplate'])->name('portal.api.orders.import-template');
     Route::get('/api/orders/export', [PortalController::class, 'exportOrders'])->name('portal.api.orders.export');
+    Route::get('/api/sku-search', [PortalController::class, 'skuSearch'])->name('portal.api.sku-search');
     Route::get('/api/inventory', [PortalController::class, 'inventory'])->name('portal.api.inventory');
     Route::post('/api/inventory', [PortalController::class, 'storeInventory'])->name('portal.api.inventory.store');
     Route::put('/api/inventory/{product}', [PortalController::class, 'updateInventory'])->name('portal.api.inventory.update');

@@ -476,3 +476,34 @@ export function usePortalFinance(initialFilters: Record<string, any> = {}) {
     refresh: () => fetchFinance(),
   }
 }
+
+export type SkuItem = {
+  id: number
+  type: 'client_product' | 'product'
+  name: string
+  sku: string | null
+  unit_price: number
+}
+
+export function usePortalSkuSearch() {
+  const [items, setItems] = useState<SkuItem[]>([])
+  const [loading, setLoading] = useState(false)
+
+  const search = useCallback(async (query: string) => {
+    setLoading(true)
+    try {
+      const params = new URLSearchParams()
+      if (query) params.set('search', query)
+      const res = await fetch(`/portal/api/sku-search?${params}`)
+      const json = await res.json()
+      setItems(json.items ?? [])
+    } catch {
+      setItems([])
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  return { items, loading, search }
+}
+

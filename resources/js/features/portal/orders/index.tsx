@@ -1,5 +1,5 @@
-import { useState, useRef, useCallback } from 'react'
-import { Download, Upload, CheckCircle2, AlertCircle, FileSpreadsheet, X, Package, DollarSign, Clock, TruckIcon, Copy, XCircle, ShoppingBag, PlusCircle, MessageSquare, HelpCircle } from 'lucide-react'
+import { useState, useRef, useCallback, useEffect } from 'react'
+import { Download, Upload, CheckCircle2, AlertCircle, FileSpreadsheet, X, Package, DollarSign, Clock, TruckIcon, Copy, XCircle, ShoppingBag, PlusCircle, MessageSquare, HelpCircle, ChevronsUpDown, Check } from 'lucide-react'
 import {
   flexRender,
   getCoreRowModel,
@@ -35,7 +35,7 @@ import { Main } from '@/components/layout/main'
 import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
-import { usePortalOrders, usePortalOrderMutations, usePortalDashboard } from '@/hooks/usePortal'
+import { usePortalOrders, usePortalOrderMutations, usePortalDashboard, usePortalSkuSearch, type SkuItem } from '@/hooks/usePortal'
 import { OrdersPagination } from '@/features/orders/components/orders-pagination'
 import { ShipmentStatusInfoModal } from '@/features/orders/components/shipment-status-info-modal'
 import { PortalShipmentStatusCards } from './components/portal-shipment-status-cards'
@@ -43,6 +43,9 @@ import { PortalOrdersFilters } from './components/portal-orders-filters'
 import { usePortalOrderFilterOptions } from '@/hooks/usePortal'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command'
+import { cn } from '@/lib/utils'
 
 const MAX_FILE_SIZE_MB = 10
 const ALLOWED_MIME = ['text/csv', 'application/vnd.ms-excel', 'application/csv']
@@ -700,6 +703,26 @@ function OrderStatCards({ stats, loading }: { stats: any; loading: boolean }) {
 
 // ─── create order dialog ─────────────────────────────────────────────────────
 
+const EMPTY_FORM = {
+  customer_name: '',
+  customer_phone: '',
+  customer_email: '',
+  notes: '',
+  shipping_address1: '',
+  shipping_city: '',
+  shipping_country: 'SA',
+  payment_method: '',
+  lineitem_name: '',
+  lineitem_quantity: '1',
+  lineitem_price: '',
+  lineitem_sku: '',
+  lineitem_client_product_id: '' as string,
+  lineitem_product_id: '' as string,
+  // total is derived (price × qty) but the client can override it
+  total: '',
+  totalManuallySet: false as boolean,
+}
+
 function CreateOrderDialog({
   open,
   onOpenChange,
@@ -710,48 +733,78 @@ function CreateOrderDialog({
   onSuccess?: () => void
 }) {
   const { createOrder } = usePortalOrderMutations()
+  const { items: skuItems, loading: skuLoading, search: skuSearch } = usePortalSkuSearch()
   const [saving, setSaving] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
+  const [skuOpen, setSkuOpen] = useState(false)
+  const [selectedSku, setSelectedSku] = useState<SkuItem | null>(null)
+  const [form, setForm] = useState({ ...EMPTY_FORM })
 
-  const [form, setForm] = useState({
-    customer_name: '',
-    customer_phone: '',
-    customer_email: '',
-    notes: '',
-    shipping_address1: '',
-    shipping_city: '',
-    shipping_country: 'SA',
-    total: '',
-    payment_method: '',
-    lineitem_name: '',
-    lineitem_quantity: '1',
-    lineitem_price: '',
-    lineitem_sku: '',
-  })
+  // Derived total = price × qty (unless the user manually overrode it)
+  const derivedTotal = (() => {
+    const price = parseFloat(form.lineitem_price)
+    const qty = parseInt(form.lineitem_quantity || '1')
+    if (!isNaN(price) && price > 0) return (price * qty).toFixed(2)
+    return ''
+  })()
+
+  const displayTotal = form.totalManuallySet ? form.total : derivedTotal
+
+  // Sync auto-total whenever price/qty changes (unless user overrode)
+  useEffect(() => {
+    if (!form.totalManuallySet) {
+      setForm((prev) => ({ ...prev, total: derivedTotal }))
+    }
+  }, [form.lineitem_price, form.lineitem_quantity, form.totalManuallySet])
+
+  // Load all SKUs when dialog opens
+  useEffect(() => {
+    if (open) skuSearch('')
+  }, [open, skuSearch])
 
   const set = (field: string, value: string) => {
     setForm((prev) => ({ ...prev, [field]: value }))
     setErrors((prev) => { const e = { ...prev }; delete e[field]; return e })
   }
 
+  const handleSkuSelect = (item: SkuItem) => {
+    setSelectedSku(item)
+    setForm((prev) => {
+      const newPrice = item.unit_price > 0 ? String(item.unit_price) : prev.lineitem_price
+      const qty = parseInt(prev.lineitem_quantity || '1')
+      const autoTotal = item.unit_price > 0 ? (item.unit_price * qty).toFixed(2) : prev.total
+      return {
+        ...prev,
+        lineitem_name: item.name,
+        lineitem_sku: item.sku ?? '',
+        lineitem_price: newPrice,
+        lineitem_client_product_id: item.type === 'client_product' ? String(item.id) : '',
+        lineitem_product_id: item.type === 'product' ? String(item.id) : '',
+        total: prev.totalManuallySet ? prev.total : autoTotal,
+      }
+    })
+    setSkuOpen(false)
+  }
+
+  const handleSkuClear = () => {
+    setSelectedSku(null)
+    setForm((prev) => ({
+      ...prev,
+      lineitem_name: '',
+      lineitem_sku: '',
+      lineitem_price: '',
+      lineitem_client_product_id: '',
+      lineitem_product_id: '',
+      total: prev.totalManuallySet ? prev.total : '',
+    }))
+  }
+
   const handleClose = () => {
     if (saving) return
-    setForm({
-      customer_name: '',
-      customer_phone: '',
-      customer_email: '',
-      notes: '',
-      shipping_address1: '',
-      shipping_city: '',
-      shipping_country: 'SA',
-      total: '',
-      payment_method: '',
-      lineitem_name: '',
-      lineitem_quantity: '1',
-      lineitem_price: '',
-      lineitem_sku: '',
-    })
+    setForm({ ...EMPTY_FORM })
     setErrors({})
+    setSelectedSku(null)
+    setSkuOpen(false)
     onOpenChange(false)
   }
 
@@ -760,6 +813,8 @@ function CreateOrderDialog({
     if (!form.customer_name.trim()) errs.customer_name = 'Customer name is required.'
     if (!form.customer_phone.trim()) errs.customer_phone = 'Phone number is required.'
     if (Object.keys(errs).length) { setErrors(errs); return }
+
+    const finalTotal = form.totalManuallySet ? form.total : derivedTotal
 
     setSaving(true)
     try {
@@ -771,19 +826,20 @@ function CreateOrderDialog({
         shipping_address1: form.shipping_address1.trim() || undefined,
         shipping_city: form.shipping_city.trim() || undefined,
         shipping_country: form.shipping_country.trim() || undefined,
-        total: form.total ? parseFloat(form.total) : undefined,
+        total: finalTotal ? parseFloat(finalTotal) : undefined,
         payment_method: form.payment_method.trim() || undefined,
         lineitem_name: form.lineitem_name.trim() || undefined,
         lineitem_quantity: form.lineitem_name.trim() ? parseInt(form.lineitem_quantity || '1') : undefined,
         lineitem_price: form.lineitem_price ? parseFloat(form.lineitem_price) : undefined,
         lineitem_sku: form.lineitem_sku.trim() || undefined,
+        lineitem_client_product_id: form.lineitem_client_product_id ? parseInt(form.lineitem_client_product_id) : undefined,
+        lineitem_product_id: form.lineitem_product_id ? parseInt(form.lineitem_product_id) : undefined,
       }
       const result = await createOrder(payload)
       if (result?.success) {
         onSuccess?.()
         handleClose()
       } else if (result?.errors) {
-        // Map laravel validation errors
         const mapped: Record<string, string> = {}
         Object.entries(result.errors as Record<string, string[]>).forEach(([k, v]) => { mapped[k] = v[0] })
         setErrors(mapped)
@@ -855,27 +911,161 @@ function CreateOrderDialog({
             </div>
           </div>
 
-          {/* Description / Note */}
-          <div className='space-y-1'>
-            <Label htmlFor='co-notes' className='text-xs font-medium flex items-center gap-1.5'>
-              <MessageSquare className='h-3.5 w-3.5 text-muted-foreground' />
-              Description / Note
-            </Label>
-            <Textarea
-              id='co-notes'
-              placeholder='Any relevant notes, special instructions, or a description for this order…'
-              value={form.notes}
-              onChange={(e) => set('notes', e.target.value)}
-              rows={3}
-              maxLength={5000}
-              className='resize-none text-sm'
-            />
-            {form.notes.length > 0 && (
-              <p className='text-xs text-muted-foreground text-right'>{form.notes.length}/5000</p>
-            )}
+          {/* Product — SKU-linked */}
+          <div>
+            <p className='text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2'>
+              Product <span className='normal-case font-normal text-muted-foreground'>(optional)</span>
+            </p>
+            <div className='space-y-3'>
+
+              {/* Searchable SKU dropdown */}
+              <div className='space-y-1'>
+                <Label className='text-xs font-medium'>Select from your inventory</Label>
+                <Popover open={skuOpen} onOpenChange={setSkuOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant='outline'
+                      role='combobox'
+                      aria-expanded={skuOpen}
+                      className='w-full h-9 text-sm justify-between font-normal'
+                    >
+                      {selectedSku
+                        ? <span className='truncate flex items-center gap-1.5'>
+                            <Package className='h-3.5 w-3.5 text-primary shrink-0' />
+                            {selectedSku.sku ? `[${selectedSku.sku}]  ` : ''}{selectedSku.name}
+                          </span>
+                        : <span className='text-muted-foreground'>Search by product name or SKU…</span>}
+                      <ChevronsUpDown className='ml-2 h-3.5 w-3.5 shrink-0 opacity-50' />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className='w-[var(--radix-popover-trigger-width)] p-0' align='start'>
+                    <Command>
+                      <CommandInput
+                        placeholder='Search by name or SKU…'
+                        onValueChange={(v) => skuSearch(v)}
+                      />
+                      <CommandList>
+                        {skuLoading && (
+                          <div className='py-6 text-center text-sm text-muted-foreground'>Loading…</div>
+                        )}
+                        {!skuLoading && skuItems.length === 0 && (
+                          <CommandEmpty>No verified products found.</CommandEmpty>
+                        )}
+                        {!skuLoading && skuItems.length > 0 && (
+                          <CommandGroup>
+                            {skuItems.map((item) => (
+                              <CommandItem
+                                key={`${item.type}-${item.id}`}
+                                value={`${item.sku ?? ''} ${item.name}`}
+                                onSelect={() => handleSkuSelect(item)}
+                              >
+                                <Check className={cn('mr-2 h-3.5 w-3.5 shrink-0', selectedSku?.id === item.id && selectedSku?.type === item.type ? 'opacity-100' : 'opacity-0')} />
+                                <div className='flex-1 min-w-0'>
+                                  <span className='font-medium'>{item.name}</span>
+                                  {item.sku && <span className='ml-2 text-xs text-muted-foreground'>{item.sku}</span>}
+                                </div>
+                                {item.unit_price > 0 && (
+                                  <span className='ml-3 text-xs text-muted-foreground shrink-0'>
+                                    SAR {item.unit_price.toFixed(2)}
+                                  </span>
+                                )}
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        )}
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+                {selectedSku && (
+                  <button type='button' onClick={handleSkuClear}
+                    className='text-xs text-muted-foreground hover:text-destructive underline'>
+                    Clear selection
+                  </button>
+                )}
+              </div>
+
+              {/* Product name — auto-filled from selection, editable */}
+              {field('Product Name', 'co-item-name', {
+                placeholder: 'e.g. T-Shirt – Blue / L',
+                value: form.lineitem_name,
+                onChange: (e) => set('lineitem_name', e.target.value),
+              })}
+
+              {/* Qty + unit price on same row */}
+              <div className='grid grid-cols-2 gap-3'>
+                {field('Qty', 'co-item-qty', {
+                  type: 'number',
+                  min: '1',
+                  value: form.lineitem_quantity,
+                  onChange: (e) => set('lineitem_quantity', e.target.value),
+                })}
+                {field('Unit Price (SAR)', 'co-item-price', {
+                  type: 'number',
+                  min: '0',
+                  step: '0.01',
+                  placeholder: '0.00',
+                  value: form.lineitem_price,
+                  onChange: (e) => set('lineitem_price', e.target.value),
+                })}
+              </div>
+
+              {/* SKU — auto-filled, still editable */}
+              {field('SKU', 'co-item-sku', {
+                placeholder: 'Auto-filled from selection or enter manually',
+                value: form.lineitem_sku,
+                onChange: (e) => set('lineitem_sku', e.target.value),
+              })}
+            </div>
           </div>
 
-          {/* Shipping */}
+          {/* Order Total — derived from price × qty, overridable */}
+          <div className='rounded-lg border bg-muted/30 p-3 space-y-2'>
+            <div className='flex items-center justify-between'>
+              <p className='text-xs font-semibold text-muted-foreground uppercase tracking-wide'>Order Total</p>
+              {!form.totalManuallySet && derivedTotal && (
+                <span className='text-xs text-muted-foreground'>Auto-calculated</span>
+              )}
+              {form.totalManuallySet && (
+                <button type='button'
+                  onClick={() => setForm((p) => ({ ...p, totalManuallySet: false, total: derivedTotal }))}
+                  className='text-xs text-primary hover:underline'>
+                  Reset to auto
+                </button>
+              )}
+            </div>
+            <div className='grid grid-cols-2 gap-3'>
+              <div className='space-y-1'>
+                <Label htmlFor='co-total' className='text-xs font-medium'>
+                  Total (SAR)
+                  {!form.totalManuallySet && derivedTotal && (
+                    <span className='ml-1 text-muted-foreground font-normal'>= qty × price</span>
+                  )}
+                </Label>
+                <Input
+                  id='co-total'
+                  type='number'
+                  min='0'
+                  step='0.01'
+                  placeholder='0.00'
+                  value={displayTotal}
+                  className={cn('h-8 text-sm', !form.totalManuallySet && derivedTotal ? 'bg-muted/50' : '')}
+                  onChange={(e) => {
+                    setForm((p) => ({ ...p, total: e.target.value, totalManuallySet: true }))
+                    setErrors((p) => { const e2 = { ...p }; delete e2.total; return e2 })
+                  }}
+                />
+                {errors.total && <p className='text-xs text-destructive'>{errors.total}</p>}
+              </div>
+              {field('Payment Method', 'co-payment', {
+                placeholder: 'Cash on Delivery',
+                value: form.payment_method,
+                onChange: (e) => set('payment_method', e.target.value),
+              })}
+            </div>
+          </div>
+
+          {/* Shipping Address */}
           <div>
             <p className='text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2'>Shipping Address</p>
             <div className='space-y-3'>
@@ -900,57 +1090,24 @@ function CreateOrderDialog({
             </div>
           </div>
 
-          {/* Order value */}
-          <div>
-            <p className='text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2'>Order Value</p>
-            <div className='grid grid-cols-2 gap-3'>
-              {field('Total (SAR)', 'co-total', {
-                type: 'number',
-                min: '0',
-                step: '0.01',
-                placeholder: '0.00',
-                value: form.total,
-                onChange: (e) => set('total', e.target.value),
-              })}
-              {field('Payment Method', 'co-payment', {
-                placeholder: 'Cash on Delivery',
-                value: form.payment_method,
-                onChange: (e) => set('payment_method', e.target.value),
-              })}
-            </div>
-          </div>
-
-          {/* Line item */}
-          <div>
-            <p className='text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2'>Product / Line Item <span className='normal-case font-normal'>(optional)</span></p>
-            <div className='space-y-3'>
-              {field('Product Name', 'co-item-name', {
-                placeholder: 'e.g. T-Shirt – Blue / L',
-                value: form.lineitem_name,
-                onChange: (e) => set('lineitem_name', e.target.value),
-              })}
-              <div className='grid grid-cols-3 gap-3'>
-                {field('Qty', 'co-item-qty', {
-                  type: 'number',
-                  min: '1',
-                  value: form.lineitem_quantity,
-                  onChange: (e) => set('lineitem_quantity', e.target.value),
-                })}
-                {field('Price (SAR)', 'co-item-price', {
-                  type: 'number',
-                  min: '0',
-                  step: '0.01',
-                  placeholder: '0.00',
-                  value: form.lineitem_price,
-                  onChange: (e) => set('lineitem_price', e.target.value),
-                })}
-                {field('SKU', 'co-item-sku', {
-                  placeholder: 'SKU-001',
-                  value: form.lineitem_sku,
-                  onChange: (e) => set('lineitem_sku', e.target.value),
-                })}
-              </div>
-            </div>
+          {/* Description / Note */}
+          <div className='space-y-1'>
+            <Label htmlFor='co-notes' className='text-xs font-medium flex items-center gap-1.5'>
+              <MessageSquare className='h-3.5 w-3.5 text-muted-foreground' />
+              Description / Note
+            </Label>
+            <Textarea
+              id='co-notes'
+              placeholder='Any relevant notes, special instructions, or a description for this order…'
+              value={form.notes}
+              onChange={(e) => set('notes', e.target.value)}
+              rows={2}
+              maxLength={5000}
+              className='resize-none text-sm'
+            />
+            {form.notes.length > 0 && (
+              <p className='text-xs text-muted-foreground text-right'>{form.notes.length}/5000</p>
+            )}
           </div>
         </div>
 

@@ -4,6 +4,8 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use App\Models\ClientProduct;
+use App\Models\Product;
 
 class OrderItem extends Model
 {
@@ -21,6 +23,8 @@ class OrderItem extends Model
         'lineitem_fulfillment_status',
         'lineitem_discount',
         'variant_name',
+        'client_product_id',
+        'product_id',
     ];
 
     protected $casts = [
@@ -37,12 +41,19 @@ class OrderItem extends Model
         'formatted_price',
     ];
 
-    /**
-     * Get the order that owns the order item.
-     */
     public function order()
     {
         return $this->belongsTo(Order::class);
+    }
+
+    public function clientProduct()
+    {
+        return $this->belongsTo(ClientProduct::class);
+    }
+
+    public function product()
+    {
+        return $this->belongsTo(Product::class);
     }
 
     /**

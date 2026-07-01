@@ -400,10 +400,12 @@ class PortalController extends Controller
             'total'              => 'nullable|numeric|min:0',
             'currency'           => 'nullable|string|max:3',
             'payment_method'     => 'nullable|string|max:255',
-            'lineitem_name'      => 'nullable|string|max:500',
-            'lineitem_quantity'  => 'nullable|integer|min:1',
-            'lineitem_price'     => 'nullable|numeric|min:0',
-            'lineitem_sku'       => 'nullable|string|max:255',
+            'lineitem_name'             => 'nullable|string|max:500',
+            'lineitem_quantity'         => 'nullable|integer|min:1',
+            'lineitem_price'            => 'nullable|numeric|min:0',
+            'lineitem_sku'              => 'nullable|string|max:255',
+            'lineitem_client_product_id' => 'nullable|integer|exists:client_products,id',
+            'lineitem_product_id'       => 'nullable|integer|exists:products,id',
         ]);
 
         $prefix      = $client->short_id ?: 'CL' . $client->id;
@@ -439,6 +441,8 @@ class PortalController extends Controller
                 'lineitem_requires_shipping'  => true,
                 'lineitem_taxable'            => false,
                 'lineitem_fulfillment_status' => 'unfulfilled',
+                'client_product_id'           => $validated['lineitem_client_product_id'] ?? null,
+                'product_id'                  => $validated['lineitem_product_id'] ?? null,
             ]);
         }
 
@@ -567,6 +571,65 @@ class PortalController extends Controller
         };
 
         return response()->stream($callback, 200, $headers);
+    }
+
+    /**
+     * Lightweight SKU list for the "create order" dropdown.
+     * Returns only verified client-inventory products (fulfilment clients)
+     * or published catalogue products (dropshippers).
+     */
+    public function skuSearch(Request $request)
+    {
+        $client = $this->resolveClient();
+
+        if (!$client || !in_array('orders', $client->portal_features ?? [])) {
+            abort(403);
+        }
+
+        $search = trim($request->get('search', ''));
+
+        if ($client->is_dropshipper) {
+            $query = \App\Models\Product::where('published', true)
+                ->select('id', 'title as name', 'variant_sku as sku', 'variant_price as unit_price');
+
+            if ($search) {
+                $query->where(function ($q) use ($search) {
+                    $q->where('title', 'like', "%{$search}%")
+                      ->orWhere('variant_sku', 'like', "%{$search}%");
+                });
+            }
+
+            $items = $query->orderBy('title')->limit(50)->get()
+                ->map(fn ($p) => [
+                    'id'           => $p->id,
+                    'type'         => 'product',
+                    'name'         => $p->name,
+                    'sku'          => $p->sku,
+                    'unit_price'   => (float) $p->unit_price,
+                ]);
+        } else {
+            $query = $client->clientProducts()
+                ->where('verification_status', 'verified')
+                ->select('id', 'name', 'sku', 'unit_price');
+
+            if ($search) {
+                $query->where(function ($q) use ($search) {
+                    $q->where('name', 'like', "%{$search}%")
+                      ->orWhere('sku', 'like', "%{$search}%");
+                });
+            }
+
+            $items = $query->orderBy('name')->limit(50)->get()
+                ->map(fn ($p) => [
+                    'id'           => $p->id,
+                    'type'         => 'client_product',
+                    'name'         => $p->name,
+                    'sku'          => $p->sku,
+                    'unit_price'   => (float) $p->unit_price,
+                ]);
+        }
+
+        return response()->json(['items' => $items]);
     }
 
     public function inventory(Request $request)

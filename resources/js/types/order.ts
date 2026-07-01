@@ -135,6 +135,10 @@ export interface OrderItem {
   lineitem_fulfillment_status: string | null
   lineitem_discount: string
   variant_name: string | null
+  client_product_id: number | null
+  product_id: number | null
+  client_product: { id: number; name: string; sku: string | null } | null
+  product: { id: number; title: string; variant_sku: string | null } | null
   total_price: number
   formatted_price: string
   created_at: string
