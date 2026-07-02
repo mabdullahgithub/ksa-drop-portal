@@ -22,6 +22,9 @@ use App\Http\Controllers\SettingsController;
 use App\Http\Controllers\TagController;
 use App\Http\Controllers\TeamController;
 use App\Http\Controllers\ConnectorController;
+use App\Http\Controllers\ShopifyController;
+use App\Http\Controllers\ShopifyWebhookController;
+use App\Http\Controllers\ShopifyPendingOrderController;
 use App\Http\Controllers\TrackingController;
 use App\Http\Controllers\UserRoleController;
 use Illuminate\Support\Facades\Route;
@@ -223,6 +226,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
 // Shared API endpoints
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/api/connectors/enabled', [ConnectorController::class, 'enabledWithComingSoon'])->name('api.connectors.enabled');
+
+    // Shopify OAuth callback — must live at the redirect_uri path (not under /portal).
+    // Not role-gated: the logged-in client is redirected back here from Shopify.
+    Route::get('/shopify/callback', [ShopifyController::class, 'callback'])->name('shopify.callback');
 });
 
 // Client Portal - account restricted page (no role:client check so suspended clients can see it)
@@ -263,6 +270,18 @@ Route::prefix('portal')->middleware(['auth', 'verified', 'role:client'])->group(
     Route::post('/settings/company-profile', [PortalController::class, 'updateCompanyProfile'])->name('portal.settings.company-profile.update');
     Route::post('/settings/logo', [PortalController::class, 'updateLogo'])->name('portal.settings.logo.update');
     Route::delete('/settings/logo', [PortalController::class, 'removeLogo'])->name('portal.settings.logo.remove');
+
+    // Shopify — connect flow + connection management
+    Route::get('/shopify/connect', [ShopifyController::class, 'redirect'])->name('portal.shopify.connect');
+    Route::delete('/api/shopify/disconnect', [ShopifyController::class, 'disconnect'])->name('portal.shopify.disconnect');
+    Route::put('/api/shopify/sync-mode', [ShopifyController::class, 'updateSyncMode'])->name('portal.shopify.sync-mode');
+    Route::post('/api/shopify/retry-webhooks', [ShopifyController::class, 'retryWebhooks'])->name('portal.shopify.retry-webhooks');
+
+    // Shopify — manual-approval queue
+    Route::get('/api/shopify/pending', [ShopifyPendingOrderController::class, 'index'])->name('portal.shopify.pending.index');
+    Route::post('/api/shopify/pending/submit-bulk', [ShopifyPendingOrderController::class, 'submitBulk'])->name('portal.shopify.pending.submit-bulk');
+    Route::post('/api/shopify/pending/{orderId}/submit', [ShopifyPendingOrderController::class, 'submit'])->name('portal.shopify.pending.submit');
+    Route::delete('/api/shopify/pending/{orderId}/dismiss', [ShopifyPendingOrderController::class, 'dismiss'])->name('portal.shopify.pending.dismiss');
 });
 
 // Tracking — single search page + JSON API for AJAX lookup
@@ -275,6 +294,9 @@ Route::post('/webhooks/jnt-express/tracking', [WebhookController::class, 'handle
 Route::post('/webhooks/jnt-express/return', [WebhookController::class, 'handleJntReturn'])->name('webhooks.jnt-express.return');
 Route::post('/webhooks/jnt-express/cod', [WebhookController::class, 'handleJntCod'])->name('webhooks.jnt-express.cod');
 Route::post('/webhooks/jnt-express/otp', [WebhookController::class, 'handleJntOtp'])->name('webhooks.jnt-express.otp');
+
+// Shopify webhooks — public, HMAC-verified inside the controller (CSRF excluded via bootstrap/app.php 'webhooks/*')
+Route::post('/webhooks/shopify', [ShopifyWebhookController::class, 'handle'])->name('webhooks.shopify');
 
 // Error pages
 Route::get('/errors/unauthorized', fn () => Inertia::render('Errors/Unauthorized'))->name('errors.unauthorized');

@@ -10,6 +10,22 @@ class Order extends Model
 {
     use HasFactory, SoftDeletes;
 
+    /**
+     * Hide Shopify orders that are awaiting client review (manual-approval mode)
+     * or that the client dismissed. Only normal orders (null) and approved ones
+     * are visible to every existing admin/portal query. The Shopify Queue tab
+     * opts out via ->withoutGlobalScope('shopify_visible').
+     */
+    protected static function booted(): void
+    {
+        static::addGlobalScope('shopify_visible', function ($builder) {
+            $builder->where(function ($query) {
+                $query->whereNull('shopify_sync_status')
+                    ->orWhere('shopify_sync_status', 'approved');
+            });
+        });
+    }
+
     protected $fillable = [
         'client_id',
         'order_number',
@@ -62,6 +78,7 @@ class Order extends Model
         'risk_level',
         'source',
         'vendor',
+        'shopify_sync_status',
         'utm_source',
         'utm_medium',
         'utm_campaign',

@@ -2,15 +2,15 @@
 
 namespace App\Mail\Settings;
 
+use App\Mail\BaseMailable;
 use App\Models\User;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
-use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Content;
 use Illuminate\Mail\Mailables\Envelope;
 use Illuminate\Queue\SerializesModels;
 
-class SettingsUpdatedMail extends Mailable implements ShouldQueue
+class SettingsUpdatedMail extends BaseMailable implements ShouldQueue
 {
     use Queueable, SerializesModels;
 
@@ -23,8 +23,8 @@ class SettingsUpdatedMail extends Mailable implements ShouldQueue
     public function envelope(): Envelope
     {
         return new Envelope(
-            to: [$this->user->email],
-            subject: ucfirst($this->settingType) . ' Settings Updated',
+            subject: ucfirst($this->settingType) . ' settings updated on your account',
+            replyTo: [config('mail.from.address')],
         );
     }
 
@@ -32,11 +32,12 @@ class SettingsUpdatedMail extends Mailable implements ShouldQueue
     {
         return new Content(
             view: 'emails.settings.settings-updated',
+            text: 'emails.settings.settings-updated-text',
             with: [
-                'user' => $this->user,
+                'user'        => $this->user,
                 'settingType' => $this->settingType,
-                'changes' => $this->changes,
-                'recipient' => $this->user->email,
+                'changes'     => $this->changes,
+                'recipient'   => $this->user->email,
             ],
         );
     }

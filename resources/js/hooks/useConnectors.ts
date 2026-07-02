@@ -6,6 +6,16 @@ export interface Connector {
   name: string
   description: string | null
   enabled: boolean
+  // Shopify client-specific fields — present only when a client views
+  // /api/connectors/enabled (attached server-side from their connection).
+  client_connected?: boolean
+  shop_domain?: string | null
+  sync_mode?: 'auto_sync' | 'manual_approval' | null
+  last_synced_at?: string | null
+  connected_at?: string | null
+  needs_reconnect?: boolean
+  webhooks_registered?: boolean
+  pending_count?: number
 }
 
 const getCsrfToken = () =>

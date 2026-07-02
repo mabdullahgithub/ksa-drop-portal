@@ -2,15 +2,15 @@
 
 namespace App\Mail\Auth;
 
+use App\Mail\BaseMailable;
 use App\Models\User;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
-use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Content;
 use Illuminate\Mail\Mailables\Envelope;
 use Illuminate\Queue\SerializesModels;
 
-class VerifyEmailMail extends Mailable implements ShouldQueue
+class VerifyEmailMail extends BaseMailable implements ShouldQueue
 {
     use Queueable, SerializesModels;
 
@@ -23,7 +23,8 @@ class VerifyEmailMail extends Mailable implements ShouldQueue
     public function envelope(): Envelope
     {
         return new Envelope(
-            subject: 'Verify Your Email Address',
+            subject: 'Please confirm your ' . config('app.name') . ' email address',
+            replyTo: [config('mail.from.address')],
         );
     }
 
@@ -31,12 +32,13 @@ class VerifyEmailMail extends Mailable implements ShouldQueue
     {
         return new Content(
             view: 'emails.auth.verify-email',
+            text: 'emails.auth.verify-email-text',
             with: [
-                'user' => $this->user,
-                'verificationUrl' => $this->verificationUrl,
-                'expirationTime' => $this->expirationTime,
-                'recipient' => $this->user->email,
-                'isSecurityEmail' => true,
+                'user'             => $this->user,
+                'verificationUrl'  => $this->verificationUrl,
+                'expirationTime'   => $this->expirationTime,
+                'recipient'        => $this->user->email,
+                'isSecurityEmail'  => true,
             ],
         );
     }

@@ -2,15 +2,15 @@
 
 namespace App\Mail\Auth;
 
+use App\Mail\BaseMailable;
 use App\Models\User;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
-use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Content;
 use Illuminate\Mail\Mailables\Envelope;
 use Illuminate\Queue\SerializesModels;
 
-class TwoFactorEnabledMail extends Mailable implements ShouldQueue
+class TwoFactorEnabledMail extends BaseMailable implements ShouldQueue
 {
     use Queueable, SerializesModels;
 
@@ -21,7 +21,8 @@ class TwoFactorEnabledMail extends Mailable implements ShouldQueue
     public function envelope(): Envelope
     {
         return new Envelope(
-            subject: 'Two-Factor Authentication Enabled',
+            subject: 'Security update: 2FA enabled on your account',
+            replyTo: [config('mail.from.address')],
         );
     }
 
@@ -29,9 +30,10 @@ class TwoFactorEnabledMail extends Mailable implements ShouldQueue
     {
         return new Content(
             view: 'emails.auth.two-factor-enabled',
+            text: 'emails.auth.two-factor-enabled-text',
             with: [
-                'user' => $this->user,
-                'recipient' => $this->user->email,
+                'user'            => $this->user,
+                'recipient'       => $this->user->email,
                 'isSecurityEmail' => true,
             ],
         );

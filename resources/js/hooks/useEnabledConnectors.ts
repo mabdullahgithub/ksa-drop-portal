@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import type { Connector } from './useConnectors'
 
 export { type Connector }
@@ -8,8 +8,8 @@ export function useEnabledConnectors() {
   const [comingSoon, setComingSoon] = useState(false)
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    fetch('/api/connectors/enabled', { headers: { Accept: 'application/json' } })
+  const refresh = useCallback(() => {
+    return fetch('/api/connectors/enabled', { headers: { Accept: 'application/json' } })
       .then((r) => r.json())
       .then((data) => {
         setConnectors(data.connectors || [])
@@ -18,5 +18,9 @@ export function useEnabledConnectors() {
       .finally(() => setLoading(false))
   }, [])
 
-  return { connectors, comingSoon, loading }
+  useEffect(() => {
+    refresh()
+  }, [refresh])
+
+  return { connectors, comingSoon, loading, refresh }
 }

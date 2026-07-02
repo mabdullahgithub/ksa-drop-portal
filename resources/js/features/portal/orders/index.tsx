@@ -41,6 +41,8 @@ import { ShipmentStatusInfoModal } from '@/features/orders/components/shipment-s
 import { PortalShipmentStatusCards } from './components/portal-shipment-status-cards'
 import { PortalOrdersFilters } from './components/portal-orders-filters'
 import { usePortalOrderFilterOptions } from '@/hooks/usePortal'
+import { useEnabledConnectors } from '@/hooks/useEnabledConnectors'
+import { ShopifyQueuePanel } from './shopify-queue-panel'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -1082,6 +1084,18 @@ export function PortalOrders() {
   const { exportOrders } = usePortalOrderMutations()
   const { data: dashboardData } = usePortalDashboard()
   const { options: filterOptions, loading: filterOptionsLoading } = usePortalOrderFilterOptions()
+  const { connectors, refresh: refreshConnectors } = useEnabledConnectors()
+
+  // Shopify manual-approval queue tab (only shown when connected + manual mode).
+  const shopifyConnector = connectors.find((c) => c.key === 'shopify')
+  const showShopifyTab =
+    !!shopifyConnector?.client_connected &&
+    shopifyConnector?.sync_mode === 'manual_approval'
+  const shopifyPendingCount = shopifyConnector?.pending_count ?? 0
+
+  const [shopifyTab, setShopifyTab] = useState(
+    () => new URLSearchParams(window.location.search).get('tab') === 'shopify-queue'
+  )
 
   const table = useReactTable({
     data: orders,
@@ -1099,6 +1113,7 @@ export function PortalOrders() {
   }
 
   const handleTabChange = (tab: 'unassigned' | 'assigned') => {
+    setShopifyTab(false)
     updateFilters({
       has_shipment: tab === 'assigned',
       page: 1,
@@ -1172,7 +1187,7 @@ export function PortalOrders() {
           <button
             onClick={() => handleTabChange('unassigned')}
             className={`px-4 py-2 text-sm font-medium transition-colors ${
-              activeTab === 'unassigned'
+              !shopifyTab && activeTab === 'unassigned'
                 ? 'border-b-2 border-primary text-primary -mb-px'
                 : 'text-muted-foreground hover:text-foreground'
             }`}
@@ -1187,7 +1202,7 @@ export function PortalOrders() {
           <button
             onClick={() => handleTabChange('assigned')}
             className={`px-4 py-2 text-sm font-medium transition-colors ${
-              activeTab === 'assigned'
+              !shopifyTab && activeTab === 'assigned'
                 ? 'border-b-2 border-primary text-primary -mb-px'
                 : 'text-muted-foreground hover:text-foreground'
             }`}
@@ -1199,19 +1214,42 @@ export function PortalOrders() {
               </span>
             )}
           </button>
+          {showShopifyTab && (
+            <button
+              onClick={() => setShopifyTab(true)}
+              className={`px-4 py-2 text-sm font-medium transition-colors ${
+                shopifyTab
+                  ? 'border-b-2 border-primary text-primary -mb-px'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              Shopify Queue
+              {shopifyPendingCount > 0 && (
+                <span className='ml-1.5 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-amber-700 dark:bg-amber-900 dark:text-amber-400'>
+                  {shopifyPendingCount}
+                </span>
+              )}
+            </button>
+          )}
         </div>
 
+        {shopifyTab ? (
+          <ShopifyQueuePanel onChanged={refreshConnectors} />
+        ) : (
+          <>
         {/* Filters */}
         {filterOptionsLoading ? (
-          <div className='h-9 flex items-center'>
+          <div className='h-9 flex items-center mb-4'>
             <Skeleton className='h-8 w-96' />
           </div>
         ) : (
-          <PortalOrdersFilters
-            filters={filters}
-            onFiltersChange={updateFilters}
-            filterOptions={filterOptions}
-          />
+          <div className='mb-4'>
+            <PortalOrdersFilters
+              filters={filters}
+              onFiltersChange={updateFilters}
+              filterOptions={filterOptions}
+            />
+          </div>
         )}
 
         {/* Orders table section */}
@@ -1279,6 +1317,8 @@ export function PortalOrders() {
             />
           )}
         </div>
+          </>
+        )}
       </Main>
 
       <PortalOrdersImportDialog

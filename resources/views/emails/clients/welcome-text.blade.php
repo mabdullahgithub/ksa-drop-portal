@@ -1,16 +1,16 @@
-Welcome to {{ config('app.name') }}!
+Welcome to {{ config('app.name') }}
 
 Hi {{ $client->contact_person ?? $client->user->name }},
 
 Your client portal account has been created for {{ $client->company_name }}. You can now access your portal to track orders, inventory, and revenue.
 
-Here are your sign-in details for the portal:
+Sign-in details:
   Email:              {{ $client->user->email }}
-  Temporary password: {{ $password }}
+  Initial access code: {{ $password }}
 
-For your security, we recommend updating this temporary password to one of your own after your first sign-in.
+For your security, please set a personal password after your first sign-in.
 
-Login to Portal:
+Sign in to Portal:
 {{ $loginUrl }}
 
 Once logged in, you can:
@@ -20,9 +20,7 @@ Once logged in, you can:
   - Update your company profile
   - Enable two-factor authentication for extra security
 
-Best regards,
-The {{ config('app.name') }} Team
-
 ---
-© {{ date('Y') }} {{ config('app.name') }}. All rights reserved.
 This email was sent because an account was created for your email address.
+Manage email preferences: {{ rtrim(config('app.url'), '/') }}/settings/email
+© {{ date('Y') }} {{ config('app.name') }}. All rights reserved.

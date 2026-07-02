@@ -13,7 +13,7 @@
 
     @component('emails.components.alert', ['type' => 'success'])
         <p style="margin: 0; color: #065f46;">
-            <strong>✓ Your account is now more secure</strong><br>
+            <strong>Your account is now more secure</strong><br>
             From now on, you'll need to provide a verification code from your authenticator app when signing in.
         </p>
     @endcomponent

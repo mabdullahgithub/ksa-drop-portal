@@ -147,7 +147,7 @@ function ConnectorCard({ connector, logo, canEdit, isToggling, onToggle }: Conne
   return (
     <li className='rounded-lg border p-4 hover:shadow-md'>
       <div className='mb-8 flex items-center justify-between'>
-        <div className='flex size-10 items-center justify-center rounded-lg bg-muted p-2'>
+        <div className='flex size-16 items-center justify-center rounded-lg bg-muted overflow-hidden'>
           {logo}
         </div>
         {canEdit && (

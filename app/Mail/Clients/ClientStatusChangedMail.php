@@ -2,15 +2,15 @@
 
 namespace App\Mail\Clients;
 
+use App\Mail\BaseMailable;
 use App\Models\Client;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
-use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Content;
 use Illuminate\Mail\Mailables\Envelope;
 use Illuminate\Queue\SerializesModels;
 
-class ClientStatusChangedMail extends Mailable implements ShouldQueue
+class ClientStatusChangedMail extends BaseMailable implements ShouldQueue
 {
     use Queueable, SerializesModels;
 
@@ -23,7 +23,8 @@ class ClientStatusChangedMail extends Mailable implements ShouldQueue
     public function envelope(): Envelope
     {
         return new Envelope(
-            subject: 'Your Account Status Has Been Updated',
+            subject: 'Your ' . config('app.name') . ' account status has changed',
+            replyTo: [config('mail.from.address')],
         );
     }
 
@@ -31,6 +32,7 @@ class ClientStatusChangedMail extends Mailable implements ShouldQueue
     {
         return new Content(
             view: 'emails.clients.client-status-changed',
+            text: 'emails.clients.client-status-changed-text',
             with: [
                 'client'    => $this->client,
                 'oldStatus' => $this->oldStatus,

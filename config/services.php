@@ -58,4 +58,17 @@ return [
         'base_url' => env('JNT_BASE_URL', 'https://openapi.jtjms-sa.com'),
     ],
 
+    /*
+    | Shopify Integration — public app credentials (OAuth authorization code
+    | grant with expiring offline tokens). Clients connect their own stores;
+    | each connection stores its own access/refresh token in
+    | client_shopify_connections.
+    */
+    'shopify' => [
+        'key'          => env('SHOPIFY_API_KEY'),
+        'secret'       => env('SHOPIFY_API_SECRET'),
+        'scopes'       => env('SHOPIFY_SCOPES', 'read_orders'),
+        'redirect_uri' => env('SHOPIFY_REDIRECT_URI'),
+    ],
+
 ];

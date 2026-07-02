@@ -11,6 +11,10 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        // Trust the ngrok / reverse-proxy forwarded headers so Laravel detects
+        // the original HTTPS scheme instead of the proxied HTTP request.
+        $middleware->trustProxies(at: '*');
+
         $middleware->validateCsrfTokens(except: [
             'webhooks/*',
         ]);
