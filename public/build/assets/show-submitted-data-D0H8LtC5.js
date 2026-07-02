@@ -1,0 +1,1 @@
+import{t as e}from"./app-6e4mO8Uz.js";import{n as t}from"./AuthenticatedLayout-BZAccq_E.js";var n=e();function r(e,r=`You submitted the following values:`){t.message(r,{description:(0,n.jsx)(`pre`,{className:`mt-2 w-full overflow-x-auto rounded-md bg-slate-950 p-4`,children:(0,n.jsx)(`code`,{className:`text-white`,children:JSON.stringify(e,null,2)})})})}export{r as t};
