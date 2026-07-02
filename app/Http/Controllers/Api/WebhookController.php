@@ -10,7 +10,9 @@ use App\Services\Shipping\DTOs\TrackingEvent;
 use App\Services\Shipping\Enums\ShipmentStatus;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Throwable;
 
 class WebhookController extends Controller
 {
@@ -35,41 +37,56 @@ class WebhookController extends Controller
             return response()->json(['code' => 0, 'msg' => 'Missing tracking number'], 400);
         }
 
-        $shipment = Shipment::where('tracking_number', $trackingNumber)->first();
+        try {
+            $shipment = Shipment::where('tracking_number', $trackingNumber)->first();
 
-        if (! $shipment) {
-            Log::channel('jnt_webhooks')->info('J&T tracking webhook for unknown shipment', ['tracking' => $trackingNumber]);
-            return response()->json(['code' => 1, 'msg' => 'success']);
+            if (! $shipment) {
+                Log::channel('jnt_webhooks')->info('J&T tracking webhook for unknown shipment', ['tracking' => $trackingNumber]);
+                return response()->json(['code' => 1, 'msg' => 'success']);
+            }
+
+            $driver = new JntExpressDriver();
+            $rawStatus = $data['scanType'] ?? $data['status'] ?? '';
+            $normalizedStatus = $driver->normalizeStatus($rawStatus);
+
+            $event = new TrackingEvent(
+                status: $normalizedStatus,
+                description: $data['desc'] ?? $data['description'] ?? '',
+                location: $data['scanCity'] ?? $data['city'] ?? null,
+                timestamp: $data['scanTime'] ?? $data['operationTime'] ?? now()->toIso8601String(),
+                rawStatus: $rawStatus,
+            );
+
+            DB::transaction(function () use ($shipment, $event, $normalizedStatus, $rawStatus): void {
+                $shipment->addTrackingEvent($event);
+                $shipment->update([
+                    'status'                     => $normalizedStatus->value,
+                    'courier_status'             => $rawStatus,
+                    'courier_status_description' => $event->description,
+                    'tracking_history'           => $shipment->tracking_history,
+                ]);
+
+                if ($normalizedStatus === ShipmentStatus::DELIVERED) {
+                    $shipment->markDelivered();
+                }
+            });
+
+            Log::channel('jnt_webhooks')->info('J&T tracking webhook processed', [
+                'tracking' => $trackingNumber,
+                'status'   => $normalizedStatus->value,
+            ]);
+        } catch (Throwable $e) {
+            Log::channel('jnt_webhooks')->error('J&T tracking webhook failed', [
+                'tracking'  => $trackingNumber,
+                'error'     => $e->getMessage(),
+                'exception' => get_class($e),
+                'file'      => $e->getFile(),
+                'line'      => $e->getLine(),
+                'payload'   => $data,
+            ]);
+
+            return response()->json(['code' => 0, 'msg' => 'Internal error'], 500);
         }
-
-        $driver = new JntExpressDriver();
-        $rawStatus = $data['scanType'] ?? $data['status'] ?? '';
-        $normalizedStatus = $driver->normalizeStatus($rawStatus);
-
-        $event = new TrackingEvent(
-            status: $normalizedStatus,
-            description: $data['desc'] ?? $data['description'] ?? '',
-            location: $data['scanCity'] ?? $data['city'] ?? null,
-            timestamp: $data['scanTime'] ?? $data['operationTime'] ?? now()->toIso8601String(),
-            rawStatus: $rawStatus,
-        );
-
-        $shipment->addTrackingEvent($event);
-        $shipment->update([
-            'status'                    => $normalizedStatus->value,
-            'courier_status'            => $rawStatus,
-            'courier_status_description' => $event->description,
-            'tracking_history'          => $shipment->tracking_history,
-        ]);
-
-        if ($normalizedStatus === ShipmentStatus::DELIVERED) {
-            $shipment->markDelivered();
-        }
-
-        Log::channel('jnt_webhooks')->info('J&T tracking webhook processed', [
-            'tracking' => $trackingNumber,
-            'status'   => $normalizedStatus->value,
-        ]);
 
         return response()->json(['code' => 1, 'msg' => 'success']);
     }
@@ -90,32 +107,47 @@ class WebhookController extends Controller
             return response()->json(['code' => 0, 'msg' => 'Missing tracking number'], 400);
         }
 
-        $shipment = Shipment::where('tracking_number', $trackingNumber)->first();
+        try {
+            $shipment = Shipment::where('tracking_number', $trackingNumber)->first();
 
-        if (! $shipment) {
-            Log::channel('jnt_webhooks')->info('J&T return webhook for unknown shipment', ['tracking' => $trackingNumber]);
-            return response()->json(['code' => 1, 'msg' => 'success']);
+            if (! $shipment) {
+                Log::channel('jnt_webhooks')->info('J&T return webhook for unknown shipment', ['tracking' => $trackingNumber]);
+                return response()->json(['code' => 1, 'msg' => 'success']);
+            }
+
+            $reason = $data['returnReason'] ?? $data['reason'] ?? '';
+            $returnTime = $data['returnTime'] ?? $data['operationTime'] ?? now()->toIso8601String();
+
+            $event = new TrackingEvent(
+                status: ShipmentStatus::RETURNED,
+                description: $reason ?: 'Package returned to sender',
+                location: $data['city'] ?? null,
+                timestamp: $returnTime,
+                rawStatus: 'RETURNED',
+            );
+
+            DB::transaction(function () use ($shipment, $event, $reason): void {
+                $shipment->addTrackingEvent($event);
+                $shipment->update(['tracking_history' => $shipment->tracking_history]);
+                $shipment->markReturned($reason);
+            });
+
+            Log::channel('jnt_webhooks')->info('J&T return webhook processed', [
+                'tracking' => $trackingNumber,
+                'reason'   => $reason,
+            ]);
+        } catch (Throwable $e) {
+            Log::channel('jnt_webhooks')->error('J&T return webhook failed', [
+                'tracking'  => $trackingNumber,
+                'error'     => $e->getMessage(),
+                'exception' => get_class($e),
+                'file'      => $e->getFile(),
+                'line'      => $e->getLine(),
+                'payload'   => $data,
+            ]);
+
+            return response()->json(['code' => 0, 'msg' => 'Internal error'], 500);
         }
-
-        $reason = $data['returnReason'] ?? $data['reason'] ?? '';
-        $returnTime = $data['returnTime'] ?? $data['operationTime'] ?? now()->toIso8601String();
-
-        $event = new TrackingEvent(
-            status: ShipmentStatus::RETURNED,
-            description: $reason ?: 'Package returned to sender',
-            location: $data['city'] ?? null,
-            timestamp: $returnTime,
-            rawStatus: 'RETURNED',
-        );
-
-        $shipment->addTrackingEvent($event);
-        $shipment->update(['tracking_history' => $shipment->tracking_history]);
-        $shipment->markReturned($reason);
-
-        Log::channel('jnt_webhooks')->info('J&T return webhook processed', [
-            'tracking' => $trackingNumber,
-            'reason'   => $reason,
-        ]);
 
         return response()->json(['code' => 1, 'msg' => 'success']);
     }
@@ -147,27 +179,41 @@ class WebhookController extends Controller
         $batchId     = $data['billSerialNum'] ?? null;
 
         $updated = 0;
+        $failed  = 0;
+
         foreach ($wayNos as $trackingNumber) {
-            $shipment = Shipment::with('order')->where('tracking_number', $trackingNumber)->first();
+            try {
+                $shipment = Shipment::with('order')->where('tracking_number', $trackingNumber)->first();
 
-            if (! $shipment) {
-                Log::channel('jnt_webhooks')->info('J&T COD webhook: unknown shipment in batch', ['tracking' => $trackingNumber]);
-                continue;
+                if (! $shipment) {
+                    Log::channel('jnt_webhooks')->info('J&T COD webhook: unknown shipment in batch', ['tracking' => $trackingNumber]);
+                    continue;
+                }
+
+                if (! $shipment->order) {
+                    Log::channel('jnt_webhooks')->warning('J&T COD webhook: shipment has no associated order (possibly deleted)', ['tracking' => $trackingNumber]);
+                    continue;
+                }
+
+                $shipment->order->update([
+                    'financial_status'     => 'paid',
+                    'paid_at'              => $shipment->order->paid_at ?? $remitTime,
+                    'cod_collected_amount' => $totalAmount,
+                    'cod_collected_at'     => $remitTime,
+                ]);
+
+                $updated++;
+            } catch (Throwable $e) {
+                $failed++;
+                Log::channel('jnt_webhooks')->error('J&T COD webhook: failed to update order', [
+                    'tracking'  => $trackingNumber,
+                    'batch_id'  => $batchId,
+                    'error'     => $e->getMessage(),
+                    'exception' => get_class($e),
+                    'file'      => $e->getFile(),
+                    'line'      => $e->getLine(),
+                ]);
             }
-
-            if (! $shipment->order) {
-                Log::channel('jnt_webhooks')->warning('J&T COD webhook: shipment has no associated order (possibly deleted)', ['tracking' => $trackingNumber]);
-                continue;
-            }
-
-            $shipment->order->update([
-                'financial_status'     => 'paid',
-                'paid_at'              => $shipment->order->paid_at ?? $remitTime,
-                'cod_collected_amount' => $totalAmount,
-                'cod_collected_at'     => $remitTime,
-            ]);
-
-            $updated++;
         }
 
         Log::channel('jnt_webhooks')->info('J&T COD webhook processed', [
@@ -176,7 +222,12 @@ class WebhookController extends Controller
             'remit_time'    => $remitTime,
             'waybill_count' => count($wayNos),
             'updated'       => $updated,
+            'failed'        => $failed,
         ]);
+
+        if ($failed > 0 && $updated === 0) {
+            return response()->json(['code' => 0, 'msg' => 'All updates failed'], 500);
+        }
 
         return response()->json(['code' => 1, 'msg' => 'success']);
     }
@@ -197,28 +248,43 @@ class WebhookController extends Controller
             return response()->json(['code' => 0, 'msg' => 'Missing tracking number'], 400);
         }
 
-        $shipment = Shipment::where('tracking_number', $trackingNumber)->first();
+        try {
+            $shipment = Shipment::where('tracking_number', $trackingNumber)->first();
 
-        if (! $shipment) {
-            Log::channel('jnt_webhooks')->info('J&T OTP webhook for unknown shipment', ['tracking' => $trackingNumber]);
-            return response()->json(['code' => 1, 'msg' => 'success']);
+            if (! $shipment) {
+                Log::channel('jnt_webhooks')->info('J&T OTP webhook for unknown shipment', ['tracking' => $trackingNumber]);
+                return response()->json(['code' => 1, 'msg' => 'success']);
+            }
+
+            $verifyTime = $data['verifyTime'] ?? $data['operationTime'] ?? now()->toIso8601String();
+
+            $event = new TrackingEvent(
+                status: ShipmentStatus::DELIVERED,
+                description: 'Delivered — OTP verified',
+                location: null,
+                timestamp: $verifyTime,
+                rawStatus: 'OTP_VERIFIED',
+            );
+
+            DB::transaction(function () use ($shipment, $event): void {
+                $shipment->addTrackingEvent($event);
+                $shipment->update(['tracking_history' => $shipment->tracking_history]);
+                $shipment->markDelivered();
+            });
+
+            Log::channel('jnt_webhooks')->info('J&T OTP webhook processed', ['tracking' => $trackingNumber]);
+        } catch (Throwable $e) {
+            Log::channel('jnt_webhooks')->error('J&T OTP webhook failed', [
+                'tracking'  => $trackingNumber,
+                'error'     => $e->getMessage(),
+                'exception' => get_class($e),
+                'file'      => $e->getFile(),
+                'line'      => $e->getLine(),
+                'payload'   => $data,
+            ]);
+
+            return response()->json(['code' => 0, 'msg' => 'Internal error'], 500);
         }
-
-        $verifyTime = $data['verifyTime'] ?? $data['operationTime'] ?? now()->toIso8601String();
-
-        $event = new TrackingEvent(
-            status: ShipmentStatus::DELIVERED,
-            description: 'Delivered — OTP verified',
-            location: null,
-            timestamp: $verifyTime,
-            rawStatus: 'OTP_VERIFIED',
-        );
-
-        $shipment->addTrackingEvent($event);
-        $shipment->update(['tracking_history' => $shipment->tracking_history]);
-        $shipment->markDelivered();
-
-        Log::channel('jnt_webhooks')->info('J&T OTP webhook processed', ['tracking' => $trackingNumber]);
 
         return response()->json(['code' => 1, 'msg' => 'success']);
     }
@@ -233,25 +299,41 @@ class WebhookController extends Controller
      */
     private function parseAndVerify(Request $request, string $type): array
     {
-        $digest = $request->header('digest');
-        $fullBody = $request->getContent();
+        try {
+            $digest   = $request->header('digest');
+            $fullBody = $request->getContent();
 
-        // bizContent may arrive as a JSON string or a pre-parsed object
-        $raw = $request->input('bizContent');
-        $bizContentString = is_string($raw) ? $raw : json_encode($raw);
+            // bizContent may arrive as a JSON string or a pre-parsed object
+            $raw              = $request->input('bizContent');
+            $bizContentString = is_string($raw) ? $raw : json_encode($raw);
 
-        if (! $this->verifyJntSignature($bizContentString, $fullBody, $digest, $type)) {
-            Log::channel('jnt_webhooks')->warning("J&T {$type} webhook signature verification failed");
-            return [null, response()->json(['code' => 0, 'msg' => 'Invalid signature'], 401)];
+            if (! $this->verifyJntSignature($bizContentString, $fullBody, $digest, $type)) {
+                Log::channel('jnt_webhooks')->warning("J&T {$type} webhook signature verification failed", [
+                    'ip'             => $request->ip(),
+                    'digest_present' => ! empty($digest),
+                    'body_length'    => strlen($fullBody),
+                ]);
+                return [null, response()->json(['code' => 0, 'msg' => 'Invalid signature'], 401)];
+            }
+
+            $data = is_string($raw) ? json_decode($raw, true) : (array) $raw;
+
+            if (! $data) {
+                Log::channel('jnt_webhooks')->warning("J&T {$type} webhook empty or invalid bizContent", [
+                    'raw_preview' => substr((string) $raw, 0, 200),
+                ]);
+                return [null, response()->json(['code' => 0, 'msg' => 'Invalid payload'], 400)];
+            }
+
+            return [$data, null];
+        } catch (Throwable $e) {
+            Log::channel('jnt_webhooks')->error("J&T {$type} webhook parse error", [
+                'error'     => $e->getMessage(),
+                'exception' => get_class($e),
+                'ip'        => $request->ip(),
+            ]);
+            return [null, response()->json(['code' => 0, 'msg' => 'Parse error'], 400)];
         }
-
-        $data = is_string($raw) ? json_decode($raw, true) : (array) $raw;
-
-        if (! $data) {
-            return [null, response()->json(['code' => 0, 'msg' => 'Invalid payload'], 400)];
-        }
-
-        return [$data, null];
     }
 
     protected function verifyJntSignature(string $bizContent, string $fullBody, ?string $digest, string $type = ''): bool
