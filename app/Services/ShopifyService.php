@@ -379,7 +379,7 @@ class ShopifyService
                 'discount_amount'    => $o['discount_codes'][0]['amount'] ?? ($o['total_discounts'] ?? 0),
                 'shipping_method'    => $shipLine['title'] ?? null,
                 'notes'              => $o['note'] ?? null,
-                'tags'               => $this->splitTags($o['tags'] ?? null),
+                'tags'               => $this->filterShopifyTags($o['tags'] ?? null),
                 'accepts_marketing'  => (bool) ($customer['accepts_marketing'] ?? false),
                 'paid_at'            => $o['processed_at'] ?? null,
                 'cancelled_at'       => $o['cancelled_at'] ?? null,
@@ -435,7 +435,7 @@ class ShopifyService
                 'shipping_cost'      => $n['totalShippingPriceSet']['shopMoney']['amount'] ?? 0,
                 'discount_code'      => $n['discountCode'] ?? null,
                 'notes'              => $n['note'] ?? null,
-                'tags'               => is_array($n['tags'] ?? null) ? $n['tags'] : $this->splitTags($n['tags'] ?? null),
+                'tags'               => $this->filterShopifyTags($n['tags'] ?? null),
                 'paid_at'            => $n['processedAt'] ?? null,
                 'cancelled_at'       => $n['cancelledAt'] ?? null,
                 // Billing
@@ -529,6 +529,15 @@ class ShopifyService
         }
 
         return $tags ? array_values(array_filter(array_map('trim', explode(',', (string) $tags)))) : [];
+    }
+
+    private function filterShopifyTags($tags): array
+    {
+        $all = $this->splitTags($tags);
+
+        $buyease = array_values(array_filter($all, fn($t) => stripos($t, 'buyease') !== false));
+
+        return $buyease ?: [];
     }
 
     /**
