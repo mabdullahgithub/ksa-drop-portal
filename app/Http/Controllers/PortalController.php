@@ -400,12 +400,11 @@ class PortalController extends Controller
             'total'              => 'nullable|numeric|min:0',
             'currency'           => 'nullable|string|max:3',
             'payment_method'     => 'nullable|string|max:255',
-            'lineitem_name'             => 'nullable|string|max:500',
-            'lineitem_quantity'         => 'nullable|integer|min:1',
-            'lineitem_price'            => 'nullable|numeric|min:0',
-            'lineitem_sku'              => 'nullable|string|max:255',
+            'lineitem_name'              => 'nullable|string|max:500',
+            'lineitem_quantity'          => 'nullable|integer|min:1',
+            'lineitem_sku'               => 'nullable|string|max:255',
             'lineitem_client_product_id' => 'nullable|integer|exists:client_products,id',
-            'lineitem_product_id'       => 'nullable|integer|exists:products,id',
+            'lineitem_product_id'        => 'nullable|integer|exists:products,id',
         ]);
 
         $prefix      = $client->short_id ?: 'CL' . $client->id;
@@ -433,10 +432,15 @@ class PortalController extends Controller
         ]);
 
         if (!empty($validated['lineitem_name'])) {
+            $qty   = max((int) ($validated['lineitem_quantity'] ?? 1), 1);
+            $total = (float) ($validated['total'] ?? 0);
+            // Derive unit price from the order total the client entered
+            $unitPrice = $qty > 0 ? round($total / $qty, 2) : 0;
+
             $order->items()->create([
                 'lineitem_name'               => $validated['lineitem_name'],
-                'lineitem_quantity'           => $validated['lineitem_quantity'] ?? 1,
-                'lineitem_price'              => $validated['lineitem_price'] ?? 0,
+                'lineitem_quantity'           => $qty,
+                'lineitem_price'              => $unitPrice,
                 'lineitem_sku'                => $validated['lineitem_sku'] ?? null,
                 'lineitem_requires_shipping'  => true,
                 'lineitem_taxable'            => false,

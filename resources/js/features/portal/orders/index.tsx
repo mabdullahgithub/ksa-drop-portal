@@ -715,13 +715,10 @@ const EMPTY_FORM = {
   payment_method: '',
   lineitem_name: '',
   lineitem_quantity: '1',
-  lineitem_price: '',
   lineitem_sku: '',
   lineitem_client_product_id: '' as string,
   lineitem_product_id: '' as string,
-  // total is derived (price × qty) but the client can override it
   total: '',
-  totalManuallySet: false as boolean,
 }
 
 function CreateOrderDialog({
@@ -741,24 +738,6 @@ function CreateOrderDialog({
   const [selectedSku, setSelectedSku] = useState<SkuItem | null>(null)
   const [form, setForm] = useState({ ...EMPTY_FORM })
 
-  // Derived total = price × qty (unless the user manually overrode it)
-  const derivedTotal = (() => {
-    const price = parseFloat(form.lineitem_price)
-    const qty = parseInt(form.lineitem_quantity || '1')
-    if (!isNaN(price) && price > 0) return (price * qty).toFixed(2)
-    return ''
-  })()
-
-  const displayTotal = form.totalManuallySet ? form.total : derivedTotal
-
-  // Sync auto-total whenever price/qty changes (unless user overrode)
-  useEffect(() => {
-    if (!form.totalManuallySet) {
-      setForm((prev) => ({ ...prev, total: derivedTotal }))
-    }
-  }, [form.lineitem_price, form.lineitem_quantity, form.totalManuallySet])
-
-  // Load all SKUs when dialog opens
   useEffect(() => {
     if (open) skuSearch('')
   }, [open, skuSearch])
@@ -770,20 +749,15 @@ function CreateOrderDialog({
 
   const handleSkuSelect = (item: SkuItem) => {
     setSelectedSku(item)
-    setForm((prev) => {
-      const newPrice = item.unit_price > 0 ? String(item.unit_price) : prev.lineitem_price
-      const qty = parseInt(prev.lineitem_quantity || '1')
-      const autoTotal = item.unit_price > 0 ? (item.unit_price * qty).toFixed(2) : prev.total
-      return {
-        ...prev,
-        lineitem_name: item.name,
-        lineitem_sku: item.sku ?? '',
-        lineitem_price: newPrice,
-        lineitem_client_product_id: item.type === 'client_product' ? String(item.id) : '',
-        lineitem_product_id: item.type === 'product' ? String(item.id) : '',
-        total: prev.totalManuallySet ? prev.total : autoTotal,
-      }
-    })
+    setForm((prev) => ({
+      ...prev,
+      lineitem_name: item.name,
+      lineitem_sku: item.sku ?? '',
+      lineitem_client_product_id: item.type === 'client_product' ? String(item.id) : '',
+      lineitem_product_id: item.type === 'product' ? String(item.id) : '',
+      // pre-fill total from the product's catalogue price (client can override)
+      total: item.unit_price > 0 ? String(item.unit_price) : prev.total,
+    }))
     setSkuOpen(false)
   }
 
@@ -793,10 +767,8 @@ function CreateOrderDialog({
       ...prev,
       lineitem_name: '',
       lineitem_sku: '',
-      lineitem_price: '',
       lineitem_client_product_id: '',
       lineitem_product_id: '',
-      total: prev.totalManuallySet ? prev.total : '',
     }))
   }
 
@@ -815,8 +787,6 @@ function CreateOrderDialog({
     if (!form.customer_phone.trim()) errs.customer_phone = 'Phone number is required.'
     if (Object.keys(errs).length) { setErrors(errs); return }
 
-    const finalTotal = form.totalManuallySet ? form.total : derivedTotal
-
     setSaving(true)
     try {
       const payload: Record<string, unknown> = {
@@ -827,11 +797,10 @@ function CreateOrderDialog({
         shipping_address1: form.shipping_address1.trim() || undefined,
         shipping_city: form.shipping_city.trim() || undefined,
         shipping_country: form.shipping_country.trim() || undefined,
-        total: finalTotal ? parseFloat(finalTotal) : undefined,
+        total: form.total ? parseFloat(form.total) : undefined,
         payment_method: form.payment_method.trim() || undefined,
         lineitem_name: form.lineitem_name.trim() || undefined,
         lineitem_quantity: form.lineitem_name.trim() ? parseInt(form.lineitem_quantity || '1') : undefined,
-        lineitem_price: form.lineitem_price ? parseFloat(form.lineitem_price) : undefined,
         lineitem_sku: form.lineitem_sku.trim() || undefined,
         lineitem_client_product_id: form.lineitem_client_product_id ? parseInt(form.lineitem_client_product_id) : undefined,
         lineitem_product_id: form.lineitem_product_id ? parseInt(form.lineitem_product_id) : undefined,
@@ -993,7 +962,6 @@ function CreateOrderDialog({
                 onChange: (e) => set('lineitem_name', e.target.value),
               })}
 
-              {/* Qty + unit price on same row */}
               <div className='grid grid-cols-2 gap-3'>
                 {field('Qty', 'co-item-qty', {
                   type: 'number',
@@ -1001,78 +969,42 @@ function CreateOrderDialog({
                   value: form.lineitem_quantity,
                   onChange: (e) => set('lineitem_quantity', e.target.value),
                 })}
-                {field('Unit Price (SAR)', 'co-item-price', {
-                  type: 'number',
-                  min: '0',
-                  step: '0.01',
-                  placeholder: '0.00',
-                  value: form.lineitem_price,
-                  onChange: (e) => set('lineitem_price', e.target.value),
+                {field('SKU', 'co-item-sku', {
+                  placeholder: 'Auto-filled or enter manually',
+                  value: form.lineitem_sku,
+                  onChange: (e) => set('lineitem_sku', e.target.value),
                 })}
               </div>
-
-              {/* SKU — auto-filled, still editable */}
-              {field('SKU', 'co-item-sku', {
-                placeholder: 'Auto-filled from selection or enter manually',
-                value: form.lineitem_sku,
-                onChange: (e) => set('lineitem_sku', e.target.value),
-              })}
             </div>
           </div>
 
-          {/* Order Total — derived from price × qty, overridable */}
-          <div className='rounded-lg border bg-muted/30 p-3 space-y-2'>
-            <div className='flex items-center justify-between'>
-              <p className='text-xs font-semibold text-muted-foreground uppercase tracking-wide'>Order Total</p>
-              {!form.totalManuallySet && derivedTotal && (
-                <span className='text-xs text-muted-foreground'>Auto-calculated</span>
-              )}
-              {form.totalManuallySet && (
-                <button type='button'
-                  onClick={() => setForm((p) => ({ ...p, totalManuallySet: false, total: derivedTotal }))}
-                  className='text-xs text-primary hover:underline'>
-                  Reset to auto
-                </button>
-              )}
+          {/* Order Total */}
+          <div className='grid grid-cols-2 gap-3'>
+            <div className='space-y-1'>
+              <Label htmlFor='co-total' className='text-xs font-medium'>Total (SAR)</Label>
+              <Input
+                id='co-total'
+                type='number'
+                min='0'
+                step='0.01'
+                placeholder='0.00'
+                value={form.total}
+                className='h-8 text-sm'
+                onChange={(e) => set('total', e.target.value)}
+              />
+              {errors.total && <p className='text-xs text-destructive'>{errors.total}</p>}
             </div>
-            <div className='grid grid-cols-2 gap-3'>
-              <div className='space-y-1'>
-                <Label htmlFor='co-total' className='text-xs font-medium'>
-                  Total (SAR)
-                  {!form.totalManuallySet && derivedTotal && (
-                    <span className='ml-1 text-muted-foreground font-normal'>= qty × price</span>
-                  )}
-                </Label>
-                <Input
-                  id='co-total'
-                  type='number'
-                  min='0'
-                  step='0.01'
-                  placeholder='0.00'
-                  value={displayTotal}
-                  className={cn('h-8 text-sm', !form.totalManuallySet && derivedTotal ? 'bg-muted/50' : '')}
-                  onChange={(e) => {
-                    setForm((p) => ({ ...p, total: e.target.value, totalManuallySet: true }))
-                    setErrors((p) => { const e2 = { ...p }; delete e2.total; return e2 })
-                  }}
-                />
-                {errors.total && <p className='text-xs text-destructive'>{errors.total}</p>}
-              </div>
-              <div className='space-y-1'>
-                <Label htmlFor='co-payment' className='text-xs font-medium'>Payment Method</Label>
-                <Select
-                  value={form.payment_method}
-                  onValueChange={(v) => set('payment_method', v)}
-                >
-                  <SelectTrigger id='co-payment' className='h-8 text-sm'>
-                    <SelectValue placeholder='Select…' />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value='Cash on Delivery'>Cash on Delivery</SelectItem>
-                    <SelectItem value='Prepaid'>Prepaid</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+            <div className='space-y-1'>
+              <Label htmlFor='co-payment' className='text-xs font-medium'>Payment Method</Label>
+              <Select value={form.payment_method} onValueChange={(v) => set('payment_method', v)}>
+                <SelectTrigger id='co-payment' className='h-8 text-sm'>
+                  <SelectValue placeholder='Select…' />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value='Cash on Delivery'>Cash on Delivery</SelectItem>
+                  <SelectItem value='Prepaid'>Prepaid</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </div>
 
