@@ -824,8 +824,27 @@ class PortalController extends Controller
 
         $orders = $client->orders()
             ->where('created_at', '>=', $startDate)
-            ->with(['items.product:id,variant_price,price_saudi_arabia'])
+            ->with(['items:id,order_id,lineitem_sku,lineitem_quantity'])
             ->get(['id', 'total', 'created_at']);
+
+        // Pre-load product costs keyed by SKU (only needed for dropshippers)
+        $productCostBySku = [];
+        if ($isDropshipper) {
+            $allSkus = $orders
+                ->flatMap(fn($o) => $o->items->pluck('lineitem_sku'))
+                ->filter()
+                ->unique()
+                ->values();
+
+            if ($allSkus->isNotEmpty()) {
+                \App\Models\Product::whereIn('variant_sku', $allSkus)
+                    ->get(['variant_sku', 'price_saudi_arabia', 'variant_price'])
+                    ->each(function ($p) use (&$productCostBySku) {
+                        $productCostBySku[$p->variant_sku] =
+                            (float) ($p->price_saudi_arabia ?? $p->variant_price ?? 0);
+                    });
+            }
+        }
 
         $totalSoldValue  = 0.0;
         $totalProfit     = 0.0;
@@ -838,9 +857,9 @@ class PortalController extends Controller
             $productCost = 0.0;
             if ($isDropshipper) {
                 foreach ($order->items as $item) {
-                    if ($item->product) {
-                        $unitCost = (float) ($item->product->price_saudi_arabia ?? $item->product->variant_price ?? 0);
-                        $productCost += $unitCost * $item->lineitem_quantity;
+                    $sku = $item->lineitem_sku;
+                    if ($sku && isset($productCostBySku[$sku])) {
+                        $productCost += $productCostBySku[$sku] * $item->lineitem_quantity;
                     }
                 }
             }

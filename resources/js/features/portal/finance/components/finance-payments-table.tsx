@@ -1,5 +1,7 @@
+import { useState } from 'react'
 import { Button } from '@/components/ui/button'
-import { ChevronLeft, ChevronRight, ExternalLink } from 'lucide-react'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { ChevronLeft, ChevronRight, Eye } from 'lucide-react'
 
 interface Payment {
   id: number
@@ -24,6 +26,42 @@ interface Props {
   payments: PaginatedPayments | null | undefined
   loading: boolean
   onPageChange: (page: number) => void
+}
+
+function formatDate(dateStr: string) {
+  return new Date(dateStr).toLocaleDateString('en-GB', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  })
+}
+
+function ProofDialog({ url }: { url: string }) {
+  const [open, setOpen] = useState(false)
+  const isPdf = url.toLowerCase().endsWith('.pdf')
+
+  return (
+    <>
+      <Button variant='outline' size='sm' className='h-7 gap-1.5 text-xs' onClick={() => setOpen(true)}>
+        <Eye className='h-3 w-3' />
+        View
+      </Button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className='max-w-3xl w-full'>
+          <DialogHeader>
+            <DialogTitle>Payment Proof</DialogTitle>
+          </DialogHeader>
+          <div className='mt-2 overflow-auto max-h-[70vh] flex items-center justify-center rounded border bg-muted/20'>
+            {isPdf ? (
+              <iframe src={url} className='w-full h-[65vh]' title='Payment Proof' />
+            ) : (
+              <img src={url} alt='Payment Proof' className='max-w-full max-h-[65vh] object-contain' />
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
+  )
 }
 
 export function FinancePaymentsTable({ payments, loading, onPageChange }: Props) {
@@ -59,11 +97,7 @@ export function FinancePaymentsTable({ payments, loading, onPageChange }: Props)
             {payments.data.map((payment) => (
               <tr key={payment.id} className='border-b last:border-0'>
                 <td className='py-2.5 pr-4 text-muted-foreground whitespace-nowrap'>
-                  {new Date(payment.paid_at).toLocaleDateString('en-SA', {
-                    year: 'numeric',
-                    month: 'short',
-                    day: 'numeric',
-                  })}
+                  {formatDate(payment.paid_at)}
                 </td>
                 <td className='py-2.5 pr-4 font-semibold text-green-600 dark:text-green-400 whitespace-nowrap'>
                   SAR {parseFloat(payment.amount).toLocaleString()}
@@ -72,20 +106,10 @@ export function FinancePaymentsTable({ payments, loading, onPageChange }: Props)
                   {payment.message || <span className='italic'>—</span>}
                 </td>
                 <td className='py-2.5'>
-                  {payment.proof_url ? (
-                    <a
-                      href={payment.proof_url}
-                      target='_blank'
-                      rel='noopener noreferrer'
-                    >
-                      <Button variant='outline' size='sm' className='h-7 gap-1.5 text-xs'>
-                        <ExternalLink className='h-3 w-3' />
-                        View
-                      </Button>
-                    </a>
-                  ) : (
-                    <span className='text-muted-foreground'>—</span>
-                  )}
+                  {payment.proof_url
+                    ? <ProofDialog url={payment.proof_url} />
+                    : <span className='text-muted-foreground'>—</span>
+                  }
                 </td>
               </tr>
             ))}

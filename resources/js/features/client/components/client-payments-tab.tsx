@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
-import { Plus, Trash2, ExternalLink, Upload } from 'lucide-react'
+import { Plus, Trash2, Eye, Upload } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -46,6 +46,7 @@ export function ClientPaymentsTab({ client }: Props) {
   const [loading, setLoading] = useState(true)
   const [addOpen, setAddOpen] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<Payment | null>(null)
+  const [proofUrl, setProofUrl] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [deleting, setDeleting] = useState(false)
 
@@ -242,7 +243,7 @@ export function ClientPaymentsTab({ client }: Props) {
                   {payments.map((p) => (
                     <tr key={p.id} className='border-b last:border-0'>
                       <td className='py-2.5 pr-4 whitespace-nowrap text-muted-foreground'>
-                        {new Date(p.paid_at).toLocaleDateString('en-SA', { year: 'numeric', month: 'short', day: 'numeric' })}
+                        {new Date(p.paid_at).toLocaleDateString('en-GB', { year: 'numeric', month: 'short', day: 'numeric' })}
                       </td>
                       <td className='py-2.5 pr-4 font-semibold whitespace-nowrap text-green-600 dark:text-green-400'>
                         SAR {parseFloat(p.amount).toLocaleString()}
@@ -252,12 +253,10 @@ export function ClientPaymentsTab({ client }: Props) {
                       </td>
                       <td className='py-2.5 pr-4'>
                         {p.proof_url ? (
-                          <a href={p.proof_url} target='_blank' rel='noopener noreferrer'>
-                            <Button variant='outline' size='sm' className='h-7 gap-1.5 text-xs'>
-                              <ExternalLink className='h-3 w-3' />
-                              View
-                            </Button>
-                          </a>
+                          <Button variant='outline' size='sm' className='h-7 gap-1.5 text-xs' onClick={() => setProofUrl(p.proof_url)}>
+                            <Eye className='h-3 w-3' />
+                            View
+                          </Button>
                         ) : (
                           <span className='text-muted-foreground text-xs'>—</span>
                         )}
@@ -285,6 +284,22 @@ export function ClientPaymentsTab({ client }: Props) {
           )}
         </CardContent>
       </Card>
+
+      {/* Proof viewer */}
+      <Dialog open={!!proofUrl} onOpenChange={(open) => !open && setProofUrl(null)}>
+        <DialogContent className='max-w-3xl w-full'>
+          <DialogHeader>
+            <DialogTitle>Payment Proof</DialogTitle>
+          </DialogHeader>
+          <div className='mt-2 overflow-auto max-h-[70vh] flex items-center justify-center rounded border bg-muted/20'>
+            {proofUrl?.toLowerCase().endsWith('.pdf') ? (
+              <iframe src={proofUrl} className='w-full h-[65vh]' title='Payment Proof' />
+            ) : (
+              <img src={proofUrl ?? ''} alt='Payment Proof' className='max-w-full max-h-[65vh] object-contain' />
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
         <AlertDialogContent>
