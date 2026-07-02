@@ -60,6 +60,11 @@ class Client extends Model
         return $this->hasMany(ClientProduct::class);
     }
 
+    public function payments(): HasMany
+    {
+        return $this->hasMany(ClientPayment::class);
+    }
+
     public function scopeSearch($query, string $term)
     {
         return $query->where(function ($q) use ($term) {

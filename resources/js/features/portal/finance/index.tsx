@@ -1,9 +1,6 @@
-import { useState } from 'react'
-import { DollarSign, TrendingUp, TrendingDown, AlertCircle, CreditCard, Receipt } from 'lucide-react'
+import { TrendingUp, ShoppingBag, Wallet, AlertCircle } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Input } from '@/components/ui/input'
 import { Header } from '@/components/layout/header'
 import { NotificationsDropdown } from '@/components/layout/notifications-dropdown'
 import { Main } from '@/components/layout/main'
@@ -11,40 +8,19 @@ import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
 import { usePortalFinance } from '@/hooks/usePortal'
-import { FinanceTransactionsTable } from './components/finance-transactions-table'
+import { FinancePaymentsTable } from './components/finance-payments-table'
 import { FinanceMonthlyBreakdown } from './components/finance-monthly-breakdown'
+import { FinanceGuideBook } from './components/finance-guide-book'
 
 export function PortalFinance() {
-  const { data, loading, filters, updateFilters } = usePortalFinance({ financial_status: '' })
-  const [searchValue, setSearchValue] = useState('')
+  const { data, loading, filters, updateFilters, updatePage } = usePortalFinance()
 
   const handlePeriodChange = (value: string) => {
     updateFilters({ period: value, page: 1 })
   }
 
-  const handleStatusFilter = (value: string) => {
-    updateFilters({ financial_status: value === 'all' ? '' : value, page: 1 })
-  }
-
-  const handleSearch = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
-      updateFilters({ search: searchValue, page: 1 })
-    }
-  }
-
-  const handlePageChange = (page: number) => {
-    updateFilters({ page })
-  }
-
-  const statusColor = (status: string) => {
-    switch (status) {
-      case 'paid': return 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
-      case 'pending': return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400'
-      case 'refunded': return 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
-      case 'partially_refunded': return 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400'
-      default: return ''
-    }
-  }
+  const summary = data?.summary
+  const balanceOwed = summary?.balance_owed ?? 0
 
   return (
     <>
@@ -56,21 +32,29 @@ export function PortalFinance() {
       </Header>
 
       <Main>
-        <div className='mb-4 flex items-center justify-between'>
+        <div className='mb-4 flex items-center justify-between gap-3 flex-wrap'>
           <div>
             <h1 className='text-2xl font-bold tracking-tight'>Finance</h1>
-            <p className='text-muted-foreground'>Financial overview, transactions and payment tracking</p>
+            <p className='text-muted-foreground'>Your earnings, profit and payment history</p>
           </div>
-          <Select value={filters.period || '6months'} onValueChange={handlePeriodChange}>
-            <SelectTrigger className='w-[140px]'>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value='3months'>3 Months</SelectItem>
-              <SelectItem value='6months'>6 Months</SelectItem>
-              <SelectItem value='12months'>12 Months</SelectItem>
-            </SelectContent>
-          </Select>
+          <div className='flex items-center gap-2'>
+            {data && (
+              <FinanceGuideBook
+                clientType={data.client_type ?? []}
+                charges={data.charges ?? {}}
+              />
+            )}
+            <Select value={filters.period || '6months'} onValueChange={handlePeriodChange}>
+              <SelectTrigger className='w-[140px]'>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value='3months'>3 Months</SelectItem>
+                <SelectItem value='6months'>6 Months</SelectItem>
+                <SelectItem value='12months'>12 Months</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
 
         {loading && !data ? (
@@ -83,6 +67,7 @@ export function PortalFinance() {
                   </CardHeader>
                   <CardContent>
                     <div className='h-7 w-20 animate-pulse rounded bg-muted' />
+                    <div className='mt-1 h-3 w-28 animate-pulse rounded bg-muted' />
                   </CardContent>
                 </Card>
               ))}
@@ -96,132 +81,77 @@ export function PortalFinance() {
         ) : (
           <div className='space-y-6'>
             {/* Summary Cards */}
-            <div className='grid gap-4 md:grid-cols-2 lg:grid-cols-5'>
+            <div className='grid gap-4 md:grid-cols-2 lg:grid-cols-4'>
               <Card>
                 <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
-                  <CardTitle className='text-sm font-medium'>Net Revenue</CardTitle>
-                  <TrendingUp className='h-4 w-4 text-muted-foreground' />
-                </CardHeader>
-                <CardContent>
-                  <div className='text-2xl font-bold text-green-600 dark:text-green-400'>
-                    SAR {(data?.summary?.net_revenue ?? 0).toLocaleString()}
-                  </div>
-                  <p className='text-xs text-muted-foreground'>Paid minus refunds</p>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
-                  <CardTitle className='text-sm font-medium'>Total Paid</CardTitle>
-                  <DollarSign className='h-4 w-4 text-muted-foreground' />
+                  <CardTitle className='text-sm font-medium'>Total Sold</CardTitle>
+                  <ShoppingBag className='h-4 w-4 text-muted-foreground' />
                 </CardHeader>
                 <CardContent>
                   <div className='text-2xl font-bold'>
-                    SAR {(data?.summary?.total_paid ?? 0).toLocaleString()}
+                    SAR {(summary?.total_sold_value ?? 0).toLocaleString()}
                   </div>
-                  <p className='text-xs text-muted-foreground'>Collected payments</p>
+                  <p className='text-xs text-muted-foreground'>
+                    {summary?.total_sold_count ?? 0} orders
+                  </p>
                 </CardContent>
               </Card>
+
               <Card>
                 <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
-                  <CardTitle className='text-sm font-medium'>Pending</CardTitle>
+                  <CardTitle className='text-sm font-medium'>Your Profit</CardTitle>
+                  <TrendingUp className='h-4 w-4 text-muted-foreground' />
+                </CardHeader>
+                <CardContent>
+                  <div className={`text-2xl font-bold ${(summary?.total_profit ?? 0) >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                    SAR {(summary?.total_profit ?? 0).toLocaleString()}
+                  </div>
+                  <p className='text-xs text-muted-foreground'>After charges &amp; costs</p>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
+                  <CardTitle className='text-sm font-medium'>Total Received</CardTitle>
+                  <Wallet className='h-4 w-4 text-muted-foreground' />
+                </CardHeader>
+                <CardContent>
+                  <div className='text-2xl font-bold text-blue-600 dark:text-blue-400'>
+                    SAR {(summary?.total_received ?? 0).toLocaleString()}
+                  </div>
+                  <p className='text-xs text-muted-foreground'>Transferred to you</p>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
+                  <CardTitle className='text-sm font-medium'>Balance Owed</CardTitle>
                   <AlertCircle className='h-4 w-4 text-muted-foreground' />
                 </CardHeader>
                 <CardContent>
-                  <div className='text-2xl font-bold text-yellow-600 dark:text-yellow-400'>
-                    SAR {(data?.summary?.total_pending ?? 0).toLocaleString()}
+                  <div className={`text-2xl font-bold ${balanceOwed > 0 ? 'text-orange-600 dark:text-orange-400' : 'text-green-600 dark:text-green-400'}`}>
+                    SAR {balanceOwed.toLocaleString()}
                   </div>
-                  <p className='text-xs text-muted-foreground'>Awaiting payment</p>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
-                  <CardTitle className='text-sm font-medium'>Refunded</CardTitle>
-                  <TrendingDown className='h-4 w-4 text-muted-foreground' />
-                </CardHeader>
-                <CardContent>
-                  <div className='text-2xl font-bold text-red-600 dark:text-red-400'>
-                    SAR {(data?.summary?.total_refunded ?? 0).toLocaleString()}
-                  </div>
-                  <p className='text-xs text-muted-foreground'>Total refunded</p>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
-                  <CardTitle className='text-sm font-medium'>Outstanding</CardTitle>
-                  <CreditCard className='h-4 w-4 text-muted-foreground' />
-                </CardHeader>
-                <CardContent>
-                  <div className='text-2xl font-bold text-orange-600 dark:text-orange-400'>
-                    SAR {(data?.summary?.total_outstanding ?? 0).toLocaleString()}
-                  </div>
-                  <p className='text-xs text-muted-foreground'>Balance due</p>
+                  <p className='text-xs text-muted-foreground'>
+                    {balanceOwed > 0 ? 'Pending transfer' : 'All settled'}
+                  </p>
                 </CardContent>
               </Card>
             </div>
 
-            {/* Status Breakdown */}
-            {data?.status_breakdown && data.status_breakdown.length > 0 && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className='text-sm font-medium flex items-center gap-2'>
-                    <Receipt className='h-4 w-4' />
-                    Payment Status Breakdown
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className='grid gap-3 sm:grid-cols-2 lg:grid-cols-4'>
-                    {data.status_breakdown.map((item: any) => (
-                      <div key={item.financial_status} className='flex items-center justify-between rounded-lg border p-3'>
-                        <div>
-                          <Badge className={`text-xs ${statusColor(item.financial_status)}`} variant='outline'>
-                            {item.financial_status.replace('_', ' ')}
-                          </Badge>
-                          <p className='mt-1 text-xs text-muted-foreground'>{item.count} orders</p>
-                        </div>
-                        <span className='text-sm font-bold'>SAR {parseFloat(item.total_amount).toLocaleString()}</span>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
             {/* Monthly Breakdown */}
             <FinanceMonthlyBreakdown data={data?.monthly_breakdown} />
 
-            {/* Transactions */}
+            {/* Payments */}
             <Card>
               <CardHeader>
-                <div className='flex items-center justify-between'>
-                  <CardTitle className='text-sm font-medium'>Transactions</CardTitle>
-                  <div className='flex items-center gap-2'>
-                    <Input
-                      placeholder='Search orders...'
-                      className='h-8 w-[180px]'
-                      value={searchValue}
-                      onChange={(e) => setSearchValue(e.target.value)}
-                      onKeyDown={handleSearch}
-                    />
-                    <Select value={filters.financial_status || 'all'} onValueChange={handleStatusFilter}>
-                      <SelectTrigger className='h-8 w-[150px]'>
-                        <SelectValue placeholder='All statuses' />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value='all'>All Statuses</SelectItem>
-                        <SelectItem value='paid'>Paid</SelectItem>
-                        <SelectItem value='pending'>Pending</SelectItem>
-                        <SelectItem value='refunded'>Refunded</SelectItem>
-                        <SelectItem value='partially_refunded'>Partially Refunded</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
+                <CardTitle className='text-sm font-medium'>Payments</CardTitle>
               </CardHeader>
               <CardContent>
-                <FinanceTransactionsTable
-                  transactions={data?.transactions}
+                <FinancePaymentsTable
+                  payments={data?.payments}
                   loading={loading}
-                  onPageChange={handlePageChange}
+                  onPageChange={updatePage}
                 />
               </CardContent>
             </Card>

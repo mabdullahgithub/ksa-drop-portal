@@ -474,6 +474,11 @@ export function usePortalFinance(initialFilters: Record<string, any> = {}) {
     filters,
     updateFilters,
     refresh: () => fetchFinance(),
+    updatePage: (page: number) => {
+      const merged = { ...filters, page }
+      setFilters(merged)
+      fetchFinance(merged)
+    },
   }
 }
 

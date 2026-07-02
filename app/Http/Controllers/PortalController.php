@@ -814,76 +814,83 @@ class PortalController extends Controller
 
         $startDate = now()->subMonths($months);
 
-        $ordersQuery = $client->orders()->where('created_at', '>=', $startDate);
+        $charges = $client->charges ?? [];
+        $deliveryFee    = (float) ($charges['delivery'] ?? 0);
+        $callConfirmFee = (float) ($charges['call_confirmation'] ?? 0);
+        $codFee         = (float) ($charges['cod'] ?? 0);
+        $otherFee       = (float) ($charges['other'] ?? 0);
+        $vatPercent     = (float) ($charges['vat'] ?? 0);
+        $isDropshipper  = $client->is_dropshipper;
 
-        $totalPaid = round((float) $ordersQuery->clone()->where('financial_status', 'paid')->sum('total'), 2);
-        $totalPending = round((float) $ordersQuery->clone()->where('financial_status', 'pending')->sum('total'), 2);
-        $totalRefunded = round((float) $ordersQuery->clone()->whereIn('financial_status', ['refunded', 'partially_refunded'])->sum('refunded_amount'), 2);
-        $totalOutstanding = round((float) $ordersQuery->clone()->where('outstanding_balance', '>', 0)->sum('outstanding_balance'), 2);
-
-        $statusBreakdown = $client->orders()
+        $orders = $client->orders()
             ->where('created_at', '>=', $startDate)
-            ->selectRaw("financial_status, COUNT(*) as count, SUM(total) as total_amount")
-            ->groupBy('financial_status')
-            ->get();
+            ->with(['items.product:id,variant_price,price_saudi_arabia'])
+            ->get(['id', 'total', 'created_at']);
 
-        $monthlyBreakdown = $client->orders()
-            ->where('created_at', '>=', $startDate)
-            ->selectRaw("DATE_FORMAT(created_at, '%Y-%m') as month, financial_status, COUNT(*) as orders_count, SUM(total) as total_amount, SUM(refunded_amount) as refunded")
-            ->groupBy('month', 'financial_status')
-            ->orderBy('month', 'desc')
-            ->get()
-            ->groupBy('month')
-            ->map(function ($items, $month) {
-                $paid = $items->firstWhere('financial_status', 'paid');
-                $pending = $items->firstWhere('financial_status', 'pending');
-                $refunded = $items->filter(fn ($i) => in_array($i->financial_status, ['refunded', 'partially_refunded']));
+        $totalSoldValue  = 0.0;
+        $totalProfit     = 0.0;
+        $monthlyData     = [];
 
-                return [
-                    'month' => $month,
-                    'paid_amount' => round((float) ($paid->total_amount ?? 0), 2),
-                    'paid_count' => (int) ($paid->orders_count ?? 0),
-                    'pending_amount' => round((float) ($pending->total_amount ?? 0), 2),
-                    'pending_count' => (int) ($pending->orders_count ?? 0),
-                    'refunded_amount' => round((float) $refunded->sum('refunded'), 2),
-                    'refunded_count' => (int) $refunded->sum('orders_count'),
-                    'total_orders' => (int) $items->sum('orders_count'),
-                ];
-            })
-            ->values();
+        foreach ($orders as $order) {
+            $revenue = (float) $order->total;
+            $totalSoldValue += $revenue;
 
-        $transactions = $client->orders()
-            ->where('created_at', '>=', $startDate)
-            ->orderBy('created_at', 'desc');
+            $productCost = 0.0;
+            if ($isDropshipper) {
+                foreach ($order->items as $item) {
+                    if ($item->product) {
+                        $unitCost = (float) ($item->product->price_saudi_arabia ?? $item->product->variant_price ?? 0);
+                        $productCost += $unitCost * $item->lineitem_quantity;
+                    }
+                }
+            }
 
-        if ($request->has('financial_status') && $request->financial_status !== 'all') {
-            $transactions->where('financial_status', $request->financial_status);
+            $orderCharges = $deliveryFee + $callConfirmFee + $codFee + $otherFee
+                          + ($revenue * $vatPercent / 100);
+
+            $orderProfit = $revenue - $productCost - $orderCharges;
+            $totalProfit += $orderProfit;
+
+            $month = $order->created_at->format('Y-m');
+            if (!isset($monthlyData[$month])) {
+                $monthlyData[$month] = ['orders_count' => 0, 'sold_value' => 0.0, 'profit' => 0.0];
+            }
+            $monthlyData[$month]['orders_count']++;
+            $monthlyData[$month]['sold_value'] += $revenue;
+            $monthlyData[$month]['profit'] += $orderProfit;
         }
 
-        if ($request->has('search') && $request->search) {
-            $transactions->search($request->search);
-        }
+        krsort($monthlyData);
+        $monthlyBreakdown = array_map(function ($data, $month) {
+            return [
+                'month'        => $month,
+                'orders_count' => $data['orders_count'],
+                'sold_value'   => round($data['sold_value'], 2),
+                'profit'       => round($data['profit'], 2),
+            ];
+        }, $monthlyData, array_keys($monthlyData));
 
-        $perPage = $request->get('per_page', 15);
+        $totalReceived = round((float) $client->payments()->sum('amount'), 2);
+        $balanceOwed   = round($totalProfit - $totalReceived, 2);
 
-        $paginatedTransactions = $transactions->paginate($perPage, [
-            'id', 'order_number', 'customer_name', 'total', 'subtotal',
-            'shipping_cost', 'taxes', 'discount_amount', 'refunded_amount',
-            'outstanding_balance', 'financial_status', 'payment_method',
-            'payment_reference', 'currency', 'paid_at', 'created_at',
-        ]);
+        $perPage  = $request->get('per_page', 15);
+        $payments = $client->payments()
+            ->with('createdBy:id,name')
+            ->orderBy('paid_at', 'desc')
+            ->paginate($perPage);
 
         return response()->json([
             'summary' => [
-                'total_paid' => $totalPaid,
-                'total_pending' => $totalPending,
-                'total_refunded' => $totalRefunded,
-                'total_outstanding' => $totalOutstanding,
-                'net_revenue' => round($totalPaid - $totalRefunded, 2),
+                'total_sold_count' => count($orders),
+                'total_sold_value' => round($totalSoldValue, 2),
+                'total_profit'     => round($totalProfit, 2),
+                'total_received'   => $totalReceived,
+                'balance_owed'     => $balanceOwed,
             ],
-            'status_breakdown' => $statusBreakdown,
-            'monthly_breakdown' => $monthlyBreakdown,
-            'transactions' => $paginatedTransactions,
+            'client_type' => $client->client_types ?? [],
+            'charges'     => $charges,
+            'monthly_breakdown' => array_values($monthlyBreakdown),
+            'payments'    => $payments,
         ]);
     }
 

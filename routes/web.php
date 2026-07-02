@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\ClientController;
+use App\Http\Controllers\Api\ClientPaymentController;
 use App\Http\Controllers\Api\ConnectorSettingsController;
 use App\Http\Controllers\Api\InvoiceController;
 use App\Http\Controllers\Api\OrderController;
@@ -136,6 +137,10 @@ Route::middleware(['auth', 'verified', 'role:!client'])->group(function () {
         Route::patch('/{client}/products/{product}/review', [ClientController::class, 'reviewProduct'])->middleware('permission:edit client')->name('api.clients.products.review');
         Route::delete('/{client}/products/{product}', [ClientController::class, 'destroyProduct'])->middleware('permission:delete client')->name('api.clients.products.destroy');
         Route::delete('/{client}/products/{product}/images/{image}', [ClientController::class, 'destroyProductImage'])->middleware('permission:edit client')->name('api.clients.products.images.destroy');
+
+        Route::get('/{client}/payments', [ClientPaymentController::class, 'index'])->middleware('permission:view client')->name('api.clients.payments.index');
+        Route::post('/{client}/payments', [ClientPaymentController::class, 'store'])->middleware('permission:edit client')->name('api.clients.payments.store');
+        Route::delete('/{client}/payments/{payment}', [ClientPaymentController::class, 'destroy'])->middleware('permission:edit client')->name('api.clients.payments.destroy');
     });
 
     // Inventory / Products API

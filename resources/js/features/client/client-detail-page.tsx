@@ -63,6 +63,7 @@ import { ClientProvider } from './components/client-provider'
 import { EditClientDialog } from './components/edit-client-dialog'
 import { ChangePasswordDialog } from './components/change-password-dialog'
 import { ClientInventoryTab } from './components/client-inventory-tab'
+import { ClientPaymentsTab } from './components/client-payments-tab'
 import type { Client } from '@/types/client'
 
 interface ClientDetailPageProps {
@@ -326,7 +327,7 @@ function ClientDetailContent({ client }: ClientDetailPageProps) {
         </div>
 
         {/* Tabs */}
-        <Tabs defaultValue={client.is_fulfilment ? initialTab : 'overview'}>
+        <Tabs defaultValue={initialTab}>
           <TabsList>
             <TabsTrigger value='overview'>Overview</TabsTrigger>
             {client.is_fulfilment && (
@@ -335,6 +336,10 @@ function ClientDetailContent({ client }: ClientDetailPageProps) {
                 Inventory
               </TabsTrigger>
             )}
+            <TabsTrigger value='payments'>
+              <DollarSign className='mr-1.5 h-4 w-4' />
+              Payments
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value='overview' className='mt-6 space-y-6'>
@@ -409,6 +414,10 @@ function ClientDetailContent({ client }: ClientDetailPageProps) {
               <ClientInventoryTab client={client} />
             </TabsContent>
           )}
+
+          <TabsContent value='payments' className='mt-6'>
+            <ClientPaymentsTab client={client} />
+          </TabsContent>
         </Tabs>
       </Main>
 
