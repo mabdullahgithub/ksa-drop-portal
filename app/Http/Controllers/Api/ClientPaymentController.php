@@ -6,7 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Client;
 use App\Models\ClientPayment;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 
 class ClientPaymentController extends Controller
 {
@@ -31,10 +31,16 @@ class ClientPaymentController extends Controller
 
         $proofPath = null;
         if ($request->hasFile('proof')) {
-            $proofPath = $request->file('proof')->store(
-                "client-payments/{$client->short_id}",
-                'public'
-            );
+            $file      = $request->file('proof');
+            $dir       = public_path("uploads/client-payments/{$client->short_id}");
+            $filename  = Str::uuid() . '.' . $file->getClientOriginalExtension();
+
+            if (!is_dir($dir)) {
+                mkdir($dir, 0755, true);
+            }
+
+            $file->move($dir, $filename);
+            $proofPath = "uploads/client-payments/{$client->short_id}/{$filename}";
         }
 
         $payment = $client->payments()->create([
@@ -55,7 +61,10 @@ class ClientPaymentController extends Controller
         }
 
         if ($payment->proof_path) {
-            Storage::disk('public')->delete($payment->proof_path);
+            $fullPath = public_path($payment->proof_path);
+            if (file_exists($fullPath)) {
+                @unlink($fullPath);
+            }
         }
 
         $payment->delete();
