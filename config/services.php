@@ -67,7 +67,7 @@ return [
     'shopify' => [
         'key'          => env('SHOPIFY_API_KEY'),
         'secret'       => env('SHOPIFY_API_SECRET'),
-        'scopes'       => env('SHOPIFY_SCOPES', 'read_orders'),
+        'scopes'       => env('SHOPIFY_SCOPES', 'read_orders,read_customers'),
         'redirect_uri' => env('SHOPIFY_REDIRECT_URI'),
     ],
 

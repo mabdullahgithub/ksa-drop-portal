@@ -45,47 +45,64 @@ class ShopifyOrderSyncJob implements ShouldQueue
 
         $cursor = null;
 
-        do {
-            $page = $shopify->fetchRecentOrders($connection->shop_domain, $token, $cursor);
+        try {
+            do {
+                $page = $shopify->fetchRecentOrders($connection->shop_domain, $token, $cursor);
 
-            foreach ($page['orders'] as $node) {
-                $data = $shopify->mapGraphqlOrder($node, $connection->client);
+                foreach ($page['orders'] as $node) {
+                    $data = $shopify->mapGraphqlOrder($node, $connection->client);
 
-                $existing = Order::withoutGlobalScope('shopify_visible')
-                    ->where('shopify_order_id', $data['shopify_order_id'])
-                    ->first();
+                    $existing = Order::withoutGlobalScope('shopify_visible')
+                        ->where('shopify_order_id', $data['shopify_order_id'])
+                        ->first();
 
-                $data['shopify_sync_status'] = $existing
-                    ? $existing->shopify_sync_status
-                    : ($connection->sync_mode === 'manual_approval' ? 'pending_review' : null);
+                    $data['shopify_sync_status'] = $existing
+                        ? $existing->shopify_sync_status
+                        : ($connection->sync_mode === 'manual_approval' ? 'pending_review' : null);
 
-                $order = Order::withoutGlobalScope('shopify_visible')->updateOrCreate(
-                    ['shopify_order_id' => $data['shopify_order_id']],
-                    $data
-                );
-
-                // Upsert line items atomically (no race condition window).
-                // Delete items no longer in the payload; upsert all others keyed on SKU.
-                $currentSkus = collect($shopify->mapLineItems($node, 'graphql'))
-                    ->pluck('lineitem_sku')
-                    ->filter()
-                    ->all();
-
-                $order->items()
-                    ->whereNotIn('lineitem_sku', $currentSkus)
-                    ->delete();
-
-                foreach ($shopify->mapLineItems($node, 'graphql') as $item) {
-                    $order->items()->updateOrCreate(
-                        ['lineitem_sku' => $item['lineitem_sku'] ?? null],
-                        $item
+                    $order = Order::withoutGlobalScope('shopify_visible')->updateOrCreate(
+                        ['shopify_order_id' => $data['shopify_order_id']],
+                        $data
                     );
+
+                    // Upsert line items atomically (no race condition window).
+                    // Delete items no longer in the payload; upsert all others keyed on SKU.
+                    $currentSkus = collect($shopify->mapLineItems($node, 'graphql'))
+                        ->pluck('lineitem_sku')
+                        ->filter()
+                        ->all();
+
+                    $order->items()
+                        ->whereNotIn('lineitem_sku', $currentSkus)
+                        ->delete();
+
+                    foreach ($shopify->mapLineItems($node, 'graphql') as $item) {
+                        $order->items()->updateOrCreate(
+                            ['lineitem_sku' => $item['lineitem_sku'] ?? null],
+                            $item
+                        );
+                    }
                 }
+
+                $cursor = $page['endCursor'];
+            } while ($page['hasNextPage']);
+
+            $connection->update(['last_synced_at' => now()]);
+        } catch (\Throwable $e) {
+            Log::error('Shopify order sync failed', [
+                'connection' => $connection->id,
+                'shop'       => $connection->shop_domain,
+                'error'      => $e->getMessage(),
+            ]);
+
+            // ACCESS_DENIED means the app lacks Protected Customer Data approval.
+            // Retrying won't help — mark the connection so the UI can surface it.
+            if (str_contains($e->getMessage(), 'ACCESS_DENIED')) {
+                $connection->update(['status' => 'error']);
+                return;
             }
 
-            $cursor = $page['endCursor'];
-        } while ($page['hasNextPage']);
-
-        $connection->update(['last_synced_at' => now()]);
+            throw $e; // transient errors (network, rate-limit) are retried by the queue
+        }
     }
 }

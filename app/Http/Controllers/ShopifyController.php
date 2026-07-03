@@ -123,7 +123,11 @@ class ShopifyController extends Controller
         }
 
         // Pull last 60 days of orders in the background.
-        ShopifyOrderSyncJob::dispatch($connection->id);
+        try {
+            ShopifyOrderSyncJob::dispatch($connection->id);
+        } catch (\Throwable $e) {
+            Log::warning('Shopify order sync dispatch failed', ['shop' => $shop, 'error' => $e->getMessage()]);
+        }
 
         session()->forget(['shopify_oauth_nonce', 'shopify_oauth_shop']);
 
