@@ -3,11 +3,14 @@ import { router, usePage } from '@inertiajs/react'
 import { toast } from 'sonner'
 import {
   Loader2,
-  Sparkles,
   ChevronDown,
   CheckCircle2,
   AlertTriangle,
   ArrowRight,
+  RefreshCw,
+  ClipboardCheck,
+  Zap,
+  Store,
 } from 'lucide-react'
 import { Header } from '@/components/layout/header'
 import { NotificationsDropdown } from '@/components/layout/notifications-dropdown'
@@ -23,6 +26,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { BuyEaseCard } from '@/components/buyease-card'
 import { useEnabledConnectors, type Connector } from '@/hooks/useEnabledConnectors'
 import { useShopifyConnection } from '@/hooks/useShopifyConnection'
 import { IconShopify, IconJnt } from '@/assets/brand-icons'
@@ -34,8 +38,20 @@ const logoMap: Record<string, React.ReactNode> = {
   jnt_express: <IconJnt />,
 }
 
+// Fixed display order: J&T first, then Shopify, then BuyEase.
+// (J&T is filtered out server-side for clients but kept here for safety.)
+const displayOrder: Record<string, number> = {
+  jnt_express: 0,
+  shopify: 1,
+  buyease: 2,
+}
+
 export function PortalConnectors() {
-  const { connectors, comingSoon, loading, refresh } = useEnabledConnectors()
+  const { connectors, loading, refresh } = useEnabledConnectors()
+
+  const orderedConnectors = [...connectors].sort(
+    (a, b) => (displayOrder[a.key] ?? 99) - (displayOrder[b.key] ?? 99)
+  )
   const { props } = usePage<PageProps>()
 
   // Surface the OAuth callback result (redirected back with a flash message).
@@ -67,13 +83,19 @@ export function PortalConnectors() {
           </div>
         ) : (
           <ul className='faded-bottom no-scrollbar grid gap-4 overflow-auto overscroll-contain pt-4 pb-16 md:grid-cols-2 lg:grid-cols-3'>
-            {connectors.map((connector) =>
+            {orderedConnectors.map((connector) =>
               connector.key === 'shopify' ? (
                 <ShopifyConnectorCard
                   key={connector.id}
                   connector={connector}
                   logo={logoMap[connector.key]}
                   onChanged={refresh}
+                />
+              ) : connector.key === 'buyease' ? (
+                <BuyEaseCard
+                  key={connector.id}
+                  name={connector.name}
+                  description={connector.description}
                 />
               ) : (
                 <ConnectorCard
@@ -83,7 +105,6 @@ export function PortalConnectors() {
                 />
               )
             )}
-            {comingSoon && <ComingSoonCard />}
           </ul>
         )}
       </Main>
@@ -294,9 +315,15 @@ function ShopifyConnectorCard({
 
   // ── Not connected (or token error → reconnect) ──
   return (
-    <li className='rounded-lg border p-4 hover:shadow-md'>
-      <div className='mb-8 flex items-center justify-between'>
-        <div className='bg-muted flex size-16 items-center justify-center rounded-lg overflow-hidden'>
+    <li className='group relative overflow-hidden rounded-lg border border-emerald-200/80 bg-gradient-to-br from-emerald-50/70 via-background to-background p-4 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-emerald-300 hover:shadow-lg hover:shadow-emerald-100/50 dark:border-emerald-900/70 dark:from-emerald-950/30 dark:hover:border-emerald-700 dark:hover:shadow-emerald-950/30'>
+      {/* Soft brand glow */}
+      <div
+        aria-hidden
+        className='pointer-events-none absolute -top-14 -right-14 size-36 rounded-full bg-emerald-400/15 blur-2xl transition-transform duration-500 group-hover:scale-125 dark:bg-emerald-500/10'
+      />
+
+      <div className='relative mb-4 flex items-start justify-between'>
+        <div className='flex size-16 items-center justify-center overflow-hidden rounded-xl shadow-md ring-1 ring-emerald-900/10 dark:ring-white/10'>
           {logo}
         </div>
         {needsReconnect ? (
@@ -305,61 +332,52 @@ function ShopifyConnectorCard({
             Reconnect needed
           </span>
         ) : (
-          <Button
-            size='sm'
-            variant='outline'
-            className='h-7 text-xs'
-            onClick={() => setShowConnect(true)}
-          >
-            Connect Store
-          </Button>
+          <span className='text-muted-foreground inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium'>
+            Not connected
+          </span>
         )}
       </div>
 
-      <div>
+      <div className='relative'>
         <h2 className='mb-1 font-semibold'>{connector.name}</h2>
-        <p className='line-clamp-2 text-gray-500'>{connector.description}</p>
+        <p className='line-clamp-2 text-sm text-gray-500 dark:text-gray-400'>
+          {connector.description}
+        </p>
         {lastConnected && (
           <p className='text-muted-foreground mt-2 text-xs'>
             Last connected: {lastConnected}
           </p>
         )}
-        {needsReconnect && (
-          <Button
-            size='sm'
-            variant='outline'
-            className='mt-3 h-7 text-xs'
-            onClick={() => setShowConnect(true)}
-          >
-            Reconnect
-          </Button>
-        )}
       </div>
+
+      <ul className='relative mt-3 space-y-1.5 text-xs'>
+        <li className='flex items-center gap-2'>
+          <RefreshCw className='h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400' />
+          Orders sync to KSA Drop automatically
+        </li>
+        <li className='flex items-center gap-2'>
+          <ClipboardCheck className='h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400' />
+          Optional manual approval — you stay in control
+        </li>
+        <li className='flex items-center gap-2'>
+          <Zap className='h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400' />
+          Real-time updates via secure webhooks
+        </li>
+      </ul>
+
+      <div className='bg-border relative my-3 h-px' />
+
+      <Button
+        size='sm'
+        className='relative w-full bg-[#008060] text-white hover:bg-[#006e52] dark:bg-[#008060] dark:hover:bg-[#009973]'
+        onClick={() => setShowConnect(true)}
+      >
+        <Store className='h-3.5 w-3.5' />
+        {needsReconnect ? 'Reconnect Store' : 'Connect Store'}
+        <ArrowRight className='h-3.5 w-3.5' />
+      </Button>
 
       <ShopifyConnectDialog open={showConnect} onClose={() => setShowConnect(false)} lastShopDomain={connector.shop_domain} />
-    </li>
-  )
-}
-
-function ComingSoonCard() {
-  return (
-    <li className='rounded-lg border border-dashed border-amber-300 bg-gradient-to-br from-amber-50 to-orange-50 p-4 opacity-75 dark:border-amber-600 dark:from-amber-950 dark:to-orange-950'>
-      <div className='mb-8 flex items-center justify-between'>
-        <div className='flex size-16 items-center justify-center rounded-lg bg-amber-100 dark:bg-amber-900'>
-          <Sparkles className='h-8 w-8 text-amber-600 dark:text-amber-400' />
-        </div>
-        <span className='inline-flex items-center rounded-md border border-amber-300 bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700 dark:border-amber-600 dark:bg-amber-900 dark:text-amber-400'>
-          Coming Soon
-        </span>
-      </div>
-      <div>
-        <h2 className='mb-1 font-semibold text-gray-800 dark:text-gray-200'>
-          Something Special
-        </h2>
-        <p className='line-clamp-2 text-sm text-gray-600 dark:text-gray-400'>
-          Exciting new integrations coming for our valued clients. Stay tuned!
-        </p>
-      </div>
     </li>
   )
 }

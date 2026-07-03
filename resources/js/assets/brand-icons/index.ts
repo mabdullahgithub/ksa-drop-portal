@@ -1,3 +1,4 @@
+export { IconBuyease } from './icon-buyease'
 export { IconDiscord } from './icon-discord'
 export { IconDocker } from './icon-docker'
 export { IconFacebook } from './icon-facebook'
