@@ -28,7 +28,9 @@ export function JntProvinceSelect({ value, onChange, placeholder = 'Select provi
   const [open, setOpen] = useState(false)
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    // modal so wheel scrolling works when rendered inside a Dialog (its scroll
+    // lock otherwise blocks wheel events on the portaled popover content)
+    <Popover open={open} onOpenChange={setOpen} modal>
       <PopoverTrigger asChild>
         <Button
           variant='outline'
@@ -94,7 +96,7 @@ export function JntCitySelect({ province, value, onChange, onProvinceChange, pla
   )
 
   return (
-    <Popover open={open} onOpenChange={(o) => { setOpen(o); if (!o) setSearch('') }}>
+    <Popover open={open} onOpenChange={(o) => { setOpen(o); if (!o) setSearch('') }} modal>
       <PopoverTrigger asChild>
         <Button
           variant='outline'
