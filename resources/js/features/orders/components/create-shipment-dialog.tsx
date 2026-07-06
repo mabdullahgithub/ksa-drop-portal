@@ -71,6 +71,7 @@ export function CreateShipmentDialog({ order, open, onOpenChange, onSuccess }: C
           receiver_area: '',
           receiver_address: order.shipping_address1 || '',
           receiver_post_code: order.shipping_zip || '',
+          receiver_short_address: order.shipping_address2 || '',
         }))
       }
     }
@@ -270,27 +271,30 @@ export function CreateShipmentDialog({ order, open, onOpenChange, onSuccess }: C
                   />
                 </div>
                 <div className='space-y-1'>
-                  <Label className='text-xs text-muted-foreground'>Length (cm) <span className='italic'>(optional)</span></Label>
+                  <Label className='text-xs text-muted-foreground whitespace-nowrap'>Length (cm)</Label>
                   <Input
                     type='number'
                     value={form.length}
                     onChange={(e) => setForm({ ...form, length: e.target.value })}
+                    placeholder='Optional'
                   />
                 </div>
                 <div className='space-y-1'>
-                  <Label className='text-xs text-muted-foreground'>Width (cm) <span className='italic'>(optional)</span></Label>
+                  <Label className='text-xs text-muted-foreground whitespace-nowrap'>Width (cm)</Label>
                   <Input
                     type='number'
                     value={form.width}
                     onChange={(e) => setForm({ ...form, width: e.target.value })}
+                    placeholder='Optional'
                   />
                 </div>
                 <div className='space-y-1'>
-                  <Label className='text-xs text-muted-foreground'>Height (cm) <span className='italic'>(optional)</span></Label>
+                  <Label className='text-xs text-muted-foreground whitespace-nowrap'>Height (cm)</Label>
                   <Input
                     type='number'
                     value={form.height}
                     onChange={(e) => setForm({ ...form, height: e.target.value })}
+                    placeholder='Optional'
                   />
                 </div>
               </div>

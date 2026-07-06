@@ -17,6 +17,7 @@ import { format } from 'date-fns'
 import { Package, DollarSign, MapPin, Phone, Calendar, Tag, Pencil, Save, X } from 'lucide-react'
 import { ShipmentPanel } from './shipment-panel'
 import { CreateShipmentDialog } from './create-shipment-dialog'
+import { JntProvinceSelect, JntCitySelect } from '@/components/jnt-location-select'
 import { InvoicePanel } from './invoice-panel'
 import { useState, useEffect, useCallback } from 'react'
 import axios from 'axios'
@@ -241,12 +242,42 @@ export function OrderDetailsDialog({ order, open, onOpenChange, onSaved, startIn
               <div className='grid grid-cols-2 gap-4'>
                 {renderField('Name', 'shipping_name')}
                 {renderField('Phone', 'shipping_phone')}
-                {renderField('Address 1', 'shipping_address1')}
-                {renderField('Address 2', 'shipping_address2')}
-                {renderField('City', 'shipping_city')}
-                {renderField('Province', 'shipping_province')}
-                {renderField('Zip', 'shipping_zip')}
+                <div className='space-y-1'>
+                  <Label className='text-xs text-muted-foreground'>Province / Region</Label>
+                  <JntProvinceSelect
+                    value={form.shipping_province}
+                    onChange={(province) =>
+                      setForm((prev) => (prev ? { ...prev, shipping_province: province, shipping_city: '' } : prev))
+                    }
+                  />
+                </div>
+                <div className='space-y-1'>
+                  <Label className='text-xs text-muted-foreground'>City</Label>
+                  <JntCitySelect
+                    province={form.shipping_province}
+                    value={form.shipping_city}
+                    onChange={(city) => setField('shipping_city', city)}
+                    onProvinceChange={(province) => setField('shipping_province', province)}
+                  />
+                </div>
+                {renderField('Postal Code', 'shipping_zip')}
                 {renderField('Country', 'shipping_country')}
+                <div className='space-y-1 col-span-2'>
+                  <Label className='text-xs text-muted-foreground'>Short Address (Saudi National Address — optional)</Label>
+                  <Input
+                    value={form.shipping_address2}
+                    onChange={(e) => setField('shipping_address2', e.target.value)}
+                    placeholder='e.g. BLDN1234'
+                    maxLength={50}
+                  />
+                </div>
+                <div className='space-y-1 col-span-2'>
+                  <Label className='text-xs text-muted-foreground'>Street Address</Label>
+                  <Input
+                    value={form.shipping_address1}
+                    onChange={(e) => setField('shipping_address1', e.target.value)}
+                  />
+                </div>
               </div>
             </div>
 

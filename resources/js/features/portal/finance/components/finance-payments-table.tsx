@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { ChevronLeft, ChevronRight, Eye } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Download, Eye } from 'lucide-react'
 
 interface Payment {
   id: number
@@ -38,7 +38,28 @@ function formatDate(dateStr: string) {
 
 function ProofDialog({ url }: { url: string }) {
   const [open, setOpen] = useState(false)
+  const [downloading, setDownloading] = useState(false)
   const isPdf = url.toLowerCase().endsWith('.pdf')
+
+  const handleDownload = async () => {
+    setDownloading(true)
+    try {
+      const response = await fetch(url)
+      const blob = await response.blob()
+      const objectUrl = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = objectUrl
+      link.download = url.split('/').pop()?.split('?')[0] || 'payment-proof'
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      URL.revokeObjectURL(objectUrl)
+    } catch {
+      window.open(url, '_blank')
+    } finally {
+      setDownloading(false)
+    }
+  }
 
   return (
     <>
@@ -57,6 +78,12 @@ function ProofDialog({ url }: { url: string }) {
             ) : (
               <img src={url} alt='Payment Proof' className='max-w-full max-h-[65vh] object-contain' />
             )}
+          </div>
+          <div className='mt-3 flex justify-end'>
+            <Button variant='outline' size='sm' className='gap-1.5' onClick={handleDownload} disabled={downloading}>
+              <Download className='h-3.5 w-3.5' />
+              {downloading ? 'Downloading...' : 'Download'}
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
