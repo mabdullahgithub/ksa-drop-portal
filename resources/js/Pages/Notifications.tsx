@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Head, Link, router } from '@inertiajs/react'
+import { Head, router } from '@inertiajs/react'
 import {
   ChevronLeftIcon,
   ChevronRightIcon,
@@ -23,7 +23,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Bell, Check, CheckCheck, Trash2, ExternalLink } from 'lucide-react'
+import { Bell, Check, CheckCheck, Trash2 } from 'lucide-react'
 import { cn, getPageNumbers } from '@/lib/utils'
 import { usePermissions } from '@/hooks/use-permissions'
 import axios from 'axios'
@@ -273,18 +273,6 @@ export default function NotificationsPage({
                             >
                               <Check className='h-4 w-4' />
                             </Button>
-                          )}
-                          {notification.data.action_url && (
-                            <Link href={notification.data.action_url}>
-                              <Button
-                                variant='ghost'
-                                size='icon'
-                                className='h-8 w-8'
-                                title='View'
-                              >
-                                <ExternalLink className='h-4 w-4' />
-                              </Button>
-                            </Link>
                           )}
                           {can('delete notifications') && (
                             <Button

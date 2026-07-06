@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Link, router } from '@inertiajs/react'
-import { Bell, Check, CheckCheck, Trash2, ExternalLink } from 'lucide-react'
+import { Bell, Check, CheckCheck, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -189,18 +189,6 @@ export function NotificationsDropdown() {
                       >
                         <Check className='h-3.5 w-3.5' />
                       </Button>
-                    )}
-                    {notification.data.action_url && (
-                      <Link href={notification.data.action_url}>
-                        <Button
-                          variant='ghost'
-                          size='icon'
-                          className='h-7 w-7'
-                          title='View'
-                        >
-                          <ExternalLink className='h-3.5 w-3.5' />
-                        </Button>
-                      </Link>
                     )}
                     <Button
                       variant='ghost'

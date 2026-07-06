@@ -106,6 +106,14 @@ class OrderController extends Controller
             }
         }
 
+        // Filter by client type (fulfilment / dropshipper)
+        if ($request->filled('client_type') && in_array($request->client_type, ['fulfilment', 'dropshipper'])) {
+            $clientType = $request->client_type;
+            $query->whereHas('client', function ($q) use ($clientType) {
+                $q->whereJsonContains('client_types', $clientType);
+            });
+        }
+
         // Filter by shipment status
         if ($request->has('has_shipment')) {
             $hasShipment = filter_var($request->has_shipment, FILTER_VALIDATE_BOOLEAN);
@@ -544,6 +552,12 @@ class OrderController extends Controller
             if (!empty($clientIds)) {
                 $query->whereIn('client_id', $clientIds);
             }
+        }
+        if ($request->filled('client_type') && in_array($request->client_type, ['fulfilment', 'dropshipper'])) {
+            $clientType = $request->client_type;
+            $query->whereHas('client', function ($q) use ($clientType) {
+                $q->whereJsonContains('client_types', $clientType);
+            });
         }
 
         $orders = $query->get();

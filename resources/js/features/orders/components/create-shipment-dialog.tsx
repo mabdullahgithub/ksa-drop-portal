@@ -8,6 +8,7 @@ import { toast } from 'sonner'
 import axios from 'axios'
 import { useState, useEffect } from 'react'
 import { type Order } from '@/types/order'
+import { JntProvinceSelect, JntCitySelect } from '@/components/jnt-location-select'
 
 interface Warehouse {
   id: number
@@ -206,16 +207,18 @@ export function CreateShipmentDialog({ order, open, onOpenChange, onSuccess }: C
                 </div>
                 <div className='space-y-1'>
                   <Label className='text-xs text-muted-foreground'>Province / Region</Label>
-                  <Input
+                  <JntProvinceSelect
                     value={form.receiver_province}
-                    onChange={(e) => setForm({ ...form, receiver_province: e.target.value })}
+                    onChange={(province) => setForm({ ...form, receiver_province: province, receiver_city: '' })}
                   />
                 </div>
                 <div className='space-y-1'>
                   <Label className='text-xs text-muted-foreground'>City</Label>
-                  <Input
+                  <JntCitySelect
+                    province={form.receiver_province}
                     value={form.receiver_city}
-                    onChange={(e) => setForm({ ...form, receiver_city: e.target.value })}
+                    onChange={(city) => setForm((prev) => ({ ...prev, receiver_city: city }))}
+                    onProvinceChange={(province) => setForm((prev) => ({ ...prev, receiver_province: province }))}
                   />
                 </div>
                 <div className='space-y-1'>

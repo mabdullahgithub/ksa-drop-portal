@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Link } from '@inertiajs/react'
-import { Bell, ExternalLink } from 'lucide-react'
+import { Bell } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -118,17 +118,6 @@ export function RecentNotificationsCard() {
                       {getTimeAgo(notification.created_at)}
                     </p>
                   </div>
-                  {notification.data.action_url && (
-                    <Link href={notification.data.action_url}>
-                      <Button
-                        variant='ghost'
-                        size='icon'
-                        className='h-7 w-7 opacity-0 transition-opacity group-hover:opacity-100'
-                      >
-                        <ExternalLink className='h-3.5 w-3.5' />
-                      </Button>
-                    </Link>
-                  )}
                 </div>
               </div>
             ))}

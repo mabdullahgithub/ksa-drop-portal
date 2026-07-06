@@ -15,6 +15,7 @@ import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { JntProvinceSelect, JntCitySelect } from '@/components/jnt-location-select'
 import { Info } from 'lucide-react'
 import { toast } from 'sonner'
 import axios from 'axios'
@@ -453,18 +454,18 @@ export default function JntSettings() {
                     </div>
                     <div className='space-y-2'>
                       <Label>Province</Label>
-                      <Input
+                      <JntProvinceSelect
                         value={warehouseForm.province}
-                        onChange={(e) => setWarehouseForm({ ...warehouseForm, province: e.target.value })}
-                        placeholder='e.g. Riyadh Region'
+                        onChange={(province) => setWarehouseForm({ ...warehouseForm, province, city: '' })}
                       />
                     </div>
                     <div className='space-y-2'>
                       <Label>City</Label>
-                      <Input
+                      <JntCitySelect
+                        province={warehouseForm.province}
                         value={warehouseForm.city}
-                        onChange={(e) => setWarehouseForm({ ...warehouseForm, city: e.target.value })}
-                        placeholder='e.g. Riyadh'
+                        onChange={(city) => setWarehouseForm((prev) => ({ ...prev, city }))}
+                        onProvinceChange={(province) => setWarehouseForm((prev) => ({ ...prev, province }))}
                       />
                     </div>
                     <div className='space-y-2'>
@@ -532,6 +533,7 @@ export default function JntSettings() {
                             city: '',
                             area: '',
                             address: '',
+                            short_address: '',
                             post_code: '',
                             country_code: 'SA',
                             is_default: false,

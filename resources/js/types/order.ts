@@ -164,6 +164,7 @@ export interface OrderFilters {
   per_page?: number
   page?: number
   client_ids?: number[]
+  client_type?: 'fulfilment' | 'dropshipper' | ''
   has_shipment?: boolean
   shipment_status?: string[]
 }

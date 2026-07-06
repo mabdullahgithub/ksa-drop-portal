@@ -9,7 +9,6 @@ interface PortalOrdersFiltersProps {
   filters: Record<string, any>
   onFiltersChange: (filters: Partial<Record<string, any>>) => void
   filterOptions?: {
-    fulfillment_statuses?: Array<{ value: string; label: string }>
     financial_statuses?: Array<{ value: string; label: string }>
     shipment_statuses?: Array<{ value: string; label: string }>
     tags?: Array<{ value: string; label: string }>
@@ -38,7 +37,6 @@ export function PortalOrdersFilters({
     setSearchInput('')
     onFiltersChange({
       search: '',
-      fulfillment_status: [],
       financial_status: [],
       shipment_status: [],
       tags: [],
@@ -48,7 +46,6 @@ export function PortalOrdersFilters({
 
   const hasActiveFilters =
     filters.search ||
-    (filters.fulfillment_status && filters.fulfillment_status.length > 0) ||
     (filters.financial_status && filters.financial_status.length > 0) ||
     (filters.shipment_status && filters.shipment_status.length > 0) ||
     (filters.tags && filters.tags.length > 0)
@@ -65,16 +62,6 @@ export function PortalOrdersFilters({
           className='pl-8 h-9 text-sm'
         />
       </div>
-
-      {/* Fulfillment Status */}
-      {filterOptions.fulfillment_statuses && filterOptions.fulfillment_statuses.length > 0 && (
-        <MultiSelectFilter
-          label='Fulfillment'
-          options={filterOptions.fulfillment_statuses}
-          selected={filters.fulfillment_status ?? []}
-          onChange={(values) => onFiltersChange({ fulfillment_status: values, page: 1 })}
-        />
-      )}
 
       {/* Financial Status */}
       {filterOptions.financial_statuses && filterOptions.financial_statuses.length > 0 && (
