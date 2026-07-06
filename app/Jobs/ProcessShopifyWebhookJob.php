@@ -10,6 +10,7 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\Log;
 
 class ProcessShopifyWebhookJob implements ShouldQueue
 {
@@ -26,6 +27,23 @@ class ProcessShopifyWebhookJob implements ShouldQueue
 
     public function handle(ShopifyService $shopify): void
     {
+        // GDPR compliance topics must be handled even for disconnected stores —
+        // shop/redact arrives 48h after uninstall, when no active connection exists.
+        switch ($this->topic) {
+            case 'customers/data_request':
+                $this->logDataRequest();
+
+                return;
+            case 'customers/redact':
+                $this->redactCustomer();
+
+                return;
+            case 'shop/redact':
+                $this->redactShop();
+
+                return;
+        }
+
         $connection = ClientShopifyConnection::with('client')
             ->where('shop_domain', $this->shopDomain)
             ->where('status', 'active')
@@ -41,6 +59,91 @@ class ProcessShopifyWebhookJob implements ShouldQueue
             'orders/cancelled' => $this->cancelOrder(),
             default            => null,
         };
+    }
+
+    /**
+     * PII columns cleared when Shopify asks us to redact customer data.
+     * Order totals, statuses and line items are kept — they are not personal data.
+     */
+    private const PII_REDACTIONS = [
+        'customer_name'    => '[redacted]',
+        'customer_email'   => null,
+        'customer_phone'   => null,
+        'billing_name'     => '[redacted]',
+        'billing_street'   => null,
+        'billing_address1' => null,
+        'billing_address2' => null,
+        'billing_company'  => null,
+        'billing_city'     => null,
+        'billing_zip'      => null,
+        'billing_phone'    => null,
+        'shipping_name'    => '[redacted]',
+        'shipping_street'  => null,
+        'shipping_address1' => null,
+        'shipping_address2' => null,
+        'shipping_company'  => null,
+        'shipping_city'     => null,
+        'shipping_zip'      => null,
+        'shipping_phone'    => null,
+        'ip_address'        => null,
+    ];
+
+    /**
+     * customers/data_request — the merchant must supply the customer's data.
+     * We surface it in the logs so the operator can respond within 30 days.
+     */
+    private function logDataRequest(): void
+    {
+        Log::channel('single')->info('Shopify GDPR customers/data_request received', [
+            'shop'             => $this->shopDomain,
+            'customer_id'      => $this->payload['customer']['id'] ?? null,
+            'customer_email'   => $this->payload['customer']['email'] ?? null,
+            'orders_requested' => $this->payload['orders_requested'] ?? [],
+        ]);
+    }
+
+    /**
+     * customers/redact — erase the customer's PII from the orders Shopify lists.
+     */
+    private function redactCustomer(): void
+    {
+        $orderIds = array_map('strval', $this->payload['orders_to_redact'] ?? []);
+
+        if ($orderIds === []) {
+            return;
+        }
+
+        $count = Order::withoutGlobalScope('shopify_visible')
+            ->whereIn('shopify_order_id', $orderIds)
+            ->update(self::PII_REDACTIONS);
+
+        Log::info('Shopify GDPR customers/redact processed', [
+            'shop'            => $this->shopDomain,
+            'orders_redacted' => $count,
+        ]);
+    }
+
+    /**
+     * shop/redact — sent 48h after uninstall: erase PII from all of the shop's
+     * synced orders and drop the connection (and its stored tokens) entirely.
+     */
+    private function redactShop(): void
+    {
+        $connections = ClientShopifyConnection::where('shop_domain', $this->shopDomain)->get();
+
+        foreach ($connections as $connection) {
+            Order::withoutGlobalScope('shopify_visible')
+                ->where('client_id', $connection->client_id)
+                ->whereNotNull('shopify_order_id')
+                ->update(self::PII_REDACTIONS);
+
+            $connection->delete();
+        }
+
+        Log::info('Shopify GDPR shop/redact processed', [
+            'shop'        => $this->shopDomain,
+            'connections' => $connections->count(),
+        ]);
     }
 
     private function upsertOrder(ShopifyService $shopify, ClientShopifyConnection $connection): void

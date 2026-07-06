@@ -36,7 +36,7 @@ class ShopifyController extends Controller
 
         if (! $this->shopify->isValidShopDomain($shop)) {
             return redirect()->route('portal.connectors')
-                ->with('error', 'That does not look like a valid Shopify store URL.');
+                ->with('error', 'That does not look like a valid Shopify store URL. Use your permanent .myshopify.com domain (found in Shopify admin under Settings → Domains), not your custom domain.');
         }
 
         $nonce = bin2hex(random_bytes(16));

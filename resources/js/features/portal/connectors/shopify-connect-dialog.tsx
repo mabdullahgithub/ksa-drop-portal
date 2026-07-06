@@ -1,8 +1,13 @@
 import { useState } from 'react'
-import { ExternalLink, RotateCcw } from 'lucide-react'
+import { BookOpen, ChevronDown, ExternalLink, RotateCcw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible'
 import {
   Dialog,
   DialogContent,
@@ -17,9 +22,18 @@ interface Props {
   lastShopDomain?: string | null
 }
 
+/** Strip protocol, path and trailing slash so we can inspect the bare host. */
+function toBareHost(input: string): string {
+  return input
+    .replace(/^https?:\/\//i, '')
+    .replace(/\/.*$/, '')
+    .toLowerCase()
+}
+
 export function ShopifyConnectDialog({ open, onClose, lastShopDomain }: Props) {
   const [shop, setShop] = useState('')
   const [error, setError] = useState('')
+  const [guideOpen, setGuideOpen] = useState(false)
 
   const handleConnect = () => {
     const trimmed = shop.trim()
@@ -29,6 +43,16 @@ export function ShopifyConnectDialog({ open, onClose, lastShopDomain }: Props) {
     }
     if (trimmed.includes(' ')) {
       setError('Store URL cannot contain spaces.')
+      return
+    }
+    // Custom domains (e.g. mystore.com) cannot be used for the Shopify OAuth
+    // handshake — only the permanent *.myshopify.com host works.
+    const host = toBareHost(trimmed)
+    if (host.includes('.') && !host.endsWith('.myshopify.com')) {
+      setError(
+        'That looks like a custom domain. Please enter your permanent .myshopify.com store URL instead — see the guide below to find it.'
+      )
+      setGuideOpen(true)
       return
     }
     // Hand off to the backend, which initiates the Shopify OAuth handshake.
@@ -48,7 +72,8 @@ export function ShopifyConnectDialog({ open, onClose, lastShopDomain }: Props) {
         <DialogHeader>
           <DialogTitle>Connect your Shopify store</DialogTitle>
           <DialogDescription>
-            Enter your Shopify store URL. You&apos;ll be redirected to Shopify to approve
+            Enter your <b>.myshopify.com</b> store URL — your custom domain (e.g.
+            mystore.com) will not work. You&apos;ll be redirected to Shopify to approve
             the connection. Once connected, your orders sync into the portal automatically.
           </DialogDescription>
         </DialogHeader>
@@ -69,9 +94,64 @@ export function ShopifyConnectDialog({ open, onClose, lastShopDomain }: Props) {
             />
             {error && <p className='text-sm text-red-500'>{error}</p>}
             <p className='text-muted-foreground text-xs'>
-              You can enter just &quot;mystore&quot; or the full &quot;mystore.myshopify.com&quot;.
+              Enter just &quot;mystore&quot; or the full &quot;mystore.myshopify.com&quot;.
+              Custom domains (e.g. mystore.com) won&apos;t work.
             </p>
           </div>
+
+          <Collapsible open={guideOpen} onOpenChange={setGuideOpen}>
+            <CollapsibleTrigger asChild>
+              <button
+                type='button'
+                className='flex w-full items-center gap-2 rounded-lg border bg-muted/40 px-3 py-2 text-sm font-medium hover:bg-muted/70 transition-colors'
+              >
+                <BookOpen className='h-4 w-4 text-muted-foreground' />
+                How to find your .myshopify.com store URL
+                <ChevronDown
+                  className={`ml-auto h-4 w-4 text-muted-foreground transition-transform ${guideOpen ? 'rotate-180' : ''}`}
+                />
+              </button>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <div className='mt-2 space-y-3 rounded-lg border bg-muted/20 p-4 text-sm'>
+                <div>
+                  <p className='font-medium mb-1'>Option 1 — from your admin URL (fastest)</p>
+                  <p className='text-muted-foreground'>
+                    Log in to your Shopify admin. The address bar shows{' '}
+                    <code className='rounded bg-background px-1 py-0.5 font-mono text-xs border'>
+                      admin.shopify.com/store/<b>your-handle</b>
+                    </code>
+                    . Your store URL is{' '}
+                    <code className='rounded bg-background px-1 py-0.5 font-mono text-xs border'>
+                      <b>your-handle</b>.myshopify.com
+                    </code>
+                    .
+                  </p>
+                </div>
+                <div>
+                  <p className='font-medium mb-1'>Option 2 — from Shopify settings</p>
+                  <p className='text-muted-foreground'>
+                    In Shopify admin, go to <b>Settings → Domains</b>. Copy the domain
+                    ending in <b>.myshopify.com</b> — it&apos;s listed as your default or
+                    store domain.
+                  </p>
+                </div>
+                <div>
+                  <p className='font-medium mb-1'>Then connect</p>
+                  <ol className='list-decimal space-y-1 pl-4 text-muted-foreground'>
+                    <li>Paste the .myshopify.com URL above and click <b>Connect Store</b>.</li>
+                    <li>You&apos;ll be redirected to Shopify — log in if asked.</li>
+                    <li>Review the permissions and click <b>Install</b> to approve.</li>
+                    <li>You&apos;ll return here and your orders start syncing automatically.</li>
+                  </ol>
+                </div>
+                <p className='rounded-md border border-amber-200/60 bg-amber-100/40 px-3 py-2 text-xs text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-400'>
+                  Note: your custom storefront domain (e.g. mystore.com) cannot be used to
+                  connect — Shopify only allows the permanent .myshopify.com address.
+                </p>
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
 
           {lastShopDomain && (
             <div className='rounded-lg bg-green-100/40 p-3 border border-green-200/50 dark:bg-green-950/30 dark:border-green-900/50'>
