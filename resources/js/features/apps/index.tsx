@@ -89,6 +89,7 @@ export function Apps() {
                   connector={connector}
                   logo={logoMap[connector.key]}
                   canEdit={can('edit apps')}
+                  showPartnerBadge={connector.key === 'shopify'}
                 />
               )
             )}
@@ -103,9 +104,10 @@ interface ConnectorCardProps {
   connector: Connector
   logo: React.ReactNode
   canEdit: boolean
+  showPartnerBadge?: boolean
 }
 
-function ConnectorCard({ connector, logo, canEdit }: ConnectorCardProps) {
+function ConnectorCard({ connector, logo, canEdit, showPartnerBadge }: ConnectorCardProps) {
   const settingsRoute = settingsRouteMap[connector.key]
 
   return (
@@ -122,6 +124,13 @@ function ConnectorCard({ connector, logo, canEdit }: ConnectorCardProps) {
         <h2 className='mb-1 font-semibold'>{connector.name}</h2>
         <p className='line-clamp-2 text-gray-500'>{connector.description}</p>
       </div>
+      {showPartnerBadge && (
+        <img
+          src='/images/integrations/shopify-partner.png'
+          alt='Official Shopify Partner'
+          className='mt-3 h-6 w-auto'
+        />
+      )}
       {settingsRoute && canEdit && (
         <button
           type='button'
