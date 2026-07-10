@@ -39,6 +39,7 @@ import { usePortalOrders, usePortalOrderMutations, usePortalDashboard, usePortal
 import { OrdersPagination } from '@/features/orders/components/orders-pagination'
 import { ShipmentStatusInfoModal } from '@/features/orders/components/shipment-status-info-modal'
 import { PortalShipmentStatusCards } from './components/portal-shipment-status-cards'
+import { PortalTagStatCards } from './components/portal-tag-stat-cards'
 import { PortalOrdersFilters } from './components/portal-orders-filters'
 import { usePortalOrderFilterOptions } from '@/hooks/usePortal'
 import { useEnabledConnectors } from '@/hooks/useEnabledConnectors'
@@ -1162,6 +1163,14 @@ export function PortalOrders() {
             </Button>
           </div>
         </div>
+
+        {/* Tags */}
+        <PortalTagStatCards
+          activeTag={filters.tag}
+          onTagClick={(tagName) => {
+            updateFilters({ tag: filters.tag === tagName ? undefined : tagName, page: 1 })
+          }}
+        />
 
         {/* Shipment Status Distribution */}
         <div className='mb-8'>

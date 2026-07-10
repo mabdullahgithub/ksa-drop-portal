@@ -166,7 +166,7 @@ export function DataTableBulkActions<TData>({
     const selectedOrders = selectedRows.map((row) => (row.original as Order).id)
 
     if (tags.length === 0) {
-      toast.error('Please select at least one tag')
+      toast.error('Please select a tag')
       return
     }
 
@@ -179,10 +179,10 @@ export function DataTableBulkActions<TData>({
       })
       table.resetRowSelection()
       setShowTagDialog(false)
-      toast.success(`Added tags to ${selectedOrders.length} order${selectedOrders.length > 1 ? 's' : ''}`)
+      toast.success(`Tag assigned to ${selectedOrders.length} order${selectedOrders.length > 1 ? 's' : ''}`)
       refresh()
     } catch {
-      toast.error('Failed to add tags')
+      toast.error('Failed to assign tag')
     } finally {
       setIsSavingTags(false)
     }
@@ -285,15 +285,15 @@ export function DataTableBulkActions<TData>({
               size='icon'
               onClick={() => setShowTagDialog(true)}
               className='size-8'
-              aria-label='Add tags'
-              title='Add tags'
+              aria-label='Assign tag'
+              title='Assign tag'
             >
               <Tag className='h-4 w-4' />
-              <span className='sr-only'>Add tags</span>
+              <span className='sr-only'>Assign tag</span>
             </Button>
           </TooltipTrigger>
           <TooltipContent>
-            <p>Add tags</p>
+            <p>Assign tag</p>
           </TooltipContent>
         </Tooltip>
 

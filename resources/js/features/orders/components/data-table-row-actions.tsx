@@ -106,7 +106,7 @@ export function DataTableRowActions<TData>({ row }: DataTableRowActionsProps<TDa
 
               <DropdownMenuItem onClick={() => setShowTagDialog(true)}>
                 <Tag className='mr-2 h-4 w-4' />
-                Manage Tags
+                Manage Tag
               </DropdownMenuItem>
 
               <DropdownMenuItem

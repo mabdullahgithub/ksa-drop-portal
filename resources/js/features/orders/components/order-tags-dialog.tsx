@@ -55,10 +55,9 @@ export function OrderTagsDialog({
     onOpenChange(open)
   }
 
+  // Only one tag can be assigned at a time; selecting a tag replaces the current one
   const toggle = (tagName: string) => {
-    setSelected((prev) =>
-      prev.includes(tagName) ? prev.filter((t) => t !== tagName) : [...prev, tagName]
-    )
+    setSelected((prev) => (prev.includes(tagName) ? [] : [tagName]))
   }
 
   const removeTag = (tagName: string) => {
@@ -68,7 +67,7 @@ export function OrderTagsDialog({
   const addFreeTag = () => {
     const val = freeInput.trim()
     if (!val || selected.includes(val)) { setFreeInput(''); return }
-    setSelected((prev) => [...prev, val])
+    setSelected([val])
     setFreeInput('')
     inputRef.current?.focus()
   }
@@ -86,9 +85,6 @@ export function OrderTagsDialog({
     await onSave(selected)
   }
 
-  // Predefined tags not currently selected
-  const unselectedPredefined = availableTags.filter((t) => !selected.includes(t.name))
-
   // Find meta for a tag name
   const getMeta = (name: string): Tag | undefined =>
     availableTags.find((t) => t.name === name)
@@ -97,9 +93,10 @@ export function OrderTagsDialog({
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className='sm:max-w-md'>
         <DialogHeader>
-          <DialogTitle>Manage Tags</DialogTitle>
+          <DialogTitle>Manage Tag</DialogTitle>
           <DialogDescription>
-            Assign tags to order <span className='font-medium text-foreground'>{orderNumber}</span>.
+            Assign a tag to order <span className='font-medium text-foreground'>{orderNumber}</span>.
+            Only one tag can be assigned at a time — selecting a new tag replaces the current one.
           </DialogDescription>
         </DialogHeader>
 
@@ -107,10 +104,10 @@ export function OrderTagsDialog({
           {/* Current tags */}
           <div>
             <p className='mb-2 text-xs font-medium text-muted-foreground uppercase tracking-wide'>
-              Applied tags
+              Applied tag
             </p>
             {selected.length === 0 ? (
-              <p className='text-xs text-muted-foreground italic'>No tags applied yet.</p>
+              <p className='text-xs text-muted-foreground italic'>No tag applied yet.</p>
             ) : (
               <div className='flex flex-wrap gap-1.5'>
                 {selected.map((name) => {
@@ -197,10 +194,6 @@ export function OrderTagsDialog({
                     </button>
                   )
                 })}
-                {/* Show already-applied free tags that aren't in predefined */}
-                {unselectedPredefined.length === 0 && availableTags.length > 0 && (
-                  <p className='text-xs text-muted-foreground'>All tags applied.</p>
-                )}
               </div>
             )}
           </div>
@@ -232,7 +225,7 @@ export function OrderTagsDialog({
                 Add
               </Button>
             </div>
-            <p className='mt-1 text-xs text-muted-foreground'>Press Enter or comma to add</p>
+            <p className='mt-1 text-xs text-muted-foreground'>Press Enter to set the tag (replaces the current one)</p>
           </div>
         </div>
 
@@ -241,7 +234,7 @@ export function OrderTagsDialog({
             Cancel
           </Button>
           <Button onClick={handleSave} disabled={isSaving}>
-            {isSaving ? <><Loader2 size={14} className='me-1.5 animate-spin' />Saving...</> : 'Save tags'}
+            {isSaving ? <><Loader2 size={14} className='me-1.5 animate-spin' />Saving...</> : 'Save tag'}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Client;
 use App\Models\ClientProduct;
 use App\Models\ClientProductImage;
+use App\Models\Tag;
 use App\Models\User;
 use App\Notifications\ProductSubmittedNotification;
 use Illuminate\Http\Request;
@@ -79,6 +80,12 @@ class PortalController extends Controller
                 ->groupBy('status')
                 ->orderByDesc('count')
                 ->get(),
+            'by_tag' => Tag::orderBy('name')->get(['id', 'name', 'color'])->map(fn ($tag) => [
+                'id'    => $tag->id,
+                'name'  => $tag->name,
+                'color' => $tag->color,
+                'count' => $client->orders()->whereJsonContains('tags', $tag->name)->count(),
+            ]),
         ];
 
         $recentOrders = $client->orders()

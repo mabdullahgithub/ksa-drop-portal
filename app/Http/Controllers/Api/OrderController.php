@@ -227,7 +227,7 @@ class OrderController extends Controller
             'source' => 'sometimes|nullable|string|max:255',
             'vendor' => 'sometimes|nullable|string|max:255',
             'notes' => 'sometimes|string|nullable',
-            'tags' => 'sometimes|array',
+            'tags' => 'sometimes|array|max:1',
             'tags.*' => 'string|max:255',
         ]);
 
@@ -454,7 +454,8 @@ class OrderController extends Controller
             'action' => 'required|in:update_fulfillment,update_financial,add_tags,cancel',
             'fulfillment_status' => 'required_if:action,update_fulfillment',
             'financial_status' => 'required_if:action,update_financial',
-            'tags' => 'required_if:action,add_tags|array',
+            'tags' => 'required_if:action,add_tags|array|max:1',
+            'tags.*' => 'string|max:255',
         ]);
 
         $orders = Order::whereIn('id', $request->order_ids)->get();
@@ -479,9 +480,8 @@ class OrderController extends Controller
                     break;
 
                 case 'add_tags':
-                    $existingTags = is_array($order->tags) ? $order->tags : [];
-                    $newTags = array_values(array_unique(array_merge($existingTags, $request->tags)));
-                    $order->update(['tags' => $newTags]);
+                    // Only one tag can be assigned at a time; the new tag replaces any existing one
+                    $order->update(['tags' => array_values(array_unique($request->tags))]);
                     break;
 
                 case 'cancel':
