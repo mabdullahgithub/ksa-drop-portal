@@ -34,7 +34,13 @@ export interface DashboardData {
         dismissed: number
         total: number
     }
+    daily_orders: DailyOrders[]
     recent_orders: RecentOrder[]
+}
+
+export interface DailyOrders {
+    date: string
+    orders: number
 }
 
 export interface RecentOrder {

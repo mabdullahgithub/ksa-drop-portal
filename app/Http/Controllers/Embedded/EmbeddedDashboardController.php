@@ -25,6 +25,24 @@ class EmbeddedDashboardController extends Controller
             ->groupBy('status')
             ->pluck('total', 'status');
 
+        // Orders per day, last 30 days, missing days filled with zero.
+        $from = now()->subDays(29)->startOfDay();
+
+        $perDay = Order::withoutGlobalScope('shopify_visible')
+            ->where('client_id', $connection->client_id)
+            ->where('source', 'shopify')
+            ->where('created_at', '>=', $from)
+            ->selectRaw('DATE(created_at) as day, COUNT(*) as total')
+            ->groupBy('day')
+            ->pluck('total', 'day');
+
+        $dailyOrders = [];
+
+        for ($day = $from->copy(); $day->lte(now()); $day->addDay()) {
+            $key = $day->toDateString();
+            $dailyOrders[] = ['date' => $key, 'orders' => (int) ($perDay[$key] ?? 0)];
+        }
+
         $recentOrders = Order::withoutGlobalScope('shopify_visible')
             ->where('client_id', $connection->client_id)
             ->where('source', 'shopify')
@@ -54,6 +72,7 @@ class EmbeddedDashboardController extends Controller
                 'dismissed'      => (int) ($counts['dismissed'] ?? 0),
                 'total'          => (int) $counts->sum(),
             ],
+            'daily_orders'   => $dailyOrders,
             'recent_orders'  => $recentOrders,
         ]);
     }

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { embeddedFetch, type DashboardData } from '../api-client'
+import { OrdersChart } from './orders-chart'
 
 const SYNC_STATUS_BADGES: Record<string, { label: string; tone: string }> = {
     processed: { label: 'Processed', tone: 'success' },
@@ -61,6 +62,10 @@ export function DashboardPage() {
                     <StatCard label="Pending review" value={stats.pending_review} />
                     <StatCard label="Skipped by filter" value={stats.skipped} />
                 </s-grid>
+            </s-section>
+
+            <s-section heading="Orders per day (last 30 days)">
+                <OrdersChart data={data.daily_orders} />
             </s-section>
 
             <s-section heading="Recent orders">
