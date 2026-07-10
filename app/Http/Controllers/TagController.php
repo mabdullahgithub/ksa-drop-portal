@@ -10,7 +10,7 @@ class TagController extends Controller
 {
     public function index()
     {
-        $tags = Tag::orderBy('name')->get()->map(fn($tag) => [
+        $tags = Tag::orderBy('created_at')->get()->map(fn($tag) => [
             'id'          => $tag->id,
             'name'        => $tag->name,
             'color'       => $tag->color,
@@ -58,7 +58,7 @@ class TagController extends Controller
     public function list()
     {
         return response()->json([
-            'tags' => Tag::orderBy('name')->get(['id', 'name', 'color', 'description']),
+            'tags' => Tag::orderBy('created_at')->get(['id', 'name', 'color', 'description']),
         ]);
     }
 }

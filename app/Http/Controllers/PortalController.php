@@ -80,7 +80,7 @@ class PortalController extends Controller
                 ->groupBy('status')
                 ->orderByDesc('count')
                 ->get(),
-            'by_tag' => Tag::orderBy('name')->get(['id', 'name', 'color'])->map(fn ($tag) => [
+            'by_tag' => Tag::orderBy('created_at')->get(['id', 'name', 'color'])->map(fn ($tag) => [
                 'id'    => $tag->id,
                 'name'  => $tag->name,
                 'color' => $tag->color,
