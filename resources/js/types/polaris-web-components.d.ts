@@ -47,6 +47,8 @@ declare module 'react' {
             's-table-body': PolarisElementProps
             's-table-row': PolarisElementProps
             's-table-cell': PolarisElementProps
+            /** App Bridge sidebar nav — children are plain <a> links. */
+            'ui-nav-menu': PolarisElementProps
         }
     }
 }

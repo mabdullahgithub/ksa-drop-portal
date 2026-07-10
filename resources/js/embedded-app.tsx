@@ -1,4 +1,4 @@
-import { StrictMode, useState } from 'react'
+import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { DashboardPage } from '@/features/embedded-shopify/dashboard/dashboard-page'
 import { SettingsPage } from '@/features/embedded-shopify/settings/settings-page'
@@ -7,30 +7,24 @@ import { SettingsPage } from '@/features/embedded-shopify/settings/settings-page
  * Embedded Shopify Admin app — a separate React tree from the portal SPA.
  * Rendered inside the Shopify Admin iframe; UI is Polaris web components
  * (s-* custom elements loaded from Shopify's CDN in embedded.blade.php).
+ *
+ * Navigation lives in the Shopify Admin sidebar via App Bridge's
+ * <ui-nav-menu>: each item is a real URL served by the same Blade shell,
+ * and the view is picked off the pathname.
  */
 function EmbeddedApp() {
-    const [view, setView] = useState<'dashboard' | 'settings'>('dashboard')
+    const isSettings = window.location.pathname.endsWith('/settings')
 
     return (
         <>
-            <s-box padding="base">
-                <s-stack direction="inline" gap="small-200">
-                    <s-button
-                        variant={view === 'dashboard' ? 'primary' : 'secondary'}
-                        onClick={() => setView('dashboard')}
-                    >
-                        Dashboard
-                    </s-button>
-                    <s-button
-                        variant={view === 'settings' ? 'primary' : 'secondary'}
-                        onClick={() => setView('settings')}
-                    >
-                        Settings
-                    </s-button>
-                </s-stack>
-            </s-box>
+            <ui-nav-menu>
+                <a href="/embedded/shopify" rel="home">
+                    Dashboard
+                </a>
+                <a href="/embedded/shopify/settings">Settings</a>
+            </ui-nav-menu>
 
-            {view === 'dashboard' ? <DashboardPage /> : <SettingsPage />}
+            {isSettings ? <SettingsPage /> : <DashboardPage />}
         </>
     )
 }

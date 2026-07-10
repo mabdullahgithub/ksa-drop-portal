@@ -306,6 +306,7 @@ Route::post('/webhooks/shopify', [ShopifyWebhookController::class, 'handle'])->n
 // API routes are authenticated per-request via App Bridge session tokens (JWT).
 Route::prefix('embedded/shopify')->middleware('shopify.csp')->group(function () {
     Route::get('/', [EmbeddedAppController::class, 'index'])->name('embedded.shopify.index');
+    Route::get('/settings', [EmbeddedAppController::class, 'index'])->name('embedded.shopify.settings');
 
     Route::middleware('shopify.session')->prefix('api')->group(function () {
         Route::get('/dashboard', [EmbeddedDashboardController::class, 'index'])->name('embedded.shopify.dashboard');
