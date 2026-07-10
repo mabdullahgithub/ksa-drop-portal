@@ -17,6 +17,7 @@ return Application::configure(basePath: dirname(__DIR__))
 
         $middleware->validateCsrfTokens(except: [
             'webhooks/*',
+            'embedded/shopify/api/*', // session-token (JWT) authenticated, no Laravel session
         ]);
 
         $middleware->web(append: [
@@ -27,6 +28,8 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'permission' => \App\Http\Middleware\CheckPermission::class,
             'role' => \App\Http\Middleware\CheckRole::class,
+            'shopify.session' => \App\Http\Middleware\VerifyShopifySessionToken::class,
+            'shopify.csp' => \App\Http\Middleware\ShopifyEmbeddedCsp::class,
         ]);
 
         \Illuminate\Auth\Middleware\RedirectIfAuthenticated::redirectUsing(function ($request) {

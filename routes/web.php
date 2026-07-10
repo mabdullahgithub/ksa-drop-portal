@@ -22,6 +22,9 @@ use App\Http\Controllers\SettingsController;
 use App\Http\Controllers\TagController;
 use App\Http\Controllers\TeamController;
 use App\Http\Controllers\ConnectorController;
+use App\Http\Controllers\Embedded\EmbeddedAppController;
+use App\Http\Controllers\Embedded\EmbeddedDashboardController;
+use App\Http\Controllers\Embedded\EmbeddedSettingsController;
 use App\Http\Controllers\ShopifyController;
 use App\Http\Controllers\ShopifyWebhookController;
 use App\Http\Controllers\ShopifyPendingOrderController;
@@ -297,6 +300,19 @@ Route::post('/webhooks/jnt-express/otp', [WebhookController::class, 'handleJntOt
 
 // Shopify webhooks — public, HMAC-verified inside the controller (CSRF excluded via bootstrap/app.php 'webhooks/*')
 Route::post('/webhooks/shopify', [ShopifyWebhookController::class, 'handle'])->name('webhooks.shopify');
+
+// Embedded Shopify Admin app — rendered inside the Shopify Admin iframe.
+// No Laravel session: the shell loads publicly (App Bridge boots it), and the
+// API routes are authenticated per-request via App Bridge session tokens (JWT).
+Route::prefix('embedded/shopify')->middleware('shopify.csp')->group(function () {
+    Route::get('/', [EmbeddedAppController::class, 'index'])->name('embedded.shopify.index');
+
+    Route::middleware('shopify.session')->prefix('api')->group(function () {
+        Route::get('/dashboard', [EmbeddedDashboardController::class, 'index'])->name('embedded.shopify.dashboard');
+        Route::get('/settings', [EmbeddedSettingsController::class, 'show'])->name('embedded.shopify.settings.show');
+        Route::put('/settings', [EmbeddedSettingsController::class, 'update'])->name('embedded.shopify.settings.update');
+    });
+});
 
 // Error pages
 Route::get('/errors/unauthorized', fn () => Inertia::render('Errors/Unauthorized'))->name('errors.unauthorized');

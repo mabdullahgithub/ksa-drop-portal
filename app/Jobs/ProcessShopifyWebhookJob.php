@@ -156,13 +156,11 @@ class ProcessShopifyWebhookJob implements ShouldQueue
 
         // Decide visibility:
         //  - existing order keeps its review decision (never re-queue an approved/dismissed one)
-        //  - new order follows the connection's current sync mode
+        //  - new order is checked against the merchant's sync filters, then sync mode
         if ($existing) {
             $data['shopify_sync_status'] = $existing->shopify_sync_status;
         } else {
-            $data['shopify_sync_status'] = $connection->sync_mode === 'manual_approval'
-                ? 'pending_review'
-                : null;
+            $data['shopify_sync_status'] = $shopify->evaluateSyncFilters($data, $connection);
         }
 
         $order = Order::withoutGlobalScope('shopify_visible')->updateOrCreate(

@@ -58,7 +58,7 @@ class ShopifyOrderSyncJob implements ShouldQueue
 
                     $data['shopify_sync_status'] = $existing
                         ? $existing->shopify_sync_status
-                        : ($connection->sync_mode === 'manual_approval' ? 'pending_review' : null);
+                        : $shopify->evaluateSyncFilters($data, $connection);
 
                     $order = Order::withoutGlobalScope('shopify_visible')->updateOrCreate(
                         ['shopify_order_id' => $data['shopify_order_id']],

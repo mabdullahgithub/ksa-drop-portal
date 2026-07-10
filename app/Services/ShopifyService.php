@@ -308,6 +308,7 @@ class ShopifyService
                 totalTaxSet { shopMoney { amount } }
                 totalShippingPriceSet { shopMoney { amount } }
                 discountCode
+                paymentGatewayNames
                 billingAddress { firstName lastName address1 address2 company city zip province countryCodeV2 phone }
                 shippingAddress { firstName lastName address1 address2 company city zip province countryCodeV2 phone }
                 lineItems(first: 100) {
@@ -380,6 +381,8 @@ class ShopifyService
                 'shipping_method'    => $shipLine['title'] ?? null,
                 'notes'              => $o['note'] ?? null,
                 'tags'               => $this->filterShopifyTags($o['tags'] ?? null),
+                'shopify_raw_tags'   => $this->splitTags($o['tags'] ?? null),
+                'payment_method'     => $this->normalizePaymentMethod($o['payment_gateway_names'] ?? []),
                 'accepts_marketing'  => (bool) ($customer['accepts_marketing'] ?? false),
                 'paid_at'            => $o['processed_at'] ?? null,
                 'cancelled_at'       => $o['cancelled_at'] ?? null,
@@ -436,6 +439,8 @@ class ShopifyService
                 'discount_code'      => $n['discountCode'] ?? null,
                 'notes'              => $n['note'] ?? null,
                 'tags'               => $this->filterShopifyTags($n['tags'] ?? null),
+                'shopify_raw_tags'   => $this->splitTags($n['tags'] ?? null),
+                'payment_method'     => $this->normalizePaymentMethod($n['paymentGatewayNames'] ?? []),
                 'paid_at'            => $n['processedAt'] ?? null,
                 'cancelled_at'       => $n['cancelledAt'] ?? null,
                 // Billing
@@ -460,6 +465,84 @@ class ShopifyService
                 'shipping_phone'     => $shipping['phone'] ?? null,
             ]
         );
+    }
+
+    /**
+     * Decide the sync_status a newly-mapped order should receive after applying
+     * the connection's merchant-configured sync filters. Only called for NEW
+     * orders — existing orders keep their current status (same rule the jobs
+     * already apply for sync_mode).
+     *
+     * The filter check runs first: an order that fails any filter dimension is
+     * 'skipped_filtered' regardless of sync_mode. Orders that pass fall through
+     * to the sync_mode decision (manual_approval → pending_review, else null).
+     */
+    public function evaluateSyncFilters(array $mappedOrder, ClientShopifyConnection $connection): ?string
+    {
+        $filters = $connection->sync_filters ?? [];
+
+        if (! $this->passesStatusFilter($filters, $mappedOrder)
+            || ! $this->passesTagFilter($filters, $mappedOrder)
+            || ! $this->passesPaymentMethodFilter($filters, $mappedOrder)) {
+            return 'skipped_filtered';
+        }
+
+        return $connection->sync_mode === 'manual_approval' ? 'pending_review' : null;
+    }
+
+    /**
+     * Empty/absent status lists mean "allow all" — filters are opt-in restrictions.
+     */
+    private function passesStatusFilter(array $filters, array $order): bool
+    {
+        $financial = $filters['financial_statuses'] ?? [];
+
+        if (! empty($financial) && ! in_array($order['financial_status'] ?? null, $financial, true)) {
+            return false;
+        }
+
+        $fulfillment = $filters['fulfillment_statuses'] ?? [];
+
+        if (! empty($fulfillment) && ! in_array($order['fulfillment_status'] ?? null, $fulfillment, true)) {
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * Evaluated against the FULL raw tag list (shopify_raw_tags), not the
+     * narrowed `tags` column. Include list = order must carry at least one of
+     * them; exclude list = order must carry none.
+     */
+    private function passesTagFilter(array $filters, array $order): bool
+    {
+        $orderTags = array_map('strtolower', $order['shopify_raw_tags'] ?? []);
+
+        $include = array_map('strtolower', $filters['tags_include'] ?? []);
+
+        if (! empty($include) && empty(array_intersect($include, $orderTags))) {
+            return false;
+        }
+
+        $exclude = array_map('strtolower', $filters['tags_exclude'] ?? []);
+
+        if (! empty($exclude) && ! empty(array_intersect($exclude, $orderTags))) {
+            return false;
+        }
+
+        return true;
+    }
+
+    private function passesPaymentMethodFilter(array $filters, array $order): bool
+    {
+        $mode = $filters['payment_method'] ?? 'all';
+
+        if ($mode === 'all') {
+            return true;
+        }
+
+        return ($order['payment_method'] ?? 'unknown') === $mode;
     }
 
     /**
@@ -538,6 +621,24 @@ class ShopifyService
         $buyease = array_values(array_filter($all, fn($t) => stripos($t, 'buyease') !== false));
 
         return $buyease ?: [];
+    }
+
+    /**
+     * Bucket Shopify's gateway names into cod / prepaid / unknown. Shopify has
+     * no first-class "is COD" flag, so this is a name heuristic: any gateway
+     * containing "cash on delivery" or "cod" counts as COD.
+     */
+    private function normalizePaymentMethod(array $gatewayNames): string
+    {
+        $names = array_map('strtolower', $gatewayNames);
+
+        foreach ($names as $name) {
+            if (str_contains($name, 'cash on delivery') || str_contains($name, 'cod')) {
+                return 'cod';
+            }
+        }
+
+        return $names === [] ? 'unknown' : 'prepaid';
     }
 
     /**

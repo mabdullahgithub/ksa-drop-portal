@@ -75,6 +75,7 @@ class Order extends Model
         'notes',
         'note_attributes',
         'tags',
+        'shopify_raw_tags',
         'risk_level',
         'source',
         'vendor',
@@ -103,6 +104,7 @@ class Order extends Model
         'accepts_marketing' => 'boolean',
         'note_attributes' => 'json',
         'tags' => 'array',
+        'shopify_raw_tags' => 'array',
     ];
 
     /**
