@@ -49,6 +49,8 @@ declare module 'react' {
             's-table-cell': PolarisElementProps
             /** App Bridge sidebar nav — children are plain <a> links. */
             'ui-nav-menu': PolarisElementProps
+            /** App Bridge contextual save bar — shown via shopify.saveBar. */
+            'ui-save-bar': PolarisElementProps
         }
     }
 }
@@ -60,6 +62,10 @@ declare global {
             idToken: () => Promise<string>
             toast: {
                 show: (message: string, opts?: { isError?: boolean; duration?: number }) => void
+            }
+            saveBar: {
+                show: (id: string) => Promise<void>
+                hide: (id: string) => Promise<void>
             }
             config: { shop?: string; host?: string; apiKey?: string }
         }

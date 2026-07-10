@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { embeddedFetch, type SettingsData, type SyncFilters } from '../api-client'
 import { StatusFilterCard } from './status-filter-card'
 import { TagFilterCard } from './tag-filter-card'
@@ -12,32 +12,62 @@ const DEFAULT_FILTERS: SyncFilters = {
     payment_method: 'all',
 }
 
+const SAVE_BAR_ID = 'sync-settings-save-bar'
+
 export function SettingsPage() {
     const [filters, setFilters] = useState<SyncFilters>(DEFAULT_FILTERS)
+    // Last-saved snapshot; dirty-state (and the native save bar) is derived from it.
+    const [saved, setSaved] = useState<SyncFilters>(DEFAULT_FILTERS)
     const [loading, setLoading] = useState(true)
     const [saving, setSaving] = useState(false)
     const [error, setError] = useState('')
+    const savingRef = useRef(false)
+
+    const dirty = JSON.stringify(filters) !== JSON.stringify(saved)
 
     useEffect(() => {
         embeddedFetch<SettingsData>('/settings')
-            .then((data) => setFilters(data.sync_filters))
+            .then((data) => {
+                setFilters(data.sync_filters)
+                setSaved(data.sync_filters)
+            })
             .catch((e: Error) => setError(e.message))
             .finally(() => setLoading(false))
     }, [])
 
+    // Drive Shopify Admin's native contextual save bar from the dirty state.
+    useEffect(() => {
+        if (dirty) {
+            void window.shopify.saveBar.show(SAVE_BAR_ID)
+        } else {
+            void window.shopify.saveBar.hide(SAVE_BAR_ID)
+        }
+    }, [dirty])
+
+    // Never leave a stale save bar behind when navigating away.
+    useEffect(() => () => void window.shopify.saveBar.hide(SAVE_BAR_ID), [])
+
     const handleSave = async () => {
+        if (savingRef.current) return
+        savingRef.current = true
         setSaving(true)
         try {
             await embeddedFetch('/settings', {
                 method: 'PUT',
                 body: JSON.stringify(filters),
             })
+            setSaved(filters)
             window.shopify.toast.show('Sync settings saved')
         } catch (e) {
             window.shopify.toast.show((e as Error).message, { isError: true })
         } finally {
+            savingRef.current = false
             setSaving(false)
         }
+    }
+
+    const handleDiscard = () => {
+        setFilters(saved)
     }
 
     if (loading) {
@@ -62,6 +92,11 @@ export function SettingsPage() {
 
     return (
         <s-page heading="Sync Settings" subheading="Control which orders are processed by KSA Drop. By default, every order is processed.">
+            <ui-save-bar id={SAVE_BAR_ID}>
+                <button {...{ variant: 'primary' }} onClick={handleSave} disabled={saving}></button>
+                <button onClick={handleDiscard} disabled={saving}></button>
+            </ui-save-bar>
+
             <s-section>
                 <s-banner tone="info">
                     Filters only apply to new orders. Orders already synced keep their current
@@ -72,12 +107,6 @@ export function SettingsPage() {
             <StatusFilterCard filters={filters} onChange={setFilters} />
             <TagFilterCard filters={filters} onChange={setFilters} />
             <PaymentMethodCard filters={filters} onChange={setFilters} />
-
-            <s-section>
-                <s-button variant="primary" disabled={saving} onClick={handleSave}>
-                    {saving ? 'Saving…' : 'Save settings'}
-                </s-button>
-            </s-section>
         </s-page>
     )
 }
