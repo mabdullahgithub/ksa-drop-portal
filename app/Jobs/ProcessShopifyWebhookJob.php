@@ -30,6 +30,10 @@ class ProcessShopifyWebhookJob implements ShouldQueue
         // GDPR compliance topics must be handled even for disconnected stores —
         // shop/redact arrives 48h after uninstall, when no active connection exists.
         switch ($this->topic) {
+            case 'app/uninstalled':
+                $this->handleAppUninstalled();
+
+                return;
             case 'customers/data_request':
                 $this->logDataRequest();
 
@@ -120,6 +124,30 @@ class ProcessShopifyWebhookJob implements ShouldQueue
         Log::info('Shopify GDPR customers/redact processed', [
             'shop'            => $this->shopDomain,
             'orders_redacted' => $count,
+        ]);
+    }
+
+    /**
+     * app/uninstalled — sent when merchant uninstalls the app. Disconnect the
+     * connection by clearing tokens, but preserve order history so the merchant
+     * can still see and fulfill existing orders. Syncing stops automatically
+     * since new orders require a fresh access token.
+     */
+    private function handleAppUninstalled(): void
+    {
+        $connections = ClientShopifyConnection::where('shop_domain', $this->shopDomain)->get();
+
+        foreach ($connections as $connection) {
+            $connection->update([
+                'access_token'  => null,
+                'refresh_token' => null,
+                'status'        => 'disconnected',
+            ]);
+        }
+
+        Log::info('Shopify app/uninstalled processed', [
+            'shop'        => $this->shopDomain,
+            'connections' => $connections->count(),
         ]);
     }
 

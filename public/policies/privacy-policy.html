@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Privacy Policy - KSA Drop</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: #f9f9f9;
+        }
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 40px 20px;
+            background: white;
+        }
+        h1 {
+            font-size: 32px;
+            margin-bottom: 10px;
+            color: #1a1a1a;
+        }
+        .last-updated {
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 30px;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 20px;
+        }
+        h2 {
+            font-size: 24px;
+            margin-top: 40px;
+            margin-bottom: 15px;
+            color: #1a1a1a;
+            border-left: 4px solid #2a78d6;
+            padding-left: 15px;
+        }
+        h3 {
+            font-size: 18px;
+            margin-top: 25px;
+            margin-bottom: 10px;
+            color: #333;
+        }
+        p {
+            margin-bottom: 15px;
+            line-height: 1.7;
+        }
+        ul, ol {
+            margin-left: 25px;
+            margin-bottom: 15px;
+        }
+        li {
+            margin-bottom: 8px;
+        }
+        .highlight {
+            background: #f0f7ff;
+            border-left: 4px solid #2a78d6;
+            padding: 15px 20px;
+            margin: 20px 0;
+        }
+        .contact-info {
+            background: #f9f9f9;
+            padding: 20px;
+            border-radius: 8px;
+            margin-top: 20px;
+        }
+        .contact-info p {
+            margin-bottom: 8px;
+        }
+        a {
+            color: #2a78d6;
+            text-decoration: none;
+        }
+        a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Privacy Policy</h1>
+        <div class="last-updated">Last updated: July 10, 2026</div>
+
+        <h2>Introduction</h2>
+        <p>KSA Drop ("we," "us," "our," or "Company") operates the KSA Drop Order Sync application (the "App"). This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you use our App in connection with Shopify's platform.</p>
+
+        <div class="highlight">
+            <strong>Key Point:</strong> The App only processes order data from your Shopify store. We do not store, process, or retain customer payment information, credit card numbers, or sensitive financial data beyond what Shopify shares in order records.
+        </div>
+
+        <h2>1. Information We Collect</h2>
+
+        <h3>1.1 Order Data</h3>
+        <p>When you authorize the App, we collect and store the following order information from your Shopify store:</p>
+        <ul>
+            <li>Order number, date, and status (financial and fulfillment)</li>
+            <li>Customer name, email, and phone number</li>
+            <li>Billing and shipping addresses</li>
+            <li>Order total, currency, and line item details (product SKU, quantity, price)</li>
+            <li>Payment method (normalized: COD, Prepaid, or Unknown)</li>
+            <li>Order tags and custom metadata</li>
+        </ul>
+
+        <h3>1.2 Connection Data</h3>
+        <p>We store:</p>
+        <ul>
+            <li>Your Shopify store domain</li>
+            <li>OAuth tokens (access token + refresh token) used to read your orders</li>
+            <li>Your configured sync filters (status, tags, payment method preferences)</li>
+        </ul>
+
+        <h3>1.3 Session & Interaction Data</h3>
+        <p>We do not use cookies or tracking scripts. The App authenticates using Shopify's session tokens (JWT) within the Shopify Admin iframe, and we do not log or store interaction details beyond error logs for debugging.</p>
+
+        <h2>2. How We Use Your Information</h2>
+        <p>We use the collected information only to:</p>
+        <ul>
+            <li>Sync orders to your KSA Drop fulfillment account</li>
+            <li>Filter orders based on your configured preferences (status, tags, payment method)</li>
+            <li>Display order statistics and trends in the App's dashboard</li>
+            <li>Respond to your support requests</li>
+            <li>Comply with legal obligations (GDPR, CCPA)</li>
+        </ul>
+        <p>We do <strong>not</strong>:</p>
+        <ul>
+            <li>Sell, rent, or lease your data to third parties</li>
+            <li>Use your data for marketing or advertising</li>
+            <li>Share order data beyond your authorized KSA Drop account</li>
+            <li>Process payment information (this is handled by Shopify)</li>
+        </ul>
+
+        <h2>3. Data Retention</h2>
+        <p>We retain order data as long as your KSA Drop account is active and the App is installed. When you uninstall the App:</p>
+        <ul>
+            <li><strong>Immediately:</strong> Syncing stops; OAuth tokens are invalidated</li>
+            <li><strong>Within 48 hours:</strong> Your order customer data is anonymized (names replaced with "[redacted]", addresses cleared)</li>
+            <li><strong>48+ hours:</strong> On Shopify's shop/redact webhook, all order records and connection data are deleted</li>
+        </ul>
+        <p>This ensures your data is removed promptly after uninstall, in compliance with GDPR and Shopify's data retention policies.</p>
+
+        <h2>4. Data Security</h2>
+        <p>We implement industry-standard security measures:</p>
+        <ul>
+            <li><strong>HTTPS only:</strong> All communication is encrypted in transit</li>
+            <li><strong>HMAC validation:</strong> Shopify webhooks are verified using HMAC-SHA256</li>
+            <li><strong>Session tokens:</strong> App Bridge session tokens are validated server-side (HS256 HMAC)</li>
+            <li><strong>Database encryption:</strong> Sensitive fields (tokens, addresses) are encrypted at rest</li>
+            <li><strong>Access control:</strong> Only authorized connections can read/write order data</li>
+            <li><strong>No public exposure:</strong> The App is embedded in Shopify Admin only (iframe-restricted via CSP)</li>
+        </ul>
+
+        <h2>5. GDPR & Data Rights</h2>
+        <p>If you are a merchant in the EU, you have the following rights:</p>
+
+        <h3>5.1 Right to Access</h3>
+        <p>You can request a copy of your order data by contacting us (see section 8).</p>
+
+        <h3>5.2 Right to Erasure ("Right to be Forgotten")</h3>
+        <p>You can request deletion of your data by uninstalling the App. We will anonymize customer data immediately and delete all records within 48 hours.</p>
+
+        <h3>5.3 Right to Rectification</h3>
+        <p>Order data is read-only from Shopify; corrections must be made in your Shopify Admin. We will update our records on the next sync.</p>
+
+        <h3>5.4 Right to Data Portability</h3>
+        <p>Your order data can be exported from your KSA Drop account dashboard. Contact us for assistance.</p>
+
+        <h3>5.5 Right to Restrict Processing</h3>
+        <p>You can restrict processing by pausing sync in the App's Settings or uninstalling the App.</p>
+
+        <h2>6. Customer PII & GDPR Compliance</h2>
+        <p>Shopify's customers (your shoppers) are subject to Shopify's own privacy policies. We process their personally identifiable information (PII) only as a data processor on your behalf, in accordance with Shopify's Data Processing Addendum (DPA).</p>
+
+        <p>When a customer requests their data or deletion under GDPR:</p>
+        <ul>
+            <li><strong>customers/data_request:</strong> Shopify notifies us; we log the request for your review</li>
+            <li><strong>customers/redact:</strong> Shopify notifies us; we anonymize the customer's PII from affected orders</li>
+            <li><strong>shop/redact (uninstall):</strong> We anonymize all customer PII and delete the connection after 48 hours</li>
+        </ul>
+
+        <p>We do not sell or share customer data with any third party.</p>
+
+        <h2>7. Children's Privacy</h2>
+        <p>The App is intended for business use by merchants and is not directed to children under 13. We do not knowingly collect personal information from children under 13. If we become aware that a child has provided us with personal information, we will take steps to delete such information and terminate the child's account.</p>
+
+        <h2>8. Contact & Support</h2>
+        <p>If you have questions about this Privacy Policy, wish to exercise your rights, or need to report a data breach:</p>
+        <div class="contact-info">
+            <p><strong>Email:</strong> support@ksadrop.com</p>
+            <p><strong>Support Portal:</strong> <a href="https://ksadrop.com/support">https://ksadrop.com/support</a></p>
+            <p><strong>Mailing Address:</strong><br>KSA Drop<br>[Your Company Address]<br>[City, Country]</p>
+            <p>We will respond to all data subject requests within 30 days.</p>
+        </div>
+
+        <h2>9. Changes to This Policy</h2>
+        <p>We may update this Privacy Policy from time to time. We will notify you of any material changes by updating the "Last updated" date at the top of this page and, where required, by obtaining your consent. Your continued use of the App after changes constitutes your acceptance of the updated Privacy Policy.</p>
+
+        <h2>10. Third-Party Links & Integrations</h2>
+        <p>The App integrates with:</p>
+        <ul>
+            <li><strong>Shopify:</strong> Order data is read from Shopify and synced to your KSA Drop account via our API</li>
+            <li><strong>KSA Drop Fulfillment Platform:</strong> Synced orders are stored in your KSA Drop account under your control</li>
+        </ul>
+        <p>We are not responsible for the privacy practices of these third parties. Please review their privacy policies independently.</p>
+
+        <h2>11. Shopify's Role</h2>
+        <p>This App is a third-party application built for Shopify's platform. Shopify is the data controller for your store data; we are a data processor. Shopify's Privacy Policy governs their collection and use of data. See <a href="https://www.shopify.com/legal/privacy">https://www.shopify.com/legal/privacy</a> for details.</p>
+
+        <h2>12. Compliance & Certifications</h2>
+        <p>KSA Drop is compliant with:</p>
+        <ul>
+            <li><strong>GDPR (EU):</strong> General Data Protection Regulation</li>
+            <li><strong>CCPA (California):</strong> California Consumer Privacy Act</li>
+            <li><strong>Shopify Partner Standards:</strong> Including GDPR webhook compliance</li>
+        </ul>
+
+        <div class="highlight">
+            <strong>Questions?</strong> Contact our Privacy team at <a href="mailto:support@ksadrop.com">support@ksadrop.com</a> or visit our <a href="https://ksadrop.com/support">support portal</a>.
+        </div>
+    </div>
+</body>
+</html>
