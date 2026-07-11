@@ -14,9 +14,12 @@ class EmbeddedAppController extends Controller
 {
     public function index(Request $request)
     {
+        $portalUrl = rtrim((string) config('services.shopify.portal_url'), '/');
+
         return view('embedded', [
-            'shop' => (string) $request->query('shop', ''),
-            'host' => (string) $request->query('host', ''),
+            'shop'           => (string) $request->query('shop', ''),
+            'host'           => (string) $request->query('host', ''),
+            'portalLoginUrl' => $portalUrl . '/login',
         ]);
     }
 }

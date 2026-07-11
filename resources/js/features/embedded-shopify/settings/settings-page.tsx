@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { embeddedFetch, type SettingsData, type SyncFilters } from '../api-client'
+import { embeddedFetch, EmbeddedApiError, type SettingsData, type SyncFilters } from '../api-client'
+import { StoreNotConnected } from '../store-not-connected'
 import { StatusFilterCard } from './status-filter-card'
 import { TagFilterCard } from './tag-filter-card'
 import { PaymentMethodCard } from './payment-method-card'
@@ -20,7 +21,7 @@ export function SettingsPage() {
     const [saved, setSaved] = useState<SyncFilters>(DEFAULT_FILTERS)
     const [loading, setLoading] = useState(true)
     const [saving, setSaving] = useState(false)
-    const [error, setError] = useState('')
+    const [error, setError] = useState<Error | null>(null)
     const savingRef = useRef(false)
 
     const dirty = JSON.stringify(filters) !== JSON.stringify(saved)
@@ -31,7 +32,7 @@ export function SettingsPage() {
                 setFilters(data.sync_filters)
                 setSaved(data.sync_filters)
             })
-            .catch((e: Error) => setError(e.message))
+            .catch((e: Error) => setError(e))
             .finally(() => setLoading(false))
     }, [])
 
@@ -81,10 +82,13 @@ export function SettingsPage() {
     }
 
     if (error) {
+        if (error instanceof EmbeddedApiError && error.status === 401) {
+            return <StoreNotConnected heading="Sync Settings" />
+        }
         return (
             <s-page heading="Sync Settings">
                 <s-banner tone="critical" heading="Could not load settings">
-                    {error}
+                    {error.message}
                 </s-banner>
             </s-page>
         )

@@ -1,4 +1,19 @@
 /**
+ * Error thrown by embeddedFetch, carrying the HTTP status so callers can
+ * distinguish cases — notably 401, which means the store isn't linked to a
+ * KSA Drop account yet ("Store is not connected").
+ */
+export class EmbeddedApiError extends Error {
+    status: number
+
+    constructor(message: string, status: number) {
+        super(message)
+        this.name = 'EmbeddedApiError'
+        this.status = status
+    }
+}
+
+/**
  * Fetch wrapper for the embedded app's API. Every request carries a fresh
  * App Bridge session token (short-lived JWT) as a Bearer header — there is
  * no Laravel session/CSRF inside the Shopify Admin iframe.
@@ -18,7 +33,10 @@ export async function embeddedFetch<T>(path: string, options: RequestInit = {}):
 
     if (!response.ok) {
         const body = await response.json().catch(() => null)
-        throw new Error(body?.message || `Request failed (${response.status})`)
+        throw new EmbeddedApiError(
+            body?.message || `Request failed (${response.status})`,
+            response.status
+        )
     }
 
     return response.json()

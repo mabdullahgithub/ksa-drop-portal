@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { embeddedFetch, type DashboardData } from '../api-client'
+import { embeddedFetch, EmbeddedApiError, type DashboardData } from '../api-client'
+import { StoreNotConnected } from '../store-not-connected'
 import { OrdersChart } from './orders-chart'
 
 const SYNC_STATUS_BADGES: Record<string, { label: string; tone: string }> = {
@@ -16,19 +17,22 @@ function syncBadge(status: string | null) {
 
 export function DashboardPage() {
     const [data, setData] = useState<DashboardData | null>(null)
-    const [error, setError] = useState('')
+    const [error, setError] = useState<Error | null>(null)
 
     useEffect(() => {
         embeddedFetch<DashboardData>('/dashboard')
             .then(setData)
-            .catch((e: Error) => setError(e.message))
+            .catch((e: Error) => setError(e))
     }, [])
 
     if (error) {
+        if (error instanceof EmbeddedApiError && error.status === 401) {
+            return <StoreNotConnected heading="Order Sync" />
+        }
         return (
             <s-page heading="Order Sync">
                 <s-banner tone="critical" heading="Could not load dashboard">
-                    {error}
+                    {error.message}
                 </s-banner>
             </s-page>
         )

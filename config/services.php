@@ -69,6 +69,9 @@ return [
         'secret'       => env('SHOPIFY_API_SECRET'),
         'scopes'       => env('SHOPIFY_SCOPES', 'read_orders,read_customers'),
         'redirect_uri' => env('SHOPIFY_REDIRECT_URI'),
+        // Public portal URL surfaced by the embedded app so merchants can log
+        // in and connect their store. Falls back to the app URL for local dev.
+        'portal_url'   => env('KSADROP_PORTAL_URL', env('APP_URL')),
     ],
 
 ];
