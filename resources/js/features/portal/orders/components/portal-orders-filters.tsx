@@ -18,8 +18,11 @@ interface PortalOrdersFiltersProps {
 export function PortalOrdersFilters({
   filters,
   onFiltersChange,
-  filterOptions = {},
+  filterOptions,
 }: PortalOrdersFiltersProps) {
+  // Normalize with ?? so an explicit null (e.g. the options fetch failed) is
+  // handled too — a default parameter only covers undefined, not null.
+  const options = filterOptions ?? {}
   const [searchInput, setSearchInput] = useState(filters.search || '')
 
   // Debounce search input
@@ -64,30 +67,30 @@ export function PortalOrdersFilters({
       </div>
 
       {/* Financial Status */}
-      {filterOptions.financial_statuses && filterOptions.financial_statuses.length > 0 && (
+      {options.financial_statuses && options.financial_statuses.length > 0 && (
         <MultiSelectFilter
           label='Payment'
-          options={filterOptions.financial_statuses}
+          options={options.financial_statuses}
           selected={filters.financial_status ?? []}
           onChange={(values) => onFiltersChange({ financial_status: values, page: 1 })}
         />
       )}
 
       {/* Shipment Status */}
-      {filterOptions.shipment_statuses && filterOptions.shipment_statuses.length > 0 && (
+      {options.shipment_statuses && options.shipment_statuses.length > 0 && (
         <MultiSelectFilter
           label='Shipment Status'
-          options={filterOptions.shipment_statuses}
+          options={options.shipment_statuses}
           selected={filters.shipment_status ?? []}
           onChange={(values) => onFiltersChange({ shipment_status: values, page: 1 })}
         />
       )}
 
       {/* Tags */}
-      {filterOptions.tags && filterOptions.tags.length > 0 && (
+      {options.tags && options.tags.length > 0 && (
         <MultiSelectFilter
           label='Tags'
-          options={filterOptions.tags}
+          options={options.tags}
           selected={filters.tags ?? []}
           onChange={(values) => onFiltersChange({ tags: values, page: 1 })}
         />
