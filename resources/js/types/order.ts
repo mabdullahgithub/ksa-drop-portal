@@ -185,6 +185,7 @@ export interface OrderStatistics {
   by_payment_method: Array<{ payment_method: string; count: number }>
   by_utm_source: Array<{ utm_source: string; count: number }>
   by_country: Array<{ shipping_country: string; count: number }>
+  by_tag: Array<{ id: number; name: string; color: string; count: number }>
   top_products: Array<{
     lineitem_name: string
     total_quantity: number

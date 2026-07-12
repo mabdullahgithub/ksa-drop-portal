@@ -88,3 +88,27 @@
     height: 0;
   }
 }
+
+/* Impersonation bar: fixed at the top of the viewport, so anything else that
+   anchors to the viewport (the sidebar, sticky page headers, full-height panes)
+   has to start below it instead of sliding underneath. */
+[data-impersonating='true'] {
+  --impersonate-bar-height: --spacing(9);
+}
+
+[data-impersonating='true'] [data-slot='sidebar-container'] {
+  top: var(--impersonate-bar-height);
+  height: calc(100svh - var(--impersonate-bar-height));
+}
+
+[data-impersonating='true'] .header-fixed {
+  top: var(--impersonate-bar-height);
+}
+
+[data-impersonating='true'] [data-slot='sidebar-wrapper'] {
+  min-height: calc(100svh - var(--impersonate-bar-height));
+}
+
+[data-impersonating='true'] [data-slot='sidebar-inset']:has([data-layout='fixed']) {
+  height: calc(100svh - var(--impersonate-bar-height));
+}

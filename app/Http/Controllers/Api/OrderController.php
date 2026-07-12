@@ -351,6 +351,12 @@ class OrderController extends Controller
                 ->select('payment_method', DB::raw('count(*) as count'))
                 ->groupBy('payment_method')
                 ->get(),
+            'by_tag' => Tag::orderBy('created_at')->get(['id', 'name', 'color'])->map(fn ($tag) => [
+                'id'    => $tag->id,
+                'name'  => $tag->name,
+                'color' => $tag->color,
+                'count' => Order::whereJsonContains('tags', $tag->name)->count(),
+            ]),
             'by_utm_source' => DB::table('orders')
                 ->select('utm_source', DB::raw('count(*) as count'))
                 ->whereNotNull('utm_source')

@@ -28,7 +28,10 @@ function LayoutInner({ children }: AuthenticatedLayoutProps) {
   const defaultOpen = getCookie('sidebar_state') !== 'false'
 
   return (
-    <div className={cn(isImpersonating && 'pt-8')}>
+    <div
+      data-impersonating={isImpersonating || undefined}
+      className={cn(isImpersonating && 'pt-9')}
+    >
       <ImpersonateBanner />
       <SidebarProvider defaultOpen={defaultOpen}>
         <SkipToMain />

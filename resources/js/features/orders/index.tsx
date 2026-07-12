@@ -11,8 +11,8 @@ import { OrdersPrimaryButtons } from './components/orders-primary-buttons'
 import { OrdersProvider } from './components/orders-provider'
 import { OrdersTable } from './components/orders-table'
 import { OrdersFilters } from './components/orders-filters'
-import { OrdersStats } from './components/orders-stats'
 import { ShipmentStatusCards } from './components/shipment-status-cards'
+import { TagStatCards } from './components/tag-stat-cards'
 import { ShipmentStatusInfoModal } from './components/shipment-status-info-modal'
 import { useOrders } from '@/hooks/useOrders'
 
@@ -69,7 +69,13 @@ export function Orders() {
           <OrdersPrimaryButtons />
         </div>
 
-        <OrdersStats />
+        <TagStatCards
+          activeTag={filters.tags?.[0] ?? null}
+          onTagClick={(tagName) => {
+            const isActive = filters.tags?.[0] === tagName
+            updateFilters({ tags: isActive ? [] : [tagName], page: 1 })
+          }}
+        />
 
         <div>
           <div className='flex items-center justify-between mb-3'>
