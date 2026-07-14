@@ -107,16 +107,6 @@ class ShopifyController extends Controller
             );
         }
 
-        // Block connecting a store already owned by a different client.
-        $existing = ClientShopifyConnection::where('shop_domain', $shop)
-            ->where('client_id', '!=', $client->id)
-            ->first();
-
-        if ($existing) {
-            return redirect()->route('portal.connectors')
-                ->with('error', 'This Shopify store is already connected to another account.');
-        }
-
         try {
             $token = $this->shopify->exchangeCodeForToken($shop, (string) $request->code);
         } catch (\Throwable $e) {
@@ -125,6 +115,29 @@ class ShopifyController extends Controller
             return redirect()->route('portal.connectors')
                 ->with('error', 'Failed to connect Shopify store. Please try again.');
         }
+
+        // The store may still be linked to a different client. Reaching this point
+        // means the user approved the install inside that store's own Shopify admin,
+        // which proves they control it — so the store moves to them and the stale
+        // link is released. shop_domain is unique, so the old row cannot just be
+        // marked disconnected; it has to go. Only the link and its tokens are
+        // dropped — orders already synced stay with the old client.
+        //
+        // Done after the token exchange so a failed exchange cannot strand the
+        // previous owner with no connection.
+        ClientShopifyConnection::where('shop_domain', $shop)
+            ->where('client_id', '!=', $client->id)
+            ->get()
+            ->each(function (ClientShopifyConnection $old) use ($shop, $client) {
+                Log::warning('Shopify store reassigned to a new client', [
+                    'shop'           => $shop,
+                    'from_client_id' => $old->client_id,
+                    'to_client_id'   => $client->id,
+                    'by_user_id'     => auth()->id(),
+                ]);
+
+                $old->delete();
+            });
 
         // Preserve sync_mode if reconnecting an existing connection.
         $previousSyncMode = ClientShopifyConnection::where('client_id', $client->id)->value('sync_mode');
