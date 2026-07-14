@@ -42,14 +42,24 @@ export default function Login({
           </div>
           <div className='flex flex-1 items-center justify-center p-10'>
             <video
-              src='/images/login/drone-with-parcel.mp4'
               className='h-auto w-full max-w-2xl select-none object-contain'
               autoPlay
               loop
               muted
               playsInline
               aria-label='KSA Drop'
-            />
+            >
+              {/* HEVC-with-alpha plays only in Safari; the quicktime type keeps
+                  Chromium from claiming it and rendering the alpha as black. */}
+              <source
+                src='/images/login/drone-with-parcel.mov'
+                type='video/quicktime; codecs="hvc1"'
+              />
+              <source
+                src='/images/login/drone-with-parcel.webm'
+                type='video/webm; codecs="vp9"'
+              />
+            </video>
           </div>
         </div>
 
