@@ -1,3 +1,9 @@
+# Chrome refuses a video source served as text/plain.
+<IfModule mod_mime.c>
+    AddType video/webm .webm
+    AddType video/quicktime .mov
+</IfModule>
+
 <IfModule mod_rewrite.c>
     <IfModule mod_negotiation.c>
         Options -MultiViews -Indexes

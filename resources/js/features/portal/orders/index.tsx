@@ -100,7 +100,7 @@ const STAT_CARDS: StatCard[] = [
   },
   {
     label: 'Pending',
-    key: 'unassigned_orders',
+    key: 'pending_orders',
     icon: Clock,
     iconClass: 'text-yellow-600 dark:text-yellow-400',
     bgClass: 'bg-yellow-100 dark:bg-yellow-900/30',
@@ -1186,7 +1186,13 @@ export function PortalOrders() {
           </div>
           <PortalShipmentStatusCards
             onStatusClick={(status) => {
-              updateFilters({ shipment_status: [status], has_shipment: true, page: 1 })
+              // Pending includes orders with no shipment at all, so it must not
+              // be narrowed to orders that already have one.
+              updateFilters({
+                shipment_status: [status],
+                has_shipment: status === 'pending' ? undefined : true,
+                page: 1,
+              })
             }}
           />
         </div>

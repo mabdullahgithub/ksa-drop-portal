@@ -51,6 +51,29 @@ class PortalController extends Controller
         ));
     }
 
+    /**
+     * Shipment status counts for a client, with orders that have no shipment yet
+     * folded into "pending" — they have not been handed to a courier, so they
+     * belong there even though they have no row in the shipments table.
+     */
+    private function shipmentStatusCounts($client)
+    {
+        $counts = DB::table('shipments')
+            ->whereIn('order_id', $client->orders()->pluck('id'))
+            ->select('status', DB::raw('count(*) as count'))
+            ->groupBy('status')
+            ->pluck('count', 'status')
+            ->map(fn ($count) => (int) $count)
+            ->all();
+
+        $counts['pending'] = ($counts['pending'] ?? 0) + $client->orders()->withoutShipment()->count();
+
+        return collect($counts)
+            ->map(fn ($count, $status) => ['status' => $status, 'count' => $count])
+            ->sortByDesc('count')
+            ->values();
+    }
+
     public function dashboard()
     {
         $client = $this->resolveClient();
@@ -74,12 +97,7 @@ class PortalController extends Controller
             'pending_verification'=> $client->clientProducts()->pending()->count(),
             'unassigned_orders'   => $client->orders()->withoutShipment()->count(),
             'assigned_orders'     => $client->orders()->withShipment()->count(),
-            'by_shipment_status'  => DB::table('shipments')
-                ->whereIn('order_id', $client->orders()->pluck('id'))
-                ->select('status', DB::raw('count(*) as count'))
-                ->groupBy('status')
-                ->orderByDesc('count')
-                ->get(),
+            'by_shipment_status'  => $this->shipmentStatusCounts($client),
             'by_tag' => Tag::orderBy('created_at')->get(['id', 'name', 'color'])->map(fn ($tag) => [
                 'id'    => $tag->id,
                 'name'  => $tag->name,
@@ -146,8 +164,16 @@ class PortalController extends Controller
         if ($request->has('shipment_status')) {
             $statuses = $this->parseMultiValue($request->shipment_status);
             if (!empty($statuses)) {
-                $query->whereHas('shipments', function ($q) use ($statuses) {
-                    $q->whereIn('status', $statuses);
+                $query->where(function ($q) use ($statuses) {
+                    $q->whereHas('shipments', function ($s) use ($statuses) {
+                        $s->whereIn('status', $statuses);
+                    });
+
+                    // "pending" also covers orders never handed to a courier,
+                    // which have no shipment row to match on.
+                    if (in_array('pending', $statuses, true)) {
+                        $q->orWhereDoesntHave('shipments');
+                    }
                 });
             }
         }

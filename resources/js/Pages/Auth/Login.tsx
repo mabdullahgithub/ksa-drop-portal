@@ -53,11 +53,11 @@ export default function Login({
                   Chromium from claiming it and rendering the alpha as black. */}
               <source
                 src='/images/login/drone-with-parcel.mov'
-                type='video/quicktime; codecs="hvc1"'
+                type='video/quicktime'
               />
               <source
                 src='/images/login/drone-with-parcel.webm'
-                type='video/webm; codecs="vp9"'
+                type='video/webm'
               />
             </video>
           </div>
