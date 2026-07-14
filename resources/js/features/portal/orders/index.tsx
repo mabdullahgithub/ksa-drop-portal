@@ -100,7 +100,7 @@ const STAT_CARDS: StatCard[] = [
   },
   {
     label: 'Pending',
-    key: 'pending_orders',
+    key: 'unassigned_orders',
     icon: Clock,
     iconClass: 'text-yellow-600 dark:text-yellow-400',
     bgClass: 'bg-yellow-100 dark:bg-yellow-900/30',
