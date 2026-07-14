@@ -54,26 +54,57 @@ class ShopifyController extends Controller
      */
     public function callback(Request $request)
     {
+        $shop = $this->shopify->normalizeShopDomain((string) $request->shop);
+
+        // Every rejection below refuses the connection. They used to abort(403),
+        // which dead-ended the merchant on an error page with nothing in the logs;
+        // now each one says why and sends them back to Connectors to retry.
+        $reject = function (string $reason, string $message) use ($request, $shop) {
+            Log::warning('Shopify OAuth callback rejected', [
+                'reason'          => $reason,
+                'shop'            => $shop,
+                'state_present'   => $request->filled('state'),
+                'nonce_in_session' => session()->has('shopify_oauth_nonce'),
+                'session_shop'    => session('shopify_oauth_shop'),
+                'user_id'         => auth()->id(),
+            ]);
+
+            return redirect()->route('portal.connectors')->with('error', $message);
+        };
+
         // CSRF: state must match the nonce we stored in session.
         if (! $request->filled('state') || $request->state !== session('shopify_oauth_nonce')) {
-            abort(403, 'Invalid state parameter. Possible CSRF attempt.');
+            return $reject(
+                'state_mismatch',
+                'Your connection attempt expired or was started in another tab. Please click Connect Shopify and try again.'
+            );
         }
 
-        // Authenticity: validate Shopify's HMAC over the query params.
-        if (! $this->shopify->verifyOauthHmac($request->query())) {
-            abort(403, 'HMAC verification failed. Request may be forged.');
+        // Authenticity: validate Shopify's HMAC over the query params. Sign the raw
+        // query string — the decoded params drop the %3D padding on `host`. Read it
+        // off the server bag, not getQueryString(), which re-encodes and sorts.
+        if (! $this->shopify->verifyOauthHmac($request->query(), $request->server('QUERY_STRING'))) {
+            return $reject(
+                'hmac_failed',
+                'We could not verify the response from Shopify. Please try connecting again.'
+            );
         }
 
-        $shop   = $this->shopify->normalizeShopDomain((string) $request->shop);
         $client = $this->resolveClient();
 
         if (! $client) {
-            abort(403, 'No client account linked to this user.');
+            return $reject(
+                'no_client',
+                'No client account is linked to your login. Please contact support.'
+            );
         }
 
         // The shop in the callback must match the one we initiated OAuth for.
         if ($shop !== session('shopify_oauth_shop')) {
-            abort(403, 'Shop mismatch on OAuth callback.');
+            return $reject(
+                'shop_mismatch',
+                'The store Shopify sent back does not match the one you entered. Please try again.'
+            );
         }
 
         // Block connecting a store already owned by a different client.

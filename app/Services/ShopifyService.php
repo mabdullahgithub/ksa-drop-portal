@@ -153,18 +153,74 @@ class ShopifyService
 
     /**
      * Verify the HMAC on an OAuth callback (query params) to block forged redirects.
+     *
+     * Shopify signs the query string as it appears on the wire, so the message has
+     * to keep its original percent-encoding. `host` is base64 of
+     * "admin.shopify.com/store/{handle}" and carries "=" padding whenever the
+     * handle's length is not a multiple of 3 — that reaches us as "%3D". Rebuilding
+     * the message from Laravel's decoded params turns it back into "=", which
+     * changes the signed bytes and fails the check for ~2 of every 3 stores.
+     *
+     * Pass $rawQuery (the untouched server QUERY_STRING) to sign what Shopify
+     * actually sent. Both the raw and decoded forms are accepted, since they are
+     * identical for unpadded hosts and we do not want to depend on which one
+     * Shopify used.
      */
-    public function verifyOauthHmac(array $params): bool
+    public function verifyOauthHmac(array $params, ?string $rawQuery = null): bool
     {
-        $hmac = $params['hmac'] ?? '';
+        $hmac = (string) ($params['hmac'] ?? '');
 
-        $data = collect($params)
+        if ($hmac === '') {
+            return false;
+        }
+
+        foreach ($this->oauthHmacMessages($params, $rawQuery) as $message) {
+            if (hash_equals(hash_hmac('sha256', $message, $this->apiSecret), $hmac)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * The candidate signed messages for an OAuth callback, preferred form first.
+     *
+     * @return list<string>
+     */
+    private function oauthHmacMessages(array $params, ?string $rawQuery): array
+    {
+        $messages = [];
+
+        if (is_string($rawQuery) && $rawQuery !== '') {
+            $pairs = [];
+
+            foreach (explode('&', $rawQuery) as $pair) {
+                if ($pair === '') {
+                    continue;
+                }
+
+                $key = rawurldecode(explode('=', $pair, 2)[0]);
+
+                if ($key === 'hmac' || $key === 'signature') {
+                    continue;
+                }
+
+                // Key it for the sort, but sign the pair byte-for-byte as received.
+                $pairs[$key] = $pair;
+            }
+
+            ksort($pairs);
+            $messages[] = implode('&', $pairs);
+        }
+
+        $messages[] = collect($params)
             ->except(['hmac', 'signature'])
             ->sortKeys()
             ->map(fn ($v, $k) => "{$k}={$v}")
             ->implode('&');
 
-        return hash_equals(hash_hmac('sha256', $data, $this->apiSecret), (string) $hmac);
+        return $messages;
     }
 
     /**
