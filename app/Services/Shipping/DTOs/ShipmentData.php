@@ -23,6 +23,8 @@ class ShipmentData
         public readonly ?string $remark = null,
         public readonly int $operateType = 1,
         public readonly ?string $billCode = null,
+        public readonly float $codAmount = 0.0,
+        public readonly string $codCurrency = 'SAR',
     ) {}
 
     public static function fromOrder(Order $order, Warehouse $warehouse, array $options = []): self
@@ -67,6 +69,17 @@ class ShipmentData
             $remark = mb_substr((string) $remark, 0, 200);
         }
 
+        // COD amount to collect on delivery. Only COD orders should carry a
+        // collectable amount; prepaid orders collect nothing. Callers may
+        // override explicitly via options['cod_amount'].
+        if (array_key_exists('cod_amount', $options)) {
+            $codAmount = (float) $options['cod_amount'];
+        } elseif (($order->payment_method ?? null) === 'cod') {
+            $codAmount = (float) ($order->total ?? 0);
+        } else {
+            $codAmount = 0.0;
+        }
+
         return new self(
             sender:          $sender,
             receiver:        $receiver,
@@ -83,6 +96,8 @@ class ShipmentData
             remark:          $remark,
             operateType:     $options['operate_type'] ?? 1,
             billCode:        $options['bill_code'] ?? null,
+            codAmount:       $codAmount,
+            codCurrency:     $options['cod_currency'] ?? ($order->currency ?? 'SAR'),
         );
     }
 }
