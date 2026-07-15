@@ -108,8 +108,7 @@ class JntCodShipmentTest extends TestCase
             $biz = json_decode($request['bizContent'], true);
 
             return str_contains($request->url(), 'addOrder')
-                && ($biz['codMoney'] ?? null) === '199.50'
-                && ($biz['payType'] ?? null) === 'CC_CASH'
+                && ($biz['itemsValue'] ?? null) === '199.50'
                 && ($biz['priceCurrency'] ?? null) === 'SAR';
         });
     }
@@ -130,7 +129,7 @@ class JntCodShipmentTest extends TestCase
         Http::assertSent(function ($request) {
             $biz = json_decode($request['bizContent'], true);
 
-            return ! isset($biz['codMoney']);
+            return ! isset($biz['itemsValue']);
         });
     }
 }

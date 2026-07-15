@@ -93,12 +93,13 @@ class JntExpressDriver implements CourierDriver
             ], fn ($v) => $v !== null && $v !== ''),
         ];
 
-        // Cash on delivery. J&T needs both the payment type flagged as collect
-        // (`CC_CASH`) and the amount to collect (`codMoney`); without these the
-        // COD field shows empty on J&T's side. Prepaid orders send neither.
+        // Cash on delivery. Per the J&T KSA addOrder spec, COD is expressed with
+        // the top-level `itemsValue` (COD amount) + `priceCurrency` (COD currency)
+        // fields — there is no separate payType/codMoney flag. Sending these two
+        // is what makes the COD amount appear on J&T's side. Prepaid orders (COD
+        // amount 0) send neither, so nothing is collected on delivery.
         if ($data->codAmount > 0) {
-            $bizContent['payType']       = 'CC_CASH';
-            $bizContent['codMoney']      = number_format($data->codAmount, 2, '.', '');
+            $bizContent['itemsValue']    = number_format($data->codAmount, 2, '.', '');
             $bizContent['priceCurrency'] = $data->codCurrency;
         }
 
