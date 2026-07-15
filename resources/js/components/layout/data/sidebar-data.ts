@@ -129,6 +129,13 @@ export const sidebarData: SidebarData = {
           role: 'client',
         },
         {
+          title: 'Track Order',
+          url: '/track',
+          icon: Truck,
+          role: 'client',
+          newTab: true,
+        },
+        {
           title: 'My Inventory',
           url: '/portal/inventory',
           icon: PackageSearch,
