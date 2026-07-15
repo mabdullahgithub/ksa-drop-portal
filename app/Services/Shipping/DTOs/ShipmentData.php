@@ -70,7 +70,7 @@ class ShipmentData
         return new self(
             sender:          $sender,
             receiver:        $receiver,
-            txlogisticId:    $options['txlogistic_id'] ?? 'KSD-' . $order->order_number . '-' . time(),
+            txlogisticId:    $options['txlogistic_id'] ?? (string) $order->order_number,
             weight:          (float) ($options['weight'] ?? 0.5),
             length:          isset($options['length']) ? (float) $options['length'] : null,
             width:           isset($options['width']) ? (float) $options['width'] : null,
