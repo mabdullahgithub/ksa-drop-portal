@@ -71,10 +71,11 @@ class ShipmentData
 
         // COD amount to collect on delivery. Only COD orders should carry a
         // collectable amount; prepaid orders collect nothing. Callers may
-        // override explicitly via options['cod_amount'].
+        // override explicitly via options['cod_amount']. Note: payment_method is
+        // free-text across import sources, so detection lives in Order::isCashOnDelivery().
         if (array_key_exists('cod_amount', $options)) {
             $codAmount = (float) $options['cod_amount'];
-        } elseif (($order->payment_method ?? null) === 'cod') {
+        } elseif ($order->isCashOnDelivery()) {
             $codAmount = (float) ($order->total ?? 0);
         } else {
             $codAmount = 0.0;

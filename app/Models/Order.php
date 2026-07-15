@@ -200,6 +200,38 @@ class Order extends Model
     }
 
     /**
+     * Whether this order should be collected as Cash on Delivery.
+     *
+     * `payment_method` is not normalized across sources: Shopify orders store
+     * 'cod'/'prepaid', CSV imports store free text like 'Cash on Delivery' or
+     * 'COD' (or Arabic), and manual orders may leave it null. So we detect COD
+     * positively from known keywords, treat clearly-prepaid values as not-COD,
+     * and for anything ambiguous fall back to the financial status (an order
+     * that is already 'paid' is not collected on delivery).
+     */
+    public function isCashOnDelivery(): bool
+    {
+        $method = mb_strtolower(trim((string) $this->payment_method));
+
+        $codKeywords = ['cod', 'cash on delivery', 'cash', 'الدفع عند الاستلام', 'الدفع عند الإستلام', 'دفع عند الاستلام'];
+        foreach ($codKeywords as $keyword) {
+            if ($method !== '' && str_contains($method, $keyword)) {
+                return true;
+            }
+        }
+
+        $prepaidKeywords = ['prepaid', 'paid', 'card', 'credit', 'mada', 'apple pay', 'visa', 'mastercard', 'tabby', 'tamara', 'stc', 'online', 'bank'];
+        foreach ($prepaidKeywords as $keyword) {
+            if ($method !== '' && str_contains($method, $keyword)) {
+                return false;
+            }
+        }
+
+        // Unknown/blank payment method: an already-paid order is not COD.
+        return mb_strtolower(trim((string) $this->financial_status)) !== 'paid';
+    }
+
+    /**
      * Get the status color for UI display.
      */
     public function getStatusColorAttribute()

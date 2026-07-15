@@ -102,6 +102,12 @@ class JntExpressDriver implements CourierDriver
             $bizContent['priceCurrency'] = $data->codCurrency;
         }
 
+        Log::info('J&T Express COD decision', [
+            'txlogistic_id' => $data->txlogisticId,
+            'cod_amount'    => $data->codAmount,
+            'sent_cod'      => $data->codAmount > 0,
+        ]);
+
         if ($data->billCode) {
             $bizContent['billCode'] = $data->billCode;
         }
