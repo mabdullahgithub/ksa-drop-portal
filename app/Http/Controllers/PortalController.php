@@ -237,11 +237,16 @@ class PortalController extends Controller
                     $data = array_combine($headers, $row);
 
                     // ── Resolve customer name ────────────────────────────────────
-                    // Simplified template uses "Name" for customer name.
-                    // Shopify exports use "Billing Name" / "Shipping Name".
-                    $customerName = trim(
-                        (string) ($data['Name'] ?? $data['Billing Name'] ?? $data['Shipping Name'] ?? '')
-                    );
+                    // Simplified template uses "Name" for the customer name.
+                    // Shopify exports use "Name" for the ORDER name (e.g. "#1082")
+                    // and put the customer's name in "Billing Name" / "Shipping Name".
+                    // So whenever those Shopify columns are present, prefer them and
+                    // ignore "Name" — otherwise "#1082" ends up as the customer name.
+                    $hasShopifyNameColumns = array_key_exists('Billing Name', $data)
+                        || array_key_exists('Shipping Name', $data);
+                    $customerName = $hasShopifyNameColumns
+                        ? trim((string) ($data['Billing Name'] ?? $data['Shipping Name'] ?? ''))
+                        : trim((string) ($data['Name'] ?? ''));
 
                     // ── Resolve phone ────────────────────────────────────────────
                     $customerPhone = trim(

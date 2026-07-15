@@ -55,10 +55,14 @@ return new class extends Migration
 
     /**
      * Check if an index exists on a table.
+     *
+     * Uses Laravel's schema introspection so it works across drivers
+     * (MySQL in production, sqlite in the test suite) instead of the
+     * MySQL-only "SHOW INDEX" statement.
      */
     private function indexExists(string $table, string $indexName): bool
     {
-        $indexes = DB::select("SHOW INDEX FROM {$table}");
-        return collect($indexes)->contains('Key_name', $indexName);
+        return collect(Schema::getIndexes($table))
+            ->contains(fn ($index) => ($index['name'] ?? null) === $indexName);
     }
 };

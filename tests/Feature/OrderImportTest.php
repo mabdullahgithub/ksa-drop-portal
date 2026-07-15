@@ -133,6 +133,37 @@ class OrderImportTest extends TestCase
         $this->assertEquals('SHOE-WHT-42', $item->lineitem_sku);
     }
 
+    // ─── Shopify export: "Name" is the order name, not the customer ──────────
+
+    public function test_shopify_export_uses_billing_name_not_order_name(): void
+    {
+        $user = User::factory()->create();
+        $user->assignRole('client');
+        $this->makeClient($user);
+
+        // In Shopify exports, "Name" holds the order name (e.g. "#1082") and the
+        // customer's actual name lives in "Billing Name" / "Shipping Name".
+        $headers = ['Name', 'Billing Name', 'Shipping Name', 'Phone', 'Shipping City', 'Shipping Address1', 'Total', 'Lineitem name'];
+        $row = ['#1082', 'Ahmed Al-Bahah', 'Ahmed Al-Bahah', '+966503315451', 'Al Bahah', 'Some Street', '179.00', 'Solar Camera'];
+
+        $handle = fopen('php://temp', 'r+');
+        fputcsv($handle, $headers);
+        fputcsv($handle, $row);
+        rewind($handle);
+        $content = stream_get_contents($handle);
+        fclose($handle);
+        $file = UploadedFile::fake()->createWithContent('shopify.csv', $content);
+
+        $this->actingAs($user)
+            ->postJson(route('portal.api.orders.import'), ['file' => $file])
+            ->assertStatus(200)->assertJsonPath('imported', 1);
+
+        $order = Order::where('client_id', $user->client->id)->first();
+        $this->assertEquals('Ahmed Al-Bahah', $order->customer_name);
+        $this->assertEquals('Ahmed Al-Bahah', $order->shipping_name);
+        $this->assertNotEquals('#1082', $order->customer_name);
+    }
+
     // ─── Import note applied to all orders ───────────────────────────────────
 
     public function test_import_note_is_prepended_to_order_notes(): void
