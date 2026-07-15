@@ -329,7 +329,7 @@ class PortalController extends Controller
                         'customer_email'     => $data['Email'] ?? null,
                         'customer_phone'     => $customerPhone,
                         'financial_status'   => strtolower($data['Financial Status'] ?? 'pending'),
-                        'fulfillment_status' => strtolower($data['Fulfillment Status'] ?? 'pending'),
+                        'fulfillment_status' => strtolower($data['Fulfillment Status'] ?? 'unfulfilled'),
                         'accepts_marketing'  => strtolower($data['Accepts Marketing'] ?? 'no') === 'yes',
                         'currency'           => $data['Currency'] ?? 'SAR',
                         'subtotal'           => $total,
@@ -348,7 +348,7 @@ class PortalController extends Controller
                         'shipping_phone'     => $customerPhone,
                         'payment_method'     => $data['Payment Method'] ?? 'Cash on Delivery',
                         'notes'              => $notes,
-                        'tags'               => [],
+                        'tags'               => ['pending'],
                         'risk_level'         => $data['Risk Level'] ?? 'Low',
                         'source'             => $data['Source'] ?? null,
                         'paid_at'            => $paidAt,
@@ -452,8 +452,8 @@ class PortalController extends Controller
             'currency'        => $validated['currency'] ?? 'SAR',
             'payment_method'  => $validated['payment_method'] ?? null,
             'financial_status'   => 'pending',
-            'fulfillment_status' => 'pending',
-            'tags'            => [],
+            'fulfillment_status' => 'unfulfilled',
+            'tags'            => ['pending'],
         ]);
 
         if (!empty($validated['lineitem_name'])) {
