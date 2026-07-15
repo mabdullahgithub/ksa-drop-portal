@@ -16,6 +16,13 @@ return new class extends Migration
      */
     public function up(): void
     {
+        // sqlite (used by the test suite) has no ENUM type — the column is plain
+        // TEXT there and already accepts any value, so the ALTER is only needed
+        // on MySQL/MariaDB where the enum constraint actually exists.
+        if (DB::getDriverName() !== 'mysql') {
+            return;
+        }
+
         DB::statement("ALTER TABLE orders MODIFY COLUMN shopify_sync_status ENUM('pending_review','approved','dismissed','skipped_filtered') NULL DEFAULT NULL");
     }
 
@@ -23,6 +30,11 @@ return new class extends Migration
     {
         // Reassign skipped_filtered rows before narrowing the enum or the ALTER fails.
         DB::statement("UPDATE orders SET shopify_sync_status = NULL WHERE shopify_sync_status = 'skipped_filtered'");
+
+        if (DB::getDriverName() !== 'mysql') {
+            return;
+        }
+
         DB::statement("ALTER TABLE orders MODIFY COLUMN shopify_sync_status ENUM('pending_review','approved','dismissed') NULL DEFAULT NULL");
     }
 };
