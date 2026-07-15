@@ -55,6 +55,40 @@ class User extends Authenticatable
     }
 
     /**
+     * Resolve the best landing route for this user based on their permissions.
+     *
+     * Falls through an ordered list mirroring the sidebar navigation and returns
+     * the first page the user can view. Used so a user without "view dashboard"
+     * lands on a page they can actually access instead of hitting a 403.
+     */
+    public function defaultLandingRoute(): string
+    {
+        if ($this->hasRole('client')) {
+            return 'portal.dashboard';
+        }
+
+        // permission => route name, in sidebar order.
+        $candidates = [
+            'view dashboard' => 'dashboard',
+            'view client' => 'client',
+            'view inventory' => 'inventory',
+            'view orders' => 'orders',
+            'view apps' => 'apps',
+            'view tags' => 'tags',
+            'view users' => 'users',
+        ];
+
+        foreach ($candidates as $permission => $route) {
+            if ($this->can($permission)) {
+                return $route;
+            }
+        }
+
+        // Settings has no permission gate, so every authenticated user can reach it.
+        return 'settings';
+    }
+
+    /**
      * Send the password reset notification using the branded mailable.
      */
     public function sendPasswordResetNotification($token): void

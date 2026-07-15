@@ -1,6 +1,8 @@
+import { useEffect } from 'react'
 import { Head, router } from '@inertiajs/react'
 import { ErrorPage } from '@/features/errors/error-page'
 import { copyForStatus } from '@/features/errors/status-map'
+import { useDefaultRoute } from '@/hooks/use-default-route'
 
 type Props = {
   status: number
@@ -19,6 +21,26 @@ type Props = {
  */
 export default function ErrorStatusPage({ status, detail, reference }: Props) {
   const { title, description, retryable } = copyForStatus(status)
+  const fallbackRoute = useDefaultRoute()
+
+  // On a 403, don't dead-end the user: if they can view some other page, send
+  // them there instead. Only show the 403 when there's nowhere to fall back to.
+  // The /errors/* routes are intentional previews, so never redirect from them.
+  const redirecting =
+    status === 403 &&
+    fallbackRoute !== null &&
+    fallbackRoute !== window.location.pathname &&
+    !window.location.pathname.startsWith('/errors/')
+
+  useEffect(() => {
+    if (redirecting) {
+      router.visit(fallbackRoute as string, { replace: true })
+    }
+  }, [redirecting, fallbackRoute])
+
+  if (redirecting) {
+    return <Head title={`${status} - ${title}`} />
+  }
 
   return (
     <>

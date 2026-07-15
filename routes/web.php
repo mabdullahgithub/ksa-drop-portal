@@ -34,15 +34,23 @@ use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
 Route::get('/', function () {
-    if (auth()->check() && auth()->user()->hasRole('client')) {
-        return redirect()->route('portal.dashboard');
+    if (auth()->check()) {
+        return redirect()->route(auth()->user()->defaultLandingRoute());
     }
     return redirect()->route('dashboard');
 });
 
 Route::get('/dashboard', function () {
+    $user = auth()->user();
+
+    // Users without dashboard access land on the first page they can view
+    // instead of hitting a 403.
+    if (!$user->can('view dashboard')) {
+        return redirect()->route($user->defaultLandingRoute());
+    }
+
     return Inertia::render('Dashboard');
-})->middleware(['auth', 'verified', 'permission:view dashboard'])->name('dashboard');
+})->middleware(['auth', 'verified'])->name('dashboard');
 
 Route::middleware(['auth', 'verified', 'role:!client'])->group(function () {
     // General

@@ -1,1 +1,0 @@
-import{t as e}from"./jsx-runtime-CFjYCJiA.js";import{t}from"./AuthenticatedLayout-CXWat76H.js";import{t as n}from"./users-Dwd3Z2-W.js";import{j as r}from"./app-UWrVbELt.js";var i=e();function a(){return(0,i.jsxs)(t,{children:[(0,i.jsx)(r,{title:`Users`}),(0,i.jsx)(n,{})]})}export{a as default};
