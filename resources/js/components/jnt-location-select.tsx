@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { useCommandState } from 'cmdk'
+import { defaultFilter, useCommandState } from 'cmdk'
 import { Check, ChevronsUpDown } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -81,6 +81,15 @@ interface JntCitySelectProps {
   className?: string
 }
 
+// Item values are prefixed with the province to keep them unique across regions
+// (e.g. "Central Region (Riyadh)-Ad Dilam"). cmdk's default filter scores that
+// whole value, so typing a province name like "Riyadh" would match every city
+// in that region. Score against the EN/AR city names (the item keywords) only.
+function filterCityByName(_value: string, search: string, keywords?: string[]): number {
+  if (!keywords || keywords.length === 0) return 0
+  return defaultFilter(keywords[0], search, keywords)
+}
+
 export function JntCitySelect({ province, value, onChange, onProvinceChange, placeholder = 'Select city...', className }: JntCitySelectProps) {
   const [open, setOpen] = useState(false)
 
@@ -112,7 +121,7 @@ export function JntCitySelect({ province, value, onChange, onProvinceChange, pla
         </Button>
       </PopoverTrigger>
       <PopoverContent className='w-[--radix-popover-trigger-width] p-0' align='start'>
-        <Command>
+        <Command filter={filterCityByName}>
           <CommandInput placeholder='Search city (EN/AR)...' />
           <CommandList>
             <CommandEmpty>No city found.</CommandEmpty>
@@ -156,8 +165,7 @@ export function JntCitySelect({ province, value, onChange, onProvinceChange, pla
 /**
  * Offers "Use custom city: X" when the typed search isn't an exact match for a
  * listed city. Reads the live search straight from cmdk (via useCommandState)
- * so the CommandInput can stay uncontrolled — a controlled input in cmdk only
- * syncs into the filter through a fragile effect and can stop filtering.
+ * so the CommandInput can stay uncontrolled and cmdk owns the filter state.
  */
 function CustomCityItem({ cityNames, onSelect }: { cityNames: string[]; onSelect: (city: string) => void }) {
   const search = useCommandState((state) => state.search)
