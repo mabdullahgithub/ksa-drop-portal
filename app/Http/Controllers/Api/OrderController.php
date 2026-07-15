@@ -128,16 +128,8 @@ class OrderController extends Controller
         if ($request->has('shipment_status')) {
             $statuses = $this->multiValue($request->shipment_status);
             if (!empty($statuses)) {
-                $query->where(function ($q) use ($statuses) {
-                    $q->whereHas('shipments', function ($s) use ($statuses) {
-                        $s->whereIn('status', $statuses);
-                    });
-
-                    // "pending" also covers orders never handed to a courier,
-                    // which have no shipment row to match on.
-                    if (in_array('pending', $statuses, true)) {
-                        $q->orWhereDoesntHave('shipments');
-                    }
+                $query->whereHas('shipments', function ($q) use ($statuses) {
+                    $q->whereIn('status', $statuses);
                 });
             }
         }
@@ -166,28 +158,6 @@ class OrderController extends Controller
             array_map('trim', $values),
             fn ($v) => $v !== '' && $v !== 'all'
         ));
-    }
-
-    /**
-     * Shipment status counts, with orders that have no shipment yet folded into
-     * "pending" — they have not been handed to a courier, so they belong there
-     * even though they have no row in the shipments table.
-     */
-    private function shipmentStatusCounts(int $unassignedOrders)
-    {
-        $counts = DB::table('shipments')
-            ->select('status', DB::raw('count(*) as count'))
-            ->groupBy('status')
-            ->pluck('count', 'status')
-            ->map(fn ($count) => (int) $count)
-            ->all();
-
-        $counts['pending'] = ($counts['pending'] ?? 0) + $unassignedOrders;
-
-        return collect($counts)
-            ->map(fn ($count, $status) => ['status' => $status, 'count' => $count])
-            ->sortByDesc('count')
-            ->values();
     }
 
     /**
@@ -358,11 +328,9 @@ class OrderController extends Controller
             $query->dateRange($request->start_date, $request->end_date);
         }
 
-        $unassignedOrders = $query->clone()->withoutShipment()->count();
-
         $stats = [
             'total_orders' => $query->count(),
-            'unassigned_orders' => $unassignedOrders,
+            'unassigned_orders' => $query->clone()->withoutShipment()->count(),
             'assigned_orders' => $query->clone()->withShipment()->count(),
             'total_revenue' => round((float) $query->sum('total'), 2),
             'average_order_value' => round((float) $query->avg('total'), 2),
@@ -374,7 +342,11 @@ class OrderController extends Controller
                 ->select('financial_status', DB::raw('count(*) as count'))
                 ->groupBy('financial_status')
                 ->get(),
-            'by_shipment_status' => $this->shipmentStatusCounts($unassignedOrders),
+            'by_shipment_status' => DB::table('shipments')
+                ->select('status', DB::raw('count(*) as count'))
+                ->groupBy('status')
+                ->orderByDesc('count')
+                ->get(),
             'by_payment_method' => DB::table('orders')
                 ->select('payment_method', DB::raw('count(*) as count'))
                 ->groupBy('payment_method')

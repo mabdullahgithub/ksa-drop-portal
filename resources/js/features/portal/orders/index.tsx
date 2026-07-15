@@ -1186,13 +1186,7 @@ export function PortalOrders() {
           </div>
           <PortalShipmentStatusCards
             onStatusClick={(status) => {
-              // Pending includes orders with no shipment at all, so it must not
-              // be narrowed to orders that already have one.
-              updateFilters({
-                shipment_status: [status],
-                has_shipment: status === 'pending' ? undefined : true,
-                page: 1,
-              })
+              updateFilters({ shipment_status: [status], has_shipment: true, page: 1 })
             }}
           />
         </div>
