@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { useCommandState } from 'cmdk'
 import { Check, ChevronsUpDown } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -82,7 +83,6 @@ interface JntCitySelectProps {
 
 export function JntCitySelect({ province, value, onChange, onProvinceChange, placeholder = 'Select city...', className }: JntCitySelectProps) {
   const [open, setOpen] = useState(false)
-  const [search, setSearch] = useState('')
 
   const groups = useMemo<[string, JntCity[]][]>(() => {
     if (province && JNT_LOCATIONS[province]) {
@@ -91,12 +91,15 @@ export function JntCitySelect({ province, value, onChange, onProvinceChange, pla
     return Object.entries(JNT_LOCATIONS)
   }, [province])
 
-  const hasExactMatch = groups.some(([, cities]) =>
-    cities.some((c) => c.en.toLowerCase() === search.trim().toLowerCase())
+  // Flat set of the currently-listed city names, used to decide whether the
+  // typed search is already an exact city (in which case no "custom" row).
+  const cityNames = useMemo(
+    () => groups.flatMap(([, cities]) => cities.map((c) => c.en.toLowerCase())),
+    [groups]
   )
 
   return (
-    <Popover open={open} onOpenChange={(o) => { setOpen(o); if (!o) setSearch('') }} modal>
+    <Popover open={open} onOpenChange={setOpen} modal>
       <PopoverTrigger asChild>
         <Button
           variant='outline'
@@ -110,7 +113,7 @@ export function JntCitySelect({ province, value, onChange, onProvinceChange, pla
       </PopoverTrigger>
       <PopoverContent className='w-[--radix-popover-trigger-width] p-0' align='start'>
         <Command>
-          <CommandInput placeholder='Search city (EN/AR)...' value={search} onValueChange={setSearch} />
+          <CommandInput placeholder='Search city (EN/AR)...' />
           <CommandList>
             <CommandEmpty>No city found.</CommandEmpty>
             {groups.map(([groupProvince, cities]) => (
@@ -124,7 +127,6 @@ export function JntCitySelect({ province, value, onChange, onProvinceChange, pla
                       onChange(city.en)
                       if (groupProvince !== province) onProvinceChange?.(groupProvince)
                       setOpen(false)
-                      setSearch('')
                     }}
                   >
                     <Check className={cn('mr-2 h-4 w-4 shrink-0', value === city.en ? 'opacity-100' : 'opacity-0')} />
@@ -137,25 +139,38 @@ export function JntCitySelect({ province, value, onChange, onProvinceChange, pla
                 ))}
               </CommandGroup>
             ))}
-            {search.trim() !== '' && !hasExactMatch && (
-              <CommandGroup forceMount>
-                <CommandItem
-                  forceMount
-                  value={`__custom__${search}`}
-                  onSelect={() => {
-                    onChange(search.trim())
-                    setOpen(false)
-                    setSearch('')
-                  }}
-                >
-                  <span className='text-muted-foreground'>Use custom city:</span>
-                  <span className='ml-1 font-medium'>&quot;{search.trim()}&quot;</span>
-                </CommandItem>
-              </CommandGroup>
-            )}
+            <CustomCityItem
+              cityNames={cityNames}
+              onSelect={(city) => {
+                onChange(city)
+                setOpen(false)
+              }}
+            />
           </CommandList>
         </Command>
       </PopoverContent>
     </Popover>
+  )
+}
+
+/**
+ * Offers "Use custom city: X" when the typed search isn't an exact match for a
+ * listed city. Reads the live search straight from cmdk (via useCommandState)
+ * so the CommandInput can stay uncontrolled — a controlled input in cmdk only
+ * syncs into the filter through a fragile effect and can stop filtering.
+ */
+function CustomCityItem({ cityNames, onSelect }: { cityNames: string[]; onSelect: (city: string) => void }) {
+  const search = useCommandState((state) => state.search)
+  const trimmed = search.trim()
+
+  if (trimmed === '' || cityNames.includes(trimmed.toLowerCase())) return null
+
+  return (
+    <CommandGroup forceMount>
+      <CommandItem forceMount value={`__custom__${trimmed}`} onSelect={() => onSelect(trimmed)}>
+        <span className='text-muted-foreground'>Use custom city:</span>
+        <span className='ml-1 font-medium'>&quot;{trimmed}&quot;</span>
+      </CommandItem>
+    </CommandGroup>
   )
 }
