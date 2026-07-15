@@ -132,6 +132,19 @@ class PortalController extends Controller
             $query->whereJsonContains('tags', $request->tag);
         }
 
+        // Filter by multiple tags (multi-select "Tags" filter). An order matches
+        // when it carries any of the selected tags.
+        if ($request->has('tags')) {
+            $tags = $this->parseMultiValue($request->tags);
+            if (!empty($tags)) {
+                $query->where(function ($q) use ($tags) {
+                    foreach ($tags as $tag) {
+                        $q->orWhereJsonContains('tags', $tag);
+                    }
+                });
+            }
+        }
+
         // Filter by shipment status (has shipment or not)
         if ($request->has('has_shipment')) {
             $hasShipment = filter_var($request->has_shipment, FILTER_VALIDATE_BOOLEAN);

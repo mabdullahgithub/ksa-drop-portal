@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from 'react'
+import { useState, useRef, useCallback, useEffect, useMemo } from 'react'
 import { Download, Upload, CheckCircle2, AlertCircle, FileSpreadsheet, X, Package, DollarSign, Clock, TruckIcon, Copy, XCircle, ShoppingBag, PlusCircle, MessageSquare, HelpCircle, ChevronsUpDown, Check } from 'lucide-react'
 import {
   flexRender,
@@ -124,7 +124,16 @@ const STAT_CARDS: StatCard[] = [
 
 // ─── columns ─────────────────────────────────────────────────────────────────
 
-const columns: ColumnDef<any>[] = [
+function hexToRgba(hex: string | null | undefined, alpha: number) {
+  if (!hex || hex.length < 4) return `rgba(128, 128, 128, ${alpha})`
+  const r = parseInt(hex.slice(1, 3), 16)
+  const g = parseInt(hex.slice(3, 5), 16)
+  const b = parseInt(hex.slice(5, 7), 16)
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`
+}
+
+function makeColumns(tagColors: Record<string, string>): ColumnDef<any>[] {
+  return [
   {
     accessorKey: 'order_number',
     header: 'Order #',
@@ -154,20 +163,35 @@ const columns: ColumnDef<any>[] = [
     },
   },
   {
-    accessorKey: 'financial_status',
-    header: 'Payment',
+    accessorKey: 'tags',
+    header: 'Tags',
     cell: ({ row }) => {
-      const status = row.getValue('financial_status') as string
-      const colorMap: Record<string, string> = {
-        paid: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
-        pending: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400',
-        refunded: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400',
-        partially_refunded: 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400',
-      }
+      const tags = row.original.tags as string[] | null
+      const tagList = Array.isArray(tags) ? tags : []
+      if (tagList.length === 0) return <span className='text-xs text-muted-foreground'>—</span>
       return (
-        <Badge variant='outline' className={`text-xs capitalize ${colorMap[status] || ''}`}>
-          {status?.replace(/_/g, ' ')}
-        </Badge>
+        <div className='flex flex-wrap gap-1'>
+          {tagList.map((name) => {
+            const color = tagColors[name]
+            return color ? (
+              <span
+                key={name}
+                className='inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium'
+                style={{
+                  backgroundColor: hexToRgba(color, 0.15),
+                  color,
+                  border: `1px solid ${hexToRgba(color, 0.3)}`,
+                }}
+              >
+                {name}
+              </span>
+            ) : (
+              <Badge key={name} variant='secondary' className='text-[10px] py-0 px-1.5 h-4'>
+                {name}
+              </Badge>
+            )
+          })}
+        </div>
       )
     },
   },
@@ -245,7 +269,8 @@ const columns: ColumnDef<any>[] = [
       }
     },
   },
-]
+  ]
+}
 
 function validateFile(file: File): string | null {
   const isCSV =
@@ -1085,6 +1110,18 @@ export function PortalOrders() {
   const { exportOrders } = usePortalOrderMutations()
   const { data: dashboardData } = usePortalDashboard()
   const { options: filterOptions, loading: filterOptionsLoading } = usePortalOrderFilterOptions()
+
+  // Map tag name → color from the dashboard's tag stats so the Tags column can
+  // render each tag in its configured colour.
+  const tagColors = useMemo(() => {
+    const map: Record<string, string> = {}
+    ;(dashboardData?.stats?.by_tag ?? []).forEach((t: { name: string; color: string }) => {
+      map[t.name] = t.color
+    })
+    return map
+  }, [dashboardData])
+
+  const columns = useMemo(() => makeColumns(tagColors), [tagColors])
   const { connectors, refresh: refreshConnectors } = useEnabledConnectors()
 
   // Shopify manual-approval queue tab (only shown when connected + manual mode).
