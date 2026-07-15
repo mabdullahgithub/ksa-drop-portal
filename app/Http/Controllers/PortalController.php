@@ -214,6 +214,9 @@ class PortalController extends Controller
         // Format: "{prefix}{5-digit-seq}" e.g. "EVENIE00001".
         $prefix = $client->short_id ?: 'CL' . $client->id;
 
+        // Resolve the default "Pending" tag once so every imported order gets it.
+        $defaultTags = $this->defaultOrderTags();
+
         DB::beginTransaction();
 
         try {
@@ -348,7 +351,7 @@ class PortalController extends Controller
                         'shipping_phone'     => $customerPhone,
                         'payment_method'     => $data['Payment Method'] ?? 'Cash on Delivery',
                         'notes'              => $notes,
-                        'tags'               => ['pending'],
+                        'tags'               => $defaultTags,
                         'risk_level'         => $data['Risk Level'] ?? 'Low',
                         'source'             => $data['Source'] ?? null,
                         'paid_at'            => $paidAt,
@@ -404,6 +407,22 @@ class PortalController extends Controller
         }
     }
 
+    /**
+     * Default tag applied to every order created on the platform (manual entry
+     * or CSV import). Resolves the actual "Pending" tag from the tags catalog
+     * (creating it if it doesn't exist yet) and returns its name, since an
+     * order's `tags` column stores catalog tag names.
+     */
+    private function defaultOrderTags(): array
+    {
+        $pending = Tag::firstOrCreate(
+            ['name' => 'Pending'],
+            ['color' => '#f59e0b', 'description' => 'Order awaiting processing']
+        );
+
+        return [$pending->name];
+    }
+
     public function storeOrder(Request $request)
     {
         $client = $this->resolveClient();
@@ -453,7 +472,7 @@ class PortalController extends Controller
             'payment_method'  => $validated['payment_method'] ?? null,
             'financial_status'   => 'pending',
             'fulfillment_status' => 'unfulfilled',
-            'tags'            => ['pending'],
+            'tags'            => $this->defaultOrderTags(),
         ]);
 
         if (!empty($validated['lineitem_name'])) {
