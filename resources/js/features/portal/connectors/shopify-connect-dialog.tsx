@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import {
   ArrowLeft,
   BookOpen,
@@ -27,6 +27,8 @@ interface Props {
   open: boolean
   onClose: () => void
   lastShopDomain?: string | null
+  /** Prefill from the embedded-app deep link (?shop=...) — skips manual entry. */
+  initialShop?: string
 }
 
 /** Strip protocol, path and trailing slash so we can inspect the bare host. */
@@ -44,27 +46,38 @@ function toShopDomain(input: string): string {
   return host.endsWith('.myshopify.com') ? host : `${host}.myshopify.com`
 }
 
-export function ShopifyConnectDialog({ open, onClose, lastShopDomain }: Props) {
-  const [shop, setShop] = useState('')
+export function ShopifyConnectDialog({ open, onClose, lastShopDomain, initialShop }: Props) {
+  const [shop, setShop] = useState(initialShop ?? '')
   const [error, setError] = useState('')
   const [guideOpen, setGuideOpen] = useState(false)
   const [signInStep, setSignInStep] = useState(false)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  // Show a validation error and put the user right back on the offending
+  // field, with its content selected so retyping replaces it.
+  const failValidation = (message: string) => {
+    setError(message)
+    requestAnimationFrame(() => {
+      inputRef.current?.focus()
+      inputRef.current?.select()
+    })
+  }
 
   const handleConnect = () => {
     const trimmed = shop.trim()
     if (!trimmed) {
-      setError('Please enter your store URL.')
+      failValidation('Please enter your store URL.')
       return
     }
     if (trimmed.includes(' ')) {
-      setError('Store URL cannot contain spaces.')
+      failValidation('Store URL cannot contain spaces.')
       return
     }
     // Custom domains (e.g. mystore.com) cannot be used for the Shopify OAuth
     // handshake — only the permanent *.myshopify.com host works.
     const host = toBareHost(trimmed)
     if (host.includes('.') && !host.endsWith('.myshopify.com')) {
-      setError(
+      failValidation(
         'That looks like a custom domain. Please enter your permanent .myshopify.com store URL instead — see the guide below to find it.'
       )
       setGuideOpen(true)
@@ -177,6 +190,7 @@ export function ShopifyConnectDialog({ open, onClose, lastShopDomain }: Props) {
           <div className='space-y-2'>
             <Label htmlFor='shop-domain'>Store URL</Label>
             <Input
+              ref={inputRef}
               id='shop-domain'
               placeholder='mystore.myshopify.com'
               value={shop}
@@ -186,8 +200,14 @@ export function ShopifyConnectDialog({ open, onClose, lastShopDomain }: Props) {
               }}
               onKeyDown={(e) => e.key === 'Enter' && handleConnect()}
               autoFocus
+              aria-invalid={!!error}
+              aria-describedby={error ? 'shop-domain-error' : undefined}
             />
-            {error && <p className='text-sm text-red-500'>{error}</p>}
+            {error && (
+              <p id='shop-domain-error' className='text-sm text-red-500'>
+                {error}
+              </p>
+            )}
             <p className='text-muted-foreground text-xs'>
               Enter just &quot;mystore&quot; or the full &quot;mystore.myshopify.com&quot;.
               Custom domains (e.g. mystore.com) won&apos;t work.

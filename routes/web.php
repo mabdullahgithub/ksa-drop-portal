@@ -108,14 +108,6 @@ Route::middleware(['auth', 'verified', 'role:!client'])->group(function () {
     Route::get('/chats', fn () => Inertia::render('Chats'))->name('chats');
     Route::get('/users', fn () => Inertia::render('Users'))->middleware('permission:view users')->name('users');
 
-    // Notifications
-    Route::get('/notifications', [NotificationController::class, 'page'])->name('notifications');
-    Route::get('/api/notifications', [NotificationController::class, 'index'])->name('api.notifications.index');
-    Route::get('/api/notifications/unread-count', [NotificationController::class, 'unread'])->name('api.notifications.unread');
-    Route::post('/api/notifications/{id}/read', [NotificationController::class, 'markAsRead'])->name('api.notifications.read');
-    Route::post('/api/notifications/read-all', [NotificationController::class, 'markAllAsRead'])->name('api.notifications.read-all');
-    Route::delete('/api/notifications/{id}', [NotificationController::class, 'destroy'])->name('api.notifications.destroy');
-
     // Orders API
     Route::prefix('api/orders')->group(function () {
         Route::get('/', [OrderController::class, 'index'])->middleware('permission:view orders')->name('api.orders.index');
@@ -238,10 +230,25 @@ Route::middleware(['auth', 'verified'])->group(function () {
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/api/connectors/enabled', [ConnectorController::class, 'enabledWithComingSoon'])->name('api.connectors.enabled');
 
-    // Shopify OAuth callback — must live at the redirect_uri path (not under /portal).
-    // Not role-gated: the logged-in client is redirected back here from Shopify.
-    Route::get('/shopify/callback', [ShopifyController::class, 'callback'])->name('shopify.callback');
+    // Notifications — every role, clients included: the header bell polls these
+    // on every page, and the controller scopes strictly to the logged-in user.
+    // Keeping them in the role:!client group made the client portal log 403s
+    // on every pageview (flagged by Shopify app review as web errors).
+    Route::get('/notifications', [NotificationController::class, 'page'])->name('notifications');
+    Route::get('/api/notifications', [NotificationController::class, 'index'])->name('api.notifications.index');
+    Route::get('/api/notifications/unread-count', [NotificationController::class, 'unread'])->name('api.notifications.unread');
+    Route::post('/api/notifications/{id}/read', [NotificationController::class, 'markAsRead'])->name('api.notifications.read');
+    Route::post('/api/notifications/read-all', [NotificationController::class, 'markAllAsRead'])->name('api.notifications.read-all');
+    Route::delete('/api/notifications/{id}', [NotificationController::class, 'destroy'])->name('api.notifications.destroy');
 });
+
+// Shopify OAuth callback — must live at the redirect_uri path (not under /portal).
+// Public: it is reached both by logged-in clients (portal-initiated connect) and
+// by merchants installing straight from the Shopify App Store, who have no portal
+// session at all. Authenticity is enforced inside the controller (signed state +
+// Shopify HMAC), not by login middleware — an auth redirect here breaks the
+// OAuth hop and fails Shopify app review.
+Route::get('/shopify/callback', [ShopifyController::class, 'callback'])->name('shopify.callback');
 
 // Client Portal - account restricted page (no role:client check so suspended clients can see it)
 Route::middleware(['auth', 'verified'])->get('/portal/suspended', fn () => Inertia::render('Portal/Suspended'))->name('portal.suspended');

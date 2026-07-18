@@ -15,6 +15,6 @@
         @vite(['resources/js/embedded-app.tsx'])
     </head>
     <body>
-        <div id="embedded-root" data-shop="{{ $shop }}" data-host="{{ $host }}" data-portal-login-url="{{ $portalLoginUrl }}"></div>
+        <div id="embedded-root" data-shop="{{ $shop }}" data-host="{{ $host }}" data-portal-url="{{ $portalUrl }}" data-portal-login-url="{{ $portalLoginUrl }}"></div>
     </body>
 </html>

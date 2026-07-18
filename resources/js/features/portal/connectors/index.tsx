@@ -54,6 +54,12 @@ export function PortalConnectors() {
   )
   const { props } = usePage<PageProps>()
 
+  // Deep link from the embedded Shopify admin app: ?shop=<domain> opens the
+  // connect dialog with the store prefilled so nothing is typed manually.
+  const [prefillShop] = useState(
+    () => new URLSearchParams(window.location.search).get('shop') || ''
+  )
+
   // Surface the OAuth callback result (redirected back with a flash message).
   useEffect(() => {
     if (props.flash?.success) toast.success(props.flash.success)
@@ -90,6 +96,7 @@ export function PortalConnectors() {
                   connector={connector}
                   logo={logoMap[connector.key]}
                   onChanged={refresh}
+                  prefillShop={prefillShop}
                 />
               ) : connector.key === 'buyease' ? (
                 <BuyEaseCard
@@ -140,8 +147,17 @@ function ShopifyConnectorCard({
   connector,
   logo,
   onChanged,
-}: ConnectorCardProps & { onChanged: () => void }) {
+  prefillShop,
+}: ConnectorCardProps & { onChanged: () => void; prefillShop?: string }) {
   const [showConnect, setShowConnect] = useState(false)
+
+  // Arriving via the embedded-app deep link (?shop=...): open the dialog
+  // immediately with the store prefilled, unless it's already connected.
+  useEffect(() => {
+    if (prefillShop && !connector.client_connected) {
+      setShowConnect(true)
+    }
+  }, [prefillShop, connector.client_connected])
   const {
     disconnect,
     disconnecting,
@@ -377,7 +393,12 @@ function ShopifyConnectorCard({
         <ArrowRight className='h-3.5 w-3.5' />
       </Button>
 
-      <ShopifyConnectDialog open={showConnect} onClose={() => setShowConnect(false)} lastShopDomain={connector.shop_domain} />
+      <ShopifyConnectDialog
+        open={showConnect}
+        onClose={() => setShowConnect(false)}
+        lastShopDomain={connector.shop_domain}
+        initialShop={prefillShop}
+      />
     </li>
   )
 }

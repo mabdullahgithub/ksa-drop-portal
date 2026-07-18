@@ -31,7 +31,7 @@ class UserUpdatedNotification extends Notification
             'user_name' => $this->updatedUser->name,
             'updated_by' => $this->updatedBy->name,
             'changes' => $this->changes,
-            'action_url' => route('team-management.users.show', $this->updatedUser->id),
+            'action_url' => route('team-management.users'),
             'icon' => 'user-check',
         ];
     }

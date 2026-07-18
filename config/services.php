@@ -68,7 +68,10 @@ return [
         'key'          => env('SHOPIFY_API_KEY'),
         'secret'       => env('SHOPIFY_API_SECRET'),
         'scopes'       => env('SHOPIFY_SCOPES', 'read_orders,read_customers'),
-        'redirect_uri' => env('SHOPIFY_REDIRECT_URI'),
+        // Must exactly match an "Allowed redirection URL" in the Partner
+        // Dashboard. Defaults to the app's own /shopify/callback route so a
+        // missing env var can't produce a broken authorize URL.
+        'redirect_uri' => env('SHOPIFY_REDIRECT_URI') ?: rtrim((string) env('APP_URL'), '/') . '/shopify/callback',
         // Public portal URL surfaced by the embedded app so merchants can log
         // in and connect their store. Falls back to the app URL for local dev.
         'portal_url'   => env('KSADROP_PORTAL_URL', env('APP_URL')),

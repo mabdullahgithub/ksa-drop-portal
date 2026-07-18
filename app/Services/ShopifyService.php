@@ -56,6 +56,54 @@ class ShopifyService
     }
 
     /**
+     * The app's page inside the merchant's Shopify admin. Shopify resolves
+     * /admin/apps/{api-key} to the embedded app regardless of the app handle.
+     */
+    public function adminAppUrl(string $shop): string
+    {
+        return "https://{$shop}/admin/apps/{$this->apiKey}";
+    }
+
+    /**
+     * Build a self-verifying OAuth state value: "shop|timestamp" signed with the
+     * app secret. A session-stored nonce cannot be used for installs that start
+     * inside the Shopify admin iframe — browsers block third-party cookies
+     * there, so nothing written to the session before the OAuth hop survives
+     * to the callback. The signature makes the state tamper-proof without any
+     * server-side storage.
+     */
+    public function makeState(string $shop): string
+    {
+        $payload = $shop . '|' . time();
+        $signature = hash_hmac('sha256', $payload, $this->apiSecret);
+
+        return rtrim(strtr(base64_encode($payload . '|' . $signature), '+/', '-_'), '=');
+    }
+
+    /**
+     * Verify a state produced by makeState(): signature valid, shop matches the
+     * callback's shop, and not older than an hour.
+     */
+    public function verifyState(?string $state, string $shop, int $maxAgeSeconds = 3600): bool
+    {
+        if (! $state) {
+            return false;
+        }
+
+        $decoded = base64_decode(strtr($state, '-_', '+/'), true);
+
+        if ($decoded === false || substr_count($decoded, '|') !== 2) {
+            return false;
+        }
+
+        [$stateShop, $timestamp, $signature] = explode('|', $decoded);
+
+        return hash_equals(hash_hmac('sha256', "{$stateShop}|{$timestamp}", $this->apiSecret), $signature)
+            && hash_equals($stateShop, $shop)
+            && (time() - (int) $timestamp) <= $maxAgeSeconds;
+    }
+
+    /**
      * Exchange a temporary OAuth code for an EXPIRING offline access token.
      *
      * @return array{access_token:string,refresh_token:?string,expires_in:?int,refresh_token_expires_in:?int,scope:?string}
@@ -282,6 +330,10 @@ class ShopifyService
             'ORDERS_UPDATED',
             'ORDERS_PAID',
             'ORDERS_CANCELLED',
+            // Marks the connection disconnected so a reinstall re-triggers
+            // OAuth (handled in ProcessShopifyWebhookJob). Not gated on
+            // protected-customer-data approval, unlike the order topics.
+            'APP_UNINSTALLED',
         ];
 
         $mutation = <<<'GQL'

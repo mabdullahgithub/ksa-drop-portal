@@ -39,44 +39,62 @@ class ShopifyController extends Controller
                 ->with('error', 'That does not look like a valid Shopify store URL. Use your permanent .myshopify.com domain (found in Shopify admin under Settings → Domains), not your custom domain.');
         }
 
-        $nonce = bin2hex(random_bytes(16));
+        // Signed, self-verifying state — no session storage, so the callback
+        // still validates when the session cookie is missing or expired (the
+        // former "connection attempt expired" dead end).
+        $state = $this->shopify->makeState($shop);
 
-        session([
-            'shopify_oauth_nonce' => $nonce,
-            'shopify_oauth_shop'  => $shop,
-        ]);
-
-        return redirect()->away($this->shopify->buildAuthUrl($shop, $nonce));
+        return redirect()->away($this->shopify->buildAuthUrl($shop, $state));
     }
 
     /**
      * Step 2 — Shopify redirects back with a temporary code.
+     *
+     * Reached by two flows that must both work:
+     *  - portal-initiated connect: a logged-in client clicked Connect Shopify;
+     *  - App Store install: the merchant approved the install inside the
+     *    Shopify admin with no portal session at all (this is the flow the
+     *    Shopify app reviewer exercises).
      */
     public function callback(Request $request)
     {
-        $shop = $this->shopify->normalizeShopDomain((string) $request->shop);
+        $shop   = $this->shopify->normalizeShopDomain((string) $request->shop);
+        $client = auth()->check() ? $this->resolveClient() : null;
 
-        // Every rejection below refuses the connection. They used to abort(403),
-        // which dead-ended the merchant on an error page with nothing in the logs;
-        // now each one says why and sends them back to Connectors to retry.
+        // Every rejection below refuses the connection with a log line. A
+        // portal user goes back to Connectors with a message; a visitor with
+        // no portal session (install started inside the Shopify admin) lands
+        // on the login page with the reason — never a bare error page, and
+        // never back into the admin app, which would restart the OAuth hop.
         $reject = function (string $reason, string $message) use ($request, $shop) {
             Log::warning('Shopify OAuth callback rejected', [
-                'reason'          => $reason,
-                'shop'            => $shop,
-                'state_present'   => $request->filled('state'),
-                'nonce_in_session' => session()->has('shopify_oauth_nonce'),
-                'session_shop'    => session('shopify_oauth_shop'),
-                'user_id'         => auth()->id(),
+                'reason'        => $reason,
+                'shop'          => $shop,
+                'state_present' => $request->filled('state'),
+                'user_id'       => auth()->id(),
             ]);
 
-            return redirect()->route('portal.connectors')->with('error', $message);
+            if (auth()->check()) {
+                return redirect()->route('portal.connectors')->with('error', $message);
+            }
+
+            return redirect()->route('login')->with(
+                'status',
+                $message . ' Sign in to KSA Drop, then connect the store from Connectors → Connect Shopify.'
+            );
         };
 
-        // CSRF: state must match the nonce we stored in session.
-        if (! $request->filled('state') || $request->state !== session('shopify_oauth_nonce')) {
+        if (! $this->shopify->isValidShopDomain($shop)) {
+            return $reject('invalid_shop', 'Shopify sent back an invalid store domain. Please try again.');
+        }
+
+        // CSRF: the state is a signed "shop|timestamp" token minted by us at
+        // the start of the handshake — self-verifying, and bound to this shop,
+        // so no session storage is needed (the embedded-install flow has none).
+        if (! $this->shopify->verifyState((string) $request->state, $shop)) {
             return $reject(
-                'state_mismatch',
-                'Your connection attempt expired or was started in another tab. Please click Connect Shopify and try again.'
+                'state_invalid',
+                'Your connection attempt expired or was tampered with. Please click Connect Shopify and try again.'
             );
         }
 
@@ -90,21 +108,34 @@ class ShopifyController extends Controller
             );
         }
 
-        $client = $this->resolveClient();
-
+        // A connection always belongs to a client — a store can never be linked
+        // without one.
         if (! $client) {
-            return $reject(
-                'no_client',
-                'No client account is linked to your login. Please contact support.'
-            );
-        }
+            if (auth()->check()) {
+                return $reject('no_client', 'No client account is linked to your login. Please contact support.');
+            }
 
-        // The shop in the callback must match the one we initiated OAuth for.
-        if ($shop !== session('shopify_oauth_shop')) {
-            return $reject(
-                'shop_mismatch',
-                'The store Shopify sent back does not match the one you entered. Please try again.'
-            );
+            // Install / re-grant done inside the store's own Shopify admin with
+            // no portal session. If the store is already linked to a client
+            // (reinstall after uninstall, or a re-grant), approving the install
+            // in that store's admin proves control of the store — ownership is
+            // unchanged, so refresh the tokens on the existing link.
+            $existing = ClientShopifyConnection::where('shop_domain', $shop)
+                ->whereNotNull('client_id')
+                ->first();
+
+            if ($existing) {
+                return $this->relinkExistingConnection($request, $existing, $shop);
+            }
+
+            // Fresh install, not linked to any KSA Drop client yet. Send the
+            // merchant into the embedded app UI (Shopify requires landing in
+            // the app after the grant); its onboarding screen walks them
+            // through linking a KSA Drop account. Nothing is stored — a
+            // connection row always requires a client.
+            Log::info('Shopify install completed for unlinked store', ['shop' => $shop]);
+
+            return redirect()->away($this->shopify->adminAppUrl($shop));
         }
 
         try {
@@ -112,8 +143,7 @@ class ShopifyController extends Controller
         } catch (\Throwable $e) {
             Log::error('Shopify OAuth exchange failed', ['shop' => $shop, 'error' => $e->getMessage()]);
 
-            return redirect()->route('portal.connectors')
-                ->with('error', 'Failed to connect Shopify store. Please try again.');
+            return $reject('exchange_failed', 'Failed to connect Shopify store. Please try again.');
         }
 
         // The store may still be linked to a different client. Reaching this point
@@ -177,6 +207,55 @@ class ShopifyController extends Controller
 
         return redirect()->route('portal.connectors')
             ->with('success', 'Shopify store connected. Recent orders are syncing in the background.');
+    }
+
+    /**
+     * Reinstall / re-grant of a store that already belongs to a client, done
+     * from inside the store's own Shopify admin (no portal session). Refresh
+     * the tokens on the existing link — the client never changes — and land
+     * the merchant back in the embedded app. Never an error page: on any
+     * failure the merchant still ends up in the app UI and can retry from
+     * the portal.
+     */
+    private function relinkExistingConnection(Request $request, ClientShopifyConnection $connection, string $shop)
+    {
+        try {
+            $token = $this->shopify->exchangeCodeForToken($shop, (string) $request->code);
+        } catch (\Throwable $e) {
+            Log::error('Shopify OAuth exchange failed on relink', ['shop' => $shop, 'error' => $e->getMessage()]);
+
+            return redirect()->away($this->shopify->adminAppUrl($shop));
+        }
+
+        $connection->update([
+            'access_token'             => $token['access_token'],
+            'refresh_token'            => $token['refresh_token'],
+            'token_expires_at'         => $this->shopify->expiryFromSeconds($token['expires_in']),
+            'refresh_token_expires_at' => $this->shopify->expiryFromSeconds($token['refresh_token_expires_in']),
+            'scope'                    => $token['scope'],
+            'status'                   => 'active',
+            'connected_at'             => now(),
+        ]);
+
+        try {
+            $results = $this->shopify->registerWebhooks($shop, $token['access_token']);
+            $connection->update(['webhooks_registered' => ! in_array(false, $results, true)]);
+        } catch (\Throwable $e) {
+            Log::warning('Shopify webhook registration error', ['shop' => $shop, 'error' => $e->getMessage()]);
+        }
+
+        try {
+            ShopifyOrderSyncJob::dispatch($connection->id);
+        } catch (\Throwable $e) {
+            Log::warning('Shopify order sync dispatch failed', ['shop' => $shop, 'error' => $e->getMessage()]);
+        }
+
+        Log::info('Shopify store relinked via admin re-grant', [
+            'shop'      => $shop,
+            'client_id' => $connection->client_id,
+        ]);
+
+        return redirect()->away($this->shopify->adminAppUrl($shop));
     }
 
     /**

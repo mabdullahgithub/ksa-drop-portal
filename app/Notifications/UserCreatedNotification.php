@@ -30,7 +30,7 @@ class UserCreatedNotification extends Notification
             'user_name' => $this->createdUser->name,
             'user_email' => $this->createdUser->email,
             'created_by' => $this->createdBy->name,
-            'action_url' => route('team-management.users.show', $this->createdUser->id),
+            'action_url' => route('team-management.users'),
             'icon' => 'user-plus',
         ];
     }
