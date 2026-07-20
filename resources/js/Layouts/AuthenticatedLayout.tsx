@@ -8,6 +8,7 @@ import { SearchProvider } from '@/context/search-provider'
 import { ToastPositionProvider, useToastPosition } from '@/context/toast-position-provider'
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
 import { AppSidebar } from '@/components/layout/app-sidebar'
+import { GuideVideoWidget } from '@/components/guide-video-widget'
 import { ImpersonateBanner } from '@/components/layout/impersonate-banner'
 import { SkipToMain } from '@/components/skip-to-main'
 import { Toaster } from '@/components/ui/sonner'
@@ -45,6 +46,7 @@ function LayoutInner({ children }: AuthenticatedLayoutProps) {
         >
           {children}
         </SidebarInset>
+        <GuideVideoWidget />
       </SidebarProvider>
     </div>
   )
