@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react'
-import { Download, Upload, CheckCircle2, AlertCircle, FileSpreadsheet, X, Package, DollarSign, Clock, TruckIcon, Copy, XCircle, ShoppingBag, PlusCircle, MessageSquare, HelpCircle, ChevronsUpDown, Check } from 'lucide-react'
+import { Download, Upload, CheckCircle2, AlertCircle, FileSpreadsheet, X, Package, DollarSign, Clock, TruckIcon, Copy, XCircle, ShoppingBag, PlusCircle, MessageSquare, HelpCircle, ChevronsUpDown, Check, Eye } from 'lucide-react'
 import {
   flexRender,
   getCoreRowModel,
@@ -40,7 +40,8 @@ import { OrdersPagination } from '@/features/orders/components/orders-pagination
 import { ShipmentStatusInfoModal } from '@/features/orders/components/shipment-status-info-modal'
 import { PortalShipmentStatusCards } from './components/portal-shipment-status-cards'
 import { PortalTagStatCards } from './components/portal-tag-stat-cards'
-import { PortalOrdersFilters } from './components/portal-orders-filters'
+import { PortalOrdersFilters, type PortalOrdersViewMode } from './components/portal-orders-filters'
+import { PortalOrderDetailsDialog } from './components/portal-order-details-dialog'
 import { usePortalOrderFilterOptions } from '@/hooks/usePortal'
 import { useEnabledConnectors } from '@/hooks/useEnabledConnectors'
 import { ShopifyQueuePanel } from './shopify-queue-panel'
@@ -132,12 +133,20 @@ function hexToRgba(hex: string | null | undefined, alpha: number) {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`
 }
 
-function makeColumns(tagColors: Record<string, string>): ColumnDef<any>[] {
+function makeColumns(tagColors: Record<string, string>, onView: (order: any) => void): ColumnDef<any>[] {
   return [
   {
     accessorKey: 'order_number',
     header: 'Order #',
-    cell: ({ row }) => <span className='font-medium'>{row.getValue('order_number')}</span>,
+    cell: ({ row }) => (
+      <button
+        type='button'
+        onClick={() => onView(row.original)}
+        className='font-medium text-primary hover:underline text-left'
+      >
+        {row.getValue('order_number')}
+      </button>
+    ),
   },
   {
     accessorKey: 'customer_name',
@@ -270,6 +279,143 @@ function makeColumns(tagColors: Record<string, string>): ColumnDef<any>[] {
     },
   },
   ]
+}
+
+// ─── card view ───────────────────────────────────────────────────────────────
+
+const fulfillmentColorMap: Record<string, string> = {
+  fulfilled: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
+  pending: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400',
+  unfulfilled: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400',
+  cancelled: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400',
+}
+
+const trackingColorMap: Record<string, string> = {
+  gray: 'bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400',
+  blue: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400',
+  indigo: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-400',
+  orange: 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400',
+  red: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400',
+  green: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
+  yellow: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400',
+}
+
+interface OrderCardViewProps {
+  data: any[]
+  meta: any
+  loading: boolean
+  tagColors: Record<string, string>
+  onView: (order: any) => void
+  onPageChange: (page: number) => void
+  onPageSizeChange: (size: number) => void
+  emptyMessage: string
+}
+
+function PortalOrderCardView({ data, meta, loading, tagColors, onView, onPageChange, onPageSizeChange, emptyMessage }: OrderCardViewProps) {
+  if (loading) {
+    return (
+      <div className='grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'>
+        {Array.from({ length: 8 }).map((_, i) => (
+          <Card key={i} className='border-muted/50'>
+            <CardContent className='space-y-2 p-4'>
+              <Skeleton className='h-4 w-24' />
+              <Skeleton className='h-4 w-32' />
+              <Skeleton className='h-4 w-16' />
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    )
+  }
+
+  return (
+    <div className='space-y-4'>
+      {data.length === 0 ? (
+        <div className='flex flex-col items-center justify-center py-16 text-center'>
+          <Package className='mb-3 h-12 w-12 text-muted-foreground/30' />
+          <p className='text-sm font-medium text-muted-foreground'>{emptyMessage}</p>
+        </div>
+      ) : (
+        <div className='grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'>
+          {data.map((order) => {
+            const shipment = order.latest_shipment
+            const tags = Array.isArray(order.tags) ? order.tags : []
+            return (
+              <Card
+                key={order.id}
+                className='group cursor-pointer border-muted/50 transition-all duration-200 hover:border-muted hover:shadow-md'
+                onClick={() => onView(order)}
+              >
+                <CardContent className='space-y-3 p-4'>
+                  <div className='flex items-start justify-between gap-2'>
+                    <div className='min-w-0'>
+                      <p className='truncate font-semibold text-sm text-primary group-hover:underline'>{order.order_number}</p>
+                      <p className='truncate text-xs text-muted-foreground'>{order.customer_name || '—'}</p>
+                    </div>
+                    <Badge variant='outline' className={`shrink-0 text-[10px] capitalize ${fulfillmentColorMap[order.fulfillment_status] || ''}`}>
+                      {order.fulfillment_status}
+                    </Badge>
+                  </div>
+
+                  <div className='flex items-center justify-between'>
+                    <span className='text-sm font-semibold'>
+                      SAR {parseFloat(order.total || '0').toLocaleString()}
+                    </span>
+                    <span className='text-[10px] text-muted-foreground'>
+                      {order.created_at ? new Date(order.created_at).toLocaleDateString() : '—'}
+                    </span>
+                  </div>
+
+                  {shipment ? (
+                    <div className='flex items-center gap-1.5'>
+                      <Badge variant='outline' className={`text-[10px] ${trackingColorMap[shipment.status_color] || ''}`}>
+                        {shipment.status_label}
+                      </Badge>
+                      {shipment.tracking_number && (
+                        <span className='truncate font-mono text-[10px] text-muted-foreground'>{shipment.tracking_number}</span>
+                      )}
+                    </div>
+                  ) : (
+                    <p className='text-[10px] text-muted-foreground'>No shipment yet</p>
+                  )}
+
+                  {tags.length > 0 && (
+                    <div className='flex flex-wrap gap-1'>
+                      {tags.slice(0, 3).map((name: string) => {
+                        const color = tagColors[name]
+                        return (
+                          <Badge key={name} variant='secondary' className='h-4 px-1.5 py-0 text-[9px]' style={color ? { backgroundColor: `${color}26`, color, border: `1px solid ${color}4d` } : undefined}>
+                            {name}
+                          </Badge>
+                        )
+                      })}
+                      {tags.length > 3 && (
+                        <span className='text-[9px] text-muted-foreground'>+{tags.length - 3}</span>
+                      )}
+                    </div>
+                  )}
+
+                  <Button
+                    size='sm'
+                    variant='outline'
+                    className='h-7 w-full gap-1.5 text-xs'
+                    onClick={(e) => { e.stopPropagation(); onView(order) }}
+                  >
+                    <Eye className='h-3.5 w-3.5' />
+                    View Details
+                  </Button>
+                </CardContent>
+              </Card>
+            )
+          })}
+        </div>
+      )}
+
+      {meta && meta.last_page > 1 && (
+        <OrdersPagination meta={meta} onPageChange={onPageChange} onPageSizeChange={onPageSizeChange} />
+      )}
+    </div>
+  )
 }
 
 function validateFile(file: File): string | null {
@@ -1100,6 +1246,14 @@ export function PortalOrders() {
   const [importDialogOpen, setImportDialogOpen] = useState(false)
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
   const [statusInfoModalOpen, setStatusInfoModalOpen] = useState(false)
+  const [viewMode, setViewMode] = useState<PortalOrdersViewMode>('table')
+  const [selectedOrder, setSelectedOrder] = useState<any | null>(null)
+  const [detailsDialogOpen, setDetailsDialogOpen] = useState(false)
+
+  const handleViewOrder = (order: any) => {
+    setSelectedOrder(order)
+    setDetailsDialogOpen(true)
+  }
 
   const { orders, meta, loading, filters, updateFilters, refresh } = usePortalOrders({
     per_page: 15,
@@ -1121,7 +1275,7 @@ export function PortalOrders() {
     return map
   }, [dashboardData])
 
-  const columns = useMemo(() => makeColumns(tagColors), [tagColors])
+  const columns = useMemo(() => makeColumns(tagColors, handleViewOrder), [tagColors])
   const { connectors, refresh: refreshConnectors } = useEnabledConnectors()
 
   // Shopify manual-approval queue tab (only shown when connected + manual mode).
@@ -1294,11 +1448,25 @@ export function PortalOrders() {
               filters={filters}
               onFiltersChange={updateFilters}
               filterOptions={filterOptions}
+              viewMode={viewMode}
+              onViewModeChange={setViewMode}
             />
           </div>
         )}
 
-        {/* Orders table section */}
+        {/* Orders table/card section */}
+        {viewMode === 'card' ? (
+          <PortalOrderCardView
+            data={orders}
+            meta={meta}
+            loading={loading}
+            tagColors={tagColors}
+            onView={handleViewOrder}
+            onPageChange={(page) => updateFilters({ page })}
+            onPageSizeChange={(perPage) => updateFilters({ per_page: perPage, page: 1 })}
+            emptyMessage={activeTab === 'assigned' ? 'No orders assigned to courier found.' : 'No orders found.'}
+          />
+        ) : (
         <div className='space-y-3'>
 
           <div className='overflow-hidden rounded-md border'>
@@ -1363,10 +1531,19 @@ export function PortalOrders() {
             />
           )}
         </div>
+        )}
           </>
         )}
       </Main>
 
+      <PortalOrderDetailsDialog
+        order={selectedOrder}
+        open={detailsDialogOpen}
+        onOpenChange={(isOpen) => {
+          setDetailsDialogOpen(isOpen)
+          if (!isOpen) setTimeout(() => setSelectedOrder(null), 300)
+        }}
+      />
       <PortalOrdersImportDialog
         open={importDialogOpen}
         onOpenChange={setImportDialogOpen}

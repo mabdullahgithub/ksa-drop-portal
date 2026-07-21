@@ -174,6 +174,21 @@ class PortalController extends Controller
         return response()->json($query->paginate($perPage));
     }
 
+    public function showOrder(int $orderId)
+    {
+        $client = $this->resolveClient();
+
+        if (!$client || !in_array('orders', $client->portal_features ?? [])) {
+            abort(403);
+        }
+
+        $order = $client->orders()
+            ->with(['items.clientProduct', 'items.product', 'latestShipment', 'invoices'])
+            ->findOrFail($orderId);
+
+        return response()->json($order);
+    }
+
     public function importOrders(Request $request)
     {
         $client = $this->resolveClient();
