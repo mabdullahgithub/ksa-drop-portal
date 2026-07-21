@@ -1,10 +1,17 @@
 import { useState, useEffect } from 'react'
-import { Search, X, List, LayoutGrid } from 'lucide-react'
+import { Search, X, SlidersHorizontal } from 'lucide-react'
+import { type Table } from '@tanstack/react-table'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { MultiSelectFilter } from '@/components/multi-select-filter'
-
-export type PortalOrdersViewMode = 'table' | 'card'
 
 interface PortalOrdersFiltersProps {
   filters: Record<string, any>
@@ -14,16 +21,14 @@ interface PortalOrdersFiltersProps {
     shipment_statuses?: Array<{ value: string; label: string }>
     tags?: Array<{ value: string; label: string }>
   }
-  viewMode: PortalOrdersViewMode
-  onViewModeChange: (mode: PortalOrdersViewMode) => void
+  table?: Table<any>
 }
 
 export function PortalOrdersFilters({
   filters,
   onFiltersChange,
   filterOptions,
-  viewMode,
-  onViewModeChange,
+  table,
 }: PortalOrdersFiltersProps) {
   // Normalize with ?? so an explicit null (e.g. the options fetch failed) is
   // handled too — a default parameter only covers undefined, not null.
@@ -114,27 +119,34 @@ export function PortalOrdersFilters({
         </Button>
       )}
 
-      {/* View mode toggle */}
-      <div className='ml-auto flex shrink-0 items-center overflow-hidden rounded-md border border-muted/70'>
-        <Button
-          variant={viewMode === 'table' ? 'secondary' : 'ghost'}
-          size='sm'
-          className='h-9 rounded-none px-2.5'
-          onClick={() => onViewModeChange('table')}
-          title='Table view'
-        >
-          <List className='h-4 w-4' />
-        </Button>
-        <Button
-          variant={viewMode === 'card' ? 'secondary' : 'ghost'}
-          size='sm'
-          className='h-9 rounded-none px-2.5'
-          onClick={() => onViewModeChange('card')}
-          title='Card view'
-        >
-          <LayoutGrid className='h-4 w-4' />
-        </Button>
-      </div>
+      {/* Column visibility control */}
+      {table && (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant='outline' size='sm' className='h-9 shrink-0 ml-auto'>
+              <SlidersHorizontal className='mr-2 h-4 w-4' />
+              View
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align='end' className='w-[180px]'>
+            <DropdownMenuLabel>Toggle columns</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            {table
+              .getAllColumns()
+              .filter((column) => typeof column.accessorFn !== 'undefined' && column.getCanHide())
+              .map((column) => (
+                <DropdownMenuCheckboxItem
+                  key={column.id}
+                  className='capitalize'
+                  checked={column.getIsVisible()}
+                  onCheckedChange={(value) => column.toggleVisibility(!!value)}
+                >
+                  {column.id.replace(/_/g, ' ')}
+                </DropdownMenuCheckboxItem>
+              ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
     </div>
   )
 }
