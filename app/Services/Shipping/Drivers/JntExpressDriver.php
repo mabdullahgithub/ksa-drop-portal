@@ -413,19 +413,44 @@ HTML;
         }
     }
 
+    /**
+     * Map a J&T scan type — either the numeric `scanType` code from the
+     * tracking-push spec or the textual description — onto our internal
+     * {@see ShipmentStatus}.
+     *
+     * Numeric codes (per J&T KSA tracking-push docs):
+     *   10  Pickup scan            50  Station/DC sending
+     *   92  Station arrival        90  DC arrival
+     *   94  Delivery scan          100 Sign scan
+     *   110 Abnormal parcel scan   172 Returned parcel scan
+     *   402 Change Address scan    1001 Returned signed
+     *   301 International warehousing   302 International air arrival
+     *   303 International air shipment   304 Customs declaration scan
+     *   305 Customs clearance scan
+     */
     public function normalizeStatus(string $rawStatus): ShipmentStatus
     {
         return match (strtolower(trim($rawStatus))) {
-            // Uppercase codes (some API versions / webhooks)
+            // ---- Numeric scan-type codes ----
+            '10' => ShipmentStatus::INFO_RECEIVED,
+            '50', '92', '90', '402',
+            '301', '302', '303', '304', '305' => ShipmentStatus::IN_TRANSIT,
+            '94' => ShipmentStatus::OUT_FOR_DELIVERY,
+            '100' => ShipmentStatus::DELIVERED,
+            '110' => ShipmentStatus::EXCEPTION,
+            '172', '1001' => ShipmentStatus::RETURNED,
+
+            // ---- Textual scan descriptions ----
             'got', 'pick_up', 'collected', 'pickup scan' => ShipmentStatus::INFO_RECEIVED,
             'departure', 'send_scan', 'in_transit', 'sending scan',
-            'arrival', 'arrival_scan', 'station arrival' => ShipmentStatus::IN_TRANSIT,
+            'arrival', 'arrival_scan', 'station arrival', 'dc arrival',
+            'change address scan' => ShipmentStatus::IN_TRANSIT,
             'delivering', 'out_for_delivery', 'delivery scan' => ShipmentStatus::OUT_FOR_DELIVERY,
             'signed', 'delivered', 'pod', 'sign scan' => ShipmentStatus::DELIVERED,
             'failed', 'attempt_fail', 'undelivered' => ShipmentStatus::ATTEMPT_FAIL,
-            'return', 'returned' => ShipmentStatus::RETURNED,
+            'return', 'returned', 'returned parcel scan', 'returned signed' => ShipmentStatus::RETURNED,
             'cancel', 'cancelled' => ShipmentStatus::CANCELLED,
-            'lost', 'damaged', 'exception' => ShipmentStatus::EXCEPTION,
+            'lost', 'damaged', 'exception', 'abnormal parcel scan' => ShipmentStatus::EXCEPTION,
             default => ShipmentStatus::IN_TRANSIT,
         };
     }

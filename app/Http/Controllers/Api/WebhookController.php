@@ -7,6 +7,7 @@ use App\Models\ConnectorSetting;
 use App\Models\Shipment;
 use App\Services\Shipping\Drivers\JntExpressDriver;
 use App\Services\Shipping\DTOs\TrackingEvent;
+use App\Services\Shipping\Enums\JntErrorCode;
 use App\Services\Shipping\Enums\ShipmentStatus;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -28,52 +29,69 @@ class WebhookController extends Controller
     public function handleJntExpress(Request $request): JsonResponse
     {
         [$data, $error] = $this->parseAndVerify($request, 'tracking');
-        if ($error) return $error;
+        if ($error) {
+            return $error;
+        }
 
         $trackingNumber = $data['billCode'] ?? $data['mailNo'] ?? null;
+        $txlogisticId   = $data['txlogisticId'] ?? null;
 
-        if (! $trackingNumber) {
-            Log::channel('jnt_webhooks')->warning('J&T tracking webhook missing tracking number', ['data' => $data]);
-            return response()->json(['code' => 0, 'msg' => 'Missing tracking number'], 400);
+        if (! $trackingNumber && ! $txlogisticId) {
+            Log::channel('jnt_webhooks')->warning('J&T tracking webhook missing billCode/txlogisticId', ['data' => $data]);
+            return $this->failure(JntErrorCode::ILLEGAL_PARAMETERS, 'Missing billCode');
         }
 
         try {
-            $shipment = Shipment::where('tracking_number', $trackingNumber)->first();
+            $shipment = $this->resolveShipment($trackingNumber, $txlogisticId);
 
             if (! $shipment) {
-                Log::channel('jnt_webhooks')->info('J&T tracking webhook for unknown shipment', ['tracking' => $trackingNumber]);
-                return response()->json(['code' => 1, 'msg' => 'success']);
+                Log::channel('jnt_webhooks')->info('J&T tracking webhook for unknown shipment', [
+                    'tracking'      => $trackingNumber,
+                    'txlogistic_id' => $txlogisticId,
+                ]);
+                // Acknowledge so J&T stops retrying a waybill we don't own.
+                return $this->success();
             }
 
-            $driver = new JntExpressDriver();
-            $rawStatus = $data['scanType'] ?? $data['status'] ?? '';
-            $normalizedStatus = $driver->normalizeStatus($rawStatus);
+            $events = $this->extractTrackingEvents($data);
 
-            $event = new TrackingEvent(
-                status: $normalizedStatus,
-                description: $data['desc'] ?? $data['description'] ?? '',
-                location: $data['scanCity'] ?? $data['city'] ?? null,
-                timestamp: $data['scanTime'] ?? $data['operationTime'] ?? now()->toIso8601String(),
-                rawStatus: $rawStatus,
-            );
+            if ($events === []) {
+                Log::channel('jnt_webhooks')->info('J&T tracking webhook carried no scan details', [
+                    'tracking' => $shipment->tracking_number,
+                ]);
+                return $this->success();
+            }
 
-            DB::transaction(function () use ($shipment, $event, $normalizedStatus, $rawStatus): void {
-                $shipment->addTrackingEvent($event);
+            $latest = $this->latestEvent($events);
+
+            DB::transaction(function () use ($shipment, $events, $latest): void {
+                $shipment->addTrackingEvents($events);
                 $shipment->update([
-                    'status'                     => $normalizedStatus->value,
-                    'courier_status'             => $rawStatus,
-                    'courier_status_description' => $event->description,
+                    'status'                     => $latest->status->value,
+                    'courier_status'             => $latest->rawStatus,
+                    'courier_status_description' => $latest->description,
                     'tracking_history'           => $shipment->tracking_history,
                 ]);
 
-                if ($normalizedStatus === ShipmentStatus::DELIVERED) {
-                    $shipment->markDelivered();
+                // Capture an OTP delivered on a sign scan.
+                $otpEvent = $this->firstEventWithOtp($events);
+                if ($otpEvent && ! $shipment->otp_verified) {
+                    $shipment->markOtpVerified();
                 }
+
+                // Fire terminal-state side-effects based on the most recent scan.
+                match ($latest->status) {
+                    ShipmentStatus::DELIVERED => $shipment->markDelivered(),
+                    ShipmentStatus::RETURNED  => $shipment->markReturned($latest->description),
+                    ShipmentStatus::EXCEPTION => $this->escalateOnce($shipment, $latest->description),
+                    default                   => null,
+                };
             });
 
             Log::channel('jnt_webhooks')->info('J&T tracking webhook processed', [
-                'tracking' => $trackingNumber,
-                'status'   => $normalizedStatus->value,
+                'tracking'    => $shipment->tracking_number,
+                'status'      => $latest->status->value,
+                'scan_events' => count($events),
             ]);
         } catch (Throwable $e) {
             Log::channel('jnt_webhooks')->error('J&T tracking webhook failed', [
@@ -85,10 +103,10 @@ class WebhookController extends Controller
                 'payload'   => $data,
             ]);
 
-            return response()->json(['code' => 0, 'msg' => 'Internal error'], 500);
+            return $this->failure(JntErrorCode::INTERNAL_CALL_EXCEPTION, 'Internal error');
         }
 
-        return response()->json(['code' => 1, 'msg' => 'success']);
+        return $this->success();
     }
 
     // -----------------------------------------------------------------------
@@ -98,21 +116,24 @@ class WebhookController extends Controller
     public function handleJntReturn(Request $request): JsonResponse
     {
         [$data, $error] = $this->parseAndVerify($request, 'return');
-        if ($error) return $error;
+        if ($error) {
+            return $error;
+        }
 
         $trackingNumber = $data['billCode'] ?? $data['mailNo'] ?? $data['waybillNo'] ?? null;
+        $txlogisticId   = $data['txlogisticId'] ?? null;
 
-        if (! $trackingNumber) {
+        if (! $trackingNumber && ! $txlogisticId) {
             Log::channel('jnt_webhooks')->warning('J&T return webhook missing tracking number', ['data' => $data]);
-            return response()->json(['code' => 0, 'msg' => 'Missing tracking number'], 400);
+            return $this->failure(JntErrorCode::ILLEGAL_PARAMETERS, 'Missing billCode');
         }
 
         try {
-            $shipment = Shipment::where('tracking_number', $trackingNumber)->first();
+            $shipment = $this->resolveShipment($trackingNumber, $txlogisticId);
 
             if (! $shipment) {
                 Log::channel('jnt_webhooks')->info('J&T return webhook for unknown shipment', ['tracking' => $trackingNumber]);
-                return response()->json(['code' => 1, 'msg' => 'success']);
+                return $this->success();
             }
 
             $reason = $data['returnReason'] ?? $data['reason'] ?? '';
@@ -146,10 +167,10 @@ class WebhookController extends Controller
                 'payload'   => $data,
             ]);
 
-            return response()->json(['code' => 0, 'msg' => 'Internal error'], 500);
+            return $this->failure(JntErrorCode::INTERNAL_CALL_EXCEPTION, 'Internal error');
         }
 
-        return response()->json(['code' => 1, 'msg' => 'success']);
+        return $this->success();
     }
 
     // -----------------------------------------------------------------------
@@ -159,7 +180,9 @@ class WebhookController extends Controller
     public function handleJntCod(Request $request): JsonResponse
     {
         [$data, $error] = $this->parseAndVerify($request, 'cod');
-        if ($error) return $error;
+        if ($error) {
+            return $error;
+        }
 
         // COD remittance is a batch: wayNos is an array of tracking numbers.
         // Fallback to single-waybill fields for forward compatibility.
@@ -171,7 +194,7 @@ class WebhookController extends Controller
 
         if (empty($wayNos)) {
             Log::channel('jnt_webhooks')->warning('J&T COD webhook missing waybill numbers', ['data' => $data]);
-            return response()->json(['code' => 0, 'msg' => 'Missing waybill numbers'], 400);
+            return $this->failure(JntErrorCode::ILLEGAL_PARAMETERS, 'Missing waybill numbers');
         }
 
         $totalAmount = $data['payCustomerCollectionAmount'] ?? $data['codAmount'] ?? null;
@@ -226,10 +249,10 @@ class WebhookController extends Controller
         ]);
 
         if ($failed > 0 && $updated === 0) {
-            return response()->json(['code' => 0, 'msg' => 'All updates failed'], 500);
+            return $this->failure(JntErrorCode::INTERNAL_CALL_EXCEPTION, 'All updates failed');
         }
 
-        return response()->json(['code' => 1, 'msg' => 'success']);
+        return $this->success();
     }
 
     // -----------------------------------------------------------------------
@@ -239,21 +262,24 @@ class WebhookController extends Controller
     public function handleJntOtp(Request $request): JsonResponse
     {
         [$data, $error] = $this->parseAndVerify($request, 'otp');
-        if ($error) return $error;
+        if ($error) {
+            return $error;
+        }
 
         $trackingNumber = $data['billCode'] ?? $data['mailNo'] ?? null;
+        $txlogisticId   = $data['txlogisticId'] ?? null;
 
-        if (! $trackingNumber) {
+        if (! $trackingNumber && ! $txlogisticId) {
             Log::channel('jnt_webhooks')->warning('J&T OTP webhook missing tracking number', ['data' => $data]);
-            return response()->json(['code' => 0, 'msg' => 'Missing tracking number'], 400);
+            return $this->failure(JntErrorCode::ILLEGAL_PARAMETERS, 'Missing billCode');
         }
 
         try {
-            $shipment = Shipment::where('tracking_number', $trackingNumber)->first();
+            $shipment = $this->resolveShipment($trackingNumber, $txlogisticId);
 
             if (! $shipment) {
                 Log::channel('jnt_webhooks')->info('J&T OTP webhook for unknown shipment', ['tracking' => $trackingNumber]);
-                return response()->json(['code' => 1, 'msg' => 'success']);
+                return $this->success();
             }
 
             $verifyTime = $data['verifyTime'] ?? $data['operationTime'] ?? now()->toIso8601String();
@@ -264,11 +290,13 @@ class WebhookController extends Controller
                 location: null,
                 timestamp: $verifyTime,
                 rawStatus: 'OTP_VERIFIED',
+                otp: isset($data['otp']) ? (string) $data['otp'] : null,
             );
 
             DB::transaction(function () use ($shipment, $event): void {
                 $shipment->addTrackingEvent($event);
                 $shipment->update(['tracking_history' => $shipment->tracking_history]);
+                $shipment->markOtpVerified();
                 $shipment->markDelivered();
             });
 
@@ -283,46 +311,196 @@ class WebhookController extends Controller
                 'payload'   => $data,
             ]);
 
-            return response()->json(['code' => 0, 'msg' => 'Internal error'], 500);
+            return $this->failure(JntErrorCode::INTERNAL_CALL_EXCEPTION, 'Internal error');
         }
 
-        return response()->json(['code' => 1, 'msg' => 'success']);
+        return $this->success();
     }
 
     // -----------------------------------------------------------------------
-    // Shared helpers
+    // Tracking-event helpers
+    // -----------------------------------------------------------------------
+
+    /**
+     * Build the list of scan events from a tracking-push payload.
+     *
+     * The spec nests scans inside a `details[]` array (a single push may carry
+     * several scans). For forward compatibility we also accept a single scan
+     * expressed at the top level of bizContent.
+     *
+     * @return array<int, TrackingEvent>
+     */
+    private function extractTrackingEvents(array $data): array
+    {
+        $details = $data['details'] ?? null;
+
+        if (! is_array($details) || $details === []) {
+            $details = (isset($data['scanType']) || isset($data['scanTime']))
+                ? [$data]
+                : [];
+        }
+
+        $driver = new JntExpressDriver();
+        $events = [];
+
+        foreach ($details as $detail) {
+            if (! is_array($detail)) {
+                continue;
+            }
+            $events[] = $this->makeTrackingEvent($driver, $detail);
+        }
+
+        return $events;
+    }
+
+    /**
+     * Map a single J&T scan `detail` onto a {@see TrackingEvent}, preserving the
+     * rich scan attributes provided in the push.
+     */
+    private function makeTrackingEvent(JntExpressDriver $driver, array $detail): TrackingEvent
+    {
+        // Prefer the textual scanType; fall back to the numeric scanTypeCode.
+        $scanType = trim((string) ($detail['scanType'] ?? $detail['status'] ?? ''));
+        $scanCode = isset($detail['scanTypeCode']) ? trim((string) $detail['scanTypeCode']) : '';
+        $rawStatus = $scanType !== '' ? $scanType : $scanCode;
+
+        $location = $detail['scanNetworkCity']
+            ?? $detail['scanNetworkArea']
+            ?? $detail['scanNetworkProvince']
+            ?? $detail['scanCity']
+            ?? $detail['city']
+            ?? null;
+
+        return new TrackingEvent(
+            status: $driver->normalizeStatus($rawStatus !== '' ? $rawStatus : 'unknown'),
+            description: (string) ($detail['desc'] ?? $detail['description'] ?? ''),
+            location: $location !== null ? (string) $location : null,
+            timestamp: (string) ($detail['scanTime'] ?? $detail['operationTime'] ?? now()->toIso8601String()),
+            rawStatus: $rawStatus !== '' ? $rawStatus : null,
+            scanTypeCode: $scanCode !== '' ? $scanCode : null,
+            networkName: isset($detail['scanNetworkName']) ? (string) $detail['scanNetworkName'] : null,
+            networkId: isset($detail['scanNetworkId']) ? (string) $detail['scanNetworkId'] : null,
+            staffName: isset($detail['staffName']) ? (string) $detail['staffName'] : null,
+            staffContact: isset($detail['staffContact']) ? (string) $detail['staffContact'] : null,
+            nextStopName: isset($detail['nextStopName']) ? (string) $detail['nextStopName'] : null,
+            signaturePicUrl: $detail['electronicSignaturePicUrl'] ?? $detail['sigPicUrl'] ?? null,
+            problemPicUrl: $detail['problemPicUrl'] ?? null,
+            latitude: isset($detail['latitude']) ? (string) $detail['latitude'] : null,
+            longitude: isset($detail['longitude']) ? (string) $detail['longitude'] : null,
+            otp: isset($detail['otp']) ? (string) $detail['otp'] : null,
+        );
+    }
+
+    /**
+     * The most recent scan (by scan time) drives the shipment's current status.
+     *
+     * @param  array<int, TrackingEvent>  $events
+     */
+    private function latestEvent(array $events): TrackingEvent
+    {
+        $latest = $events[0];
+
+        foreach ($events as $event) {
+            if (strcmp($event->timestamp, $latest->timestamp) >= 0) {
+                $latest = $event;
+            }
+        }
+
+        return $latest;
+    }
+
+    /**
+     * @param  array<int, TrackingEvent>  $events
+     */
+    private function firstEventWithOtp(array $events): ?TrackingEvent
+    {
+        foreach ($events as $event) {
+            if (! empty($event->otp)) {
+                return $event;
+            }
+        }
+
+        return null;
+    }
+
+    private function resolveShipment(?string $trackingNumber, ?string $txlogisticId): ?Shipment
+    {
+        if ($trackingNumber) {
+            $shipment = Shipment::where('tracking_number', $trackingNumber)->first();
+            if ($shipment) {
+                return $shipment;
+            }
+        }
+
+        if ($txlogisticId) {
+            return Shipment::where('txlogistic_id', $txlogisticId)->first();
+        }
+
+        return null;
+    }
+
+    private function escalateOnce(Shipment $shipment, string $note): void
+    {
+        // Only notify admins once per shipment to avoid alert spam on repeated
+        // abnormal scans.
+        if ($shipment->exception_escalated_at) {
+            $shipment->update(['status' => ShipmentStatus::EXCEPTION->value]);
+            return;
+        }
+
+        $shipment->escalateException($note);
+    }
+
+    // -----------------------------------------------------------------------
+    // Request parsing, verification & responses
     // -----------------------------------------------------------------------
 
     /**
      * Extract and verify a J&T webhook request.
-     * Returns [parsed_data_array, null] on success, or [null, error_response] on failure.
+     *
+     * Returns [parsed_data_array, null] on success, or [null, error_response]
+     * on failure. Error responses carry the documented J&T response codes.
      */
     private function parseAndVerify(Request $request, string $type): array
     {
         try {
-            $digest   = $request->header('digest');
-            $fullBody = $request->getContent();
+            $apiAccount = $request->header('apiAccount');
+            $digest     = $request->header('digest');
+            $timestamp  = $request->header('timestamp');
+            $fullBody   = $request->getContent();
 
-            // bizContent may arrive as a JSON string or a pre-parsed object
+            if (! $apiAccount) {
+                return [null, $this->failure(JntErrorCode::API_ACCOUNT_EMPTY)];
+            }
+
+            if (! $digest) {
+                return [null, $this->failure(JntErrorCode::DIGEST_EMPTY)];
+            }
+
+            if (! $timestamp) {
+                return [null, $this->failure(JntErrorCode::TIMESTAMP_EMPTY)];
+            }
+
+            // bizContent may arrive as a JSON string or a pre-parsed object.
             $raw              = $request->input('bizContent');
             $bizContentString = is_string($raw) ? $raw : json_encode($raw);
 
-            if (! $this->verifyJntSignature($bizContentString, $fullBody, $digest, $type)) {
+            if (! $this->verifyJntSignature($bizContentString, $fullBody, $digest, $apiAccount, $type)) {
                 Log::channel('jnt_webhooks')->warning("J&T {$type} webhook signature verification failed", [
                     'ip'             => $request->ip(),
                     'digest_present' => ! empty($digest),
                     'body_length'    => strlen($fullBody),
                 ]);
-                return [null, response()->json(['code' => 0, 'msg' => 'Invalid signature'], 401)];
+                return [null, $this->failure(JntErrorCode::HEADER_SIGNATURE_INVALID)];
             }
 
             $data = is_string($raw) ? json_decode($raw, true) : (array) $raw;
 
-            if (! $data) {
+            if (! is_array($data) || $data === []) {
                 Log::channel('jnt_webhooks')->warning("J&T {$type} webhook empty or invalid bizContent", [
                     'raw_preview' => substr((string) $raw, 0, 200),
                 ]);
-                return [null, response()->json(['code' => 0, 'msg' => 'Invalid payload'], 400)];
+                return [null, $this->failure(JntErrorCode::ILLEGAL_PARAMETERS, 'Invalid bizContent')];
             }
 
             return [$data, null];
@@ -332,93 +510,97 @@ class WebhookController extends Controller
                 'exception' => get_class($e),
                 'ip'        => $request->ip(),
             ]);
-            return [null, response()->json(['code' => 0, 'msg' => 'Parse error'], 400)];
+            return [null, $this->failure(JntErrorCode::SYSTEM_ERROR, 'Parse error')];
         }
     }
 
-    protected function verifyJntSignature(string $bizContent, string $fullBody, ?string $digest, string $type = ''): bool
-    {
+    protected function verifyJntSignature(
+        string $bizContent,
+        string $fullBody,
+        ?string $digest,
+        ?string $apiAccount = null,
+        string $type = '',
+    ): bool {
         if (! $digest) {
             Log::channel('jnt_webhooks')->debug('J&T webhook: no digest header received');
             return false;
         }
 
-        $creds = \App\Models\ConnectorSetting::getAllForConnector('jnt_express');
-        $privateKey      = $creds['private_key']       ?? '';
-        $customerCode    = $creds['customer_code']     ?? '';
-        $customerPass    = $creds['customer_password'] ?? '';
-        $apiAccount      = $creds['api_account']       ?? '';
+        $creds           = ConnectorSetting::getAllForConnector('jnt_express');
+        $privateKey      = $creds['private_key'] ?? config('services.jnt_express.private_key') ?? '';
+        $expectedAccount = $creds['api_account'] ?? config('services.jnt_express.api_account') ?? '';
 
         if (! $privateKey) {
             Log::channel('jnt_webhooks')->warning('J&T webhook: private_key not configured in connector_settings');
             return false;
         }
 
-        // Sandbox bypass: J&T's console debug test uses their own internal test key,
-        // not your actual private key. Enable this only during sandbox joint-debugging.
+        // Sandbox bypass: J&T's console debug test signs with their own internal
+        // test key, not your production private key. Enable only during
+        // sandbox joint-debugging — never in production.
         if (config('services.jnt.skip_webhook_verification', false)) {
             Log::channel('jnt_webhooks')->info("J&T {$type} webhook: signature verification bypassed (sandbox mode)");
             return true;
         }
 
-        // Derived ciphertext used in inner digest formula
-        $ciphertext = strtoupper(md5($customerPass . 'jadada236t2'));
+        // The pushing account must match our configured J&T account.
+        if ($expectedAccount && $apiAccount && ! hash_equals((string) $expectedAccount, (string) $apiAccount)) {
+            Log::channel('jnt_webhooks')->warning('J&T webhook: apiAccount mismatch', [
+                'received' => $apiAccount,
+            ]);
+            return false;
+        }
 
-        // Some integrations store the key as hex — try binary-decoded variant too
-        $privateKeyBin = (ctype_xdigit($privateKey) && strlen($privateKey) % 2 === 0)
-            ? hex2bin($privateKey)
-            : null;
+        // Documented formula — identical to the outbound signature J&T accepts:
+        //   digest = base64( md5( bizContent + privateKey ) )
+        $expected = base64_encode(md5($bizContent . $privateKey, true));
+        if (hash_equals($expected, $digest)) {
+            return true;
+        }
 
-        // Extract the raw URL-encoded bizContent value from the body (before PHP decodes it)
-        preg_match('/(?:^|&)bizContent=([^&]*)/', $fullBody, $m);
-        $urlEncodedBiz = $m[1] ?? '';
-
-        $candidates = [
-            // ---- private_key (string) variants ----
-            'biz+key'               => base64_encode(md5($bizContent . $privateKey, true)),
-            'body+key'              => base64_encode(md5($fullBody . $privateKey, true)),
-            'urlbiz+key'            => base64_encode(md5($urlEncodedBiz . $privateKey, true)),
-            'key+biz'               => base64_encode(md5($privateKey . $bizContent, true)),
-            // ---- private_key (hex-decoded to binary) variants ----
-            'biz+key_bin'           => $privateKeyBin ? base64_encode(md5($bizContent . $privateKeyBin, true)) : null,
-            'urlbiz+key_bin'        => $privateKeyBin ? base64_encode(md5($urlEncodedBiz . $privateKeyBin, true)) : null,
-            // ---- ciphertext variants (derived from customer_password) ----
-            'biz+cipher'            => base64_encode(md5($bizContent . $ciphertext, true)),
-            'urlbiz+cipher'         => base64_encode(md5($urlEncodedBiz . $ciphertext, true)),
-            // ---- compound key variants ----
-            'biz+code+key'          => base64_encode(md5($bizContent . $customerCode . $privateKey, true)),
-            'code+biz+key'          => base64_encode(md5($customerCode . $bizContent . $privateKey, true)),
-            'biz+account+key'       => base64_encode(md5($bizContent . $apiAccount . $privateKey, true)),
-            'account+biz+key'       => base64_encode(md5($apiAccount . $bizContent . $privateKey, true)),
-            // ---- no-key variants ----
-            'biz_only'              => base64_encode(md5($bizContent, true)),
-            'body_only'             => base64_encode(md5($fullBody, true)),
-        ];
-
-        foreach ($candidates as $label => $candidate) {
-            if ($candidate && hash_equals($candidate, $digest)) {
-                Log::channel('jnt_webhooks')->info("J&T {$type} webhook signature matched", [
-                    'matched_candidate' => $label,
-                ]);
+        // Safety net: some proxies deliver the raw, still url-encoded bizContent
+        // value. Verify against those exact bytes before rejecting.
+        if (preg_match('/(?:^|&)bizContent=([^&]*)/', $fullBody, $m) && $m[1] !== '') {
+            $expectedRaw = base64_encode(md5($m[1] . $privateKey, true));
+            if (hash_equals($expectedRaw, $digest)) {
                 return true;
             }
         }
 
-        Log::channel('jnt_webhooks')->debug('J&T webhook signature mismatch — all candidates failed', [
-            'type'                  => $type,
-            'received_digest'       => $digest,
-            'candidates'            => array_filter($candidates),
-            'private_key_hint'      => substr($privateKey, 0, 4) . '...' . substr($privateKey, -4),
-            'private_key_length'    => strlen($privateKey),
-            'customer_code'         => $customerCode,
-            'api_account'           => $apiAccount,
-            'ciphertext_hint'       => substr($ciphertext, 0, 6) . '...',
-            'biz_length'            => strlen($bizContent),
-            'urlencoded_biz_length' => strlen($urlEncodedBiz),
-            'body_length'           => strlen($fullBody),
-            'biz_preview'           => substr($bizContent, 0, 300),
+        Log::channel('jnt_webhooks')->debug('J&T webhook signature mismatch', [
+            'type'               => $type,
+            'private_key_length' => strlen($privateKey),
+            'biz_length'         => strlen($bizContent),
+            'body_length'        => strlen($fullBody),
         ]);
 
         return false;
+    }
+
+    /**
+     * Spec-compliant success response: {"code":"1","msg":"success","data":{}}.
+     */
+    private function success(array $data = []): JsonResponse
+    {
+        return response()->json([
+            'code' => '1',
+            'msg'  => 'success',
+            'data' => (object) $data,
+        ]);
+    }
+
+    /**
+     * Spec-compliant failure response carrying a documented J&T code/message.
+     *
+     * Returned with HTTP 200 so J&T reliably reads the business `code` from the
+     * body (its push consumer keys off the JSON code, not the HTTP status).
+     */
+    private function failure(JntErrorCode $code, ?string $msg = null): JsonResponse
+    {
+        return response()->json([
+            'code' => $code->value,
+            'msg'  => $msg ?? $code->message(),
+            'data' => (object) [],
+        ]);
     }
 }

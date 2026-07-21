@@ -126,9 +126,57 @@ class Shipment extends Model
 
     public function addTrackingEvent(TrackingEvent $event): void
     {
+        $this->addTrackingEvents([$event]);
+    }
+
+    /**
+     * Merge one or more scan events into the shipment's tracking history.
+     *
+     * Events already present (same timestamp + raw status + scan network) are
+     * skipped so repeated J&T webhook pushes are idempotent, and the resulting
+     * history is kept newest-first by scan time.
+     *
+     * @param  array<int, TrackingEvent>  $events
+     */
+    public function addTrackingEvents(array $events): void
+    {
         $history = $this->tracking_history ?? [];
-        array_unshift($history, $event->toArray());
+
+        $seen = [];
+        foreach ($history as $existing) {
+            $seen[$this->trackingEventSignature($existing)] = true;
+        }
+
+        foreach ($events as $event) {
+            $entry = $event->toArray();
+            $signature = $this->trackingEventSignature($entry);
+
+            if (isset($seen[$signature])) {
+                continue;
+            }
+
+            $seen[$signature] = true;
+            $history[] = $entry;
+        }
+
+        // Newest first. J&T scan times ("Y-m-d H:i:s") and ISO-8601 timestamps
+        // both sort lexicographically by their leading date, so a string
+        // comparison orders them correctly.
+        usort($history, fn ($a, $b) => strcmp(
+            (string) ($b['timestamp'] ?? ''),
+            (string) ($a['timestamp'] ?? ''),
+        ));
+
         $this->tracking_history = $history;
+    }
+
+    protected function trackingEventSignature(array $event): string
+    {
+        return implode('|', [
+            $event['timestamp'] ?? '',
+            $event['raw_status'] ?? '',
+            $event['network_id'] ?? '',
+        ]);
     }
 
     public function markDelivered(): void
