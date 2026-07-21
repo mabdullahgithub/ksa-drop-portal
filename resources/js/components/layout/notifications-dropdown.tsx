@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react'
-import { Link, router } from '@inertiajs/react'
+import { useState, useEffect, useRef } from 'react'
+import { Link, usePage } from '@inertiajs/react'
 import { Bell, Check, CheckCheck, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -13,6 +13,7 @@ import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { cn } from '@/lib/utils'
 import axios from 'axios'
+import { type PageProps } from '@/types'
 
 interface Notification {
   id: string
@@ -28,15 +29,35 @@ interface Notification {
   created_at: string
 }
 
+// Background refresh cadence for the badge while a user sits on one page
+// without navigating. Normal Inertia navigation already refreshes the count
+// for free via the shared `notifications.unread_count` prop (see
+// HandleInertiaRequests), so this only needs to catch notifications that
+// arrive while idle on one screen — hence the long interval.
+const POLL_INTERVAL_MS = 90_000
+
 export function NotificationsDropdown() {
+  const page = usePage<PageProps>()
+  const user = page.props.auth?.user
+  const sharedUnreadCount = page.props.unreadNotificationsCount ?? 0
+
   const [notifications, setNotifications] = useState<Notification[]>([])
-  const [unreadCount, setUnreadCount] = useState(0)
+  const [unreadCount, setUnreadCount] = useState(sharedUnreadCount)
+  const [listLoaded, setListLoaded] = useState(false)
   const [loading, setLoading] = useState(false)
+  const pollingStoppedRef = useRef(false)
+
+  // Every Inertia navigation delivers a fresh, server-cached count for free.
+  // Adopt it whenever it changes instead of firing a dedicated request.
+  useEffect(() => {
+    setUnreadCount(sharedUnreadCount)
+  }, [sharedUnreadCount])
 
   const fetchNotifications = async () => {
     try {
       const response = await axios.get('/api/notifications?per_page=15')
       setNotifications(response.data.data?.slice(0, 15) || [])
+      setListLoaded(true)
     } catch (error) {
       console.error('Failed to fetch notifications:', error)
     }
@@ -47,20 +68,44 @@ export function NotificationsDropdown() {
       const response = await axios.get('/api/notifications/unread-count')
       setUnreadCount(response.data.count || 0)
     } catch (error) {
-      console.error('Failed to fetch unread count:', error)
+      // Any failure (expired session, network hiccup, etc.) means polling
+      // from this tab is no longer useful — stop instead of silently
+      // retrying every interval indefinitely in the background. A fresh
+      // count still arrives on the next real Inertia navigation.
+      pollingStoppedRef.current = true
+      console.error('Failed to fetch unread count, background polling stopped:', error)
     }
   }
 
   useEffect(() => {
-    fetchNotifications()
-    fetchUnreadCount()
+    // Never poll without a logged-in user — this is what guarantees the
+    // endpoint can't be hit from a logged-out or pre-auth context.
+    if (!user) return
+
+    pollingStoppedRef.current = false
 
     const interval = setInterval(() => {
-      fetchUnreadCount()
-    }, 30000)
+      if (pollingStoppedRef.current) {
+        clearInterval(interval)
+        return
+      }
+      // Pause while the tab is hidden/backgrounded — no point polling a
+      // badge nobody can see, and it cuts request volume further.
+      if (document.visibilityState === 'visible') {
+        fetchUnreadCount()
+      }
+    }, POLL_INTERVAL_MS)
 
     return () => clearInterval(interval)
-  }, [])
+  }, [user?.id])
+
+  const handleOpenChange = (open: boolean) => {
+    // The notification list itself is only ever needed once the dropdown is
+    // actually opened — no reason to fetch it on every page mount.
+    if (open && !listLoaded) {
+      fetchNotifications()
+    }
+  }
 
   const markAsRead = async (id: string) => {
     try {
@@ -70,7 +115,7 @@ export function NotificationsDropdown() {
           n.id === id ? { ...n, read_at: new Date().toISOString() } : n
         )
       )
-      setUnreadCount(Math.max(0, unreadCount - 1))
+      setUnreadCount((count) => Math.max(0, count - 1))
     } catch (error) {
       console.error('Failed to mark notification as read:', error)
     }
@@ -96,7 +141,7 @@ export function NotificationsDropdown() {
       await axios.delete(`/api/notifications/${id}`)
       setNotifications(notifications.filter((n) => n.id !== id))
       if (notifications.find((n) => n.id === id)?.read_at === null) {
-        setUnreadCount(Math.max(0, unreadCount - 1))
+        setUnreadCount((count) => Math.max(0, count - 1))
       }
     } catch (error) {
       console.error('Failed to delete notification:', error)
@@ -116,7 +161,7 @@ export function NotificationsDropdown() {
   }
 
   return (
-    <DropdownMenu>
+    <DropdownMenu onOpenChange={handleOpenChange}>
       <DropdownMenuTrigger asChild>
         <Button variant='ghost' size='icon' className='relative'>
           <Bell className='h-5 w-5' />

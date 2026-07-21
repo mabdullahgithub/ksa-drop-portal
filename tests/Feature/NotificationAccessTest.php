@@ -137,4 +137,52 @@ class NotificationAccessTest extends TestCase
     {
         $this->getJson('/api/notifications/unread-count')->assertUnauthorized();
     }
+
+    /**
+     * A stale `impersonate.client_id` left in an admin's session (e.g. the
+     * client was deleted after impersonation started) must not hard-fail the
+     * request — it previously threw ModelNotFoundException, which Laravel
+     * turns into an HTTP 404 for a request that otherwise looks completely
+     * normal from the browser's side.
+     */
+    public function test_stale_impersonation_session_falls_back_instead_of_404ing(): void
+    {
+        $admin = User::factory()->create();
+
+        $response = $this->actingAs($admin)
+            ->withSession([
+                'impersonate.admin_id' => $admin->id,
+                'impersonate.client_id' => 999999, // no such client
+            ])
+            ->getJson('/api/notifications/unread-count');
+
+        $response->assertOk()->assertJson(['count' => 0]);
+    }
+
+    public function test_unread_count_is_shared_on_every_inertia_visit(): void
+    {
+        $user = $this->makeClientUser();
+        $this->notify($user, 'Your order shipped');
+
+        $this->actingAs($user)
+            ->get('/notifications')
+            ->assertInertia(fn ($page) => $page->where('unreadNotificationsCount', 1));
+    }
+
+    public function test_marking_read_invalidates_the_cached_count(): void
+    {
+        $user = $this->makeClientUser();
+        $id = $this->notify($user, 'Your order shipped');
+
+        $this->actingAs($user)
+            ->getJson('/api/notifications/unread-count')
+            ->assertJson(['count' => 1]);
+
+        $this->actingAs($user)->postJson("/api/notifications/{$id}/read")->assertOk();
+
+        // Without cache invalidation this would still read the stale value.
+        $this->actingAs($user)
+            ->getJson('/api/notifications/unread-count')
+            ->assertJson(['count' => 0]);
+    }
 }

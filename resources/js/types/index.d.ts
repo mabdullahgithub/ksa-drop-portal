@@ -43,4 +43,5 @@ export type PageProps<
         success?: string;
         error?: string;
     };
+    unreadNotificationsCount: number;
 };

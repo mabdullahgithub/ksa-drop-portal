@@ -2,11 +2,14 @@
 
 namespace App\Http\Middleware;
 
+use App\Http\Concerns\ResolvesNotifiableUser;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 
 class HandleInertiaRequests extends Middleware
 {
+    use ResolvesNotifiableUser;
+
     /**
      * The root template that is loaded on the first page visit.
      *
@@ -96,6 +99,18 @@ class HandleInertiaRequests extends Middleware
                 'success' => fn () => $request->session()->get('success'),
                 'error' => fn () => $request->session()->get('error'),
             ],
+            // Delivered on every Inertia visit so the notification badge stays
+            // fresh from normal navigation alone — no dedicated polling
+            // request needed for the common case. Cached briefly server-side
+            // (see ResolvesNotifiableUser) so this costs nothing extra.
+            //
+            // Deliberately NOT nested under a `notifications` key: the
+            // notifications index page already renders its own top-level
+            // `notifications` prop (the paginated list), which would silently
+            // overwrite this one on that exact page.
+            'unreadNotificationsCount' => fn () => $user
+                ? $this->cachedUnreadCount($this->resolveNotifiableUser($request) ?? $user)
+                : 0,
         ];
     }
 }

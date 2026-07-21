@@ -6,6 +6,7 @@ import { type Order } from '@/types/order'
 import { DataTableRowActions } from './data-table-row-actions'
 import { format } from 'date-fns'
 import { useAvailableTags } from '@/hooks/useTags'
+import { useOrdersContext } from './orders-provider'
 
 function hexToRgba(hex: string | null | undefined, alpha: number) {
   if (!hex || hex.length < 4) return `rgba(128, 128, 128, ${alpha})`
@@ -13,6 +14,22 @@ function hexToRgba(hex: string | null | undefined, alpha: number) {
   const g = parseInt(hex.slice(3, 5), 16)
   const b = parseInt(hex.slice(5, 7), 16)
   return `rgba(${r}, ${g}, ${b}, ${alpha})`
+}
+
+function OrderNumberCell({ order }: { order: Order }) {
+  const { setCurrentRow, setOpen } = useOrdersContext()
+  return (
+    <button
+      type='button'
+      onClick={() => {
+        setCurrentRow(order)
+        setOpen('view')
+      }}
+      className='w-20 truncate text-left font-medium text-primary hover:underline'
+    >
+      {order.order_number}
+    </button>
+  )
 }
 
 function TagsCell({ tags }: { tags: string[] | null }) {
@@ -93,9 +110,7 @@ export const ordersColumns: ColumnDef<Order>[] = [
     header: ({ column }) => (
       <DataTableColumnHeader column={column} title='Order #' />
     ),
-    cell: ({ row }) => (
-      <div className='w-20 font-medium'>{row.getValue('order_number')}</div>
-    ),
+    cell: ({ row }) => <OrderNumberCell order={row.original} />,
     enableSorting: true,
     enableHiding: false,
   },
