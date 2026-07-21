@@ -545,6 +545,14 @@ HTML;
             // Al Jawf
             'al jawf' => 'Al Jawf', 'al jouf' => 'Al Jawf', 'jawf' => 'Al Jawf',
             'sakaka' => 'Al Jawf', 'الجوف' => 'Al Jawf',
+
+            // Legacy aliases: the shipment-creation UI used to send its dropdown
+            // display labels (straight from the source SLA sheet) instead of a
+            // canonical name — orders saved before that was fixed may still carry
+            // these exact strings in shipping_province.
+            'west region makkah' => 'Makkah',
+            'arar northen boarders' => 'Northern Borders',
+            'arar northern borders' => 'Northern Borders',
         ];
 
         // Also try a variant with trailing qualifier words removed, so values like

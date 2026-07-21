@@ -1003,3 +1003,46 @@ export const JNT_LOCATIONS: Record<string, JntCity[]> = {
 }
 
 export const JNT_PROVINCES = Object.keys(JNT_LOCATIONS)
+
+/**
+ * JNT_LOCATIONS keys are display labels straight from the source SLA sheet
+ * (e.g. "West Region (Makkah)", "Arar (Northen Boarders)") — several of them
+ * don't match any of the 13 canonical KSA region names the J&T API accepts
+ * (App\Services\Shipping\Drivers\JntExpressDriver::provinces()). Sending the
+ * raw label as the shipment's "prov" gets silently rejected by J&T, or by our
+ * own pre-flight validation in JntExpressDriver::createShipment().
+ *
+ * This maps every dropdown label to the canonical name so what actually gets
+ * saved to orders/shipments is always something the API will accept. "Other"
+ * has no real J&T region and is intentionally left unmapped — selecting it
+ * should fail validation rather than silently guess a region.
+ */
+export const JNT_PROVINCE_CANONICAL: Record<string, string> = {
+  'West Region (Makkah)': 'Makkah',
+  'Tabuk': 'Tabuk',
+  'Riyadh Province': 'Riyadh',
+  'Qassim': 'Qassim',
+  'Najran': 'Najran',
+  'Madinah': 'Madinah',
+  'Hail': 'Hail',
+  'Gizan': 'Jazan',
+  'Eastern Region': 'Eastern Province',
+  'Aseer': 'Asir',
+  'Arar (Northen Boarders)': 'Northern Borders',
+  'Al Jouf Province': 'Al Jawf',
+  'Al Baha': 'Al Bahah',
+}
+
+const JNT_PROVINCE_RAW: Record<string, string> = Object.fromEntries(
+  Object.entries(JNT_PROVINCE_CANONICAL).map(([raw, canonical]) => [canonical, raw])
+)
+
+/** Resolve a stored province (canonical, or a legacy raw SLA-sheet label) back to its JNT_LOCATIONS key. */
+export function rawProvinceKey(province: string): string {
+  return JNT_PROVINCE_RAW[province] ?? province
+}
+
+/** Convert a JNT_LOCATIONS display label to the canonical name the J&T API accepts. */
+export function toCanonicalProvince(province: string): string {
+  return JNT_PROVINCE_CANONICAL[province] ?? province
+}

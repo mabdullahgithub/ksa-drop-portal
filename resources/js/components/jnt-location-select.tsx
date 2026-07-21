@@ -16,7 +16,7 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover'
 import { cn } from '@/lib/utils'
-import { JNT_LOCATIONS, JNT_PROVINCES, type JntCity } from '@/data/jnt-locations'
+import { JNT_LOCATIONS, JNT_PROVINCES, type JntCity, rawProvinceKey, toCanonicalProvince } from '@/data/jnt-locations'
 
 interface JntProvinceSelectProps {
   value: string
@@ -39,7 +39,7 @@ export function JntProvinceSelect({ value, onChange, placeholder = 'Select provi
           aria-expanded={open}
           className={cn('h-9 w-full justify-between px-3 font-normal', !value && 'text-muted-foreground', className)}
         >
-          <span className='truncate'>{value || placeholder}</span>
+          <span className='truncate'>{rawProvinceKey(value) || placeholder}</span>
           <ChevronsUpDown className='ml-2 h-3.5 w-3.5 shrink-0 text-muted-foreground' />
         </Button>
       </PopoverTrigger>
@@ -54,11 +54,11 @@ export function JntProvinceSelect({ value, onChange, placeholder = 'Select provi
                   key={province}
                   value={province}
                   onSelect={() => {
-                    onChange(province)
+                    onChange(toCanonicalProvince(province))
                     setOpen(false)
                   }}
                 >
-                  <Check className={cn('mr-2 h-4 w-4', value === province ? 'opacity-100' : 'opacity-0')} />
+                  <Check className={cn('mr-2 h-4 w-4', rawProvinceKey(value) === province ? 'opacity-100' : 'opacity-0')} />
                   {province}
                 </CommandItem>
               ))}
@@ -93,12 +93,14 @@ function filterCityByName(_value: string, search: string, keywords?: string[]): 
 export function JntCitySelect({ province, value, onChange, onProvinceChange, placeholder = 'Select city...', className }: JntCitySelectProps) {
   const [open, setOpen] = useState(false)
 
+  const rawProvince = province ? rawProvinceKey(province) : ''
+
   const groups = useMemo<[string, JntCity[]][]>(() => {
-    if (province && JNT_LOCATIONS[province]) {
-      return [[province, JNT_LOCATIONS[province]]]
+    if (rawProvince && JNT_LOCATIONS[rawProvince]) {
+      return [[rawProvince, JNT_LOCATIONS[rawProvince]]]
     }
     return Object.entries(JNT_LOCATIONS)
-  }, [province])
+  }, [rawProvince])
 
   // Flat set of the currently-listed city names, used to decide whether the
   // typed search is already an exact city (in which case no "custom" row).
@@ -126,7 +128,7 @@ export function JntCitySelect({ province, value, onChange, onProvinceChange, pla
           <CommandList>
             <CommandEmpty>No city found.</CommandEmpty>
             {groups.map(([groupProvince, cities]) => (
-              <CommandGroup key={groupProvince} heading={province ? undefined : groupProvince}>
+              <CommandGroup key={groupProvince} heading={rawProvince ? undefined : groupProvince}>
                 {cities.map((city) => (
                   <CommandItem
                     key={`${groupProvince}-${city.en}`}
@@ -134,7 +136,7 @@ export function JntCitySelect({ province, value, onChange, onProvinceChange, pla
                     keywords={[city.en, city.ar]}
                     onSelect={() => {
                       onChange(city.en)
-                      if (groupProvince !== province) onProvinceChange?.(groupProvince)
+                      if (groupProvince !== rawProvince) onProvinceChange?.(toCanonicalProvince(groupProvince))
                       setOpen(false)
                     }}
                   >
