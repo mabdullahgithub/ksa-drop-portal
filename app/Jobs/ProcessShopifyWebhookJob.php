@@ -142,6 +142,13 @@ class ProcessShopifyWebhookJob implements ShouldQueue
                 'access_token'  => null,
                 'refresh_token' => null,
                 'status'        => 'disconnected',
+                // Shopify deletes every webhook subscription on uninstall, so
+                // the flag has to go false too. Leaving it true made the next
+                // reinstall skip re-registration (ensureInstalled only armed
+                // webhooks when the flag was false), so live sync silently
+                // never came back — the store looked connected but received no
+                // order webhooks at all.
+                'webhooks_registered' => false,
             ]);
         }
 

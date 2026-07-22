@@ -190,11 +190,16 @@ class ShopifyWebhookTest extends TestCase
     public function test_app_uninstalled_disconnects_but_keeps_orders(): void
     {
         $connection = $this->makeConnection();
+        // Shopify deletes the subscriptions on uninstall; the flag must follow,
+        // or the next reinstall skips re-registration and live sync never
+        // returns even though the store reconnects.
+        $connection->update(['webhooks_registered' => true]);
 
         ProcessShopifyWebhookJob::dispatchSync(self::SHOP, 'app/uninstalled', ['myshopify_domain' => self::SHOP]);
 
         $connection->refresh();
         $this->assertSame('disconnected', $connection->status);
         $this->assertNull($connection->access_token);
+        $this->assertFalse((bool) $connection->webhooks_registered);
     }
 }

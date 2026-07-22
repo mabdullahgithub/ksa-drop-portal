@@ -212,13 +212,18 @@ class ShopifyService
             ]
         );
 
-        if (! $connection->webhooks_registered) {
-            try {
-                $results = $this->registerWebhooks($shop, $token['access_token']);
-                $connection->update(['webhooks_registered' => ! in_array(false, $results, true)]);
-            } catch (\Throwable $e) {
-                Log::warning('Shopify webhook registration error', ['shop' => $shop, 'error' => $e->getMessage()]);
-            }
+        // Always (re-)register after an exchange rather than gating on the
+        // stored flag. Reaching here means a fresh install, a reinstall, or a
+        // token repair — and Shopify drops every subscription on uninstall, so
+        // the flag can read true while the store actually has none. Gating on
+        // it left reinstalled stores with no webhooks and no way to recover.
+        // Registration is idempotent: an existing subscription comes back as
+        // "already taken", which counts as success.
+        try {
+            $results = $this->registerWebhooks($shop, $token['access_token']);
+            $connection->update(['webhooks_registered' => ! in_array(false, $results, true)]);
+        } catch (\Throwable $e) {
+            Log::warning('Shopify webhook registration error', ['shop' => $shop, 'error' => $e->getMessage()]);
         }
 
         Log::info('Shopify install completed via token exchange', [
@@ -615,7 +620,8 @@ class ShopifyService
                     ],
                 ]);
 
-                $userErrors = $data['webhookSubscriptionCreate']['userErrors'] ?? [];
+                $node       = $data['webhookSubscriptionCreate'] ?? [];
+                $userErrors = $node['userErrors'] ?? [];
 
                 // A duplicate subscription is reported as a userError — treat as success.
                 $isDuplicate = collect($userErrors)->contains(
@@ -623,13 +629,18 @@ class ShopifyService
                         || str_contains(strtolower($e['message'] ?? ''), 'already')
                 );
 
-                $results[$topic] = empty($userErrors) || $isDuplicate;
+                // Require proof of a created subscription, not merely the
+                // absence of userErrors: a response that carries neither an id
+                // nor an error would otherwise read as success and leave the
+                // flag true while Shopify holds nothing.
+                $created = ! empty($node['webhookSubscription']['id']);
 
-                if (! empty($userErrors) && ! $isDuplicate) {
-                    $errors[$topic] = collect($userErrors)
-                        ->pluck('message')
-                        ->filter()
-                        ->implode('; ');
+                $results[$topic] = $created || $isDuplicate;
+
+                if (! $results[$topic]) {
+                    $errors[$topic] = $userErrors
+                        ? collect($userErrors)->pluck('message')->filter()->implode('; ')
+                        : 'Shopify created no subscription and returned no error';
 
                     Log::warning('Shopify webhook registration userError', [
                         'shop' => $shop, 'topic' => $topic, 'errors' => $userErrors,

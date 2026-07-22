@@ -785,6 +785,59 @@ class ShopifyConnectFlowTest extends TestCase
         $this->assertSame($user->client->id, $connection->client_id);
     }
 
+    public function test_reinstall_re_registers_webhooks_even_when_flag_is_stale_true(): void
+    {
+        // Uninstalling deletes the subscriptions on Shopify's side. A store that
+        // reinstalls arrives with status disconnected but webhooks_registered
+        // possibly still true (a pre-fix row, or a race). The exchange path must
+        // re-arm webhooks regardless of the flag, or live sync never returns.
+        $user = $this->makeClientUser();
+
+        ClientShopifyConnection::create([
+            'client_id'           => $user->client->id,
+            'shop_domain'         => self::SHOP,
+            'access_token'        => null,
+            'token_expires_at'    => null,
+            'status'              => 'disconnected',
+            'webhooks_registered' => true,
+            'connected_at'        => now()->subDay(),
+        ]);
+
+        $this->fakeTokenExchange();
+
+        $this->withHeader('Authorization', 'Bearer ' . $this->makeSessionToken(self::SHOP))
+            ->getJson('/embedded/shopify/api/claim-token')
+            ->assertOk();
+
+        // A webhookSubscriptionCreate mutation must actually have been sent.
+        Http::assertSent(fn ($request) => str_contains($request->url(), '/admin/api/')
+            && str_contains((string) $request->body(), 'webhookSubscriptionCreate'));
+
+        $connection = ClientShopifyConnection::sole();
+        $this->assertSame('active', $connection->status);
+        $this->assertTrue((bool) $connection->webhooks_registered);
+    }
+
+    public function test_webhook_registration_reports_failure_when_shopify_creates_nothing(): void
+    {
+        // A response with neither a subscription id nor a userError must not
+        // read as success — that false-positive left the flag true while
+        // Shopify held no subscriptions at all.
+        Http::fake([
+            'https://' . self::SHOP . '/admin/api/*' => Http::response([
+                'data' => ['webhookSubscriptionCreate' => [
+                    'webhookSubscription' => null,
+                    'userErrors'          => [],
+                ]],
+            ]),
+        ]);
+
+        $results = app(ShopifyService::class)->registerWebhooks(self::SHOP, 'tok', $errors);
+
+        $this->assertNotContains(true, $results);
+        $this->assertNotEmpty($errors);
+    }
+
     public function test_failed_token_exchange_reports_not_installed_and_mints_no_claim_token(): void
     {
         // A claim token here would send the merchant to the portal for a claim
