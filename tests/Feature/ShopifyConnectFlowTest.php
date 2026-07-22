@@ -686,6 +686,25 @@ class ShopifyConnectFlowTest extends TestCase
         $this->assertSame('tok-exchanged', $connection->access_token);
     }
 
+    public function test_failed_token_exchange_reports_not_installed_and_mints_no_claim_token(): void
+    {
+        // A claim token here would send the merchant to the portal for a claim
+        // that must 404 — there is no stored grant to attach an account to.
+        Http::fake([
+            'https://' . self::SHOP . '/admin/oauth/access_token' => Http::response(
+                ['error' => 'invalid_subject_token'],
+                400
+            ),
+        ]);
+
+        $this->withHeader('Authorization', 'Bearer ' . $this->makeSessionToken(self::SHOP))
+            ->getJson('/embedded/shopify/api/claim-token')
+            ->assertOk()
+            ->assertJson(['installed' => false, 'linked' => false, 'token' => null]);
+
+        $this->assertSame(0, ClientShopifyConnection::count());
+    }
+
     /**
      * Fake the token-exchange call plus the webhook registration that follows it.
      */

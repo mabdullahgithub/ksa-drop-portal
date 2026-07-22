@@ -16,10 +16,13 @@ export function StoreNotConnected({
     heading,
     shop,
     claimToken,
+    installed = true,
 }: {
     heading: string
     shop?: string
     claimToken?: string
+    /** False when installation never completed — the portal claim cannot work yet. */
+    installed?: boolean
 }) {
     const [connectUrl, setConnectUrl] = useState(
         shop && claimToken ? buildPortalConnectUrl(shop, claimToken) : PORTAL_LOGIN_URL
@@ -38,6 +41,25 @@ export function StoreNotConnected({
             cancelled = true
         }
     }, [shop, claimToken])
+
+    // Installation never completed, so there is no stored grant for the portal
+    // to claim. Sending the merchant there would only produce a 404 — say what
+    // actually went wrong instead.
+    if (!installed) {
+        return (
+            <s-page heading={heading}>
+                <s-section>
+                    <s-banner tone="critical" heading="Setup could not be completed">
+                        <s-paragraph>
+                            We could not finish connecting to Shopify for this store. Please
+                            uninstall and reinstall KSA Drop from the Shopify App Store. If
+                            that doesn't help, contact KSA Drop support.
+                        </s-paragraph>
+                    </s-banner>
+                </s-section>
+            </s-page>
+        )
+    }
 
     return (
         <s-page heading={heading}>

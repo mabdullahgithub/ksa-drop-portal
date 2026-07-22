@@ -44,7 +44,8 @@ export function DashboardPage() {
             <StoreNotConnected
                 heading="Order Sync"
                 shop={connection.shop}
-                claimToken={connection.token}
+                claimToken={connection.token ?? undefined}
+                installed={connection.installed}
             />
         )
     }

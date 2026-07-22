@@ -93,22 +93,27 @@ class EmbeddedAppController extends Controller
             return response()->json(['message' => 'Invalid session token.'], 401);
         }
 
-        $this->shopify->ensureInstalled($shop, $token);
+        $connection = $this->shopify->ensureInstalled($shop, $token);
+
+        // Token exchange is the only thing standing between a fresh install and
+        // a usable connection, and it can fail (revoked app, clock skew, bad
+        // credentials). Report that instead of letting the merchant walk into
+        // the portal and hit a "no pending installation" 404 with no
+        // explanation — the claim cannot succeed without a stored grant.
+        $installed = (bool) ($connection && $connection->status === 'active' && $connection->access_token);
 
         // `linked` lets the embedded app decide, without a failed request, whether
         // to load the dashboard or show the onboarding screen. Probing the
         // client-gated API endpoints instead would surface a 401 in the browser
         // console on every unlinked-store visit (harmless, but noise during app
         // review). The claim token is still returned for the onboarding deep link.
-        $linked = ClientShopifyConnection::where('shop_domain', $shop)
-            ->where('status', 'active')
-            ->whereNotNull('client_id')
-            ->exists();
+        $linked = $installed && $connection->client_id !== null;
 
         return response()->json([
-            'shop'   => $shop,
-            'linked' => $linked,
-            'token'  => $this->shopify->makeClaimToken($shop),
+            'shop'      => $shop,
+            'linked'    => $linked,
+            'installed' => $installed,
+            'token'     => $installed ? $this->shopify->makeClaimToken($shop) : null,
         ]);
     }
 }

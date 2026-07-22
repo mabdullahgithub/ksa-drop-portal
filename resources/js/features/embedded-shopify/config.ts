@@ -37,10 +37,12 @@ export async function getPortalConnectUrl(): Promise<string> {
     if (!SHOP) return PORTAL_LOGIN_URL
 
     try {
-        const { shop, token } = await embeddedFetch<{ shop: string; token: string }>(
+        const { shop, token } = await embeddedFetch<{ shop: string; token: string | null }>(
             '/claim-token'
         )
-        return buildPortalConnectUrl(shop, token)
+        // No token means installation never completed — the claim would 404, so
+        // fall back to the plain login page rather than a deep link that fails.
+        return token ? buildPortalConnectUrl(shop, token) : PORTAL_LOGIN_URL
     } catch {
         return PORTAL_LOGIN_URL
     }

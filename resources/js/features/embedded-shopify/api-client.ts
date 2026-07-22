@@ -51,7 +51,9 @@ export async function embeddedFetch<T>(path: string, options: RequestInit = {}):
 export interface ConnectionState {
     shop: string
     linked: boolean
-    token: string
+    /** False when the token exchange that completes installation failed. */
+    installed: boolean
+    token: string | null
 }
 
 export function fetchConnectionState(): Promise<ConnectionState> {

@@ -113,7 +113,8 @@ export function SettingsPage() {
             <StoreNotConnected
                 heading="Sync Settings"
                 shop={connection.shop}
-                claimToken={connection.token}
+                claimToken={connection.token ?? undefined}
+                installed={connection.installed}
             />
         )
     }
