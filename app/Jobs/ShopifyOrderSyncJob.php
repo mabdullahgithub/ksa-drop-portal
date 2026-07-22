@@ -37,7 +37,7 @@ class ShopifyOrderSyncJob implements ShouldQueue
         try {
             $token = $shopify->getValidToken($connection);
         } catch (\Throwable $e) {
-            Log::warning('Shopify sync aborted — token invalid', [
+            Log::channel('shopify')->warning('Shopify sync aborted — token invalid', [
                 'connection' => $connection->id, 'error' => $e->getMessage(),
             ]);
             return; // connection already flagged 'error' by getValidToken
@@ -81,7 +81,7 @@ class ShopifyOrderSyncJob implements ShouldQueue
 
             $connection->update(['last_synced_at' => now()]);
         } catch (\Throwable $e) {
-            Log::error('Shopify order sync failed', [
+            Log::channel('shopify')->error('Shopify order sync failed', [
                 'connection' => $connection->id,
                 'shop'       => $connection->shop_domain,
                 'error'      => $e->getMessage(),

@@ -58,7 +58,7 @@ class ProcessShopifyWebhookJob implements ShouldQueue
         // sync" cause (e.g. the store was disconnected, or claimed but the row
         // has no client), and silence made that indistinguishable from success.
         if (! $connection || ! $connection->client) {
-            Log::warning('Shopify webhook ignored — no active linked connection', [
+            Log::channel('shopify')->warning('Shopify webhook ignored — no active linked connection', [
                 'shop'             => $this->shopDomain,
                 'topic'            => $this->topic,
                 'connection_found' => (bool) $connection,
@@ -107,7 +107,7 @@ class ProcessShopifyWebhookJob implements ShouldQueue
      */
     private function logDataRequest(): void
     {
-        Log::channel('single')->info('Shopify GDPR customers/data_request received', [
+        Log::channel('shopify')->info('Shopify GDPR customers/data_request received', [
             'shop'             => $this->shopDomain,
             'customer_id'      => $this->payload['customer']['id'] ?? null,
             'customer_email'   => $this->payload['customer']['email'] ?? null,
@@ -130,7 +130,7 @@ class ProcessShopifyWebhookJob implements ShouldQueue
             ->whereIn('shopify_order_id', $orderIds)
             ->update(self::PII_REDACTIONS);
 
-        Log::info('Shopify GDPR customers/redact processed', [
+        Log::channel('shopify')->info('Shopify GDPR customers/redact processed', [
             'shop'            => $this->shopDomain,
             'orders_redacted' => $count,
         ]);
@@ -161,7 +161,7 @@ class ProcessShopifyWebhookJob implements ShouldQueue
             ]);
         }
 
-        Log::info('Shopify app/uninstalled processed', [
+        Log::channel('shopify')->info('Shopify app/uninstalled processed', [
             'shop'        => $this->shopDomain,
             'connections' => $connections->count(),
         ]);
@@ -188,7 +188,7 @@ class ProcessShopifyWebhookJob implements ShouldQueue
             $connection->delete();
         }
 
-        Log::info('Shopify GDPR shop/redact processed', [
+        Log::channel('shopify')->info('Shopify GDPR shop/redact processed', [
             'shop'            => $this->shopDomain,
             'connections'     => $connections->count(),
             'orders_redacted' => $redacted,
@@ -228,7 +228,7 @@ class ProcessShopifyWebhookJob implements ShouldQueue
 
         $connection->update(['last_synced_at' => now()]);
 
-        Log::info('Shopify order synced from webhook', [
+        Log::channel('shopify')->info('Shopify order synced from webhook', [
             'shop'         => $connection->shop_domain,
             'topic'        => $this->topic,
             'order_number' => $data['order_number'] ?? null,

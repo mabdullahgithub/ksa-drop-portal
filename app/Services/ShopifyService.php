@@ -191,7 +191,7 @@ class ShopifyService
         try {
             $token = $this->exchangeSessionToken($shop, $sessionToken);
         } catch (\Throwable $e) {
-            Log::error('Shopify token exchange failed', ['shop' => $shop, 'error' => $e->getMessage()]);
+            Log::channel('shopify')->error('Shopify token exchange failed', ['shop' => $shop, 'error' => $e->getMessage()]);
 
             return $connection;
         }
@@ -223,10 +223,10 @@ class ShopifyService
             $results = $this->registerWebhooks($shop, $token['access_token']);
             $connection->update(['webhooks_registered' => ! in_array(false, $results, true)]);
         } catch (\Throwable $e) {
-            Log::warning('Shopify webhook registration error', ['shop' => $shop, 'error' => $e->getMessage()]);
+            Log::channel('shopify')->warning('Shopify webhook registration error', ['shop' => $shop, 'error' => $e->getMessage()]);
         }
 
-        Log::info('Shopify install completed via token exchange', [
+        Log::channel('shopify')->info('Shopify install completed via token exchange', [
             'shop'      => $shop,
             'client_id' => $connection->client_id,
         ]);
@@ -642,7 +642,7 @@ class ShopifyService
                         ? collect($userErrors)->pluck('message')->filter()->implode('; ')
                         : 'Shopify created no subscription and returned no error';
 
-                    Log::warning('Shopify webhook registration userError', [
+                    Log::channel('shopify')->warning('Shopify webhook registration userError', [
                         'shop' => $shop, 'topic' => $topic, 'errors' => $userErrors,
                     ]);
                 }
@@ -650,7 +650,7 @@ class ShopifyService
                 $results[$topic]  = false;
                 $errors[$topic] = $e->getMessage();
 
-                Log::warning('Shopify webhook registration failed', [
+                Log::channel('shopify')->warning('Shopify webhook registration failed', [
                     'shop' => $shop, 'topic' => $topic, 'error' => $e->getMessage(),
                 ]);
             }

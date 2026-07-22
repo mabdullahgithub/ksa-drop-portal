@@ -46,7 +46,7 @@ class ShopifyController extends Controller
         // on the login page with the reason — never a bare error page, and
         // never back into the admin app, which would restart the OAuth hop.
         $reject = function (string $reason, string $message) use ($request, $shop) {
-            Log::warning('Shopify OAuth callback rejected', [
+            Log::channel('shopify')->warning('Shopify OAuth callback rejected', [
                 'reason'        => $reason,
                 'shop'          => $shop,
                 'state_present' => $request->filled('state'),
@@ -95,7 +95,7 @@ class ShopifyController extends Controller
         try {
             $token = $this->shopify->exchangeCodeForToken($shop, (string) $request->code);
         } catch (\Throwable $e) {
-            Log::error('Shopify OAuth exchange failed', ['shop' => $shop, 'error' => $e->getMessage()]);
+            Log::channel('shopify')->error('Shopify OAuth exchange failed', ['shop' => $shop, 'error' => $e->getMessage()]);
 
             return $reject('exchange_failed', 'Failed to connect Shopify store. Please try again.');
         }
@@ -175,7 +175,7 @@ class ShopifyController extends Controller
             ->where('id', '!=', $connection->id)
             ->get()
             ->each(function (ClientShopifyConnection $old) use ($client) {
-                Log::warning('Shopify store unlinked in favor of a new claim', [
+                Log::channel('shopify')->warning('Shopify store unlinked in favor of a new claim', [
                     'shop'      => $old->shop_domain,
                     'client_id' => $client->id,
                 ]);
@@ -187,7 +187,7 @@ class ShopifyController extends Controller
 
         $this->dispatchSyncFor($connection, $shop);
 
-        Log::info('Shopify connection claimed by client', ['shop' => $shop, 'client_id' => $client->id]);
+        Log::channel('shopify')->info('Shopify connection claimed by client', ['shop' => $shop, 'client_id' => $client->id]);
 
         return response()->json([
             'message'     => 'Shopify store connected. Recent orders are syncing in the background.',
@@ -210,7 +210,7 @@ class ShopifyController extends Controller
             ->where('client_id', '!=', $client->id)
             ->get()
             ->each(function (ClientShopifyConnection $old) use ($shop, $client) {
-                Log::warning('Shopify store reassigned to a new client', [
+                Log::channel('shopify')->warning('Shopify store reassigned to a new client', [
                     'shop'           => $shop,
                     'from_client_id' => $old->client_id,
                     'to_client_id'   => $client->id,
@@ -269,7 +269,7 @@ class ShopifyController extends Controller
         $this->registerWebhooksFor($connection, $shop, $token['access_token']);
         $this->dispatchSyncFor($connection, $shop);
 
-        Log::info('Shopify store relinked via admin re-grant', [
+        Log::channel('shopify')->info('Shopify store relinked via admin re-grant', [
             'shop'      => $shop,
             'client_id' => $connection->client_id,
         ]);
@@ -301,7 +301,7 @@ class ShopifyController extends Controller
 
         $this->registerWebhooksFor($connection, $shop, $token['access_token']);
 
-        Log::info('Shopify install completed for unlinked store — token stored', ['shop' => $shop]);
+        Log::channel('shopify')->info('Shopify install completed for unlinked store — token stored', ['shop' => $shop]);
 
         return redirect()->away($this->shopify->adminAppUrl($shop));
     }
@@ -312,7 +312,7 @@ class ShopifyController extends Controller
             $results = $this->shopify->registerWebhooks($shop, $accessToken);
             $connection->update(['webhooks_registered' => ! in_array(false, $results, true)]);
         } catch (\Throwable $e) {
-            Log::warning('Shopify webhook registration error', ['shop' => $shop, 'error' => $e->getMessage()]);
+            Log::channel('shopify')->warning('Shopify webhook registration error', ['shop' => $shop, 'error' => $e->getMessage()]);
         }
     }
 
@@ -321,7 +321,7 @@ class ShopifyController extends Controller
         try {
             ShopifyOrderSyncJob::dispatch($connection->id);
         } catch (\Throwable $e) {
-            Log::warning('Shopify order sync dispatch failed', ['shop' => $shop, 'error' => $e->getMessage()]);
+            Log::channel('shopify')->warning('Shopify order sync dispatch failed', ['shop' => $shop, 'error' => $e->getMessage()]);
         }
     }
 
@@ -391,7 +391,7 @@ class ShopifyController extends Controller
                     : 'Some webhooks could not be registered. Check that the app is approved for protected customer data.',
             ], $allOk ? 200 : 422);
         } catch (\Throwable $e) {
-            Log::warning('Shopify retryWebhooks failed', [
+            Log::channel('shopify')->warning('Shopify retryWebhooks failed', [
                 'shop' => $connection->shop_domain, 'error' => $e->getMessage(),
             ]);
 
