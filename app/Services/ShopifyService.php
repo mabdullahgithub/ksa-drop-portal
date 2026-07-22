@@ -122,11 +122,15 @@ class ShopifyService
      */
     public function exchangeSessionToken(string $shop, string $sessionToken): array
     {
-        $response = Http::acceptJson()
+        $response = Http::asForm()
+            ->acceptJson()
             ->post("https://{$shop}/admin/oauth/access_token", [
-                'client_id'            => $this->apiKey,
-                'client_secret'        => $this->apiSecret,
-                'grant_type'           => 'urn:ietf:params:oauth:token-type:token-exchange',
+                'client_id'     => $this->apiKey,
+                'client_secret' => $this->apiSecret,
+                // "grant-type", not "token-type" — the two URNs differ by one
+                // segment and Shopify answers an unrecognised grant_type with a
+                // bare {"error":"invalid_request"} that names nothing.
+                'grant_type'           => 'urn:ietf:params:oauth:grant-type:token-exchange',
                 'subject_token'        => $sessionToken,
                 'subject_token_type'   => 'urn:ietf:params:oauth:token-type:id_token',
                 'requested_token_type' => 'urn:shopify:params:oauth:token-type:offline-access-token',

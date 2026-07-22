@@ -605,9 +605,11 @@ class ShopifyConnectFlowTest extends TestCase
         $this->assertNull($connection->refresh_token);
         $this->assertTrue($connection->webhooks_registered);
 
-        // Shopify rejects the exchange outright if these exact URNs are wrong.
+        // Shopify answers a wrong URN with a bare {"error":"invalid_request"}
+        // that names nothing, so pin the exact values. Note grant_type is
+        // "grant-type", while subject_token_type is "token-type".
         Http::assertSent(fn ($request) => $request->url() === 'https://' . self::SHOP . '/admin/oauth/access_token'
-            && $request['grant_type'] === 'urn:ietf:params:oauth:token-type:token-exchange'
+            && $request['grant_type'] === 'urn:ietf:params:oauth:grant-type:token-exchange'
             && $request['subject_token_type'] === 'urn:ietf:params:oauth:token-type:id_token'
             && $request['requested_token_type'] === 'urn:shopify:params:oauth:token-type:offline-access-token'
             && $request['subject_token'] === $sessionToken);
