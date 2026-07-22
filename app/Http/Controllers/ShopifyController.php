@@ -131,10 +131,20 @@ class ShopifyController extends Controller
      * current KSA Drop client. Never talks to Shopify's OAuth endpoint — the
      * token was already obtained when the merchant installed the app from
      * Shopify, so this only updates a foreign key.
+     *
+     * The claim_token proves the caller actually controls the store — it can
+     * only have been minted by EmbeddedAppController::claimToken(), which
+     * requires a valid Shopify App Bridge session token for that exact shop.
+     * Without it, `shop` would be nothing more than user-supplied input: any
+     * portal user could link (and see the order history and PII of) any
+     * store just by knowing or guessing its domain.
      */
     public function claim(Request $request)
     {
-        $request->validate(['shop' => 'required|string|max:255']);
+        $request->validate([
+            'shop'        => 'required|string|max:255',
+            'claim_token' => 'required|string',
+        ]);
 
         $client = $this->resolveClient();
 
@@ -143,6 +153,12 @@ class ShopifyController extends Controller
         }
 
         $shop = $this->shopify->normalizeShopDomain($request->shop);
+
+        if (! $this->shopify->verifyClaimToken($request->claim_token, $shop)) {
+            return response()->json([
+                'message' => 'This connect link has expired. Please reopen the app from Shopify Admin and try again.',
+            ], 422);
+        }
 
         $connection = ClientShopifyConnection::whereNull('client_id')
             ->where('shop_domain', $shop)

@@ -65,4 +65,30 @@ class EmbeddedAppController extends Controller
             || $connection->status !== 'active'
             || ! $connection->access_token;
     }
+
+    /**
+     * Mint a short-lived claim token for the onboarding "connect your store"
+     * link. Verifies the caller's App Bridge session token directly (not the
+     * shopify.session middleware — that requires an already-linked client,
+     * which is exactly what an unlinked store doesn't have yet). The claim
+     * token then lets the portal's claim endpoint trust the shop domain in
+     * the deep link instead of taking it as bare, unverified user input —
+     * closing an IDOR where anyone with a portal login could link any store
+     * just by knowing or guessing its domain.
+     */
+    public function claimToken(Request $request)
+    {
+        $token  = $request->bearerToken();
+        $claims = $token ? $this->shopify->verifySessionToken($token) : null;
+        $shop   = $claims ? $this->shopify->shopFromSessionTokenClaims($claims) : null;
+
+        if (! $shop) {
+            return response()->json(['message' => 'Invalid session token.'], 401);
+        }
+
+        return response()->json([
+            'shop'  => $shop,
+            'token' => $this->shopify->makeClaimToken($shop),
+        ]);
+    }
 }

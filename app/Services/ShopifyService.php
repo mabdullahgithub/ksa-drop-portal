@@ -18,8 +18,9 @@ use RuntimeException;
  */
 class ShopifyService
 {
-    /** Latest stable Admin API version. Bump on each Shopify quarterly release. */
-    public const API_VERSION = '2026-04';
+    /** Latest stable Admin API version. Bump on each Shopify quarterly release.
+     *  Keep in sync with `api_version` in shopify.app.toml. */
+    public const API_VERSION = '2026-07';
 
     private string $apiKey;
     private string $apiSecret;
@@ -279,6 +280,131 @@ class ShopifyService
         $computed = base64_encode(hash_hmac('sha256', $rawBody, $this->apiSecret, true));
 
         return hash_equals($computed, $hmacHeader);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    //  Embedded App Bridge session token (JWT)
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Verify an App Bridge session token's signature and standard claims.
+     * Returns the decoded claims, or null on any failure. Shared by the
+     * embedded API auth middleware and the claim-token endpoint below —
+     * both need to prove "this request really comes from an authenticated
+     * Shopify Admin session for this shop" without a Laravel session to
+     * back it.
+     */
+    public function verifySessionToken(string $jwt): ?array
+    {
+        $parts = explode('.', $jwt);
+
+        if (count($parts) !== 3) {
+            return null;
+        }
+
+        [$header64, $payload64, $signature64] = $parts;
+
+        $header = json_decode($this->base64UrlDecode($header64) ?: '', true);
+
+        if (($header['alg'] ?? null) !== 'HS256') {
+            return null;
+        }
+
+        $expected = $this->base64UrlEncode(hash_hmac(
+            'sha256',
+            "{$header64}.{$payload64}",
+            $this->apiSecret,
+            true
+        ));
+
+        if (! hash_equals($expected, $signature64)) {
+            return null;
+        }
+
+        $claims = json_decode($this->base64UrlDecode($payload64) ?: '', true);
+
+        if (! is_array($claims)) {
+            return null;
+        }
+
+        $now = time();
+
+        if (($claims['exp'] ?? 0) < $now || ($claims['nbf'] ?? 0) > $now + 5) {
+            return null;
+        }
+
+        if (($claims['aud'] ?? null) !== $this->apiKey) {
+            return null;
+        }
+
+        return $claims;
+    }
+
+    /**
+     * dest claim is "https://{shop}.myshopify.com" — extract the bare domain.
+     */
+    public function shopFromSessionTokenClaims(array $claims): ?string
+    {
+        $host = strtolower((string) parse_url((string) ($claims['dest'] ?? ''), PHP_URL_HOST));
+
+        return $this->isValidShopDomain($host) ? $host : null;
+    }
+
+    private function base64UrlDecode(string $data): string|false
+    {
+        return base64_decode(strtr($data, '-_', '+/'));
+    }
+
+    private function base64UrlEncode(string $data): string
+    {
+        return rtrim(strtr(base64_encode($data), '+/', '-_'), '=');
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    //  Claim token — proves the caller controls $shop's Shopify Admin
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Short-lived signed token minted only from inside the verified embedded
+     * session (see EmbeddedAppController::claimToken). The portal's claim
+     * endpoint verifies this instead of trusting a bare shop domain from the
+     * URL — otherwise anyone with a portal login could link any shop just by
+     * guessing/knowing its domain and posting it directly to the claim API.
+     */
+    public function makeClaimToken(string $shop): string
+    {
+        $payload   = 'claim|' . $shop . '|' . time();
+        $signature = hash_hmac('sha256', $payload, $this->apiSecret);
+
+        return rtrim(strtr(base64_encode($payload . '|' . $signature), '+/', '-_'), '=');
+    }
+
+    /**
+     * Verify a token produced by makeClaimToken(): signature valid, tagged as
+     * a claim token (not reusable as OAuth state or vice versa), shop
+     * matches, and not older than 30 minutes.
+     */
+    public function verifyClaimToken(?string $token, string $shop, int $maxAgeSeconds = 1800): bool
+    {
+        if (! $token) {
+            return false;
+        }
+
+        $decoded = base64_decode(strtr($token, '-_', '+/'), true);
+
+        if ($decoded === false || substr_count($decoded, '|') !== 3) {
+            return false;
+        }
+
+        [$tag, $tokenShop, $timestamp, $signature] = explode('|', $decoded);
+
+        if ($tag !== 'claim') {
+            return false;
+        }
+
+        return hash_equals(hash_hmac('sha256', "{$tag}|{$tokenShop}|{$timestamp}", $this->apiSecret), $signature)
+            && hash_equals($tokenShop, $shop)
+            && (time() - (int) $timestamp) <= $maxAgeSeconds;
     }
 
     // ─────────────────────────────────────────────────────────────────────────

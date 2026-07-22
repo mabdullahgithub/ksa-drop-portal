@@ -1,3 +1,5 @@
+import { embeddedFetch } from './api-client'
+
 const root = document.getElementById('embedded-root')
 
 /**
@@ -17,10 +19,25 @@ export const PORTAL_LOGIN_URL =
 
 /**
  * Deep link that finishes account linking without any manual data entry:
- * lands on Connectors with the shop prefilled (via the login page first if
- * the merchant has no portal session — Laravel returns them here after
- * sign-in).
+ * lands on Connectors with the shop and a short-lived signed claim token
+ * prefilled (via the login page first if the merchant has no portal session
+ * — Laravel returns them here after sign-in).
+ *
+ * The claim token is minted server-side from this browser's live App Bridge
+ * session token, proving it's really inside this shop's Shopify Admin. The
+ * portal's claim endpoint verifies it instead of trusting the shop domain
+ * alone — otherwise anyone with a portal login could link any store just by
+ * knowing or guessing its domain.
  */
-export const PORTAL_CONNECT_URL = SHOP
-    ? `${PORTAL_URL}/portal/connectors?shop=${encodeURIComponent(SHOP)}`
-    : PORTAL_LOGIN_URL
+export async function getPortalConnectUrl(): Promise<string> {
+    if (!SHOP) return PORTAL_LOGIN_URL
+
+    try {
+        const { shop, token } = await embeddedFetch<{ shop: string; token: string }>(
+            '/claim-token'
+        )
+        return `${PORTAL_URL}/portal/connectors?shop=${encodeURIComponent(shop)}&claim_token=${encodeURIComponent(token)}`
+    } catch {
+        return PORTAL_LOGIN_URL
+    }
+}

@@ -14,6 +14,8 @@ interface Props {
   onClose: () => void
   /** Shop domain from the embedded-app deep link (?shop=...) — never typed. */
   shopDomain?: string
+  /** Signed proof-of-shop token from the same deep link (?claim_token=...). */
+  claimToken?: string
   /** Link to the Shopify App Store listing, shown when there's no shopDomain. */
   appStoreUrl?: string | null
   onLinked: () => void
@@ -27,15 +29,24 @@ interface Props {
  * requirement 2.3.1 forbids installation/authorization starting from manual
  * domain entry on a non-Shopify surface — the shop domain only ever comes
  * from the deep link Shopify's own embedded app passes us, and linking is a
- * plain account-attach call, never a new OAuth handshake.
+ * plain account-attach call, never a new OAuth handshake. The claim token
+ * traveling alongside it proves that deep link actually came from that
+ * shop's own Shopify Admin session, not just a URL someone typed.
  */
-export function ShopifyConnectDialog({ open, onClose, shopDomain, appStoreUrl, onLinked }: Props) {
+export function ShopifyConnectDialog({
+  open,
+  onClose,
+  shopDomain,
+  claimToken,
+  appStoreUrl,
+  onLinked,
+}: Props) {
   const { claimStore, claiming } = useShopifyConnection()
 
   const handleLink = async () => {
-    if (!shopDomain) return
+    if (!shopDomain || !claimToken) return
 
-    const { ok, message } = await claimStore(shopDomain)
+    const { ok, message } = await claimStore(shopDomain, claimToken)
 
     if (ok) {
       onLinked()
@@ -72,7 +83,7 @@ export function ShopifyConnectDialog({ open, onClose, shopDomain, appStoreUrl, o
             Cancel
           </Button>
           {shopDomain ? (
-            <Button onClick={handleLink} disabled={claiming}>
+            <Button onClick={handleLink} disabled={claiming || !claimToken}>
               {claiming ? (
                 <Loader2 className='mr-2 h-4 w-4 animate-spin' />
               ) : (

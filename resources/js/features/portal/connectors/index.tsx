@@ -56,8 +56,14 @@ export function PortalConnectors() {
 
   // Deep link from the embedded Shopify admin app: ?shop=<domain> opens the
   // connect dialog with the store prefilled so nothing is typed manually.
+  // ?claim_token=... is a signed token proving the link came from that
+  // shop's own Shopify Admin session — required by the claim endpoint so a
+  // portal user can't link a store just by knowing/guessing its domain.
   const [prefillShop] = useState(
     () => new URLSearchParams(window.location.search).get('shop') || ''
+  )
+  const [prefillClaimToken] = useState(
+    () => new URLSearchParams(window.location.search).get('claim_token') || ''
   )
 
   // Surface the OAuth callback result (redirected back with a flash message).
@@ -97,6 +103,7 @@ export function PortalConnectors() {
                   logo={logoMap[connector.key]}
                   onChanged={refresh}
                   prefillShop={prefillShop}
+                  prefillClaimToken={prefillClaimToken}
                 />
               ) : connector.key === 'buyease' ? (
                 <BuyEaseCard
@@ -148,7 +155,12 @@ function ShopifyConnectorCard({
   logo,
   onChanged,
   prefillShop,
-}: ConnectorCardProps & { onChanged: () => void; prefillShop?: string }) {
+  prefillClaimToken,
+}: ConnectorCardProps & {
+  onChanged: () => void
+  prefillShop?: string
+  prefillClaimToken?: string
+}) {
   const [showConnect, setShowConnect] = useState(false)
 
   // Arriving via the embedded-app deep link (?shop=...): open the dialog
@@ -414,6 +426,7 @@ function ShopifyConnectorCard({
         open={showConnect}
         onClose={() => setShowConnect(false)}
         shopDomain={prefillShop || undefined}
+        claimToken={prefillClaimToken || undefined}
         appStoreUrl={connector.app_store_url}
         onLinked={onChanged}
       />

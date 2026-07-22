@@ -28,6 +28,18 @@ class ShopifyWebhookController extends Controller
 
         $payload = json_decode($rawBody, true) ?: [];
 
+        // The HMAC signs only the body, never the X-Shopify-Shop-Domain header.
+        // For topics whose signed body carries the shop domain — every GDPR
+        // compliance topic and app/uninstalled — require it to match the header.
+        // Otherwise a replayed-but-validly-signed webhook could be retargeted at
+        // another merchant's store just by swapping the (unsigned) header, and
+        // these are exactly the topics that redact PII and disconnect a store.
+        $bodyShop = $payload['shop_domain'] ?? $payload['myshopify_domain'] ?? null;
+
+        if ($bodyShop !== null && ! hash_equals(strtolower((string) $bodyShop), strtolower($shop))) {
+            return response('Shop mismatch', 401);
+        }
+
         ProcessShopifyWebhookJob::dispatch($shop, $topic, $payload);
 
         return response('OK', 200);

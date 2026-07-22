@@ -1,0 +1,145 @@
+<?php
+
+namespace Tests\Feature;
+
+use App\Jobs\ProcessShopifyWebhookJob;
+use App\Models\Client;
+use App\Models\ClientShopifyConnection;
+use App\Models\Order;
+use App\Models\User;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Queue;
+use Spatie\Permission\Models\Role;
+use Tests\TestCase;
+
+/**
+ * Coverage for the public Shopify webhook endpoint: HMAC authenticity, the
+ * shop-domain header/body cross-check that stops a validly-signed webhook from
+ * being retargeted at another store, and the GDPR redaction handlers Shopify's
+ * app review exercises directly.
+ */
+class ShopifyWebhookTest extends TestCase
+{
+    use RefreshDatabase;
+
+    private const SHOP   = 'mystore.myshopify.com';
+    private const SECRET = 'test-shopify-secret';
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        Role::findOrCreate('client');
+
+        config([
+            'services.shopify.key'    => 'test-api-key',
+            'services.shopify.secret' => self::SECRET,
+        ]);
+    }
+
+    private function makeConnection(): ClientShopifyConnection
+    {
+        $user = User::factory()->create();
+        $user->assignRole('client');
+
+        $client = Client::create([
+            'user_id'         => $user->id,
+            'company_name'    => 'Test Client',
+            'short_id'        => 'TST',
+            'client_types'    => ['fulfilment'],
+            'portal_features' => ['orders'],
+        ]);
+
+        return ClientShopifyConnection::create([
+            'client_id'    => $client->id,
+            'shop_domain'  => self::SHOP,
+            'access_token' => 'tok-123',
+            'status'       => 'active',
+            'connected_at' => now(),
+        ]);
+    }
+
+    private function postWebhook(array $body, string $topic, string $shopHeader, ?string $hmac = null): \Illuminate\Testing\TestResponse
+    {
+        $raw = json_encode($body);
+
+        return $this->call(
+            'POST',
+            '/webhooks/shopify',
+            [],
+            [],
+            [],
+            [
+                'HTTP_X_SHOPIFY_HMAC_SHA256' => $hmac ?? base64_encode(hash_hmac('sha256', $raw, self::SECRET, true)),
+                'HTTP_X_SHOPIFY_TOPIC'       => $topic,
+                'HTTP_X_SHOPIFY_SHOP_DOMAIN' => $shopHeader,
+                'CONTENT_TYPE'               => 'application/json',
+            ],
+            $raw
+        );
+    }
+
+    public function test_rejects_webhook_with_invalid_hmac(): void
+    {
+        Queue::fake();
+
+        $this->postWebhook(['shop_domain' => self::SHOP], 'shop/redact', self::SHOP, hmac: 'forged')
+            ->assertStatus(401);
+
+        Queue::assertNothingPushed();
+    }
+
+    public function test_rejects_when_body_shop_does_not_match_header(): void
+    {
+        Queue::fake();
+
+        // Validly signed body for one shop, but header points at a victim store.
+        $this->postWebhook(['shop_domain' => 'attacker.myshopify.com'], 'shop/redact', self::SHOP)
+            ->assertStatus(401);
+
+        Queue::assertNothingPushed();
+    }
+
+    public function test_accepts_and_queues_valid_shop_redact(): void
+    {
+        Queue::fake();
+
+        $this->postWebhook(['shop_domain' => self::SHOP], 'shop/redact', self::SHOP)
+            ->assertOk();
+
+        Queue::assertPushed(ProcessShopifyWebhookJob::class);
+    }
+
+    public function test_shop_redact_deletes_connection_and_redacts_pii(): void
+    {
+        $connection = $this->makeConnection();
+
+        $order = Order::withoutGlobalScope('shopify_visible')->create([
+            'client_id'        => $connection->client_id,
+            'shopify_order_id' => '5001',
+            'order_number'     => 'TST5001',
+            'source'           => 'shopify',
+            'customer_name'    => 'Jane Buyer',
+            'customer_email'   => 'jane@example.com',
+        ]);
+
+        ProcessShopifyWebhookJob::dispatchSync(self::SHOP, 'shop/redact', ['shop_domain' => self::SHOP]);
+
+        $this->assertDatabaseMissing('client_shopify_connections', ['id' => $connection->id]);
+
+        $fresh = Order::withoutGlobalScope('shopify_visible')->find($order->id);
+        $this->assertSame('[redacted]', $fresh->customer_name);
+        $this->assertNull($fresh->customer_email);
+    }
+
+    public function test_app_uninstalled_disconnects_but_keeps_orders(): void
+    {
+        $connection = $this->makeConnection();
+
+        ProcessShopifyWebhookJob::dispatchSync(self::SHOP, 'app/uninstalled', ['myshopify_domain' => self::SHOP]);
+
+        $connection->refresh();
+        $this->assertSame('disconnected', $connection->status);
+        $this->assertNull($connection->access_token);
+    }
+}

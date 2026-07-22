@@ -72,6 +72,39 @@ class ShopifyConnectFlowTest extends TestCase
         return $message . '&hmac=' . hash_hmac('sha256', $message, self::SECRET);
     }
 
+    /**
+     * Build a fake App Bridge session token (HS256 JWT) for $shop, signed the
+     * way Shopify signs it, for exercising the claim-token endpoint.
+     */
+    private function makeSessionToken(string $shop): string
+    {
+        $header = $this->base64UrlJson(['alg' => 'HS256', 'typ' => 'JWT']);
+        $payload = $this->base64UrlJson([
+            'iss'  => "https://{$shop}/admin",
+            'dest' => "https://{$shop}",
+            'aud'  => 'test-api-key',
+            'sub'  => '1',
+            'exp'  => time() + 60,
+            'nbf'  => time() - 5,
+            'iat'  => time() - 5,
+            'jti'  => 'test-jti',
+            'sid'  => 'test-sid',
+        ]);
+
+        $signature = rtrim(strtr(
+            base64_encode(hash_hmac('sha256', "{$header}.{$payload}", self::SECRET, true)),
+            '+/',
+            '-_'
+        ), '=');
+
+        return "{$header}.{$payload}.{$signature}";
+    }
+
+    private function base64UrlJson(array $data): string
+    {
+        return rtrim(strtr(base64_encode(json_encode($data)), '+/', '-_'), '=');
+    }
+
     // ─── Callback with a portal session already active ───────────────────────
 
     public function test_callback_connects_store_for_logged_in_client(): void
@@ -365,7 +398,10 @@ class ShopifyConnectFlowTest extends TestCase
         $user = $this->makeClientUser();
 
         $this->actingAs($user)
-            ->postJson('/portal/api/shopify/claim', ['shop' => self::SHOP])
+            ->postJson('/portal/api/shopify/claim', [
+                'shop'        => self::SHOP,
+                'claim_token' => app(ShopifyService::class)->makeClaimToken(self::SHOP),
+            ])
             ->assertOk();
 
         $connection = ClientShopifyConnection::sole();
@@ -378,7 +414,10 @@ class ShopifyConnectFlowTest extends TestCase
     public function test_claim_without_pending_connection_returns_404(): void
     {
         $this->actingAs($this->makeClientUser())
-            ->postJson('/portal/api/shopify/claim', ['shop' => self::SHOP])
+            ->postJson('/portal/api/shopify/claim', [
+                'shop'        => self::SHOP,
+                'claim_token' => app(ShopifyService::class)->makeClaimToken(self::SHOP),
+            ])
             ->assertNotFound();
 
         $this->assertSame(0, ClientShopifyConnection::count());
@@ -407,11 +446,99 @@ class ShopifyConnectFlowTest extends TestCase
         ]);
 
         $this->actingAs($user)
-            ->postJson('/portal/api/shopify/claim', ['shop' => self::SHOP])
+            ->postJson('/portal/api/shopify/claim', [
+                'shop'        => self::SHOP,
+                'claim_token' => app(ShopifyService::class)->makeClaimToken(self::SHOP),
+            ])
             ->assertOk();
 
         $connection = ClientShopifyConnection::sole();
         $this->assertSame(self::SHOP, $connection->shop_domain);
         $this->assertSame($user->client->id, $connection->client_id);
+    }
+
+    public function test_claim_rejects_missing_claim_token(): void
+    {
+        ClientShopifyConnection::create([
+            'client_id'    => null,
+            'shop_domain'  => self::SHOP,
+            'access_token' => 'tok-pending',
+            'status'       => 'active',
+            'connected_at' => now(),
+        ]);
+
+        $this->actingAs($this->makeClientUser())
+            ->postJson('/portal/api/shopify/claim', ['shop' => self::SHOP])
+            ->assertStatus(422);
+
+        $this->assertNull(ClientShopifyConnection::sole()->client_id);
+    }
+
+    /**
+     * The vulnerability this token closes: knowing (or guessing) another
+     * store's domain must not be enough to link it — without a token minted
+     * from inside that store's own Shopify Admin session, the claim has to
+     * be refused even though a pending connection genuinely exists.
+     */
+    public function test_claim_rejects_a_forged_claim_token(): void
+    {
+        ClientShopifyConnection::create([
+            'client_id'    => null,
+            'shop_domain'  => self::SHOP,
+            'access_token' => 'tok-pending',
+            'status'       => 'active',
+            'connected_at' => now(),
+        ]);
+
+        $this->actingAs($this->makeClientUser())
+            ->postJson('/portal/api/shopify/claim', [
+                'shop'        => self::SHOP,
+                'claim_token' => 'not-a-real-token',
+            ])
+            ->assertStatus(422);
+
+        $this->assertNull(ClientShopifyConnection::sole()->client_id);
+    }
+
+    public function test_claim_rejects_a_claim_token_minted_for_a_different_shop(): void
+    {
+        ClientShopifyConnection::create([
+            'client_id'    => null,
+            'shop_domain'  => self::SHOP,
+            'access_token' => 'tok-pending',
+            'status'       => 'active',
+            'connected_at' => now(),
+        ]);
+
+        $tokenForAnotherShop = app(ShopifyService::class)->makeClaimToken('other-store.myshopify.com');
+
+        $this->actingAs($this->makeClientUser())
+            ->postJson('/portal/api/shopify/claim', [
+                'shop'        => self::SHOP,
+                'claim_token' => $tokenForAnotherShop,
+            ])
+            ->assertStatus(422);
+
+        $this->assertNull(ClientShopifyConnection::sole()->client_id);
+    }
+
+    // ─── Claim-token endpoint (embedded, mints the token above) ──────────────
+
+    public function test_claim_token_endpoint_mints_a_token_for_a_valid_session_token(): void
+    {
+        $response = $this->withHeader('Authorization', 'Bearer ' . $this->makeSessionToken(self::SHOP))
+            ->getJson('/embedded/shopify/api/claim-token')
+            ->assertOk();
+
+        $response->assertJson(['shop' => self::SHOP]);
+
+        $token = $response->json('token');
+        $this->assertNotEmpty($token);
+        $this->assertTrue(app(ShopifyService::class)->verifyClaimToken($token, self::SHOP));
+    }
+
+    public function test_claim_token_endpoint_rejects_missing_session_token(): void
+    {
+        $this->getJson('/embedded/shopify/api/claim-token')->assertStatus(401);
     }
 }

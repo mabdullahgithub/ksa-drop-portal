@@ -328,6 +328,11 @@ Route::prefix('embedded/shopify')->middleware('shopify.csp')->group(function () 
     Route::get('/', [EmbeddedAppController::class, 'index'])->name('embedded.shopify.index');
     Route::get('/settings', [EmbeddedAppController::class, 'index'])->name('embedded.shopify.settings');
 
+    // Verifies the session token itself rather than via shopify.session —
+    // that middleware requires an already-linked client, which an unlinked
+    // store doesn't have yet. Used to mint the claim token for onboarding.
+    Route::get('/api/claim-token', [EmbeddedAppController::class, 'claimToken'])->name('embedded.shopify.claim-token');
+
     Route::middleware('shopify.session')->prefix('api')->group(function () {
         Route::get('/dashboard', [EmbeddedDashboardController::class, 'index'])->name('embedded.shopify.dashboard');
         Route::get('/settings', [EmbeddedSettingsController::class, 'show'])->name('embedded.shopify.settings.show');

@@ -16,25 +16,32 @@ export function useShopifyConnection() {
 
   // Links an already-installed (unlinked) Shopify connection to this client.
   // Never touches Shopify's OAuth endpoint — the token was already obtained
-  // when the merchant installed the app from Shopify itself.
-  const claimStore = useCallback(async (shop: string): Promise<{ ok: boolean; message?: string }> => {
-    setClaiming(true)
-    try {
-      const res = await fetch('/portal/api/shopify/claim', {
-        method: 'POST',
-        headers: {
-          Accept: 'application/json',
-          'Content-Type': 'application/json',
-          'X-CSRF-TOKEN': getCsrfToken(),
-        },
-        body: JSON.stringify({ shop }),
-      })
-      const data = await res.json().catch(() => ({}))
-      return { ok: res.ok, message: data?.message }
-    } finally {
-      setClaiming(false)
-    }
-  }, [])
+  // when the merchant installed the app from Shopify itself. claimToken is
+  // the signed token minted inside the embedded app (see EmbeddedAppController
+  // ::claimToken) — it proves the deep link really came from that shop's
+  // Shopify Admin session, so the backend isn't just trusting a raw domain
+  // string typed into the URL.
+  const claimStore = useCallback(
+    async (shop: string, claimToken: string): Promise<{ ok: boolean; message?: string }> => {
+      setClaiming(true)
+      try {
+        const res = await fetch('/portal/api/shopify/claim', {
+          method: 'POST',
+          headers: {
+            Accept: 'application/json',
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': getCsrfToken(),
+          },
+          body: JSON.stringify({ shop, claim_token: claimToken }),
+        })
+        const data = await res.json().catch(() => ({}))
+        return { ok: res.ok, message: data?.message }
+      } finally {
+        setClaiming(false)
+      }
+    },
+    []
+  )
 
   const disconnect = useCallback(async (): Promise<boolean> => {
     setDisconnecting(true)
