@@ -50,7 +50,7 @@ class ShopifyOrderSyncJob implements ShouldQueue
                 $page = $shopify->fetchRecentOrders($connection->shop_domain, $token, $cursor);
 
                 foreach ($page['orders'] as $node) {
-                    $data = $shopify->mapGraphqlOrder($node, $connection->client);
+                    $data = $shopify->mapGraphqlOrder($node, $connection->client, $connection->shop_domain);
 
                     $existing = Order::withoutGlobalScope('shopify_visible')
                         ->where('shopify_order_id', $data['shopify_order_id'])

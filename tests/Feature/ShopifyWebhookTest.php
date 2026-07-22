@@ -115,17 +115,45 @@ class ShopifyWebhookTest extends TestCase
         $connection = $this->makeConnection();
 
         $order = Order::withoutGlobalScope('shopify_visible')->create([
-            'client_id'        => $connection->client_id,
-            'shopify_order_id' => '5001',
-            'order_number'     => 'TST5001',
-            'source'           => 'shopify',
-            'customer_name'    => 'Jane Buyer',
-            'customer_email'   => 'jane@example.com',
+            'client_id'           => $connection->client_id,
+            'shopify_shop_domain' => self::SHOP,
+            'shopify_order_id'    => '5001',
+            'order_number'        => 'TST5001',
+            'source'              => 'shopify',
+            'customer_name'       => 'Jane Buyer',
+            'customer_email'      => 'jane@example.com',
         ]);
 
         ProcessShopifyWebhookJob::dispatchSync(self::SHOP, 'shop/redact', ['shop_domain' => self::SHOP]);
 
         $this->assertDatabaseMissing('client_shopify_connections', ['id' => $connection->id]);
+
+        $fresh = Order::withoutGlobalScope('shopify_visible')->find($order->id);
+        $this->assertSame('[redacted]', $fresh->customer_name);
+        $this->assertNull($fresh->customer_email);
+    }
+
+    public function test_shop_redact_still_erases_pii_after_the_store_was_unlinked(): void
+    {
+        // A portal disconnect releases client_id, so redaction cannot be scoped
+        // by client — doing so matched nothing and silently erased no PII at
+        // all, while still reporting success. The shop domain on the order is
+        // what keeps erasure reachable.
+        $connection = $this->makeConnection();
+
+        $order = Order::withoutGlobalScope('shopify_visible')->create([
+            'client_id'           => $connection->client_id,
+            'shopify_shop_domain' => self::SHOP,
+            'shopify_order_id'    => '5002',
+            'order_number'        => 'TST5002',
+            'source'              => 'shopify',
+            'customer_name'       => 'Jane Buyer',
+            'customer_email'      => 'jane@example.com',
+        ]);
+
+        $connection->update(['client_id' => null, 'status' => 'disconnected']);
+
+        ProcessShopifyWebhookJob::dispatchSync(self::SHOP, 'shop/redact', ['shop_domain' => self::SHOP]);
 
         $fresh = Order::withoutGlobalScope('shopify_visible')->find($order->id);
         $this->assertSame('[redacted]', $fresh->customer_name);

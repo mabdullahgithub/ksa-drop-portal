@@ -362,6 +362,60 @@ class ShopifyConnectFlowTest extends TestCase
         $this->assertSame('disconnected', ClientShopifyConnection::first()->status);
     }
 
+    public function test_disconnect_releases_the_store_so_it_can_be_connected_again(): void
+    {
+        // Disconnecting does not uninstall the app from Shopify. Leaving
+        // client_id set meant the next embedded load re-ran token exchange and
+        // silently relinked the store to the account that had just left, while
+        // claim() — which only matches unlinked rows — could never find it
+        // again, making a reconnect impossible.
+        $user = $this->makeClientUser();
+
+        ClientShopifyConnection::create([
+            'client_id'    => $user->client->id,
+            'shop_domain'  => self::SHOP,
+            'access_token' => 'tok-123',
+            'status'       => 'active',
+            'sync_mode'    => 'manual_approval',
+            'connected_at' => now(),
+        ]);
+
+        $this->actingAs($user)
+            ->deleteJson('/portal/api/shopify/disconnect')
+            ->assertOk();
+
+        $connection = ClientShopifyConnection::sole();
+        $this->assertNull($connection->client_id);
+        $this->assertNull($connection->access_token);
+        $this->assertSame('auto_sync', $connection->sync_mode);
+
+        // Reopening the embedded app must not resurrect the old link.
+        $this->fakeTokenExchange();
+
+        $this->withHeader('Authorization', 'Bearer ' . $this->makeSessionToken(self::SHOP))
+            ->getJson('/embedded/shopify/api/claim-token')
+            ->assertOk()
+            ->assertJson(['installed' => true, 'linked' => false]);
+
+        $this->assertNull(ClientShopifyConnection::sole()->client_id);
+
+        // And the merchant can claim it again from the portal.
+        $mint = $this->withHeader('Authorization', 'Bearer ' . $this->makeSessionToken(self::SHOP))
+            ->getJson('/embedded/shopify/api/claim-token')
+            ->assertOk();
+
+        Queue::fake();
+
+        $this->actingAs($user)
+            ->postJson('/portal/api/shopify/claim', [
+                'shop'        => self::SHOP,
+                'claim_token' => $mint->json('token'),
+            ])
+            ->assertOk();
+
+        $this->assertSame($user->client->id, ClientShopifyConnection::sole()->client_id);
+    }
+
     public function test_sync_mode_update_still_works(): void
     {
         $user = $this->makeClientUser();

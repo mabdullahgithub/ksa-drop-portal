@@ -338,9 +338,22 @@ class ShopifyController extends Controller
         }
 
         $connection->update([
-            'status' => 'disconnected',
-            'access_token' => null,
-            'refresh_token' => null,
+            'status'                   => 'disconnected',
+            'access_token'             => null,
+            'refresh_token'            => null,
+            'token_expires_at'         => null,
+            'refresh_token_expires_at' => null,
+            // Release the account link, not just the tokens. Disconnecting here
+            // does not uninstall the app from Shopify, so the next embedded load
+            // re-runs token exchange and reactivates this row — with client_id
+            // still set that silently undoes the disconnect. Clearing it also
+            // returns the row to the claimable state (client_id null) that
+            // claim() looks for, which is what makes reconnecting possible.
+            'client_id'                => null,
+            // Sync preferences belonged to the account that just left; the row
+            // is now claimable by whoever controls the store.
+            'sync_mode'                => 'auto_sync',
+            'sync_filters'             => null,
         ]);
 
         return response()->json(['message' => 'Shopify store disconnected.']);

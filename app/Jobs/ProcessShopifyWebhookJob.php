@@ -157,26 +157,31 @@ class ProcessShopifyWebhookJob implements ShouldQueue
      */
     private function redactShop(): void
     {
+        // Target the shop directly rather than the connection's client. The
+        // link can legitimately be gone by now — a portal disconnect releases
+        // client_id — and a client-scoped update would then match nothing and
+        // silently erase no PII at all.
+        $redacted = Order::withoutGlobalScope('shopify_visible')
+            ->where('shopify_shop_domain', $this->shopDomain)
+            ->whereNotNull('shopify_order_id')
+            ->update(self::PII_REDACTIONS);
+
         $connections = ClientShopifyConnection::where('shop_domain', $this->shopDomain)->get();
 
         foreach ($connections as $connection) {
-            Order::withoutGlobalScope('shopify_visible')
-                ->where('client_id', $connection->client_id)
-                ->whereNotNull('shopify_order_id')
-                ->update(self::PII_REDACTIONS);
-
             $connection->delete();
         }
 
         Log::info('Shopify GDPR shop/redact processed', [
-            'shop'        => $this->shopDomain,
-            'connections' => $connections->count(),
+            'shop'            => $this->shopDomain,
+            'connections'     => $connections->count(),
+            'orders_redacted' => $redacted,
         ]);
     }
 
     private function upsertOrder(ShopifyService $shopify, ClientShopifyConnection $connection): void
     {
-        $data = $shopify->mapWebhookOrder($this->payload, $connection->client);
+        $data = $shopify->mapWebhookOrder($this->payload, $connection->client, $connection->shop_domain);
 
         $existing = Order::withoutGlobalScope('shopify_visible')
             ->where('shopify_order_id', $data['shopify_order_id'])

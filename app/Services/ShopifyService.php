@@ -695,7 +695,7 @@ class ShopifyService
     /**
      * Map a webhook payload (legacy REST-shaped JSON) to our orders columns.
      */
-    public function mapWebhookOrder(array $o, Client $client): array
+    public function mapWebhookOrder(array $o, Client $client, string $shopDomain): array
     {
         $billing  = $o['billing_address']  ?? [];
         $shipping = $o['shipping_address'] ?? [];
@@ -706,7 +706,7 @@ class ShopifyService
         $shopifyNumber  = $o['order_number'] ?? ($o['name'] ?? $shopifyOrderId);
 
         return array_merge(
-            $this->baseOrderRow($client, $shopifyOrderId, (string) $shopifyNumber),
+            $this->baseOrderRow($client, $shopDomain, $shopifyOrderId, (string) $shopifyNumber),
             [
                 'customer_name'      => $this->fullName($customer['first_name'] ?? null, $customer['last_name'] ?? null)
                     ?: ($this->fullName($shipping['first_name'] ?? null, $shipping['last_name'] ?? null) ?: 'Guest'),
@@ -756,7 +756,7 @@ class ShopifyService
     /**
      * Map a GraphQL order node (camelCase + MoneyV2) to our orders columns.
      */
-    public function mapGraphqlOrder(array $n, Client $client): array
+    public function mapGraphqlOrder(array $n, Client $client, string $shopDomain): array
     {
         $billing  = $n['billingAddress']  ?? [];
         $shipping = $n['shippingAddress'] ?? [];
@@ -766,7 +766,7 @@ class ShopifyService
         $shopifyNumber  = ltrim((string) ($n['name'] ?? $shopifyOrderId), '#');
 
         return array_merge(
-            $this->baseOrderRow($client, $shopifyOrderId, $shopifyNumber),
+            $this->baseOrderRow($client, $shopDomain, $shopifyOrderId, $shopifyNumber),
             [
                 'customer_name'      => $this->fullName($customer['firstName'] ?? null, $customer['lastName'] ?? null)
                     ?: ($this->fullName($shipping['firstName'] ?? null, $shipping['lastName'] ?? null) ?: 'Guest'),
@@ -931,15 +931,18 @@ class ShopifyService
      * the client's short_id so Shopify's per-store numbering stays globally unique
      * in our shared orders table (mirrors the manual-order convention).
      */
-    private function baseOrderRow(Client $client, string $shopifyOrderId, string $shopifyNumber): array
+    private function baseOrderRow(Client $client, string $shopDomain, string $shopifyOrderId, string $shopifyNumber): array
     {
         $prefix = $client->short_id ?: ('CL' . $client->id);
 
         return [
-            'client_id'        => $client->id,
-            'shopify_order_id' => $shopifyOrderId,
-            'order_number'     => $prefix . $shopifyNumber,
-            'source'           => 'shopify',
+            'client_id'           => $client->id,
+            // Kept on the order itself so GDPR shop/redact can find a store's
+            // orders even after the connection has been unlinked from a client.
+            'shopify_shop_domain' => $shopDomain,
+            'shopify_order_id'    => $shopifyOrderId,
+            'order_number'        => $prefix . $shopifyNumber,
+            'source'              => 'shopify',
         ];
     }
 

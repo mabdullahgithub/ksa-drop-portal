@@ -30,6 +30,7 @@ class Order extends Model
         'client_id',
         'order_number',
         'shopify_order_id',
+        'shopify_shop_domain',
         'customer_name',
         'customer_email',
         'customer_phone',
