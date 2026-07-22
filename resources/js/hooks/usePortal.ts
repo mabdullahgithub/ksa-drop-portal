@@ -149,8 +149,18 @@ export function usePortalOrderMutations() {
   const exportOrders = (filters: Record<string, any> = {}) => {
     const params = new URLSearchParams()
     Object.entries(filters).forEach(([key, value]) => {
+      // Pagination is irrelevant to an export — it always covers the full result set.
+      if (key === 'page' || key === 'per_page') return
       if (value !== undefined && value !== null && value !== '') {
-        params.append(key, String(value))
+        if (Array.isArray(value)) {
+          if (value.length > 0) {
+            params.append(key, value.join(','))
+          }
+        } else if (typeof value === 'boolean') {
+          params.append(key, value ? '1' : '0')
+        } else {
+          params.append(key, String(value))
+        }
       }
     })
     window.location.href = `/portal/api/orders/export?${params}`

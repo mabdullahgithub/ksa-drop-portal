@@ -51,6 +51,69 @@ class PortalController extends Controller
         ));
     }
 
+    /**
+     * Apply the orders-list filters to a query. Shared by the paginated list and
+     * the CSV export so an export always covers exactly what the table shows.
+     */
+    private function applyOrderFilters($query, Request $request): void
+    {
+        if ($request->has('search') && $request->search) {
+            $query->search($request->search);
+        }
+
+        if ($request->has('fulfillment_status')) {
+            $values = $this->parseMultiValue($request->fulfillment_status);
+            if (!empty($values)) {
+                $query->whereIn('fulfillment_status', $values);
+            }
+        }
+
+        if ($request->has('financial_status')) {
+            $values = $this->parseMultiValue($request->financial_status);
+            if (!empty($values)) {
+                $query->whereIn('financial_status', $values);
+            }
+        }
+
+        // Filter by a single tag (used by the "Confirmed Orders" tab)
+        if ($request->has('tag') && $request->tag) {
+            $query->whereJsonContains('tags', $request->tag);
+        }
+
+        // Filter by multiple tags (multi-select "Tags" filter). An order matches
+        // when it carries any of the selected tags.
+        if ($request->has('tags')) {
+            $tags = $this->parseMultiValue($request->tags);
+            if (!empty($tags)) {
+                $query->where(function ($q) use ($tags) {
+                    foreach ($tags as $tag) {
+                        $q->orWhereJsonContains('tags', $tag);
+                    }
+                });
+            }
+        }
+
+        // Filter by shipment status (has shipment or not)
+        if ($request->has('has_shipment')) {
+            $hasShipment = filter_var($request->has_shipment, FILTER_VALIDATE_BOOLEAN);
+            if ($hasShipment) {
+                $query->withShipment();
+            } else {
+                $query->withoutShipment();
+            }
+        }
+
+        // Filter by shipment status values
+        if ($request->has('shipment_status')) {
+            $statuses = $this->parseMultiValue($request->shipment_status);
+            if (!empty($statuses)) {
+                $query->whereHas('shipments', function ($q) use ($statuses) {
+                    $q->whereIn('status', $statuses);
+                });
+            }
+        }
+    }
+
     public function dashboard()
     {
         $client = $this->resolveClient();
@@ -115,55 +178,7 @@ class PortalController extends Controller
 
         $query = $client->orders()->with(['items', 'latestShipment', 'invoices']);
 
-        if ($request->has('search') && $request->search) {
-            $query->search($request->search);
-        }
-
-        if ($request->has('fulfillment_status') && $request->fulfillment_status !== 'all') {
-            $query->where('fulfillment_status', $request->fulfillment_status);
-        }
-
-        if ($request->has('financial_status') && $request->financial_status !== 'all') {
-            $query->where('financial_status', $request->financial_status);
-        }
-
-        // Filter by a single tag (used by the "Confirmed Orders" tab)
-        if ($request->has('tag') && $request->tag) {
-            $query->whereJsonContains('tags', $request->tag);
-        }
-
-        // Filter by multiple tags (multi-select "Tags" filter). An order matches
-        // when it carries any of the selected tags.
-        if ($request->has('tags')) {
-            $tags = $this->parseMultiValue($request->tags);
-            if (!empty($tags)) {
-                $query->where(function ($q) use ($tags) {
-                    foreach ($tags as $tag) {
-                        $q->orWhereJsonContains('tags', $tag);
-                    }
-                });
-            }
-        }
-
-        // Filter by shipment status (has shipment or not)
-        if ($request->has('has_shipment')) {
-            $hasShipment = filter_var($request->has_shipment, FILTER_VALIDATE_BOOLEAN);
-            if ($hasShipment) {
-                $query->withShipment();
-            } else {
-                $query->withoutShipment();
-            }
-        }
-
-        // Filter by shipment status values
-        if ($request->has('shipment_status')) {
-            $statuses = $this->parseMultiValue($request->shipment_status);
-            if (!empty($statuses)) {
-                $query->whereHas('shipments', function ($q) use ($statuses) {
-                    $q->whereIn('status', $statuses);
-                });
-            }
-        }
+        $this->applyOrderFilters($query, $request);
 
         $sortBy = $request->get('sort_by', 'created_at');
         $sortOrder = $request->get('sort_order', 'desc');
@@ -571,17 +586,27 @@ class PortalController extends Controller
 
         $query = $client->orders()->with('items');
 
-        if ($request->has('search') && $request->search) {
-            $query->search($request->search);
-        }
-        if ($request->has('fulfillment_status') && $request->fulfillment_status !== 'all') {
-            $query->where('fulfillment_status', $request->fulfillment_status);
-        }
-        if ($request->has('financial_status') && $request->financial_status !== 'all') {
-            $query->where('financial_status', $request->financial_status);
+        // Explicit order ids (row selection) win over the rest of the filters.
+        // Still scoped to the client's own orders, so ids from elsewhere match nothing.
+        if ($request->has('order_ids')) {
+            $orderIds = array_filter(array_map('intval', $this->parseMultiValue($request->order_ids)));
+
+            $orders = $query->whereIn('id', $orderIds)->get();
+
+            return $this->streamPortalOrdersCsv($orders);
         }
 
-        $orders = $query->get();
+        $this->applyOrderFilters($query, $request);
+
+        return $this->streamPortalOrdersCsv($query->get());
+    }
+
+    /**
+     * Stream a collection of the client's orders as a downloadable CSV,
+     * using the same Shopify-style column set as the admin orders export.
+     */
+    private function streamPortalOrdersCsv($orders)
+    {
         $filename = 'orders_export_' . date('Y-m-d_His') . '.csv';
         $headers = [
             'Content-Type' => 'text/csv',
@@ -610,7 +635,7 @@ class PortalController extends Controller
                 fputcsv($file, [
                     $order->order_number, $order->customer_email, $order->financial_status, $order->paid_at,
                     $order->fulfillment_status, $order->fulfilled_at, $order->accepts_marketing ? 'yes' : 'no',
-                    $order->currency, $order->subtotal, $order->shipping, $order->taxes, $order->total,
+                    $order->currency, $order->subtotal, $order->shipping_cost, $order->taxes, $order->total,
                     $order->discount_code, $order->discount_amount, $order->shipping_method, $order->created_at,
                     $firstItem?->lineitem_quantity ?? '', $firstItem?->lineitem_name ?? '',
                     $firstItem?->lineitem_price ?? '', $firstItem?->lineitem_compare_at_price ?? '',

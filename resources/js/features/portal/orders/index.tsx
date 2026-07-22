@@ -156,6 +156,15 @@ function makeColumns(tagColors: Record<string, string>, onView: (order: any) => 
     cell: ({ row }) => <span>{row.getValue('customer_name') || '—'}</span>,
   },
   {
+    accessorKey: 'customer_phone',
+    header: 'Phone',
+    cell: ({ row }) => (
+      <span className='text-sm text-muted-foreground' dir='ltr'>
+        {(row.getValue('customer_phone') as string | null) || '—'}
+      </span>
+    ),
+  },
+  {
     accessorKey: 'fulfillment_status',
     header: 'Status',
     cell: ({ row }) => {
