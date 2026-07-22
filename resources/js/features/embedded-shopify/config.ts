@@ -29,6 +29,10 @@ export const PORTAL_LOGIN_URL =
  * alone — otherwise anyone with a portal login could link any store just by
  * knowing or guessing its domain.
  */
+export function buildPortalConnectUrl(shop: string, claimToken: string): string {
+    return `${PORTAL_URL}/portal/connectors?shop=${encodeURIComponent(shop)}&claim_token=${encodeURIComponent(claimToken)}`
+}
+
 export async function getPortalConnectUrl(): Promise<string> {
     if (!SHOP) return PORTAL_LOGIN_URL
 
@@ -36,7 +40,7 @@ export async function getPortalConnectUrl(): Promise<string> {
         const { shop, token } = await embeddedFetch<{ shop: string; token: string }>(
             '/claim-token'
         )
-        return `${PORTAL_URL}/portal/connectors?shop=${encodeURIComponent(shop)}&claim_token=${encodeURIComponent(token)}`
+        return buildPortalConnectUrl(shop, token)
     } catch {
         return PORTAL_LOGIN_URL
     }

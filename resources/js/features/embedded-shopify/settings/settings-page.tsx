@@ -1,5 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
-import { embeddedFetch, EmbeddedApiError, type SettingsData, type SyncFilters } from '../api-client'
+import {
+    embeddedFetch,
+    fetchConnectionState,
+    EmbeddedApiError,
+    type ConnectionState,
+    type SettingsData,
+    type SyncFilters,
+} from '../api-client'
 import { StoreNotConnected } from '../store-not-connected'
 import { StatusFilterCard } from './status-filter-card'
 import { TagFilterCard } from './tag-filter-card'
@@ -21,16 +28,24 @@ export function SettingsPage() {
     const [saved, setSaved] = useState<SyncFilters>(DEFAULT_FILTERS)
     const [loading, setLoading] = useState(true)
     const [saving, setSaving] = useState(false)
+    const [connection, setConnection] = useState<ConnectionState | null>(null)
     const [error, setError] = useState<Error | null>(null)
     const savingRef = useRef(false)
 
     const dirty = JSON.stringify(filters) !== JSON.stringify(saved)
 
     useEffect(() => {
-        embeddedFetch<SettingsData>('/settings')
-            .then((data) => {
-                setFilters(data.sync_filters)
-                setSaved(data.sync_filters)
+        // Resolve link-state first so an unlinked store shows onboarding without
+        // hitting the client-gated settings endpoint (which would 401).
+        fetchConnectionState()
+            .then((state) => {
+                setConnection(state)
+                if (!state.linked) return
+
+                return embeddedFetch<SettingsData>('/settings').then((data) => {
+                    setFilters(data.sync_filters)
+                    setSaved(data.sync_filters)
+                })
             })
             .catch((e: Error) => setError(e))
             .finally(() => setLoading(false))
@@ -78,6 +93,16 @@ export function SettingsPage() {
                     <s-spinner accessibilityLabel="Loading settings" />
                 </s-stack>
             </s-page>
+        )
+    }
+
+    if (connection && !connection.linked) {
+        return (
+            <StoreNotConnected
+                heading="Sync Settings"
+                shop={connection.shop}
+                claimToken={connection.token}
+            />
         )
     }
 

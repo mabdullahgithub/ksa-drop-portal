@@ -1,5 +1,11 @@
 import { useEffect, useState } from 'react'
-import { embeddedFetch, EmbeddedApiError, type DashboardData } from '../api-client'
+import {
+    embeddedFetch,
+    fetchConnectionState,
+    EmbeddedApiError,
+    type ConnectionState,
+    type DashboardData,
+} from '../api-client'
 import { StoreNotConnected } from '../store-not-connected'
 import { OrdersChart } from './orders-chart'
 
@@ -17,13 +23,31 @@ function syncBadge(status: string | null) {
 
 export function DashboardPage() {
     const [data, setData] = useState<DashboardData | null>(null)
+    const [connection, setConnection] = useState<ConnectionState | null>(null)
     const [error, setError] = useState<Error | null>(null)
 
     useEffect(() => {
-        embeddedFetch<DashboardData>('/dashboard')
-            .then(setData)
+        // Resolve link-state first so an unlinked store shows onboarding without
+        // hitting the client-gated dashboard endpoint (which would 401).
+        fetchConnectionState()
+            .then((state) => {
+                setConnection(state)
+                if (state.linked) {
+                    return embeddedFetch<DashboardData>('/dashboard').then(setData)
+                }
+            })
             .catch((e: Error) => setError(e))
     }, [])
+
+    if (connection && !connection.linked) {
+        return (
+            <StoreNotConnected
+                heading="Order Sync"
+                shop={connection.shop}
+                claimToken={connection.token}
+            />
+        )
+    }
 
     if (error) {
         if (error instanceof EmbeddedApiError && error.status === 401) {

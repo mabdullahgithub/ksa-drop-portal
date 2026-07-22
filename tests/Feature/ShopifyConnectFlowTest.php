@@ -530,11 +530,46 @@ class ShopifyConnectFlowTest extends TestCase
             ->getJson('/embedded/shopify/api/claim-token')
             ->assertOk();
 
-        $response->assertJson(['shop' => self::SHOP]);
+        $response->assertJson(['shop' => self::SHOP, 'linked' => false]);
 
         $token = $response->json('token');
         $this->assertNotEmpty($token);
         $this->assertTrue(app(ShopifyService::class)->verifyClaimToken($token, self::SHOP));
+    }
+
+    public function test_claim_token_endpoint_reports_linked_for_a_connected_store(): void
+    {
+        $user = $this->makeClientUser();
+
+        ClientShopifyConnection::create([
+            'client_id'    => $user->client->id,
+            'shop_domain'  => self::SHOP,
+            'access_token' => 'tok-123',
+            'status'       => 'active',
+            'connected_at' => now(),
+        ]);
+
+        $this->withHeader('Authorization', 'Bearer ' . $this->makeSessionToken(self::SHOP))
+            ->getJson('/embedded/shopify/api/claim-token')
+            ->assertOk()
+            ->assertJson(['shop' => self::SHOP, 'linked' => true]);
+    }
+
+    public function test_claim_token_endpoint_reports_unlinked_for_a_pending_store(): void
+    {
+        // Installed but not yet claimed by a client — must not report linked.
+        ClientShopifyConnection::create([
+            'client_id'    => null,
+            'shop_domain'  => self::SHOP,
+            'access_token' => 'tok-pending',
+            'status'       => 'active',
+            'connected_at' => now(),
+        ]);
+
+        $this->withHeader('Authorization', 'Bearer ' . $this->makeSessionToken(self::SHOP))
+            ->getJson('/embedded/shopify/api/claim-token')
+            ->assertOk()
+            ->assertJson(['linked' => false]);
     }
 
     public function test_claim_token_endpoint_rejects_missing_session_token(): void

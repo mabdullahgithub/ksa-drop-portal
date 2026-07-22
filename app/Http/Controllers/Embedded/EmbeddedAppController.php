@@ -86,9 +86,20 @@ class EmbeddedAppController extends Controller
             return response()->json(['message' => 'Invalid session token.'], 401);
         }
 
+        // `linked` lets the embedded app decide, without a failed request, whether
+        // to load the dashboard or show the onboarding screen. Probing the
+        // client-gated API endpoints instead would surface a 401 in the browser
+        // console on every unlinked-store visit (harmless, but noise during app
+        // review). The claim token is still returned for the onboarding deep link.
+        $linked = ClientShopifyConnection::where('shop_domain', $shop)
+            ->where('status', 'active')
+            ->whereNotNull('client_id')
+            ->exists();
+
         return response()->json([
-            'shop'  => $shop,
-            'token' => $this->shopify->makeClaimToken($shop),
+            'shop'   => $shop,
+            'linked' => $linked,
+            'token'  => $this->shopify->makeClaimToken($shop),
         ]);
     }
 }

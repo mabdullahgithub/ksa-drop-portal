@@ -42,6 +42,22 @@ export async function embeddedFetch<T>(path: string, options: RequestInit = {}):
     return response.json()
 }
 
+/**
+ * Whether this shop is linked to a KSA Drop client yet, resolved from the live
+ * App Bridge session token. Fetched before the client-gated dashboard/settings
+ * endpoints so an unlinked store shows onboarding without provoking a 401.
+ * `token` is the signed claim token for the onboarding deep link.
+ */
+export interface ConnectionState {
+    shop: string
+    linked: boolean
+    token: string
+}
+
+export function fetchConnectionState(): Promise<ConnectionState> {
+    return embeddedFetch<ConnectionState>('/claim-token')
+}
+
 export interface DashboardData {
     shop_domain: string
     last_synced_at: string | null
