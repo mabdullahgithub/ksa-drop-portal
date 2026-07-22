@@ -105,6 +105,111 @@ class ShopifyService
     }
 
     /**
+     * Exchange an App Bridge session token for an offline access token.
+     *
+     * With managed installation (use_legacy_install_flow = false in
+     * shopify.app.toml) Shopify grants the scopes itself and never sends the
+     * merchant through /admin/oauth/authorize — the OAuth callback never fires
+     * and there is no code to exchange. Token exchange replaces it: the session
+     * token the embedded app already holds is proof the grant happened, and
+     * Shopify trades it for an API token.
+     *
+     * The offline token returned here does not expire and carries no refresh
+     * token, which the connection model already handles — a null expiry never
+     * counts as expired.
+     *
+     * @return array{access_token:string,scope:?string}
+     */
+    public function exchangeSessionToken(string $shop, string $sessionToken): array
+    {
+        $response = Http::acceptJson()
+            ->post("https://{$shop}/admin/oauth/access_token", [
+                'client_id'            => $this->apiKey,
+                'client_secret'        => $this->apiSecret,
+                'grant_type'           => 'urn:ietf:params:oauth:token-type:token-exchange',
+                'subject_token'        => $sessionToken,
+                'subject_token_type'   => 'urn:ietf:params:oauth:token-type:id_token',
+                'requested_token_type' => 'urn:shopify:params:oauth:token-type:offline-access-token',
+            ]);
+
+        if (! $response->successful()) {
+            throw new RuntimeException('Shopify token exchange failed: ' . $response->body());
+        }
+
+        $accessToken = (string) $response->json('access_token');
+
+        if ($accessToken === '') {
+            throw new RuntimeException('Shopify token exchange returned no access token.');
+        }
+
+        return [
+            'access_token' => $accessToken,
+            'scope'        => $response->json('scope'),
+        ];
+    }
+
+    /**
+     * Make sure the store has a usable connection record, performing the token
+     * exchange when it doesn't. Called on every embedded app load, so it is a
+     * no-op for an already-installed store.
+     *
+     * A brand-new store lands here with client_id left null: the merchant still
+     * has to link their KSA Drop account from the portal (the claim step). An
+     * existing link is preserved — reinstalling never reassigns ownership.
+     *
+     * Never throws: a failed exchange leaves the app to render its unlinked
+     * state rather than erroring out inside the Shopify Admin iframe.
+     */
+    public function ensureInstalled(string $shop, string $sessionToken): ?ClientShopifyConnection
+    {
+        $connection = ClientShopifyConnection::where('shop_domain', $shop)->first();
+
+        if ($connection && $connection->status === 'active' && $connection->access_token) {
+            return $connection;
+        }
+
+        try {
+            $token = $this->exchangeSessionToken($shop, $sessionToken);
+        } catch (\Throwable $e) {
+            Log::error('Shopify token exchange failed', ['shop' => $shop, 'error' => $e->getMessage()]);
+
+            return $connection;
+        }
+
+        $connection = ClientShopifyConnection::updateOrCreate(
+            ['shop_domain' => $shop],
+            [
+                'access_token' => $token['access_token'],
+                // Exchanged tokens are non-expiring and have no refresh token.
+                // Clear any expiry left behind by an earlier auth-code grant so
+                // getValidToken() never tries to refresh with a dead token.
+                'refresh_token'            => null,
+                'token_expires_at'         => null,
+                'refresh_token_expires_at' => null,
+                'scope'                    => $token['scope'],
+                'status'                   => 'active',
+                'connected_at'             => now(),
+            ]
+        );
+
+        if (! $connection->webhooks_registered) {
+            try {
+                $results = $this->registerWebhooks($shop, $token['access_token']);
+                $connection->update(['webhooks_registered' => ! in_array(false, $results, true)]);
+            } catch (\Throwable $e) {
+                Log::warning('Shopify webhook registration error', ['shop' => $shop, 'error' => $e->getMessage()]);
+            }
+        }
+
+        Log::info('Shopify install completed via token exchange', [
+            'shop'      => $shop,
+            'client_id' => $connection->client_id,
+        ]);
+
+        return $connection;
+    }
+
+    /**
      * Exchange a temporary OAuth code for an EXPIRING offline access token.
      *
      * @return array{access_token:string,refresh_token:?string,expires_in:?int,refresh_token_expires_in:?int,scope:?string}

@@ -526,6 +526,8 @@ class ShopifyConnectFlowTest extends TestCase
 
     public function test_claim_token_endpoint_mints_a_token_for_a_valid_session_token(): void
     {
+        $this->fakeTokenExchange();
+
         $response = $this->withHeader('Authorization', 'Bearer ' . $this->makeSessionToken(self::SHOP))
             ->getJson('/embedded/shopify/api/claim-token')
             ->assertOk();
@@ -575,5 +577,131 @@ class ShopifyConnectFlowTest extends TestCase
     public function test_claim_token_endpoint_rejects_missing_session_token(): void
     {
         $this->getJson('/embedded/shopify/api/claim-token')->assertStatus(401);
+    }
+
+    // ─── Managed installation (token exchange) ───────────────────────────────
+
+    public function test_first_embedded_load_installs_the_store_via_token_exchange(): void
+    {
+        // Managed installation never calls the OAuth redirect_uri, so the first
+        // authenticated call the embedded app makes is where the grant has to be
+        // turned into an API token. Without it the store has no connection row
+        // and claim() has nothing to attach the client account to.
+        $this->fakeTokenExchange();
+
+        $sessionToken = $this->makeSessionToken(self::SHOP);
+
+        $this->withHeader('Authorization', 'Bearer ' . $sessionToken)
+            ->getJson('/embedded/shopify/api/claim-token')
+            ->assertOk()
+            ->assertJson(['shop' => self::SHOP, 'linked' => false]);
+
+        $connection = ClientShopifyConnection::sole();
+        $this->assertNull($connection->client_id);
+        $this->assertSame('active', $connection->status);
+        $this->assertSame('tok-exchanged', $connection->access_token);
+        // Exchanged offline tokens never expire and carry no refresh token.
+        $this->assertNull($connection->token_expires_at);
+        $this->assertNull($connection->refresh_token);
+        $this->assertTrue($connection->webhooks_registered);
+
+        // Shopify rejects the exchange outright if these exact URNs are wrong.
+        Http::assertSent(fn ($request) => $request->url() === 'https://' . self::SHOP . '/admin/oauth/access_token'
+            && $request['grant_type'] === 'urn:ietf:params:oauth:token-type:token-exchange'
+            && $request['subject_token_type'] === 'urn:ietf:params:oauth:token-type:id_token'
+            && $request['requested_token_type'] === 'urn:shopify:params:oauth:token-type:offline-access-token'
+            && $request['subject_token'] === $sessionToken);
+    }
+
+    public function test_store_installed_via_token_exchange_can_then_be_claimed(): void
+    {
+        // End-to-end for the reported 404: install (token exchange) then link.
+        $this->fakeTokenExchange();
+        Queue::fake();
+
+        $mint = $this->withHeader('Authorization', 'Bearer ' . $this->makeSessionToken(self::SHOP))
+            ->getJson('/embedded/shopify/api/claim-token')
+            ->assertOk();
+
+        $user = $this->makeClientUser();
+
+        $this->actingAs($user)
+            ->postJson('/portal/api/shopify/claim', [
+                'shop'        => self::SHOP,
+                'claim_token' => $mint->json('token'),
+            ])
+            ->assertOk();
+
+        $this->assertSame($user->client->id, ClientShopifyConnection::sole()->client_id);
+    }
+
+    public function test_embedded_load_leaves_an_already_installed_store_alone(): void
+    {
+        $user = $this->makeClientUser();
+
+        ClientShopifyConnection::create([
+            'client_id'           => $user->client->id,
+            'shop_domain'         => self::SHOP,
+            'access_token'        => 'tok-existing',
+            'status'              => 'active',
+            'webhooks_registered' => true,
+            'connected_at'        => now(),
+        ]);
+
+        Http::fake();
+
+        $this->withHeader('Authorization', 'Bearer ' . $this->makeSessionToken(self::SHOP))
+            ->getJson('/embedded/shopify/api/claim-token')
+            ->assertOk()
+            ->assertJson(['linked' => true]);
+
+        Http::assertNothingSent();
+        $this->assertSame('tok-existing', ClientShopifyConnection::sole()->access_token);
+    }
+
+    public function test_reinstall_refreshes_the_token_without_reassigning_ownership(): void
+    {
+        // Uninstall marks the connection disconnected but keeps the link. The
+        // merchant reinstalling must get a working token back on the same row.
+        $user = $this->makeClientUser();
+
+        ClientShopifyConnection::create([
+            'client_id'    => $user->client->id,
+            'shop_domain'  => self::SHOP,
+            'access_token' => 'tok-stale',
+            'status'       => 'disconnected',
+            'connected_at' => now()->subMonth(),
+        ]);
+
+        $this->fakeTokenExchange();
+
+        $this->withHeader('Authorization', 'Bearer ' . $this->makeSessionToken(self::SHOP))
+            ->getJson('/embedded/shopify/api/claim-token')
+            ->assertOk()
+            ->assertJson(['linked' => true]);
+
+        $connection = ClientShopifyConnection::sole();
+        $this->assertSame($user->client->id, $connection->client_id);
+        $this->assertSame('active', $connection->status);
+        $this->assertSame('tok-exchanged', $connection->access_token);
+    }
+
+    /**
+     * Fake the token-exchange call plus the webhook registration that follows it.
+     */
+    private function fakeTokenExchange(): void
+    {
+        Http::fake([
+            'https://' . self::SHOP . '/admin/oauth/access_token' => Http::response([
+                'access_token' => 'tok-exchanged',
+                'scope'        => 'read_orders',
+            ]),
+            'https://' . self::SHOP . '/admin/api/*' => Http::response([
+                'data' => ['webhookSubscriptionCreate' => [
+                    'webhookSubscription' => ['id' => 'gid://shopify/WebhookSubscription/1'],
+                    'userErrors'          => [],
+                ]],
+            ]),
+        ]);
     }
 }

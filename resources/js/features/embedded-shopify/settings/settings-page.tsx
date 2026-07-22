@@ -22,6 +22,17 @@ const DEFAULT_FILTERS: SyncFilters = {
 
 const SAVE_BAR_ID = 'sync-settings-save-bar'
 
+/**
+ * show/hide reject when the <ui-save-bar> element isn't in the DOM — it only
+ * exists in the connected view, not while loading, on the onboarding screen,
+ * or once the page has unmounted. Swallow that: an absent save bar has nothing
+ * to hide, and the rejection otherwise surfaces as an uncaught promise error
+ * in the Shopify Admin console.
+ */
+function toggleSaveBar(action: 'show' | 'hide') {
+    Promise.resolve(window.shopify.saveBar[action](SAVE_BAR_ID)).catch(() => {})
+}
+
 export function SettingsPage() {
     const [filters, setFilters] = useState<SyncFilters>(DEFAULT_FILTERS)
     // Last-saved snapshot; dirty-state (and the native save bar) is derived from it.
@@ -51,17 +62,18 @@ export function SettingsPage() {
             .finally(() => setLoading(false))
     }, [])
 
+    // The save bar markup only renders once the store is known to be connected.
+    const saveBarMounted = !loading && !error && connection?.linked === true
+
     // Drive Shopify Admin's native contextual save bar from the dirty state.
     useEffect(() => {
-        if (dirty) {
-            void window.shopify.saveBar.show(SAVE_BAR_ID)
-        } else {
-            void window.shopify.saveBar.hide(SAVE_BAR_ID)
-        }
-    }, [dirty])
+        if (!saveBarMounted) return
+
+        toggleSaveBar(dirty ? 'show' : 'hide')
+    }, [dirty, saveBarMounted])
 
     // Never leave a stale save bar behind when navigating away.
-    useEffect(() => () => void window.shopify.saveBar.hide(SAVE_BAR_ID), [])
+    useEffect(() => () => toggleSaveBar('hide'), [])
 
     const handleSave = async () => {
         if (savingRef.current) return
