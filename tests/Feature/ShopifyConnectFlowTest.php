@@ -598,12 +598,15 @@ class ShopifyConnectFlowTest extends TestCase
         $user = $this->makeClientUser();
 
         ClientShopifyConnection::create([
-            'client_id'    => $user->client->id,
-            'shop_domain'  => self::SHOP,
-            'access_token' => 'tok-123',
-            'status'       => 'active',
-            'connected_at' => now(),
+            'client_id'        => $user->client->id,
+            'shop_domain'      => self::SHOP,
+            'access_token'     => 'tok-123',
+            'token_expires_at' => now()->addHour(),
+            'status'           => 'active',
+            'connected_at'     => now(),
         ]);
+
+        Http::preventStrayRequests();
 
         $this->withHeader('Authorization', 'Bearer ' . $this->makeSessionToken(self::SHOP))
             ->getJson('/embedded/shopify/api/claim-token')
@@ -654,9 +657,12 @@ class ShopifyConnectFlowTest extends TestCase
         $this->assertNull($connection->client_id);
         $this->assertSame('active', $connection->status);
         $this->assertSame('tok-exchanged', $connection->access_token);
-        // Exchanged offline tokens never expire and carry no refresh token.
-        $this->assertNull($connection->token_expires_at);
-        $this->assertNull($connection->refresh_token);
+        // The Admin API rejects non-expiring tokens, so the exchange must ask
+        // for an expiring one and keep the refresh token that comes with it —
+        // background sync has no session token to re-exchange from.
+        $this->assertSame('ref-exchanged', $connection->refresh_token);
+        $this->assertNotNull($connection->token_expires_at);
+        $this->assertNotNull($connection->refresh_token_expires_at);
         $this->assertTrue($connection->webhooks_registered);
 
         // Shopify answers a wrong URN with a bare {"error":"invalid_request"}
@@ -666,6 +672,8 @@ class ShopifyConnectFlowTest extends TestCase
             && $request['grant_type'] === 'urn:ietf:params:oauth:grant-type:token-exchange'
             && $request['subject_token_type'] === 'urn:ietf:params:oauth:token-type:id_token'
             && $request['requested_token_type'] === 'urn:shopify:params:oauth:token-type:offline-access-token'
+            // Without this the Admin API rejects every call the token makes.
+            && $request['expiring'] === '1'
             && $request['subject_token'] === $sessionToken);
     }
 
@@ -699,6 +707,9 @@ class ShopifyConnectFlowTest extends TestCase
             'client_id'           => $user->client->id,
             'shop_domain'         => self::SHOP,
             'access_token'        => 'tok-existing',
+            // A healthy install holds an expiring token; without an expiry it
+            // reads as the non-expiring kind and gets re-exchanged.
+            'token_expires_at'    => now()->addHour(),
             'status'              => 'active',
             'webhooks_registered' => true,
             'connected_at'        => now(),
@@ -742,6 +753,38 @@ class ShopifyConnectFlowTest extends TestCase
         $this->assertSame('tok-exchanged', $connection->access_token);
     }
 
+    public function test_embedded_load_replaces_a_stored_non_expiring_token(): void
+    {
+        // Stores connected while the exchange asked for a non-expiring token
+        // hold one the Admin API rejects on every call, and it carries no
+        // refresh token to renew from. They must heal on their next visit
+        // rather than needing a manual disconnect and reconnect.
+        $user = $this->makeClientUser();
+
+        ClientShopifyConnection::create([
+            'client_id'           => $user->client->id,
+            'shop_domain'         => self::SHOP,
+            'access_token'        => 'tok-non-expiring',
+            'token_expires_at'    => null,
+            'status'              => 'active',
+            'webhooks_registered' => false,
+            'connected_at'        => now(),
+        ]);
+
+        $this->fakeTokenExchange();
+
+        $this->withHeader('Authorization', 'Bearer ' . $this->makeSessionToken(self::SHOP))
+            ->getJson('/embedded/shopify/api/claim-token')
+            ->assertOk()
+            ->assertJson(['installed' => true, 'linked' => true]);
+
+        $connection = ClientShopifyConnection::sole();
+        $this->assertSame('tok-exchanged', $connection->access_token);
+        $this->assertNotNull($connection->token_expires_at);
+        // Repairing the token must not disturb who owns the store.
+        $this->assertSame($user->client->id, $connection->client_id);
+    }
+
     public function test_failed_token_exchange_reports_not_installed_and_mints_no_claim_token(): void
     {
         // A claim token here would send the merchant to the portal for a claim
@@ -768,8 +811,11 @@ class ShopifyConnectFlowTest extends TestCase
     {
         Http::fake([
             'https://' . self::SHOP . '/admin/oauth/access_token' => Http::response([
-                'access_token' => 'tok-exchanged',
-                'scope'        => 'read_orders',
+                'access_token'             => 'tok-exchanged',
+                'refresh_token'            => 'ref-exchanged',
+                'expires_in'               => 3600,
+                'refresh_token_expires_in' => 7776000,
+                'scope'                    => 'read_orders',
             ]),
             'https://' . self::SHOP . '/admin/api/*' => Http::response([
                 'data' => ['webhookSubscriptionCreate' => [

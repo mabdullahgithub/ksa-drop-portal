@@ -114,11 +114,13 @@ class ShopifyService
      * token the embedded app already holds is proof the grant happened, and
      * Shopify trades it for an API token.
      *
-     * The offline token returned here does not expire and carries no refresh
-     * token, which the connection model already handles — a null expiry never
-     * counts as expired.
+     * `expiring=1` is required, not optional: the Admin API rejects
+     * non-expiring offline tokens outright ("Non-expiring access tokens are no
+     * longer accepted"), and it does so at first use rather than at exchange —
+     * so the token looks fine until every API call fails. Same flag the
+     * authorization-code exchange passes.
      *
-     * @return array{access_token:string,scope:?string}
+     * @return array{access_token:string,refresh_token:?string,expires_in:?int,refresh_token_expires_in:?int,scope:?string}
      */
     public function exchangeSessionToken(string $shop, string $sessionToken): array
     {
@@ -134,6 +136,7 @@ class ShopifyService
                 'subject_token'        => $sessionToken,
                 'subject_token_type'   => 'urn:ietf:params:oauth:token-type:id_token',
                 'requested_token_type' => 'urn:shopify:params:oauth:token-type:offline-access-token',
+                'expiring'             => '1',
             ]);
 
         if (! $response->successful()) {
@@ -147,8 +150,11 @@ class ShopifyService
         }
 
         return [
-            'access_token' => $accessToken,
-            'scope'        => $response->json('scope'),
+            'access_token'             => $accessToken,
+            'refresh_token'            => $response->json('refresh_token'),
+            'expires_in'               => $response->json('expires_in'),
+            'refresh_token_expires_in' => $response->json('refresh_token_expires_in'),
+            'scope'                    => $response->json('scope'),
         ];
     }
 
@@ -168,7 +174,17 @@ class ShopifyService
     {
         $connection = ClientShopifyConnection::where('shop_domain', $shop)->first();
 
-        if ($connection && $connection->status === 'active' && $connection->access_token) {
+        // A stored token with no expiry is a non-expiring one, which the Admin
+        // API refuses on every call. It cannot be refreshed (no refresh token
+        // comes with it), so the only repair is a fresh exchange — done here so
+        // affected stores heal on their next visit instead of needing a manual
+        // disconnect. Renewal of a healthy expiring token is getValidToken's job.
+        $usable = $connection
+            && $connection->status === 'active'
+            && $connection->access_token
+            && $connection->token_expires_at;
+
+        if ($usable) {
             return $connection;
         }
 
@@ -183,13 +199,13 @@ class ShopifyService
         $connection = ClientShopifyConnection::updateOrCreate(
             ['shop_domain' => $shop],
             [
-                'access_token' => $token['access_token'],
-                // Exchanged tokens are non-expiring and have no refresh token.
-                // Clear any expiry left behind by an earlier auth-code grant so
-                // getValidToken() never tries to refresh with a dead token.
-                'refresh_token'            => null,
-                'token_expires_at'         => null,
-                'refresh_token_expires_at' => null,
+                'access_token'  => $token['access_token'],
+                // Expiring tokens come with a refresh token; storing both is
+                // what lets getValidToken() renew without another session token
+                // (background sync jobs have no Shopify Admin session).
+                'refresh_token'            => $token['refresh_token'],
+                'token_expires_at'         => $this->expiryFromSeconds($token['expires_in']),
+                'refresh_token_expires_at' => $this->expiryFromSeconds($token['refresh_token_expires_in']),
                 'scope'                    => $token['scope'],
                 'status'                   => 'active',
                 'connected_at'             => now(),
@@ -556,8 +572,15 @@ class ShopifyService
      *
      * @return array<string,bool> topic => success
      */
-    public function registerWebhooks(string $shop, string $token): array
+    /**
+     * @param  array|null  $errors  Filled with topic => reason for every topic
+     *                              that failed, so callers can surface why
+     *                              rather than only that something went wrong.
+     */
+    public function registerWebhooks(string $shop, string $token, ?array &$errors = null): array
     {
+        $errors = [];
+
         $callbackUrl = rtrim((string) config('app.url'), '/') . '/webhooks/shopify';
 
         $topics = [
@@ -592,23 +615,30 @@ class ShopifyService
                     ],
                 ]);
 
-                $errors = $data['webhookSubscriptionCreate']['userErrors'] ?? [];
+                $userErrors = $data['webhookSubscriptionCreate']['userErrors'] ?? [];
 
                 // A duplicate subscription is reported as a userError — treat as success.
-                $isDuplicate = collect($errors)->contains(
+                $isDuplicate = collect($userErrors)->contains(
                     fn ($e) => str_contains(strtolower($e['message'] ?? ''), 'taken')
                         || str_contains(strtolower($e['message'] ?? ''), 'already')
                 );
 
-                $results[$topic] = empty($errors) || $isDuplicate;
+                $results[$topic] = empty($userErrors) || $isDuplicate;
 
-                if (! empty($errors) && ! $isDuplicate) {
+                if (! empty($userErrors) && ! $isDuplicate) {
+                    $errors[$topic] = collect($userErrors)
+                        ->pluck('message')
+                        ->filter()
+                        ->implode('; ');
+
                     Log::warning('Shopify webhook registration userError', [
-                        'shop' => $shop, 'topic' => $topic, 'errors' => $errors,
+                        'shop' => $shop, 'topic' => $topic, 'errors' => $userErrors,
                     ]);
                 }
             } catch (\Throwable $e) {
-                $results[$topic] = false;
+                $results[$topic]  = false;
+                $errors[$topic] = $e->getMessage();
+
                 Log::warning('Shopify webhook registration failed', [
                     'shop' => $shop, 'topic' => $topic, 'error' => $e->getMessage(),
                 ]);

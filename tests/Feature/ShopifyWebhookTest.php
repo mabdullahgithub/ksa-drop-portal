@@ -133,6 +133,33 @@ class ShopifyWebhookTest extends TestCase
         $this->assertNull($fresh->customer_email);
     }
 
+    public function test_orders_create_stores_the_order_with_its_shop_domain(): void
+    {
+        // Covers the mapper end-to-end: every synced order now records which
+        // store it came from, which is what keeps shop/redact able to find it
+        // after the connection is unlinked.
+        $connection = $this->makeConnection();
+
+        ProcessShopifyWebhookJob::dispatchSync(self::SHOP, 'orders/create', [
+            'id'               => 9001,
+            'order_number'     => 1042,
+            'email'            => 'jane@example.com',
+            'currency'         => 'SAR',
+            'total_price'      => '250.00',
+            'financial_status' => 'paid',
+            'customer'         => ['first_name' => 'Jane', 'last_name' => 'Buyer'],
+            'shipping_address' => ['phone' => '+966500000000', 'city' => 'Riyadh'],
+        ]);
+
+        $order = Order::withoutGlobalScope('shopify_visible')
+            ->where('shopify_order_id', '9001')
+            ->sole();
+
+        $this->assertSame(self::SHOP, $order->shopify_shop_domain);
+        $this->assertSame($connection->client_id, $order->client_id);
+        $this->assertSame('Jane Buyer', $order->customer_name);
+    }
+
     public function test_shop_redact_still_erases_pii_after_the_store_was_unlinked(): void
     {
         // A portal disconnect releases client_id, so redaction cannot be scoped

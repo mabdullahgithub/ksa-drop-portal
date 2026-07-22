@@ -374,7 +374,7 @@ class ShopifyController extends Controller
 
         try {
             $token   = $this->shopify->getValidToken($connection);
-            $results = $this->shopify->registerWebhooks($connection->shop_domain, $token);
+            $results = $this->shopify->registerWebhooks($connection->shop_domain, $token, $errors);
             $allOk   = ! in_array(false, $results, true);
 
             $connection->update(['webhooks_registered' => $allOk]);
@@ -382,6 +382,10 @@ class ShopifyController extends Controller
             return response()->json([
                 'webhooks_registered' => $allOk,
                 'results'             => $results,
+                // Shopify's own reason per failed topic. Without it the only
+                // signal is a boolean, which forces guesswork about a failure
+                // that Shopify already explained.
+                'errors'              => $errors,
                 'message' => $allOk
                     ? 'Live order sync is now active.'
                     : 'Some webhooks could not be registered. Check that the app is approved for protected customer data.',
