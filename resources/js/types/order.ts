@@ -167,6 +167,7 @@ export interface OrderFilters {
   client_type?: 'fulfilment' | 'dropshipper' | ''
   has_shipment?: boolean
   shipment_status?: string[]
+  order_ids?: number[]
 }
 
 export interface ClientFilterOption {

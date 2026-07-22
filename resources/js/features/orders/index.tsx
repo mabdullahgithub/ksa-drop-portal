@@ -66,7 +66,7 @@ export function Orders() {
               Manage your orders and track their status.
             </p>
           </div>
-          <OrdersPrimaryButtons />
+          <OrdersPrimaryButtons filters={filters} table={tableInstance} />
         </div>
 
         <TagStatCards

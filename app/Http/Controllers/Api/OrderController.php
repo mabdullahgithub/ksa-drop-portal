@@ -512,6 +512,20 @@ class OrderController extends Controller
     {
         $query = Order::with('items');
 
+        // If explicit order IDs are given (e.g. row selection in the UI),
+        // export exactly those orders and skip the rest of the filters.
+        if ($request->has('order_ids')) {
+            $orderIds = is_array($request->order_ids)
+                ? $request->order_ids
+                : explode(',', $request->order_ids);
+            $orderIds = array_filter(array_map('intval', $orderIds));
+
+            $query->whereIn('id', $orderIds);
+            $orders = $query->get();
+
+            return $this->streamOrdersCsv($orders);
+        }
+
         // Apply same filters as index
         if ($request->has('search')) {
             $query->search($request->search);
@@ -565,9 +579,33 @@ class OrderController extends Controller
                 $q->whereJsonContains('client_types', $clientType);
             });
         }
+        if ($request->has('has_shipment')) {
+            $hasShipment = filter_var($request->has_shipment, FILTER_VALIDATE_BOOLEAN);
+            if ($hasShipment) {
+                $query->withShipment();
+            } else {
+                $query->withoutShipment();
+            }
+        }
+        if ($request->has('shipment_status')) {
+            $statuses = $this->multiValue($request->shipment_status);
+            if (!empty($statuses)) {
+                $query->whereHas('shipments', function ($q) use ($statuses) {
+                    $q->whereIn('status', $statuses);
+                });
+            }
+        }
 
         $orders = $query->get();
 
+        return $this->streamOrdersCsv($orders);
+    }
+
+    /**
+     * Stream a collection of orders as a downloadable CSV response.
+     */
+    private function streamOrdersCsv($orders)
+    {
         $filename = 'orders_export_' . date('Y-m-d_His') . '.csv';
         $headers = [
             'Content-Type' => 'text/csv',
