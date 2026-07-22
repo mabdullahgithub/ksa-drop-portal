@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Jobs\ProcessShopifyWebhookJob;
 use App\Services\ShopifyService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 
 class ShopifyWebhookController extends Controller
 {
@@ -22,7 +23,15 @@ class ShopifyWebhookController extends Controller
         $shop       = (string) $request->header('X-Shopify-Shop-Domain', '');
         $topic      = (string) $request->header('X-Shopify-Topic', '');
 
+        // Log every delivery on arrival. Rejections below return non-200 with
+        // no other trace, which made a webhook that never turned into an order
+        // impossible to distinguish from one that never arrived. One INFO line
+        // per delivery is cheap and makes the whole pipeline observable.
+        Log::info('Shopify webhook received', ['shop' => $shop, 'topic' => $topic]);
+
         if (! $this->shopify->verifyWebhookHmac($rawBody, $hmacHeader)) {
+            Log::warning('Shopify webhook rejected — HMAC mismatch', ['shop' => $shop, 'topic' => $topic]);
+
             return response('Unauthorized', 401);
         }
 
@@ -37,6 +46,10 @@ class ShopifyWebhookController extends Controller
         $bodyShop = $payload['shop_domain'] ?? $payload['myshopify_domain'] ?? null;
 
         if ($bodyShop !== null && ! hash_equals(strtolower((string) $bodyShop), strtolower($shop))) {
+            Log::warning('Shopify webhook rejected — shop mismatch', [
+                'header_shop' => $shop, 'body_shop' => $bodyShop, 'topic' => $topic,
+            ]);
+
             return response('Shop mismatch', 401);
         }
 

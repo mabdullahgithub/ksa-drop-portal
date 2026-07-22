@@ -53,8 +53,17 @@ class ProcessShopifyWebhookJob implements ShouldQueue
             ->where('status', 'active')
             ->first();
 
-        // Unknown / disconnected store — ignore silently.
+        // Unknown / disconnected store, or a connection with no client linked
+        // yet. Log it: an order webhook landing here is a real "why didn't it
+        // sync" cause (e.g. the store was disconnected, or claimed but the row
+        // has no client), and silence made that indistinguishable from success.
         if (! $connection || ! $connection->client) {
+            Log::warning('Shopify webhook ignored — no active linked connection', [
+                'shop'             => $this->shopDomain,
+                'topic'            => $this->topic,
+                'connection_found' => (bool) $connection,
+            ]);
+
             return;
         }
 
@@ -218,6 +227,13 @@ class ProcessShopifyWebhookJob implements ShouldQueue
         $order->items()->createMany($shopify->mapLineItems($this->payload, 'webhook'));
 
         $connection->update(['last_synced_at' => now()]);
+
+        Log::info('Shopify order synced from webhook', [
+            'shop'         => $connection->shop_domain,
+            'topic'        => $this->topic,
+            'order_number' => $data['order_number'] ?? null,
+            'sync_status'  => $data['shopify_sync_status'] ?? 'processed',
+        ]);
     }
 
     private function cancelOrder(): void
