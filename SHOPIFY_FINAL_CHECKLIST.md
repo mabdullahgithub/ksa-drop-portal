@@ -195,7 +195,7 @@
 ### Shopify Partner Dashboard Configuration
 - [ ] API credentials correct
 - [ ] Redirect URI correct
-- [ ] Scopes correct: `read_orders`, `read_products`, `write_orders`
+- [ ] Scopes correct: `read_customers`, `read_orders`
 - [ ] Webhooks registered (or auto-register on first connection)
 - [ ] App URL configured (https://yourdomain.com/embedded/shopify)
 

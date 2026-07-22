@@ -12,6 +12,29 @@ type SyncMode = 'auto_sync' | 'manual_approval'
 export function useShopifyConnection() {
   const [disconnecting, setDisconnecting] = useState(false)
   const [updatingSyncMode, setUpdatingSyncMode] = useState(false)
+  const [claiming, setClaiming] = useState(false)
+
+  // Links an already-installed (unlinked) Shopify connection to this client.
+  // Never touches Shopify's OAuth endpoint — the token was already obtained
+  // when the merchant installed the app from Shopify itself.
+  const claimStore = useCallback(async (shop: string): Promise<{ ok: boolean; message?: string }> => {
+    setClaiming(true)
+    try {
+      const res = await fetch('/portal/api/shopify/claim', {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+          'X-CSRF-TOKEN': getCsrfToken(),
+        },
+        body: JSON.stringify({ shop }),
+      })
+      const data = await res.json().catch(() => ({}))
+      return { ok: res.ok, message: data?.message }
+    } finally {
+      setClaiming(false)
+    }
+  }, [])
 
   const disconnect = useCallback(async (): Promise<boolean> => {
     setDisconnecting(true)
@@ -67,5 +90,7 @@ export function useShopifyConnection() {
     updatingSyncMode,
     retryWebhooks,
     retrying,
+    claimStore,
+    claiming,
   }
 }

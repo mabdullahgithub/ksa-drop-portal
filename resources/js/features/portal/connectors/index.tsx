@@ -383,21 +383,39 @@ function ShopifyConnectorCard({
 
       <div className='bg-border relative my-3 h-px' />
 
-      <Button
-        size='sm'
-        className='relative w-full bg-[#008060] text-white hover:bg-[#006e52] dark:bg-[#008060] dark:hover:bg-[#009973]'
-        onClick={() => setShowConnect(true)}
-      >
-        <Store className='h-3.5 w-3.5' />
-        {needsReconnect ? 'Reconnect Store' : 'Connect Store'}
-        <ArrowRight className='h-3.5 w-3.5' />
-      </Button>
+      {/* Reconnect reopens the app inside Shopify Admin — the only place
+          OAuth is allowed to start (App Store review requirement 2.3.1) —
+          rather than a portal-hosted form. */}
+      {needsReconnect && connector.admin_app_url ? (
+        <Button
+          asChild
+          size='sm'
+          className='relative w-full bg-[#008060] text-white hover:bg-[#006e52] dark:bg-[#008060] dark:hover:bg-[#009973]'
+        >
+          <a href={connector.admin_app_url} target='_blank' rel='noopener noreferrer'>
+            <Store className='h-3.5 w-3.5' />
+            Reconnect Store
+            <ArrowRight className='h-3.5 w-3.5' />
+          </a>
+        </Button>
+      ) : (
+        <Button
+          size='sm'
+          className='relative w-full bg-[#008060] text-white hover:bg-[#006e52] dark:bg-[#008060] dark:hover:bg-[#009973]'
+          onClick={() => setShowConnect(true)}
+        >
+          <Store className='h-3.5 w-3.5' />
+          Connect Store
+          <ArrowRight className='h-3.5 w-3.5' />
+        </Button>
+      )}
 
       <ShopifyConnectDialog
         open={showConnect}
         onClose={() => setShowConnect(false)}
-        lastShopDomain={connector.shop_domain}
-        initialShop={prefillShop}
+        shopDomain={prefillShop || undefined}
+        appStoreUrl={connector.app_store_url}
+        onLinked={onChanged}
       />
     </li>
   )

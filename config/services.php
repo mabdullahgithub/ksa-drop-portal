@@ -75,6 +75,11 @@ return [
         // Public portal URL surfaced by the embedded app so merchants can log
         // in and connect their store. Falls back to the app URL for local dev.
         'portal_url'   => env('KSADROP_PORTAL_URL', env('APP_URL')),
+        // App Store listing — linked from the portal for a client who hasn't
+        // installed on Shopify yet. Never build an install link from a
+        // manually-typed shop domain (App Store review requirement 2.3.1);
+        // installation must start on a Shopify-owned surface.
+        'app_store_url' => env('SHOPIFY_APP_STORE_URL'),
     ],
 
 ];

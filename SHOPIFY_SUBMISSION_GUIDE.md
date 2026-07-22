@@ -223,22 +223,34 @@ filtering and real-time insights.
 https://youtu.be/[your-screencast-id] (unlisted YouTube video)
 ```
 
-**Test account (optional but recommended):**
+**Test account (required — do this before submitting):**
+
+⚠️ The app only shows real dashboard data once the store is linked to a
+KSA Drop client account. A fresh install with no linked account lands on
+the "Store is not connected" screen instead — so the test store below
+must be **pre-linked before you submit**, not left for the reviewer to
+set up.
+
+**Setup (you do this now, before submitting):**
+1. Log in to the KSA Drop portal with the test client account below.
+2. Go to Connectors → Connect Shopify, enter `usama-92130260.myshopify.com`, and complete the OAuth grant.
+3. Confirm the connection shows "Connected" and create 2-3 test orders in the store with different statuses/tags so the dashboard has real data.
+4. Set a sync filter in Settings (e.g., exclude the "test" tag) so the reviewer has something to verify.
+
 ```
 Store URL: https://usama-92130260.myshopify.com
-Username: [test-merchant-email@example.com]
-Password: [secure-test-password]
-Instructions:
-1. Log in to the Shopify store
-2. Navigate to Apps → KSA Drop Order Sync
-3. Click "Install" to authorize the app
-4. Create 2-3 test orders with different statuses and tags
-5. View the dashboard to see orders synced
-6. Navigate to Settings and configure a filter (e.g., exclude "test" tag)
-7. Create a new test order with the "test" tag and verify it's skipped
-8. Create a test order without the tag and verify it syncs
-9. Uninstall the app and verify the connection is cleanly disconnected
+Store admin login: [test-store-staff-email@example.com] / [password]
+KSA Drop portal login (already linked to the store above): [test-client-email@example.com] / [password]
 ```
+
+**Reviewer instructions:**
+1. Log in to the Shopify store admin above.
+2. Navigate to Apps → KSA Drop Order Sync — it should open straight into the dashboard (store is pre-connected, no setup needed).
+3. View the dashboard: stat cards, 30-day chart, recent orders table should show the seeded test orders.
+4. Navigate to Settings and view/change the configured filter (e.g., exclude "test" tag).
+5. Create a new order in Shopify with the "test" tag and verify it's skipped in the dashboard.
+6. Create a new order without the tag and verify it syncs.
+7. Uninstall the app from the Shopify admin and verify the connection cleanly disconnects (re-installing should reconnect automatically without needing to relink).
 
 ---
 
@@ -293,7 +305,7 @@ Once approved:
 
 ### App Won't Install
 - **Check:** API credentials are correct in `config/services.shopify.php`
-- **Check:** Scopes include `read_orders`, `read_products`, `write_orders`
+- **Check:** Scopes include `read_customers`, `read_orders`
 - **Check:** OAuth redirect URI matches in both Partner Dashboard and `.env`
 
 ### Webhooks Not Firing

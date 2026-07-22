@@ -290,8 +290,12 @@ Route::prefix('portal')->middleware(['auth', 'verified', 'role:client'])->group(
     Route::post('/settings/logo', [PortalController::class, 'updateLogo'])->name('portal.settings.logo.update');
     Route::delete('/settings/logo', [PortalController::class, 'removeLogo'])->name('portal.settings.logo.remove');
 
-    // Shopify — connect flow + connection management
-    Route::get('/shopify/connect', [ShopifyController::class, 'redirect'])->name('portal.shopify.connect');
+    // Shopify — connection management. Note there is no route that starts a
+    // fresh OAuth handshake from the portal: installation only ever begins on
+    // a Shopify-owned surface (App Store install, or reopening the app from
+    // Shopify Admin) — App Store review requirement 2.3.1. This only claims
+    // an already-installed, unlinked connection.
+    Route::post('/api/shopify/claim', [ShopifyController::class, 'claim'])->name('portal.shopify.claim');
     Route::delete('/api/shopify/disconnect', [ShopifyController::class, 'disconnect'])->name('portal.shopify.disconnect');
     Route::put('/api/shopify/sync-mode', [ShopifyController::class, 'updateSyncMode'])->name('portal.shopify.sync-mode');
     Route::post('/api/shopify/retry-webhooks', [ShopifyController::class, 'retryWebhooks'])->name('portal.shopify.retry-webhooks');

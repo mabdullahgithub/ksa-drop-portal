@@ -14,9 +14,13 @@ use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
 /**
- * Regression coverage for the Shopify connect flows: the portal-initiated
- * OAuth handshake must keep working exactly as before, and the callback must
- * never dead-end on an error page for any auth state.
+ * Regression coverage for the Shopify connect flows. There is no
+ * portal-initiated OAuth handshake anymore (App Store review requirement
+ * 2.3.1 forbids installation/authorization starting from a non-Shopify
+ * surface) — every grant is exchanged exactly once in the callback, and a
+ * KSA Drop client is attached either immediately (portal session present) or
+ * later via the claim endpoint (no second OAuth). The callback must never
+ * dead-end on an error page for any auth state.
  */
 class ShopifyConnectFlowTest extends TestCase
 {
@@ -68,30 +72,7 @@ class ShopifyConnectFlowTest extends TestCase
         return $message . '&hmac=' . hash_hmac('sha256', $message, self::SECRET);
     }
 
-    // ─── Portal-initiated connect (existing client flow) ─────────────────────
-
-    public function test_portal_connect_redirects_to_shopify_authorize(): void
-    {
-        $response = $this->actingAs($this->makeClientUser())
-            ->get('/portal/shopify/connect?shop=mystore');
-
-        $response->assertRedirect();
-
-        $location = $response->headers->get('Location');
-        $this->assertStringStartsWith('https://mystore.myshopify.com/admin/oauth/authorize?', $location);
-        $this->assertStringContainsString('client_id=test-api-key', $location);
-
-        parse_str((string) parse_url($location, PHP_URL_QUERY), $query);
-        $this->assertTrue(app(ShopifyService::class)->verifyState($query['state'], self::SHOP));
-    }
-
-    public function test_portal_connect_rejects_invalid_domain_with_flash_error(): void
-    {
-        $this->actingAs($this->makeClientUser())
-            ->get('/portal/shopify/connect?shop=my_bad_store!')
-            ->assertRedirect(route('portal.connectors'))
-            ->assertSessionHas('error');
-    }
+    // ─── Callback with a portal session already active ───────────────────────
 
     public function test_callback_connects_store_for_logged_in_client(): void
     {
@@ -154,11 +135,28 @@ class ShopifyConnectFlowTest extends TestCase
         $this->assertSame(0, ClientShopifyConnection::count());
     }
 
-    public function test_callback_without_login_for_unlinked_store_lands_in_app_ui(): void
+    public function test_callback_without_login_for_unlinked_store_stores_token_and_lands_in_app_ui(): void
     {
-        // Fresh App Store install, store not linked to any client: no row is
-        // created (client_id is always required) and the merchant lands back
-        // in the embedded app, whose onboarding screen guides account linking.
+        // Fresh App Store install, store not linked to any client yet: the
+        // grant is exchanged and stored right away (client_id null) so it's
+        // never thrown away, and the merchant lands in the embedded app,
+        // whose onboarding screen guides account linking via claim().
+        Http::fake([
+            'https://' . self::SHOP . '/admin/oauth/access_token' => Http::response([
+                'access_token'             => 'tok-unlinked',
+                'refresh_token'            => 'ref-unlinked',
+                'expires_in'               => 3600,
+                'refresh_token_expires_in' => 7776000,
+                'scope'                    => 'read_orders',
+            ]),
+            'https://' . self::SHOP . '/admin/api/*' => Http::response([
+                'data' => ['webhookSubscriptionCreate' => [
+                    'webhookSubscription' => ['id' => 'gid://shopify/WebhookSubscription/1'],
+                    'userErrors'          => [],
+                ]],
+            ]),
+        ]);
+
         $state = app(ShopifyService::class)->makeState(self::SHOP);
 
         $query = $this->signedQuery([
@@ -171,7 +169,10 @@ class ShopifyConnectFlowTest extends TestCase
         $this->get('/shopify/callback?' . $query)
             ->assertRedirect('https://' . self::SHOP . '/admin/apps/test-api-key');
 
-        $this->assertSame(0, ClientShopifyConnection::count());
+        $connection = ClientShopifyConnection::sole();
+        $this->assertNull($connection->client_id);
+        $this->assertSame('active', $connection->status);
+        $this->assertSame('tok-unlinked', $connection->access_token);
     }
 
     public function test_callback_without_login_relinks_store_already_owned_by_a_client(): void
@@ -345,5 +346,72 @@ class ShopifyConnectFlowTest extends TestCase
             ->assertOk();
 
         $this->assertSame('manual_approval', ClientShopifyConnection::first()->sync_mode);
+    }
+
+    // ─── Claim (link an already-installed store — no OAuth) ──────────────────
+
+    public function test_claim_links_pending_connection_to_client(): void
+    {
+        Queue::fake();
+
+        ClientShopifyConnection::create([
+            'client_id'    => null,
+            'shop_domain'  => self::SHOP,
+            'access_token' => 'tok-pending',
+            'status'       => 'active',
+            'connected_at' => now(),
+        ]);
+
+        $user = $this->makeClientUser();
+
+        $this->actingAs($user)
+            ->postJson('/portal/api/shopify/claim', ['shop' => self::SHOP])
+            ->assertOk();
+
+        $connection = ClientShopifyConnection::sole();
+        $this->assertSame($user->client->id, $connection->client_id);
+        $this->assertSame('tok-pending', $connection->access_token);
+
+        Queue::assertPushed(ShopifyOrderSyncJob::class);
+    }
+
+    public function test_claim_without_pending_connection_returns_404(): void
+    {
+        $this->actingAs($this->makeClientUser())
+            ->postJson('/portal/api/shopify/claim', ['shop' => self::SHOP])
+            ->assertNotFound();
+
+        $this->assertSame(0, ClientShopifyConnection::count());
+    }
+
+    public function test_claim_replaces_clients_other_existing_connection(): void
+    {
+        Queue::fake();
+
+        $user = $this->makeClientUser();
+
+        ClientShopifyConnection::create([
+            'client_id'    => $user->client->id,
+            'shop_domain'  => 'old-store.myshopify.com',
+            'access_token' => 'tok-old',
+            'status'       => 'active',
+            'connected_at' => now()->subDay(),
+        ]);
+
+        ClientShopifyConnection::create([
+            'client_id'    => null,
+            'shop_domain'  => self::SHOP,
+            'access_token' => 'tok-new',
+            'status'       => 'active',
+            'connected_at' => now(),
+        ]);
+
+        $this->actingAs($user)
+            ->postJson('/portal/api/shopify/claim', ['shop' => self::SHOP])
+            ->assertOk();
+
+        $connection = ClientShopifyConnection::sole();
+        $this->assertSame(self::SHOP, $connection->shop_domain);
+        $this->assertSame($user->client->id, $connection->client_id);
     }
 }

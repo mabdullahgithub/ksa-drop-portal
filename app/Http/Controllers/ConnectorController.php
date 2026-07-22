@@ -66,6 +66,18 @@ class ConnectorController extends Controller
         $connector->needs_reconnect    = $conn?->status === 'error';
         $connector->webhooks_registered = (bool) ($conn?->webhooks_registered);
 
+        // Reconnecting must reopen the app inside Shopify Admin (a Shopify-owned
+        // surface) rather than re-running OAuth from the portal — Shopify
+        // resolves this URL to the embedded app regardless of the app handle,
+        // and EmbeddedAppController auto-starts OAuth there when needed.
+        $connector->admin_app_url = $conn?->shop_domain
+            ? "https://{$conn->shop_domain}/admin/apps/" . config('services.shopify.key')
+            : null;
+
+        // Shown when the client has no store installed yet — sends them to
+        // install from Shopify itself instead of typing a domain here.
+        $connector->app_store_url = config('services.shopify.app_store_url');
+
         $connector->pending_count = ($conn?->status === 'active' && $conn?->sync_mode === 'manual_approval')
             ? Order::withoutGlobalScope('shopify_visible')
                 ->where('client_id', $client->id)
