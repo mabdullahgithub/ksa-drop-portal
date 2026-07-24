@@ -785,6 +785,56 @@ class ShopifyConnectFlowTest extends TestCase
         $this->assertSame($user->client->id, $connection->client_id);
     }
 
+    public function test_get_valid_token_rejects_and_flags_a_legacy_non_expiring_token(): void
+    {
+        // A background job (no session token to re-exchange with) must not keep
+        // calling the Admin API with a legacy non-expiring token: Shopify flags
+        // every such call as deprecated and 401s them from Jan 1, 2027. It is
+        // refused and the connection flagged 'error' so the store heals on its
+        // next embedded app load instead of leaking further deprecated calls.
+        $user = $this->makeClientUser();
+
+        $connection = ClientShopifyConnection::create([
+            'client_id'        => $user->client->id,
+            'shop_domain'      => self::SHOP,
+            'access_token'     => 'tok-non-expiring',
+            'refresh_token'    => null,
+            'token_expires_at' => null,
+            'status'           => 'active',
+            'connected_at'     => now(),
+        ]);
+
+        Http::preventStrayRequests(); // no refresh/exchange call may be attempted
+
+        $this->expectException(\RuntimeException::class);
+
+        try {
+            app(ShopifyService::class)->getValidToken($connection);
+        } finally {
+            $this->assertSame('error', $connection->fresh()->status);
+        }
+    }
+
+    public function test_get_valid_token_returns_a_healthy_expiring_token_untouched(): void
+    {
+        $user = $this->makeClientUser();
+
+        $connection = ClientShopifyConnection::create([
+            'client_id'        => $user->client->id,
+            'shop_domain'      => self::SHOP,
+            'access_token'     => 'tok-live',
+            'refresh_token'    => 'ref-live',
+            'token_expires_at' => now()->addHour(),
+            'status'           => 'active',
+            'connected_at'     => now(),
+        ]);
+
+        Http::preventStrayRequests(); // a valid token needs no refresh call
+
+        $this->assertSame('tok-live', app(ShopifyService::class)->getValidToken($connection));
+        $this->assertSame('active', $connection->fresh()->status);
+    }
+
     public function test_reinstall_re_registers_webhooks_even_when_flag_is_stale_true(): void
     {
         // Uninstalling deletes the subscriptions on Shopify's side. A store that

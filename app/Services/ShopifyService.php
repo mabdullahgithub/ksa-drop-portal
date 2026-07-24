@@ -308,9 +308,23 @@ class ShopifyService
 
     /**
      * Return a valid access token, refreshing first if it is expired / near expiry.
+     *
+     * A legacy non-expiring token (no expiry, no refresh token — issued before
+     * the exchange started sending expiring=1) is refused rather than reused:
+     * Shopify flags every call made with one as a deprecated offline token and
+     * will reject them outright from Jan 1, 2027. It cannot be renewed here —
+     * a fresh exchange needs a session token, which only the embedded app load
+     * has — so the connection is flagged 'error' to stop background jobs from
+     * leaking further deprecated calls. It heals on the store's next app load,
+     * where ensureInstalled() re-exchanges it for an expiring token.
      */
     public function getValidToken(ClientShopifyConnection $connection): string
     {
+        if (! $connection->token_expires_at && ! $connection->refresh_token) {
+            $connection->update(['status' => 'error']);
+            throw new RuntimeException('Legacy non-expiring token; awaiting re-exchange on next app load.');
+        }
+
         if ($connection->isTokenExpired()) {
             return $this->refreshAccessToken($connection);
         }
