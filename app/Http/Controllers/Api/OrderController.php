@@ -6,11 +6,14 @@ use App\Http\Controllers\Controller;
 use App\Models\Client;
 use App\Models\Order;
 use App\Models\Tag;
+use App\Services\OrderExportService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 class OrderController extends Controller
 {
+    public function __construct(protected OrderExportService $orderExport) {}
+
     /**
      * Display a listing of orders with filters.
      */
@@ -510,7 +513,7 @@ class OrderController extends Controller
      */
     public function export(Request $request)
     {
-        $query = Order::with('items');
+        $query = Order::with(['items', 'client', 'latestShipment']);
 
         // If explicit order IDs are given (e.g. row selection in the UI),
         // export exactly those orders and skip the rest of the filters.
@@ -523,7 +526,7 @@ class OrderController extends Controller
             $query->whereIn('id', $orderIds);
             $orders = $query->get();
 
-            return $this->streamOrdersCsv($orders);
+            return $this->orderExport->stream($orders);
         }
 
         // Apply same filters as index
@@ -598,111 +601,7 @@ class OrderController extends Controller
 
         $orders = $query->get();
 
-        return $this->streamOrdersCsv($orders);
-    }
-
-    /**
-     * Stream a collection of orders as a downloadable CSV response.
-     */
-    private function streamOrdersCsv($orders)
-    {
-        $filename = 'orders_export_' . date('Y-m-d_His') . '.csv';
-        $headers = [
-            'Content-Type' => 'text/csv',
-            'Content-Disposition' => "attachment; filename=\"{$filename}\"",
-        ];
-
-        $callback = function() use ($orders) {
-            $file = fopen('php://output', 'w');
-
-            // Headers - matching the Shopify format
-            fputcsv($file, [
-                'Name', 'Email', 'Financial Status', 'Paid at', 'Fulfillment Status', 'Fulfilled at',
-                'Accepts Marketing', 'Currency', 'Subtotal', 'Shipping', 'Taxes', 'Total',
-                'Discount Code', 'Discount Amount', 'Shipping Method', 'Created at',
-                'Lineitem quantity', 'Lineitem name', 'Lineitem price', 'Lineitem compare at price',
-                'Lineitem sku', 'Lineitem requires shipping', 'Lineitem taxable', 'Lineitem fulfillment status',
-                'Billing Name', 'Billing Street', 'Billing Address1', 'Billing Address2', 'Billing Company',
-                'Billing City', 'Billing Zip', 'Billing Province', 'Billing Country', 'Billing Phone',
-                'Shipping Name', 'Shipping Street', 'Shipping Address1', 'Shipping Address2', 'Shipping Company',
-                'Shipping City', 'Shipping Zip', 'Shipping Province', 'Shipping Country', 'Shipping Phone',
-                'Notes', 'Note Attributes', 'Cancelled at', 'Payment Method', 'Payment Reference',
-                'Refunded Amount', 'Vendor', 'Outstanding Balance', 'Employee', 'Location', 'Device ID',
-                'Id', 'Tags', 'Risk Level', 'Source'
-            ]);
-
-            // Data
-            foreach ($orders as $order) {
-                // Get first item or create empty row
-                $firstItem = $order->items->first();
-
-                fputcsv($file, [
-                    $order->order_number,
-                    $order->customer_email,
-                    $order->financial_status,
-                    $order->paid_at,
-                    $order->fulfillment_status,
-                    $order->fulfilled_at,
-                    $order->accepts_marketing ? 'yes' : 'no',
-                    $order->currency,
-                    $order->subtotal,
-                    $order->shipping_cost,
-                    $order->taxes,
-                    $order->total,
-                    $order->discount_code,
-                    $order->discount_amount,
-                    $order->shipping_method,
-                    $order->created_at,
-                    $firstItem?->lineitem_quantity ?? '',
-                    $firstItem?->lineitem_name ?? '',
-                    $firstItem?->lineitem_price ?? '',
-                    $firstItem?->lineitem_compare_at_price ?? '',
-                    $firstItem?->lineitem_sku ?? '',
-                    $firstItem?->lineitem_requires_shipping ? 'true' : 'false',
-                    $firstItem?->lineitem_taxable ? 'true' : 'false',
-                    $firstItem?->lineitem_fulfillment_status ?? '',
-                    $order->billing_name,
-                    $order->billing_street,
-                    $order->billing_address1,
-                    $order->billing_address2,
-                    $order->billing_company,
-                    $order->billing_city,
-                    $order->billing_zip,
-                    $order->billing_province,
-                    $order->billing_country,
-                    $order->billing_phone,
-                    $order->shipping_name,
-                    $order->shipping_street,
-                    $order->shipping_address1,
-                    $order->shipping_address2,
-                    $order->shipping_company,
-                    $order->shipping_city,
-                    $order->shipping_zip,
-                    $order->shipping_province,
-                    $order->shipping_country,
-                    $order->shipping_phone,
-                    $order->notes,
-                    is_array($order->note_attributes) ? json_encode($order->note_attributes) : ($order->note_attributes ?? ''),
-                    $order->cancelled_at,
-                    $order->payment_method,
-                    $order->payment_reference,
-                    $order->refunded_amount,
-                    $order->vendor,
-                    $order->outstanding_balance,
-                    $order->employee,
-                    $order->location,
-                    $order->device_id,
-                    $order->id,
-                    is_array($order->tags) ? implode(', ', $order->tags) : ($order->tags ?? ''),
-                    $order->risk_level,
-                    $order->source,
-                ]);
-            }
-
-            fclose($file);
-        };
-
-        return response()->stream($callback, 200, $headers);
+        return $this->orderExport->stream($orders);
     }
 
 }

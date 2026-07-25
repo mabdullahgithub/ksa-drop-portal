@@ -8,12 +8,15 @@ use App\Models\ClientProductImage;
 use App\Models\Tag;
 use App\Models\User;
 use App\Notifications\ProductSubmittedNotification;
+use App\Services\OrderExportService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 
 class PortalController extends Controller
 {
+    public function __construct(protected OrderExportService $orderExport) {}
+
     private function generateOrderNumber(string $prefix): string
     {
         // Count existing orders with this prefix to derive the next sequential number.
@@ -584,7 +587,7 @@ class PortalController extends Controller
             abort(403);
         }
 
-        $query = $client->orders()->with('items');
+        $query = $client->orders()->with(['items', 'client', 'latestShipment']);
 
         // Explicit order ids (row selection) win over the rest of the filters.
         // Still scoped to the client's own orders, so ids from elsewhere match nothing.
@@ -593,72 +596,12 @@ class PortalController extends Controller
 
             $orders = $query->whereIn('id', $orderIds)->get();
 
-            return $this->streamPortalOrdersCsv($orders);
+            return $this->orderExport->stream($orders);
         }
 
         $this->applyOrderFilters($query, $request);
 
-        return $this->streamPortalOrdersCsv($query->get());
-    }
-
-    /**
-     * Stream a collection of the client's orders as a downloadable CSV,
-     * using the same Shopify-style column set as the admin orders export.
-     */
-    private function streamPortalOrdersCsv($orders)
-    {
-        $filename = 'orders_export_' . date('Y-m-d_His') . '.csv';
-        $headers = [
-            'Content-Type' => 'text/csv',
-            'Content-Disposition' => "attachment; filename=\"{$filename}\"",
-        ];
-
-        $callback = function() use ($orders) {
-            $file = fopen('php://output', 'w');
-            fputcsv($file, [
-                'Name', 'Email', 'Financial Status', 'Paid at', 'Fulfillment Status', 'Fulfilled at',
-                'Accepts Marketing', 'Currency', 'Subtotal', 'Shipping', 'Taxes', 'Total',
-                'Discount Code', 'Discount Amount', 'Shipping Method', 'Created at',
-                'Lineitem quantity', 'Lineitem name', 'Lineitem price', 'Lineitem compare at price',
-                'Lineitem sku', 'Lineitem requires shipping', 'Lineitem taxable', 'Lineitem fulfillment status',
-                'Billing Name', 'Billing Street', 'Billing Address1', 'Billing Address2', 'Billing Company',
-                'Billing City', 'Billing Zip', 'Billing Province', 'Billing Country', 'Billing Phone',
-                'Shipping Name', 'Shipping Street', 'Shipping Address1', 'Shipping Address2', 'Shipping Company',
-                'Shipping City', 'Shipping Zip', 'Shipping Province', 'Shipping Country', 'Shipping Phone',
-                'Notes', 'Note Attributes', 'Cancelled at', 'Payment Method', 'Payment Reference',
-                'Refunded Amount', 'Vendor', 'Outstanding Balance', 'Employee', 'Location', 'Device ID',
-                'Id', 'Tags', 'Risk Level', 'Source',
-            ]);
-
-            foreach ($orders as $order) {
-                $firstItem = $order->items->first();
-                fputcsv($file, [
-                    $order->order_number, $order->customer_email, $order->financial_status, $order->paid_at,
-                    $order->fulfillment_status, $order->fulfilled_at, $order->accepts_marketing ? 'yes' : 'no',
-                    $order->currency, $order->subtotal, $order->shipping_cost, $order->taxes, $order->total,
-                    $order->discount_code, $order->discount_amount, $order->shipping_method, $order->created_at,
-                    $firstItem?->lineitem_quantity ?? '', $firstItem?->lineitem_name ?? '',
-                    $firstItem?->lineitem_price ?? '', $firstItem?->lineitem_compare_at_price ?? '',
-                    $firstItem?->lineitem_sku ?? '', $firstItem?->lineitem_requires_shipping ? 'true' : 'false',
-                    $firstItem?->lineitem_taxable ? 'true' : 'false', $firstItem?->lineitem_fulfillment_status ?? '',
-                    $order->billing_name, $order->billing_street, $order->billing_address1, $order->billing_address2,
-                    $order->billing_company, $order->billing_city, $order->billing_zip, $order->billing_province,
-                    $order->billing_country, $order->billing_phone,
-                    $order->shipping_name, $order->shipping_street, $order->shipping_address1, $order->shipping_address2,
-                    $order->shipping_company, $order->shipping_city, $order->shipping_zip, $order->shipping_province,
-                    $order->shipping_country, $order->shipping_phone,
-                    $order->notes, is_array($order->note_attributes) ? json_encode($order->note_attributes) : ($order->note_attributes ?? ''),
-                    $order->cancelled_at, $order->payment_method, $order->payment_reference, $order->refunded_amount,
-                    $order->vendor, $order->outstanding_balance, $order->employee, $order->location, $order->device_id,
-                    $order->id, is_array($order->tags) ? implode(', ', $order->tags) : ($order->tags ?? ''),
-                    $order->risk_level, $order->source,
-                ]);
-            }
-
-            fclose($file);
-        };
-
-        return response()->stream($callback, 200, $headers);
+        return $this->orderExport->stream($query->get());
     }
 
     /**
