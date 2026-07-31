@@ -23,10 +23,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { DataTablePagination, DataTableToolbar } from '@/components/data-table'
-import { roles } from '../data/data'
-import { type User } from '../data/schema'
 import { DataTableBulkActions } from './data-table-bulk-actions'
-import { usersColumns as columns } from './users-columns'
 import { usersColumnsSimple } from './users-columns-simple'
 
 type DataTableProps = {
@@ -35,9 +32,7 @@ type DataTableProps = {
 }
 
 export function UsersTable({ data, availableRoles }: DataTableProps) {
-  // Check if data is from database (has numeric id) or mock data (has string id)
-  const isRealData = data.length > 0 && typeof data[0].id === 'number'
-  const tableColumns = isRealData ? usersColumnsSimple : columns
+  const tableColumns = usersColumnsSimple
   const [rowSelection, setRowSelection] = useState({})
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
   const [sorting, setSorting] = useState<SortingState>([])
@@ -57,13 +52,8 @@ export function UsersTable({ data, availableRoles }: DataTableProps) {
       columnFilters,
       columnVisibility,
     },
-    enableRowSelection: (row) => {
-      // For real data, prevent selection of superadmin users
-      if (isRealData) {
-        return !row.original.is_super_admin
-      }
-      return true
-    },
+    // Superadmins are protected — they can't be bulk-modified or deleted.
+    enableRowSelection: (row) => !row.original.is_super_admin,
     onPaginationChange: setPagination,
     onColumnFiltersChange: setColumnFilters,
     onRowSelectionChange: setRowSelection,
@@ -87,38 +77,20 @@ export function UsersTable({ data, availableRoles }: DataTableProps) {
       <DataTableToolbar
         table={table}
         searchPlaceholder='Filter users...'
-        searchKey={isRealData ? 'name' : 'username'}
+        searchKey='name'
         filters={
-          isRealData
-            ? availableRoles
-              ? [
-                  {
-                    columnId: 'roles',
-                    title: 'Role',
-                    options: availableRoles.map((role) => ({
-                      label: role,
-                      value: role,
-                    })),
-                  },
-                ]
-              : []
-            : [
+          availableRoles
+            ? [
                 {
-                  columnId: 'status',
-                  title: 'Status',
-                  options: [
-                    { label: 'Active', value: 'active' },
-                    { label: 'Inactive', value: 'inactive' },
-                    { label: 'Invited', value: 'invited' },
-                    { label: 'Suspended', value: 'suspended' },
-                  ],
-                },
-                {
-                  columnId: 'role',
+                  columnId: 'roles',
                   title: 'Role',
-                  options: roles.map((role) => ({ ...role })),
+                  options: availableRoles.map((role) => ({
+                    label: role,
+                    value: role,
+                  })),
                 },
               ]
+            : []
         }
       />
       <div className='overflow-hidden rounded-md border'>

@@ -8,7 +8,6 @@ import { UsersDialogs } from './components/users-dialogs'
 import { UsersPrimaryButtons } from './components/users-primary-buttons'
 import { UsersProvider } from './components/users-provider'
 import { UsersTable } from './components/users-table'
-import { users as mockUsers } from './data/users'
 
 interface User {
   id: number
@@ -20,14 +19,12 @@ interface User {
 }
 
 interface UsersProps {
-  users?: User[]
+  users: User[]
   availableRoles?: string[]
   availablePermissions?: string[]
 }
 
-export function Users({ users, availableRoles, availablePermissions }: UsersProps = {}) {
-  const userData = users || mockUsers
-
+export function Users({ users, availableRoles, availablePermissions }: UsersProps) {
   return (
     <UsersProvider>
       <Header fixed>
@@ -42,14 +39,12 @@ export function Users({ users, availableRoles, availablePermissions }: UsersProp
           <div className='space-y-1'>
             <h2 className='text-3xl font-bold tracking-tight'>Users</h2>
             <p className='text-muted-foreground'>
-              {users
-                ? 'View and manage user accounts and role assignments.'
-                : 'Manage your users and their roles here.'}
+              View and manage user accounts and role assignments.
             </p>
           </div>
           <UsersPrimaryButtons />
         </div>
-        <UsersTable data={userData} availableRoles={availableRoles} />
+        <UsersTable data={users} availableRoles={availableRoles} />
       </Main>
 
       <UsersDialogs availableRoles={availableRoles} availablePermissions={availablePermissions} />

@@ -75,7 +75,7 @@ class User extends Authenticatable
             'view orders' => 'orders',
             'view apps' => 'apps',
             'view tags' => 'tags',
-            'view users' => 'users',
+            'view users' => 'team-management.users',
         ];
 
         foreach ($candidates as $permission => $route) {

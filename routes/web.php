@@ -106,7 +106,6 @@ Route::middleware(['auth', 'verified', 'role:!client'])->group(function () {
     Route::delete('/api/invoices/{invoice}', [InvoiceController::class, 'destroy'])->middleware('permission:edit orders')->name('api.invoices.destroy');
 
     Route::get('/chats', fn () => Inertia::render('Chats'))->name('chats');
-    Route::get('/users', fn () => Inertia::render('Users'))->middleware('permission:view users')->name('users');
 
     // Orders API
     Route::prefix('api/orders')->group(function () {

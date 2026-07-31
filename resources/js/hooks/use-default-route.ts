@@ -13,7 +13,7 @@ const LANDING_CANDIDATES: { permission: string; url: string }[] = [
   { permission: 'view orders', url: '/orders' },
   { permission: 'view apps', url: '/apps' },
   { permission: 'view tags', url: '/tags' },
-  { permission: 'view users', url: '/users' },
+  { permission: 'view users', url: '/team-management/users' },
 ]
 
 /**
