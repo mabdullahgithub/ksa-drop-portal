@@ -11,5 +11,10 @@ Artisan::command('inspire', function () {
 // Email log cleanup - runs daily at 2:00 AM, keeps logs for 180 days
 Schedule::command('email:cleanup-logs --days=180')->dailyAt('02:00');
 
-// Sync shipment tracking every 2 hours
-Schedule::command('shipments:sync-tracking')->everyTwoHours();
+// Sync shipment tracking every 10 minutes. iMile has no push/webhook API
+// (pull-only) but client/track/list batches up to 100 orders per call, so
+// polling this often is cheap; J&T shipments are also covered live by
+// webhooks/jnt-express/* and use this mainly as a fallback.
+Schedule::command('shipments:sync-tracking --limit=200')
+    ->everyTenMinutes()
+    ->withoutOverlapping();

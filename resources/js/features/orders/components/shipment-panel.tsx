@@ -55,6 +55,13 @@ interface ShipmentPanelProps {
   onShipmentUpdated?: () => void
 }
 
+const courierLabels: Record<string, string> = {
+  jnt_express: 'J&T Express',
+  imile: 'iMile',
+}
+
+const courierLabel = (courier: string) => courierLabels[courier] || courier
+
 const statusColorMap: Record<string, string> = {
   gray: 'bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400',
   blue: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400',
@@ -193,7 +200,7 @@ export function ShipmentPanel({ shipment, orderId, onCreateShipment, onShipmentU
         )}
         <div>
           <div className='text-muted-foreground'>Courier</div>
-          <div className='font-medium'>J&T Express</div>
+          <div className='font-medium'>{courierLabel(shipment.courier)}</div>
         </div>
         <div>
           <div className='text-muted-foreground'>Weight</div>

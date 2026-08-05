@@ -9,27 +9,27 @@ import { Main } from '@/components/layout/main'
 import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
-import { BuyEaseCard } from '@/components/buyease-card'
 import { usePermissions } from '@/hooks/use-permissions'
 import { useConnectors, type Connector } from '@/hooks/useConnectors'
-import { IconShopify, IconJnt, IconBuyease } from '@/assets/brand-icons'
+import { IconShopify, IconJnt, IconImile } from '@/assets/brand-icons'
 
 const logoMap: Record<string, React.ReactNode> = {
   shopify: <IconShopify />,
   jnt_express: <IconJnt />,
-  buyease: <IconBuyease />,
+  imile: <IconImile />,
 }
 
-// Fixed display order: J&T first, then Shopify, then BuyEase.
+// Fixed display order: J&T first, then iMile, then Shopify.
 const displayOrder: Record<string, number> = {
   jnt_express: 0,
-  shopify: 1,
-  buyease: 2,
+  imile: 1,
+  shopify: 2,
 }
 
 // Connectors that have a dedicated settings page
 const settingsRouteMap: Record<string, string> = {
   jnt_express: '/apps/jnt-express',
+  imile: '/apps/imile',
 }
 
 export function Apps() {
@@ -38,7 +38,7 @@ export function Apps() {
   const { connectors, loading } = useConnectors()
 
   const filteredConnectors = [...connectors]
-    .filter((c) => c.key !== 'coming_soon')
+    .filter((c) => c.key !== 'coming_soon' && c.key !== 'buyease')
     .sort((a, b) => (displayOrder[a.key] ?? 99) - (displayOrder[b.key] ?? 99))
     .filter((c) => c.name.toLowerCase().includes(searchTerm.toLowerCase()))
 
@@ -76,23 +76,15 @@ export function Apps() {
           </div>
         ) : (
           <ul className='faded-bottom no-scrollbar grid gap-4 overflow-auto overscroll-contain pt-4 pb-16 md:grid-cols-2 lg:grid-cols-3'>
-            {filteredConnectors.map((connector) =>
-              connector.key === 'buyease' ? (
-                <BuyEaseCard
-                  key={connector.id}
-                  name={connector.name}
-                  description={connector.description}
-                />
-              ) : (
-                <ConnectorCard
-                  key={connector.id}
-                  connector={connector}
-                  logo={logoMap[connector.key]}
-                  canEdit={can('edit apps')}
-                  showPartnerBadge={connector.key === 'shopify'}
-                />
-              )
-            )}
+            {filteredConnectors.map((connector) => (
+              <ConnectorCard
+                key={connector.id}
+                connector={connector}
+                logo={logoMap[connector.key]}
+                canEdit={can('edit apps')}
+                showPartnerBadge={connector.key === 'shopify'}
+              />
+            ))}
           </ul>
         )}
       </Main>

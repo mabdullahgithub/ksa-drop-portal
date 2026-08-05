@@ -40,6 +40,7 @@ export function CreateShipmentDialog({ order, open, onOpenChange, onSuccess }: C
   const [loading, setLoading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [selectedWarehouse, setSelectedWarehouse] = useState<number | ''>('')
+  const [courier, setCourier] = useState<'jnt_express' | 'imile'>('jnt_express')
   const [form, setForm] = useState({
     weight: '0.5',
     length: '',
@@ -111,9 +112,8 @@ export function CreateShipmentDialog({ order, open, onOpenChange, onSuccess }: C
       const payload: any = {
         order_id: order.id,
         warehouse_id: selectedWarehouse,
+        courier,
         weight: parseFloat(form.weight) || 0.5,
-        service_type: form.service_type,
-        goods_type: form.goods_type,
         receiver_name: form.receiver_name,
         receiver_phone: form.receiver_phone,
         receiver_province: form.receiver_province,
@@ -123,6 +123,11 @@ export function CreateShipmentDialog({ order, open, onOpenChange, onSuccess }: C
         receiver_post_code: form.receiver_post_code,
         receiver_short_address: form.receiver_short_address || undefined,
         remark: form.remark || undefined,
+      }
+
+      if (courier === 'jnt_express') {
+        payload.service_type = form.service_type
+        payload.goods_type = form.goods_type
       }
 
       if (form.length) payload.length = parseFloat(form.length)
@@ -159,10 +164,23 @@ export function CreateShipmentDialog({ order, open, onOpenChange, onSuccess }: C
                 <AlertTriangle className='h-4 w-4 mt-0.5 shrink-0' />
                 <div>
                   <span className='font-medium'>Missing fields: </span>
-                  {missingFields.join(', ')}. You can still proceed — J&T will reject if invalid.
+                  {missingFields.join(', ')}. You can still proceed — the courier will reject if invalid.
                 </div>
               </div>
             )}
+
+            {/* Courier Selection */}
+            <div className='space-y-2'>
+              <Label className='font-semibold'>Courier</Label>
+              <select
+                className='flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm'
+                value={courier}
+                onChange={(e) => setCourier(e.target.value as 'jnt_express' | 'imile')}
+              >
+                <option value='jnt_express'>J&amp;T Express</option>
+                <option value='imile'>iMile</option>
+              </select>
+            </div>
 
             {/* Warehouse Selection */}
             <div className='space-y-2'>
@@ -298,37 +316,39 @@ export function CreateShipmentDialog({ order, open, onOpenChange, onSuccess }: C
                   />
                 </div>
               </div>
-              <div className='grid gap-3 md:grid-cols-2'>
-                <div className='space-y-1'>
-                  <Label className='text-xs text-muted-foreground'>Service Type</Label>
-                  <select
-                    className='flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm'
-                    value={form.service_type}
-                    onChange={(e) => setForm({ ...form, service_type: e.target.value })}
-                  >
-                    <option value='01'>Express (pickup at door)</option>
-                    <option value='02'>Standard (drop at J&amp;T store)</option>
-                  </select>
+              {courier === 'jnt_express' && (
+                <div className='grid gap-3 md:grid-cols-2'>
+                  <div className='space-y-1'>
+                    <Label className='text-xs text-muted-foreground'>Service Type</Label>
+                    <select
+                      className='flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm'
+                      value={form.service_type}
+                      onChange={(e) => setForm({ ...form, service_type: e.target.value })}
+                    >
+                      <option value='01'>Express (pickup at door)</option>
+                      <option value='02'>Standard (drop at J&amp;T store)</option>
+                    </select>
+                  </div>
+                  <div className='space-y-1'>
+                    <Label className='text-xs text-muted-foreground'>Goods Type</Label>
+                    <select
+                      className='flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm'
+                      value={form.goods_type}
+                      onChange={(e) => setForm({ ...form, goods_type: e.target.value })}
+                    >
+                      <option value='ITN1'>Clothes (ITN1)</option>
+                      <option value='ITN2'>Document (ITN2)</option>
+                      <option value='ITN3'>Food (ITN3)</option>
+                      <option value='ITN4'>Others (ITN4)</option>
+                      <option value='ITN5'>Digital Product (ITN5)</option>
+                      <option value='ITN6'>Daily Necessities (ITN6)</option>
+                      <option value='ITN7'>Fragile Items (ITN7)</option>
+                    </select>
+                  </div>
                 </div>
-                <div className='space-y-1'>
-                  <Label className='text-xs text-muted-foreground'>Goods Type</Label>
-                  <select
-                    className='flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm'
-                    value={form.goods_type}
-                    onChange={(e) => setForm({ ...form, goods_type: e.target.value })}
-                  >
-                    <option value='ITN1'>Clothes (ITN1)</option>
-                    <option value='ITN2'>Document (ITN2)</option>
-                    <option value='ITN3'>Food (ITN3)</option>
-                    <option value='ITN4'>Others (ITN4)</option>
-                    <option value='ITN5'>Digital Product (ITN5)</option>
-                    <option value='ITN6'>Daily Necessities (ITN6)</option>
-                    <option value='ITN7'>Fragile Items (ITN7)</option>
-                  </select>
-                </div>
-              </div>
+              )}
               <div className='space-y-1'>
-                <Label className='text-xs text-muted-foreground'>Remark (optional, forwarded to J&amp;T)</Label>
+                <Label className='text-xs text-muted-foreground'>Remark (optional, forwarded to the courier)</Label>
                 <Input
                   value={form.remark}
                   onChange={(e) => setForm({ ...form, remark: e.target.value })}

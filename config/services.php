@@ -59,6 +59,20 @@ return [
     ],
 
     /*
+    | iMile — fallback credentials used only when the matching ConnectorSetting
+    | (saved from Apps → iMile Settings) is missing. The DB settings always
+    | take precedence; these env values let the integration keep working
+    | before anything is configured in the UI.
+    */
+    'imile' => [
+        'customer_id' => env('IMILE_CUSTOMER_ID'),
+        'api_key' => env('IMILE_API_KEY'),
+        // Production: https://openapi.imile.com — Testing: https://openapi.52imile.cn
+        'base_url' => env('IMILE_BASE_URL', 'https://openapi.imile.com'),
+        'time_zone' => env('IMILE_TIME_ZONE', '+3'),
+    ],
+
+    /*
     | Shopify Integration — public app credentials (OAuth authorization code
     | grant with expiring offline tokens). Clients connect their own stores;
     | each connection stores its own access/refresh token in

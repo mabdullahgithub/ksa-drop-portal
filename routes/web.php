@@ -70,6 +70,9 @@ Route::middleware(['auth', 'verified', 'role:!client'])->group(function () {
     // J&T Express Settings Page
     Route::get('/apps/jnt-express', fn () => Inertia::render('Apps/JntSettings'))->middleware('permission:edit apps')->name('apps.jnt-express');
 
+    // iMile Settings Page
+    Route::get('/apps/imile', fn () => Inertia::render('Apps/ImileSettings'))->middleware('permission:edit apps')->name('apps.imile');
+
     // Warehouses API
     Route::prefix('api/warehouses')->middleware('permission:edit apps')->group(function () {
         Route::get('/', [WarehouseController::class, 'index'])->name('api.warehouses.index');
@@ -96,6 +99,9 @@ Route::middleware(['auth', 'verified', 'role:!client'])->group(function () {
 
     // J&T API health check
     Route::get('/api/jnt/health', [ShipmentController::class, 'health'])->middleware('permission:edit apps')->name('api.jnt.health');
+
+    // iMile API health check
+    Route::get('/api/imile/health', [ShipmentController::class, 'health'])->defaults('courier', 'imile')->middleware('permission:edit apps')->name('api.imile.health');
 
     // Shipping analytics admin page
     Route::get('/apps/jnt-express/analytics', fn () => Inertia::render('Apps/ShipmentAnalytics'))->middleware('permission:view orders')->name('apps.jnt-express.analytics');

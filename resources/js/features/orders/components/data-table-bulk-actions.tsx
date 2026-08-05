@@ -63,6 +63,7 @@ export function DataTableBulkActions<TData>({
   const [showShipmentDialog, setShowShipmentDialog] = useState(false)
   const [warehouses, setWarehouses] = useState<Warehouse[]>([])
   const [selectedWarehouse, setSelectedWarehouse] = useState<number | ''>('')
+  const [shipmentCourier, setShipmentCourier] = useState<'jnt_express' | 'imile'>('jnt_express')
   const [shipmentServiceType, setShipmentServiceType] = useState('02')
   const [shipmentGoodsType, setShipmentGoodsType] = useState('ITN1')
   const [shipmentWeight, setShipmentWeight] = useState('0.5')
@@ -96,9 +97,11 @@ export function DataTableBulkActions<TData>({
       const res = await axios.post('/api/shipments/bulk', {
         order_ids: orderIds,
         warehouse_id: selectedWarehouse,
+        courier: shipmentCourier,
         weight: parseFloat(shipmentWeight) || 0.5,
-        service_type: shipmentServiceType,
-        goods_type: shipmentGoodsType,
+        ...(shipmentCourier === 'jnt_express'
+          ? { service_type: shipmentServiceType, goods_type: shipmentGoodsType }
+          : {}),
         ...(shipmentRemark.trim() ? { remark: shipmentRemark.trim() } : {}),
       })
       setShipmentResult({ created: res.data.created || [], failed: res.data.failed || [] })
@@ -384,6 +387,17 @@ export function DataTableBulkActions<TData>({
           {!shipmentResult ? (
             <div className='space-y-4 py-2'>
               <div className='space-y-2'>
+                <Label>Courier</Label>
+                <select
+                  className='flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm'
+                  value={shipmentCourier}
+                  onChange={(e) => setShipmentCourier(e.target.value as 'jnt_express' | 'imile')}
+                >
+                  <option value='jnt_express'>J&amp;T Express</option>
+                  <option value='imile'>iMile</option>
+                </select>
+              </div>
+              <div className='space-y-2'>
                 <Label>Sender Warehouse</Label>
                 <select
                   className='flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm'
@@ -413,35 +427,39 @@ export function DataTableBulkActions<TData>({
                     onChange={(e) => setShipmentWeight(e.target.value)}
                   />
                 </div>
-                <div className='space-y-2'>
-                  <Label>Service Type</Label>
-                  <select
-                    className='flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm'
-                    value={shipmentServiceType}
-                    onChange={(e) => setShipmentServiceType(e.target.value)}
-                  >
-                    <option value='01'>Express (pickup at door)</option>
-                    <option value='02'>Standard (drop at J&T store)</option>
-                  </select>
-                </div>
+                {shipmentCourier === 'jnt_express' && (
+                  <div className='space-y-2'>
+                    <Label>Service Type</Label>
+                    <select
+                      className='flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm'
+                      value={shipmentServiceType}
+                      onChange={(e) => setShipmentServiceType(e.target.value)}
+                    >
+                      <option value='01'>Express (pickup at door)</option>
+                      <option value='02'>Standard (drop at J&T store)</option>
+                    </select>
+                  </div>
+                )}
+                {shipmentCourier === 'jnt_express' && (
+                  <div className='space-y-2 col-span-2'>
+                    <Label>Goods Type <span className='text-xs text-muted-foreground font-normal'>(optional)</span></Label>
+                    <select
+                      className='flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm'
+                      value={shipmentGoodsType}
+                      onChange={(e) => setShipmentGoodsType(e.target.value)}
+                    >
+                      <option value='ITN1'>Clothes (ITN1)</option>
+                      <option value='ITN2'>Document (ITN2)</option>
+                      <option value='ITN3'>Food (ITN3)</option>
+                      <option value='ITN4'>Others (ITN4)</option>
+                      <option value='ITN5'>Digital Product (ITN5)</option>
+                      <option value='ITN6'>Daily Necessities (ITN6)</option>
+                      <option value='ITN7'>Fragile Items (ITN7)</option>
+                    </select>
+                  </div>
+                )}
                 <div className='space-y-2 col-span-2'>
-                  <Label>Goods Type <span className='text-xs text-muted-foreground font-normal'>(optional)</span></Label>
-                  <select
-                    className='flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm'
-                    value={shipmentGoodsType}
-                    onChange={(e) => setShipmentGoodsType(e.target.value)}
-                  >
-                    <option value='ITN1'>Clothes (ITN1)</option>
-                    <option value='ITN2'>Document (ITN2)</option>
-                    <option value='ITN3'>Food (ITN3)</option>
-                    <option value='ITN4'>Others (ITN4)</option>
-                    <option value='ITN5'>Digital Product (ITN5)</option>
-                    <option value='ITN6'>Daily Necessities (ITN6)</option>
-                    <option value='ITN7'>Fragile Items (ITN7)</option>
-                  </select>
-                </div>
-                <div className='space-y-2 col-span-2'>
-                  <Label>Remark <span className='text-xs text-muted-foreground font-normal'>(optional, forwarded to J&T)</span></Label>
+                  <Label>Remark <span className='text-xs text-muted-foreground font-normal'>(optional, forwarded to the courier)</span></Label>
                   <Input
                     value={shipmentRemark}
                     onChange={(e) => setShipmentRemark(e.target.value)}

@@ -26,7 +26,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { BuyEaseCard } from '@/components/buyease-card'
 import { useEnabledConnectors, type Connector } from '@/hooks/useEnabledConnectors'
 import { useShopifyConnection } from '@/hooks/useShopifyConnection'
 import { IconShopify, IconJnt } from '@/assets/brand-icons'
@@ -38,12 +37,11 @@ const logoMap: Record<string, React.ReactNode> = {
   jnt_express: <IconJnt />,
 }
 
-// Fixed display order: J&T first, then Shopify, then BuyEase.
+// Fixed display order: J&T first, then Shopify.
 // (J&T is filtered out server-side for clients but kept here for safety.)
 const displayOrder: Record<string, number> = {
   jnt_express: 0,
   shopify: 1,
-  buyease: 2,
 }
 
 export function PortalConnectors() {
@@ -104,12 +102,6 @@ export function PortalConnectors() {
                   onChanged={refresh}
                   prefillShop={prefillShop}
                   prefillClaimToken={prefillClaimToken}
-                />
-              ) : connector.key === 'buyease' ? (
-                <BuyEaseCard
-                  key={connector.id}
-                  name={connector.name}
-                  description={connector.description}
                 />
               ) : (
                 <ConnectorCard

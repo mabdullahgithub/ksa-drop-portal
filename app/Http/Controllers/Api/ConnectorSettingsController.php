@@ -60,19 +60,24 @@ class ConnectorSettingsController extends Controller
 
     public function test(Request $request, Connector $connector)
     {
-        if ($connector->key !== 'jnt_express') {
+        $courierLabels = [
+            'jnt_express' => 'J&T Express',
+            'imile' => 'iMile',
+        ];
+
+        if (! isset($courierLabels[$connector->key])) {
             return response()->json(['success' => false, 'message' => 'Test not supported for this connector.'], 400);
         }
 
         try {
             $manager = new CourierManager();
-            $driver = $manager->driver('jnt_express');
+            $driver = $manager->driver($connector->key);
             $success = $driver->testConnection();
 
             return response()->json([
                 'success' => $success,
                 'message' => $success
-                    ? 'Connection successful! J&T Express API is reachable.'
+                    ? "Connection successful! {$courierLabels[$connector->key]} API is reachable."
                     : 'Connection failed. Please check your credentials.',
             ]);
         } catch (\Exception $e) {

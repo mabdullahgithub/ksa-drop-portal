@@ -61,6 +61,7 @@ class ShipmentController extends Controller
         $validated = $request->validate([
             'order_id'               => 'required|exists:orders,id',
             'warehouse_id'           => 'required|exists:warehouses,id',
+            'courier'                => 'nullable|in:jnt_express,imile',
             'weight'                 => 'nullable|numeric|min:0.1',
             'length'                 => 'nullable|numeric|min:0',
             'width'                  => 'nullable|numeric|min:0',
@@ -78,6 +79,8 @@ class ShipmentController extends Controller
             'receiver_short_address' => 'nullable|string|max:50',
         ]);
 
+        $courier = $validated['courier'] ?? 'jnt_express';
+
         $order = Order::with('items')->findOrFail($validated['order_id']);
 
         // Check for existing active shipment
@@ -93,12 +96,12 @@ class ShipmentController extends Controller
 
         $shipmentData = ShipmentData::fromOrder($order, $warehouse, $validated);
 
-        $driver = $this->courierManager->driver('jnt_express');
+        $driver = $this->courierManager->driver($courier);
         $result = $driver->createShipment($shipmentData);
 
         if (! $result->success) {
             return response()->json([
-                'message' => 'Failed to create shipment with J&T Express.',
+                'message' => "Failed to create shipment with {$this->courierLabel($courier)}.",
                 'error' => $result->errorMessage,
                 'error_code' => $result->errorCode,
             ], 422);
@@ -106,7 +109,7 @@ class ShipmentController extends Controller
 
         $shipment = Shipment::create([
             'order_id' => $order->id,
-            'courier' => 'jnt_express',
+            'courier' => $courier,
             'tracking_number' => $result->trackingNumber,
             'txlogistic_id' => $shipmentData->txlogisticId,
             'sorting_code' => $result->sortingCode,
@@ -132,14 +135,17 @@ class ShipmentController extends Controller
             'order_ids'    => 'required|array|min:1',
             'order_ids.*'  => 'exists:orders,id',
             'warehouse_id' => 'required|exists:warehouses,id',
+            'courier'      => 'nullable|in:jnt_express,imile',
             'weight'       => 'nullable|numeric|min:0.1',
             'service_type' => 'nullable|in:01,02',
             'goods_type'   => 'nullable|in:ITN1,ITN2,ITN3,ITN4,ITN5,ITN6,ITN7',
             'remark'       => 'nullable|string|max:200',
         ]);
 
+        $courier = $validated['courier'] ?? 'jnt_express';
+
         $warehouse = Warehouse::findOrFail($validated['warehouse_id']);
-        $driver = $this->courierManager->driver('jnt_express');
+        $driver = $this->courierManager->driver($courier);
 
         $created = [];
         $failed = [];
@@ -174,7 +180,7 @@ class ShipmentController extends Controller
 
             $shipment = Shipment::create([
                 'order_id' => $order->id,
-                'courier' => 'jnt_express',
+                'courier' => $courier,
                 'tracking_number' => $result->trackingNumber,
                 'txlogistic_id' => $shipmentData->txlogisticId,
                 'sorting_code' => $result->sortingCode,
@@ -231,12 +237,12 @@ class ShipmentController extends Controller
 
         $shipmentData = ShipmentData::fromOrder($order, $warehouse, $options);
 
-        $driver = $this->courierManager->driver('jnt_express');
+        $driver = $this->courierManager->driver($shipment->courier);
         $result = $driver->createShipment($shipmentData);
 
         if (! $result->success) {
             return response()->json([
-                'message'    => 'Failed to modify shipment at J&T Express.',
+                'message'    => "Failed to modify shipment at {$this->courierLabel($shipment->courier)}.",
                 'error'      => $result->errorMessage,
                 'error_code' => $result->errorCode,
             ], 422);
@@ -304,21 +310,23 @@ class ShipmentController extends Controller
         ]);
     }
 
-    public function health()
+    public function health(Request $request)
     {
+        $courier = $request->route('courier') ?? $request->query('courier', 'jnt_express');
+
         try {
-            $driver = $this->courierManager->driver('jnt_express');
+            $driver = $this->courierManager->driver($courier);
             $ok = $driver->testConnection();
 
             return response()->json([
                 'status'    => $ok ? 'healthy' : 'degraded',
-                'courier'   => 'jnt_express',
+                'courier'   => $courier,
                 'checked_at' => now()->toIso8601String(),
             ], $ok ? 200 : 503);
         } catch (\Exception $e) {
             return response()->json([
                 'status'    => 'error',
-                'courier'   => 'jnt_express',
+                'courier'   => $courier,
                 'message'   => $e->getMessage(),
                 'checked_at' => now()->toIso8601String(),
             ], 503);
@@ -336,7 +344,16 @@ class ShipmentController extends Controller
         }
 
         $driver = $this->courierManager->driver($shipment->courier);
-        $result = $driver->cancelShipment($shipment->txlogistic_id, $request->input('reason'));
+
+        // iMile's cancel API needs both its own order code and the courier
+        // waybill number; encode both so ImileDriver::cancelShipment can
+        // split them back out. J&T's cancelOrder only needs txlogistic_id,
+        // so its call path is untouched.
+        $identifier = $shipment->courier === 'imile' && $shipment->tracking_number
+            ? $shipment->txlogistic_id . '|' . $shipment->tracking_number
+            : $shipment->txlogistic_id;
+
+        $result = $driver->cancelShipment($identifier, $request->input('reason'));
 
         if (! $result->success) {
             return response()->json([
@@ -351,5 +368,14 @@ class ShipmentController extends Controller
             'message' => 'Shipment cancelled successfully.',
             'shipment' => $shipment->fresh(),
         ]);
+    }
+
+    protected function courierLabel(string $courier): string
+    {
+        return match ($courier) {
+            'jnt_express' => 'J&T Express',
+            'imile' => 'iMile',
+            default => $courier,
+        };
     }
 }
