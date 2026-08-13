@@ -98,11 +98,18 @@ class ImileWebhookController extends Controller
 
             DB::transaction(function () use ($shipment, $events, $latest): void {
                 $shipment->addTrackingEvents($events);
+
+                // A push may arrive out of order (iMile retries a failed
+                // delivery up to 3 times) — only move the coarse status
+                // forward; the raw courier text is always recorded regardless.
+                [$appliedStatus, $extra] = $shipment->resolveTrackingStatus($latest->status);
+
                 $shipment->update([
-                    'status'                     => $latest->status->value,
+                    'status'                     => $appliedStatus->value,
                     'courier_status'             => $latest->rawStatus,
                     'courier_status_description' => $latest->description,
                     'tracking_history'           => $shipment->tracking_history,
+                    ...$extra,
                 ]);
 
                 match ($latest->status) {

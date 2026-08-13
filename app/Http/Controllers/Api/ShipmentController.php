@@ -281,9 +281,14 @@ class ShipmentController extends Controller
             ], 422);
         }
 
+        // An on-demand refresh may still return events out of order — only
+        // move the coarse status forward (see Shipment::resolveTrackingStatus()).
+        [$appliedStatus, $extra] = $shipment->resolveTrackingStatus($result->currentStatus);
+
         $shipment->update([
-            'status' => $result->currentStatus->value,
+            'status' => $appliedStatus->value,
             'tracking_history' => array_map(fn ($e) => $e->toArray(), $result->events),
+            ...$extra,
         ]);
 
         if ($result->currentStatus === ShipmentStatus::DELIVERED) {

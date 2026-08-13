@@ -66,11 +66,18 @@ class WebhookController extends Controller
 
             DB::transaction(function () use ($shipment, $events, $latest): void {
                 $shipment->addTrackingEvents($events);
+
+                // A push may arrive out of order (retry, race, batching) —
+                // only move the coarse status forward; the raw courier text
+                // below is always recorded regardless.
+                [$appliedStatus, $extra] = $shipment->resolveTrackingStatus($latest->status);
+
                 $shipment->update([
-                    'status'                     => $latest->status->value,
+                    'status'                     => $appliedStatus->value,
                     'courier_status'             => $latest->rawStatus,
                     'courier_status_description' => $latest->description,
                     'tracking_history'           => $shipment->tracking_history,
+                    ...$extra,
                 ]);
 
                 // Capture an OTP delivered on a sign scan.
@@ -83,6 +90,7 @@ class WebhookController extends Controller
                 match ($latest->status) {
                     ShipmentStatus::DELIVERED => $shipment->markDelivered(),
                     ShipmentStatus::RETURNED  => $shipment->markReturned($latest->description),
+                    ShipmentStatus::CANCELLED => $shipment->markCancelled($latest->description),
                     ShipmentStatus::EXCEPTION => $this->escalateOnce($shipment, $latest->description),
                     default                   => null,
                 };

@@ -33,6 +33,8 @@ interface Shipment {
   status: string
   status_label: string
   status_color: string
+  courier_status: string | null
+  courier_status_description: string | null
   tracking_history: TrackingEvent[] | null
   shipped_at: string | null
   delivered_at: string | null
@@ -172,6 +174,12 @@ export function ShipmentPanel({ shipment, orderId, onCreateShipment, onShipmentU
         </div>
       </div>
 
+      {/* Raw courier text — e.g. distinguishes "In Transit" meaning outbound
+          from "In Transit" meaning a parcel returning to the warehouse. */}
+      {shipment.courier_status_description && (
+        <p className='text-xs text-muted-foreground -mt-2'>{shipment.courier_status_description}</p>
+      )}
+
       <div className='grid grid-cols-2 gap-3 text-sm'>
         {shipment.tracking_number && (
           <div>
@@ -220,8 +228,11 @@ export function ShipmentPanel({ shipment, orderId, onCreateShipment, onShipmentU
         )}
       </div>
 
-      {/* Exception note */}
-      {shipment.exception_note && (
+      {/* Exception note — only surfaced while the shipment is actually in
+          Exception; once it recovers, the backend clears exception_escalated_at
+          but keeps exception_note as history, so gate display on current
+          status rather than the note's mere presence. */}
+      {isException && shipment.exception_note && (
         <div className='rounded-md bg-red-50 dark:bg-red-900/20 p-3 text-sm text-red-700 dark:text-red-400'>
           <div className='font-medium flex items-center gap-1 mb-1'>
             <AlertTriangle className='h-3 w-3' /> Exception Note

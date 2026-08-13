@@ -55,6 +55,7 @@ enum ShipmentStatus: string
             self::IN_TRANSIT,
             self::OUT_FOR_DELIVERY,
             self::ATTEMPT_FAIL,
+            self::EXCEPTION,
         ]);
     }
 
@@ -66,5 +67,56 @@ enum ShipmentStatus: string
             self::CANCELLED,
             self::FAILED,
         ]);
+    }
+
+    /**
+     * Relative depth of the non-terminal, non-exception "happy path" states,
+     * used only by {@see shouldTransitionTo()} to stop an out-of-order courier
+     * event from moving a shipment backward (e.g. iMile's `SCH` — a delivery
+     * appointment booked — tends to arrive *after* the parcel has already
+     * reached IN_TRANSIT/OUT_FOR_DELIVERY, but normalises to INFO_RECEIVED).
+     */
+    private const PROGRESSION_RANK = [
+        'pending'          => 0,
+        'info_received'    => 1,
+        'in_transit'       => 2,
+        'out_for_delivery' => 3,
+        'attempt_fail'     => 3,
+    ];
+
+    /**
+     * Whether a shipment currently at $this status should move to $incoming.
+     *
+     * Both J&T and iMile push tracking events whose delivery order isn't
+     * guaranteed (retries, batched pulls, out-of-order webhooks), so blindly
+     * applying "whatever the latest event says" can visibly regress a
+     * shipment's status. The rule:
+     *
+     *  - A courier's terminal outcome (Delivered/Returned/Cancelled/Failed)
+     *    always wins — it's authoritative regardless of ordering.
+     *  - Nothing can move a shipment off a terminal outcome once recorded.
+     *  - Exception is a flagged-for-attention state, not a dead end: it can
+     *    be entered from anywhere, and a later plain progression event is
+     *    read as "it recovered" and is allowed to move it forward again —
+     *    otherwise a resolved exception would stay stuck on display forever.
+     *  - Otherwise, only forward (or lateral, same-rank) moves through the
+     *    ordinary PENDING → INFO_RECEIVED → IN_TRANSIT → OUT_FOR_DELIVERY
+     *    progression are applied.
+     */
+    public function shouldTransitionTo(self $incoming): bool
+    {
+        if ($incoming->isTerminal()) {
+            return true;
+        }
+
+        if ($this->isTerminal()) {
+            return false;
+        }
+
+        if ($incoming === self::EXCEPTION || $this === self::EXCEPTION) {
+            return true;
+        }
+
+        return (self::PROGRESSION_RANK[$incoming->value] ?? 0) >= (self::PROGRESSION_RANK[$this->value] ?? 0);
     }
 }

@@ -101,6 +101,10 @@ class Shipment extends Model
             ShipmentStatus::IN_TRANSIT->value,
             ShipmentStatus::OUT_FOR_DELIVERY->value,
             ShipmentStatus::ATTEMPT_FAIL->value,
+            // Exception isn't a dead end — without polling it, a shipment
+            // that hits Exception could only ever move again via another
+            // webhook push (see ShipmentStatus::shouldTransitionTo()).
+            ShipmentStatus::EXCEPTION->value,
         ]);
     }
 
@@ -127,6 +131,44 @@ class Shipment extends Model
     public function addTrackingEvent(TrackingEvent $event): void
     {
         $this->addTrackingEvents([$event]);
+    }
+
+    /**
+     * Resolve what a tracking update should actually do to this shipment's
+     * status, honoring {@see ShipmentStatus::shouldTransitionTo()}'s
+     * ordering guard so an out-of-order courier event can't move the
+     * status backward.
+     *
+     * Also detects "recovery": a shipment that was Exception and is now
+     * moving again. `escalateException()`/`escalateOnce()` only notify
+     * admins once per shipment (via `exception_escalated_at`) so repeated
+     * pushes about the *same* incident don't spam them — but without
+     * clearing that flag on recovery, a later, unrelated exception would
+     * silently fail to re-notify anyone, since the flag from the first,
+     * already-resolved incident is still sitting there. `exception_note`
+     * is left untouched as a record of the last incident; only the
+     * escalation flag resets, so the next real exception starts fresh.
+     *
+     * Shared by both webhook handlers, the polling sync command, and the
+     * on-demand track() refresh — every place a courier's reported status
+     * gets applied to a shipment.
+     *
+     * @return array{0: ShipmentStatus, 1: array<string, mixed>} [status to apply, extra attributes to persist alongside it]
+     */
+    public function resolveTrackingStatus(ShipmentStatus $incoming): array
+    {
+        $current = $this->status_enum;
+        $applied = $current->shouldTransitionTo($incoming) ? $incoming : $current;
+
+        $extra = [];
+
+        if ($current === ShipmentStatus::EXCEPTION
+            && $applied !== ShipmentStatus::EXCEPTION
+            && $this->exception_escalated_at !== null) {
+            $extra['exception_escalated_at'] = null;
+        }
+
+        return [$applied, $extra];
     }
 
     /**

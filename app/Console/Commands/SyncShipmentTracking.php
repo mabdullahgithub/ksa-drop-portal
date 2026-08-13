@@ -136,9 +136,14 @@ class SyncShipmentTracking extends Command
         // synced via this polling fallback).
         $latest = $this->latestEvent($result->events);
 
+        // A poll may race a webhook push or return events out of order —
+        // only move the coarse status forward.
+        [$appliedStatus, $extra] = $shipment->resolveTrackingStatus($result->currentStatus);
+
         $attributes = [
-            'status' => $result->currentStatus->value,
+            'status' => $appliedStatus->value,
             'tracking_history' => array_map(fn ($e) => $e->toArray(), $result->events),
+            ...$extra,
         ];
 
         if ($latest !== null) {

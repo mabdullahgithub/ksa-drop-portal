@@ -218,6 +218,70 @@ class JntTrackingWebhookTest extends TestCase
             ->assertJson(['code' => '1']);
     }
 
+    public function test_a_late_out_of_order_scan_cannot_regress_status(): void
+    {
+        $shipment = $this->makeShipment();
+
+        [$biz1, $headers1] = $this->push([
+            'billCode' => 'UTE300000056947',
+            'details'  => [['scanType' => 'Delivery scan', 'scanTypeCode' => '94', 'desc' => 'Out for delivery', 'scanTime' => '2022-06-07 08:00:00']],
+        ]);
+        $this->call('POST', '/webhooks/jnt-express', ['bizContent' => $biz1], [], [], $this->serverHeaders($headers1))->assertOk();
+        $this->assertSame(ShipmentStatus::OUT_FOR_DELIVERY->value, $shipment->refresh()->status);
+
+        // A pickup scan (rank: Info Received) arrives late — must not move
+        // the shipment backward from Out for Delivery.
+        [$biz2, $headers2] = $this->push([
+            'billCode' => 'UTE300000056947',
+            'details'  => [['scanType' => 'Pickup scan', 'scanTypeCode' => '10', 'desc' => 'Picked up', 'scanTime' => '2022-06-06 10:10:28']],
+        ]);
+        $this->call('POST', '/webhooks/jnt-express', ['bizContent' => $biz2], [], [], $this->serverHeaders($headers2))->assertOk();
+
+        $shipment->refresh();
+        $this->assertSame(ShipmentStatus::OUT_FOR_DELIVERY->value, $shipment->status);
+        // The raw courier text is still recorded even though the coarse status held.
+        $this->assertSame('Picked up', $shipment->courier_status_description);
+    }
+
+    public function test_exception_escalation_resets_after_recovery_so_a_later_exception_renotifies(): void
+    {
+        $shipment = $this->makeShipment();
+
+        [$biz1, $headers1] = $this->push([
+            'billCode' => 'UTE300000056947',
+            'details'  => [['scanType' => 'abnormal parcel scan', 'scanTypeCode' => '110', 'desc' => 'Damaged parcel', 'scanTime' => '2022-06-06 10:00:00']],
+        ]);
+        $this->call('POST', '/webhooks/jnt-express', ['bizContent' => $biz1], [], [], $this->serverHeaders($headers1))->assertOk();
+
+        $shipment->refresh();
+        $this->assertSame(ShipmentStatus::EXCEPTION->value, $shipment->status);
+        $this->assertNotNull($shipment->exception_escalated_at);
+
+        // Recovers — a normal transit scan arrives after the exception.
+        [$biz2, $headers2] = $this->push([
+            'billCode' => 'UTE300000056947',
+            'details'  => [['scanType' => 'station arrival', 'scanTypeCode' => '92', 'desc' => 'Back on route', 'scanTime' => '2022-06-06 11:00:00']],
+        ]);
+        $this->call('POST', '/webhooks/jnt-express', ['bizContent' => $biz2], [], [], $this->serverHeaders($headers2))->assertOk();
+
+        $shipment->refresh();
+        $this->assertSame(ShipmentStatus::IN_TRANSIT->value, $shipment->status);
+        $this->assertNull($shipment->exception_escalated_at);
+
+        // A second, unrelated exception — must escalate again, not be
+        // silently swallowed by the first incident's (now-cleared) flag.
+        [$biz3, $headers3] = $this->push([
+            'billCode' => 'UTE300000056947',
+            'details'  => [['scanType' => 'abnormal parcel scan', 'scanTypeCode' => '110', 'desc' => 'Lost in transit', 'scanTime' => '2022-06-06 12:00:00']],
+        ]);
+        $this->call('POST', '/webhooks/jnt-express', ['bizContent' => $biz3], [], [], $this->serverHeaders($headers3))->assertOk();
+
+        $shipment->refresh();
+        $this->assertSame(ShipmentStatus::EXCEPTION->value, $shipment->status);
+        $this->assertNotNull($shipment->exception_escalated_at);
+        $this->assertSame('Lost in transit', $shipment->exception_note);
+    }
+
     /** Prefix headers with HTTP_ so the test client passes them through. */
     private function serverHeaders(array $headers): array
     {

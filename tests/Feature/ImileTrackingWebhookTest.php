@@ -186,4 +186,71 @@ class ImileTrackingWebhookTest extends TestCase
 
         $this->assertSame(ShipmentStatus::PENDING->value, $shipment->refresh()->status);
     }
+
+    public function test_a_late_out_of_order_status_cannot_regress(): void
+    {
+        $shipment = $this->makeShipment();
+
+        $this->postJson('/webhooks/imile/tracking', $this->push([
+            'billNo'           => $shipment->tracking_number,
+            'latestStatus'     => 'OFD',
+            'latestStatusTime' => '2025-01-06T13:58:29+08:00',
+            'latestLocus'      => 'Out for delivery.',
+        ]))->assertOk();
+        $this->assertSame(ShipmentStatus::OUT_FOR_DELIVERY->value, $shipment->refresh()->status);
+
+        // A scheduling appointment (SCH, normalises to Info Received) arrives
+        // late — must not move the shipment backward from Out for Delivery.
+        $this->postJson('/webhooks/imile/tracking', $this->push([
+            'billNo'           => $shipment->tracking_number,
+            'latestStatus'     => 'SCH',
+            'latestStatusTime' => '2025-01-05T09:00:00+08:00',
+            'latestLocus'      => 'Delivery appointment booked.',
+        ]))->assertOk();
+
+        $shipment->refresh();
+        $this->assertSame(ShipmentStatus::OUT_FOR_DELIVERY->value, $shipment->status);
+        $this->assertSame('Delivery appointment booked.', $shipment->courier_status_description);
+    }
+
+    public function test_exception_escalation_resets_after_recovery_so_a_later_exception_renotifies(): void
+    {
+        $shipment = $this->makeShipment();
+
+        $this->postJson('/webhooks/imile/tracking', $this->push([
+            'billNo'           => $shipment->tracking_number,
+            'latestStatus'     => 'BTD',
+            'latestStatusTime' => '2025-01-05T09:00:00+08:00',
+            'latestLocus'      => 'Delivery failed, back to warehouse.',
+        ]))->assertOk();
+
+        $shipment->refresh();
+        $this->assertSame(ShipmentStatus::EXCEPTION->value, $shipment->status);
+        $this->assertNotNull($shipment->exception_escalated_at);
+
+        // Recovers — dispatched again after the exception.
+        $this->postJson('/webhooks/imile/tracking', $this->push([
+            'billNo'           => $shipment->tracking_number,
+            'latestStatus'     => 'AssignDA',
+            'latestStatusTime' => '2025-01-05T11:00:00+08:00',
+            'latestLocus'      => 'Reassigned to a driver.',
+        ]))->assertOk();
+
+        $shipment->refresh();
+        $this->assertSame(ShipmentStatus::IN_TRANSIT->value, $shipment->status);
+        $this->assertNull($shipment->exception_escalated_at);
+
+        // A second, unrelated exception — must escalate again.
+        $this->postJson('/webhooks/imile/tracking', $this->push([
+            'billNo'           => $shipment->tracking_number,
+            'latestStatus'     => 'VBTD',
+            'latestStatusTime' => '2025-01-05T13:00:00+08:00',
+            'latestLocus'      => 'Supplier return collection.',
+        ]))->assertOk();
+
+        $shipment->refresh();
+        $this->assertSame(ShipmentStatus::EXCEPTION->value, $shipment->status);
+        $this->assertNotNull($shipment->exception_escalated_at);
+        $this->assertSame('Supplier return collection.', $shipment->exception_note);
+    }
 }

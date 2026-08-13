@@ -405,15 +405,20 @@ class ImileDriver implements CourierDriver
             'SubmitOrder', 'SCH', 'AssignPickup', 'CancelAssignPickup', 'PickUpOrder' => ShipmentStatus::INFO_RECEIVED,
 
             'RecevieOrder', 'Shipping', 'Arrive', 'AssignDA', 'Transfer', 'Unpacking',
-            'DeliveryCompleted', 'ReturnShipping', 'ReturnArrive',
+            'ReturnShipping', 'ReturnArrive',
             'IntlReceived', 'IntlShipping', 'IntlArrive', 'IntlClearanceScan', 'IntlClearance',
-            'operation_change_delivery_method', 'operation_self_pickup_point_inbound' => ShipmentStatus::IN_TRANSIT,
+            'VDispatch', 'operation_change_delivery_method', 'operation_self_pickup_point_inbound' => ShipmentStatus::IN_TRANSIT,
 
             'OFD' => ShipmentStatus::OUT_FOR_DELIVERY,
 
             'Delivered' => ShipmentStatus::DELIVERED,
 
-            'BTD', 'ReturnFailed', 'Abandon', 'AbnormalDelivered',
+            // DeliveryCompleted looks like success by name, but per the iMile
+            // doc it fires when the waybill closes *without* delivery and
+            // enters the return process — a failure trigger, not progress.
+            // VBTD ("supplier package return collection") is the same failure
+            // family as BTD ("back to warehouse"); grouped with it here.
+            'BTD', 'VBTD', 'DeliveryCompleted', 'ReturnFailed', 'Abandon', 'AbnormalDelivered',
             'cs_schedule_failed_no_answer' => ShipmentStatus::EXCEPTION,
 
             'ReturnSuccess', 'RefundSuccess', 'RTC' => ShipmentStatus::RETURNED,
