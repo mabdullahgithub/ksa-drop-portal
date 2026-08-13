@@ -62,10 +62,11 @@ Route::middleware(['auth', 'verified', 'role:!client'])->group(function () {
     Route::get('/apps', fn () => Inertia::render('Apps'))->middleware('permission:view apps')->name('apps');
 
     // Connectors API
-    Route::get('/api/connectors', [ConnectorController::class, 'index'])->middleware('permission:view apps')->name('api.connectors.index');
+    Route::get('/api/connectors', [ConnectorController::class, 'index'])->middleware('permission:view apps,edit apps')->name('api.connectors.index');
     Route::patch('/api/connectors/{connector}/toggle', [ConnectorController::class, 'toggle'])->middleware('permission:edit apps')->name('api.connectors.toggle');
     Route::get('/api/connectors/{connector}/settings', [ConnectorSettingsController::class, 'show'])->middleware('permission:edit apps')->name('api.connectors.settings.show');
     Route::put('/api/connectors/{connector}/settings', [ConnectorSettingsController::class, 'update'])->middleware('permission:edit apps')->name('api.connectors.settings.update');
+    Route::post('/api/connectors/{connector}/settings/reveal', [ConnectorSettingsController::class, 'reveal'])->middleware('permission:edit apps')->name('api.connectors.settings.reveal');
     Route::post('/api/connectors/{connector}/test', [ConnectorSettingsController::class, 'test'])->middleware('permission:edit apps')->name('api.connectors.settings.test');
 
     // J&T Express Settings Page

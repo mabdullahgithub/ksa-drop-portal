@@ -8,15 +8,18 @@ type PasswordInputProps = Omit<
   'type'
 > & {
   ref?: React.Ref<HTMLInputElement>
+  /** Start with the value visible instead of masked. Defaults to false (masked). */
+  defaultVisible?: boolean
 }
 
 export function PasswordInput({
   className,
   disabled,
   ref,
+  defaultVisible = false,
   ...props
 }: PasswordInputProps) {
-  const [showPassword, setShowPassword] = React.useState(false)
+  const [showPassword, setShowPassword] = React.useState(defaultVisible)
 
   return (
     <div className={cn('relative rounded-md', className)}>

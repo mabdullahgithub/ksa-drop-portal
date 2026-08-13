@@ -13,9 +13,13 @@ import { Input } from '@/components/ui/input'
 import { PasswordInput } from '@/components/password-input'
 import { Label } from '@/components/ui/label'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { Info } from 'lucide-react'
+import { Info, Eye, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import axios from 'axios'
+
+// Placeholder ConnectorSettingsController::show() sends in place of a saved
+// encrypted value — the real value never round-trips to the browser.
+const MASKED_VALUE = '••••••••'
 
 // Mini info icon + popover explaining how to obtain a given credential and
 // where to add it. Mirrors the same pattern used on the J&T settings page.
@@ -56,6 +60,8 @@ export default function ImileSettings() {
   const [saving, setSaving] = useState(false)
   const [testing, setTesting] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [revealingApiKey, setRevealingApiKey] = useState(false)
+  const [apiKeyJustRevealed, setApiKeyJustRevealed] = useState(false)
 
   useEffect(() => {
     init()
@@ -105,6 +111,20 @@ export default function ImileSettings() {
       toast.error(err.response?.data?.message || 'Failed to save settings')
     } finally {
       setSaving(false)
+    }
+  }
+
+  const revealApiKey = async () => {
+    if (!connectorId) return
+    setRevealingApiKey(true)
+    try {
+      const res = await axios.post(`/api/connectors/${connectorId}/settings/reveal`, { key: 'api_key' })
+      setSettings((prev) => ({ ...prev, api_key: res.data.value }))
+      setApiKeyJustRevealed(true)
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Failed to reveal API key')
+    } finally {
+      setRevealingApiKey(false)
     }
   }
 
@@ -196,12 +216,49 @@ export default function ImileSettings() {
                       <p><span className='font-medium'>Where to get it:</span> issued together with your Customer ID by iMile. Stored encrypted — leave the masked value untouched to keep the saved key.</p>
                     </FieldInfo>
                   </div>
-                  <PasswordInput
-                    id='api_key'
-                    value={settings.api_key}
-                    onChange={(e) => setSettings({ ...settings, api_key: e.target.value })}
-                    placeholder='Your iMile API key'
-                  />
+                  {settings.api_key === MASKED_VALUE ? (
+                    // The server never sends the real key back on a normal page
+                    // load (see ConnectorSettingsController::show) — so instead of
+                    // a local show/hide toggle, this eye button fetches the real
+                    // decrypted value on demand (ConnectorSettingsController::reveal,
+                    // audit-logged server-side). Typing a new key here bypasses
+                    // this entirely and falls through to the interactive
+                    // PasswordInput below.
+                    <div className='relative rounded-md'>
+                      <Input
+                        id='api_key'
+                        type='password'
+                        value={settings.api_key}
+                        onChange={(e) => setSettings({ ...settings, api_key: e.target.value })}
+                        placeholder='Your iMile API key'
+                        autoComplete='off'
+                        className='pe-9'
+                      />
+                      <Button
+                        type='button'
+                        size='icon'
+                        variant='ghost'
+                        disabled={revealingApiKey}
+                        className='absolute inset-e-1 top-1/2 h-6 w-6 -translate-y-1/2 rounded-md text-muted-foreground'
+                        onClick={revealApiKey}
+                      >
+                        {revealingApiKey ? <Loader2 size={18} className='animate-spin' /> : <Eye size={18} />}
+                        <span className='sr-only'>Reveal saved API key</span>
+                      </Button>
+                    </div>
+                  ) : (
+                    <PasswordInput
+                      id='api_key'
+                      value={settings.api_key}
+                      onChange={(e) => setSettings({ ...settings, api_key: e.target.value })}
+                      placeholder='Your iMile API key'
+                      autoComplete='off'
+                      data-1p-ignore
+                      data-lpignore='true'
+                      data-form-type='other'
+                      defaultVisible={apiKeyJustRevealed}
+                    />
+                  )}
                 </div>
               </div>
 
