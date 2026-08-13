@@ -135,6 +135,14 @@ return [
             'replace_placeholders' => true,
         ],
 
+        'imile_webhooks' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/imile-webhooks.log'),
+            'level' => 'debug',
+            'days' => 30,
+            'replace_placeholders' => true,
+        ],
+
         // Everything Shopify — OAuth/token exchange, webhook delivery and
         // registration, order sync, and the GDPR compliance topics — lands here
         // rather than in the shared app log. Kept 90 days so the compliance

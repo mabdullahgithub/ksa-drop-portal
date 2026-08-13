@@ -52,6 +52,12 @@ const PATH_STEPS: { key: string; label: string; icon: LucideIcon }[] = [
 const HALTED  = ['cancelled', 'failed', 'returned']
 const PROBLEM = ['exception', 'attempt_fail', ...HALTED]
 
+// Mirrors shipment-panel.tsx's courierLabels
+const COURIER_LABELS: Record<string, string> = {
+  jnt_express: 'J&T Express',
+  imile: 'iMile',
+}
+
 const STATUS_BADGE: Record<string, string> = {
   gray:   'bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-700 dark:text-slate-300 dark:border-slate-600',
   blue:   'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800',
@@ -98,6 +104,10 @@ function tlIcon(status: string): LucideIcon {
   if (status === 'in_transit')                  return Truck
   if (status === 'info_received')               return ClipboardCheck
   return Clock
+}
+
+function courierLabel(courier: string): string {
+  return COURIER_LABELS[courier] || courier
 }
 
 // ── Sub-components ─────────────────────────────────────────────────────────────
@@ -225,7 +235,7 @@ function ResultsPanel({ shipment }: { shipment: ShipmentData }) {
             <p className="mb-3 text-[10px] font-semibold uppercase tracking-widest text-slate-400 dark:text-slate-500">Shipment Details</p>
             <DetailRow label="Order #"    value={shipment.order_number} />
             {shipment.customer_name && <DetailRow label="Customer" value={shipment.customer_name} />}
-            <DetailRow label="Courier"    value="J&T Express" />
+            <DetailRow label="Courier"    value={courierLabel(shipment.courier)} />
             {shipment.tracking_number && <DetailRow label="Tracking #" value={shipment.tracking_number} mono />}
             <DetailRow label="Shipped"    value={fmtDate(shipment.shipped_at)} />
             <DetailRow label="Delivered"  value={fmtDate(shipment.delivered_at)} />
@@ -271,7 +281,7 @@ function ResultsPanel({ shipment }: { shipment: ShipmentData }) {
         </div>
 
         <p className="pb-4 pt-2 text-center text-xs text-slate-400 dark:text-slate-600">
-          Powered by KSA Drop · Updates provided by J&amp;T Express
+          Powered by KSA Drop · Updates provided by {courierLabel(shipment.courier)}
         </p>
       </div>
     </div>
@@ -480,7 +490,7 @@ export default function TrackingSearch() {
               {!found && (
                 <div className="mt-8 flex items-center gap-2 text-xs text-slate-400 dark:text-slate-500">
                   <Truck className="h-4 w-4 text-orange-500/60" />
-                  Delivery powered by J&amp;T Express
+                  Delivery powered by J&amp;T Express &amp; iMile
                 </div>
               )}
             </div>
