@@ -324,8 +324,8 @@ Route::post('/webhooks/jnt-express/return', [WebhookController::class, 'handleJn
 Route::post('/webhooks/jnt-express/cod', [WebhookController::class, 'handleJntCod'])->name('webhooks.jnt-express.cod');
 Route::post('/webhooks/jnt-express/otp', [WebhookController::class, 'handleJntOtp'])->name('webhooks.jnt-express.otp');
 
-// iMile tracking-push webhook — signature verification pending iMile support
-// confirming the signing formula/secretKey (see ImileWebhookController).
+// iMile tracking-push webhook — no signature to verify (iMile support confirmed
+// the payload requires no encryption/decryption); see ImileWebhookController.
 Route::post('/webhooks/imile/tracking', [ImileWebhookController::class, 'handleTracking'])->name('webhooks.imile.tracking');
 
 // Shopify webhooks — public, HMAC-verified inside the controller (CSRF excluded via bootstrap/app.php 'webhooks/*')

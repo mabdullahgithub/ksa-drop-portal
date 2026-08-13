@@ -53,13 +53,13 @@ class ImileTrackingWebhookTest extends TestCase
         ]);
     }
 
-    /** Build the JSON envelope iMile would POST. Signature is not yet verifiable (see ImileWebhookController::verifySignature). */
+    /** Build the JSON envelope iMile would POST. `sign` is present per the doc sample but not checked (see ImileWebhookController::verifyPartnerCode). */
     private function push(array $param, string $partnerCode = self::PARTNER_CODE): array
     {
         return [
             'partnerCode' => $partnerCode,
             'param'       => $param,
-            'sign'        => 'PLACEHOLDER_UNTIL_IMILE_CONFIRMS_FORMULA',
+            'sign'        => 'NOT_VERIFIED_PER_IMILE_SUPPORT',
             'timestamp'   => '2025-01-06T19:17:06+08:00',
         ];
     }
@@ -179,6 +179,44 @@ class ImileTrackingWebhookTest extends TestCase
             'billNo'       => $shipment->tracking_number,
             'latestStatus' => 'Delivered',
         ], partnerCode: 'SOME_OTHER_ACCOUNT');
+
+        $this->postJson('/webhooks/imile/tracking', $body)
+            ->assertStatus(401)
+            ->assertJson(['code' => '401']);
+
+        $this->assertSame(ShipmentStatus::PENDING->value, $shipment->refresh()->status);
+    }
+
+    public function test_missing_sign_is_accepted_when_partner_code_matches(): void
+    {
+        // `sign` is an optional field on iMile's side (SHA-256/MD5 are the
+        // optional hash choices when a partner opts in, not a mandatory
+        // pair) — a push without one must still be processed, not rejected
+        // as a malformed request.
+        $shipment = $this->makeShipment();
+
+        $body = $this->push([
+            'billNo'       => $shipment->tracking_number,
+            'latestStatus' => 'Delivered',
+        ]);
+        unset($body['sign']);
+
+        $this->postJson('/webhooks/imile/tracking', $body)
+            ->assertOk()
+            ->assertJson(['code' => '200']);
+
+        $this->assertSame(ShipmentStatus::DELIVERED->value, $shipment->refresh()->status);
+    }
+
+    public function test_missing_sign_with_partner_code_mismatch_returns_401(): void
+    {
+        $shipment = $this->makeShipment();
+
+        $body = $this->push([
+            'billNo'       => $shipment->tracking_number,
+            'latestStatus' => 'Delivered',
+        ], partnerCode: 'SOME_OTHER_ACCOUNT');
+        unset($body['sign']);
 
         $this->postJson('/webhooks/imile/tracking', $body)
             ->assertStatus(401)

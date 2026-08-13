@@ -16,8 +16,8 @@ use Throwable;
 
 /**
  * iMile tracking-push webhook — see {@see \App\Http\Controllers\Api\WebhookController}
- * for J&T's equivalent. Kept separate because iMile's envelope, signing
- * scheme and response contract are all different from J&T's:
+ * for J&T's equivalent. Kept separate because iMile's envelope and response
+ * contract are both different from J&T's:
  *
  *  - Envelope is {partnerCode, param, sign, timestamp} (JSON body), not a
  *    signed-header form post.
@@ -27,6 +27,11 @@ use Throwable;
  *  - iMile retries a failing delivery up to 3 times, so handling must be
  *    idempotent — reuses {@see \App\Models\Shipment::addTrackingEvents()},
  *    the same dedup-by-signature mechanism the J&T push path relies on.
+ *  - Unlike J&T, there is no cryptographic signature to verify: iMile
+ *    support confirmed (2026-08-13) that the payload arrives exactly as
+ *    documented and requires no encryption/decryption on our end, so the
+ *    `sign` field is not used for authentication — see
+ *    {@see verifyPartnerCode()} for the check we do perform instead.
  *
  * Source: imiles/iMile Webhooks (Tracking Push).md, provided by iMile
  * support in response to our integration request (2026-08-13).
@@ -39,27 +44,22 @@ class ImileWebhookController extends Controller
 
         $partnerCode = $payload['partnerCode'] ?? null;
         $timestamp   = $payload['timestamp'] ?? null;
-        $sign        = $payload['sign'] ?? null;
         $param       = $payload['param'] ?? null;
 
-        if (! $partnerCode || ! $sign || ! $timestamp || ! is_array($param)) {
+        if (! $partnerCode || ! $timestamp || ! is_array($param)) {
             Log::channel('imile_webhooks')->warning('iMile webhook: missing required envelope fields', [
                 'has_partner_code' => (bool) $partnerCode,
-                'has_sign'         => (bool) $sign,
                 'has_timestamp'    => (bool) $timestamp,
                 'has_param'        => is_array($param),
             ]);
 
-            return $this->failure(400, '400', 'Missing required fields (partnerCode/param/sign/timestamp)');
+            return $this->failure(400, '400', 'Missing required fields (partnerCode/param/timestamp)');
         }
 
-        if (! $this->verifySignature((string) $partnerCode, $param, (string) $timestamp, (string) $sign)) {
-            Log::channel('imile_webhooks')->warning('iMile webhook: signature verification failed', [
-                'partner_code' => $partnerCode,
-                'ip'           => $request->ip(),
-            ]);
-
-            return $this->failure(401, '401', 'Signature verification failed');
+        // No cryptographic signature to check (see class docblock) — the
+        // partnerCode match is the actual authenticity check for this webhook.
+        if (! $this->verifyPartnerCode((string) $partnerCode, $request->ip())) {
+            return $this->failure(401, '401', 'partnerCode mismatch');
         }
 
         $trackingNumber = $param['billNo'] ?? null;
@@ -237,26 +237,19 @@ class ImileWebhookController extends Controller
     /**
      * Verify the inbound push actually came from iMile.
      *
-     * iMile's webhook doc ("API Rules" #6) only says the `sign` field uses
-     * "SHA-256 or MD5" — it does not specify field order, delimiters, or
-     * which of the two applies, and gives no worked example tying the
-     * sample payload to its sample `sign` value. We've asked iMile support
-     * for the exact formula and for the `secretKey` value to use (it's
-     * described as separate from the CustomerID/APIKey pair already used
-     * for outbound calls). Until they confirm:
+     * iMile's webhook doc ("API Rules" #6) describes `sign` as a signature
+     * generated after encryption — but iMile support confirmed directly
+     * (2026-08-13) that for our integration "the payload will be received
+     * as shown in the document, there is no need for any encryption or
+     * decryption." In other words: no secretKey exchange, no hash formula,
+     * and `sign` is not something we're expected to verify.
      *
-     *   - We cannot cryptographically verify `sign`.
-     *   - As a partial mitigation, we reject any push whose `partnerCode`
-     *     doesn't match our configured iMile Customer ID — cheap, but it
-     *     stops trivially-wrong senders and typos, the same defense-in-depth
-     *     check J&T's `apiAccount` verification performs.
-     *
-     * TODO: once iMile support provides the signing formula + secretKey,
-     * replace the "always true" fallback below with a real
-     * hash_equals()-based comparison, the same pattern used in
-     * WebhookController::verifyJntSignature().
+     * That leaves `partnerCode` matching our configured iMile Customer ID
+     * as the actual authenticity check — cheap, but it stops trivially-wrong
+     * senders and typos, the same defense-in-depth check J&T's `apiAccount`
+     * verification performs.
      */
-    protected function verifySignature(string $partnerCode, array $param, string $timestamp, string $sign): bool
+    protected function verifyPartnerCode(string $partnerCode, ?string $ip = null): bool
     {
         $expectedPartnerCode = ConnectorSetting::getForConnector('imile', 'customer_id')
             ?: config('services.imile.customer_id');
@@ -264,15 +257,11 @@ class ImileWebhookController extends Controller
         if ($expectedPartnerCode && ! hash_equals((string) $expectedPartnerCode, $partnerCode)) {
             Log::channel('imile_webhooks')->warning('iMile webhook: partnerCode mismatch', [
                 'received' => $partnerCode,
+                'ip'       => $ip,
             ]);
 
             return false;
         }
-
-        Log::channel('imile_webhooks')->warning(
-            'iMile webhook: signature NOT cryptographically verified — iMile signing spec pending confirmation from support; accepting on partnerCode match only',
-            ['partner_code' => $partnerCode],
-        );
 
         return true;
     }
