@@ -12,10 +12,13 @@ class CheckPermission
      * Handle an incoming request.
      *
      * @param  \Closure(\Illuminate\Http\Request): (\Symfony\Component\HttpFoundation\Response)  $next
-     * @param  string  $permission  One permission, or several comma-separated — any one of them is sufficient.
-     *                              e.g. `permission:view apps,edit apps` lets an edit-only role through too, so a
+     * @param  string  $permission  One permission, or several pipe-separated — any one of them is sufficient.
+     *                              e.g. `permission:view apps|edit apps` lets an edit-only role through too, so a
      *                              role granted "edit apps" without "view apps" doesn't get silently 403'd on the
-     *                              read endpoints its own edit page depends on (e.g. /api/connectors).
+     *                              read endpoints its own edit page depends on (e.g. /api/connectors). Pipe, not
+     *                              comma: Laravel's route-middleware string itself splits on commas to build the
+     *                              parameter list before this method ever runs, so a comma here would silently
+     *                              arrive as two separate $permission calls instead of one string to split.
      */
     public function handle(Request $request, Closure $next, string $permission): Response
     {
@@ -23,7 +26,7 @@ class CheckPermission
             return redirect()->route('login');
         }
 
-        $permissions = array_map('trim', explode(',', $permission));
+        $permissions = array_map('trim', explode('|', $permission));
 
         if (!auth()->user()->canAny($permissions)) {
             if (auth()->user()->hasRole('client')) {
