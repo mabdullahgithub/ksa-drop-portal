@@ -17,6 +17,37 @@ class PortalController extends Controller
 {
     public function __construct(protected OrderExportService $orderExport) {}
 
+    /**
+     * Strip a leading UTF-8 BOM and trim whitespace from CSV header cells so
+     * column matching doesn't silently fail on files exported by Excel,
+     * Numbers, Google Sheets, etc.
+     */
+    private function normalizeCsvHeaders(array $headers): array
+    {
+        return array_map(function ($header) {
+            return trim(preg_replace('/^\xEF\xBB\xBF/', '', (string) $header));
+        }, $headers);
+    }
+
+    /**
+     * Case-insensitively resolve a CSV field value, trying each candidate
+     * column name in order and returning the first non-empty match.
+     */
+    private function csvField(array $data, array $lowerHeaderMap, array $candidates): string
+    {
+        foreach ($candidates as $candidate) {
+            $key = $lowerHeaderMap[strtolower($candidate)] ?? null;
+            if ($key !== null && isset($data[$key])) {
+                $value = trim((string) $data[$key]);
+                if ($value !== '') {
+                    return $value;
+                }
+            }
+        }
+
+        return '';
+    }
+
     private function generateOrderNumber(string $prefix): string
     {
         // Count existing orders with this prefix to derive the next sequential number.
@@ -236,6 +267,45 @@ class PortalController extends Controller
             return response()->json(['success' => false, 'message' => 'Invalid CSV format - no headers found'], 422);
         }
 
+        // Normalize headers: strip a UTF-8 BOM (silently added by Excel/Numbers
+        // "CSV UTF-8" exports) and trim stray whitespace. Without this, a BOM on
+        // the first header (e.g. "Name" becomes "\xEF\xBB\xBFName") makes every
+        // exact-match lookup below fail, so every single row gets rejected.
+        $headers = $this->normalizeCsvHeaders($headers);
+        $lowerHeaderMap = array_combine(array_map('strtolower', $headers), $headers);
+
+        // Fail fast with one clear message if the file has no recognizable
+        // name/phone column at all, instead of looping through every row and
+        // reporting the same "missing" error dozens of times.
+        $nameCandidates = ['Name', 'Billing Name', 'Shipping Name'];
+        $phoneCandidates = ['Phone', 'Billing Phone', 'Shipping Phone'];
+        $hasNameColumn = false;
+        foreach ($nameCandidates as $candidate) {
+            if (isset($lowerHeaderMap[strtolower($candidate)])) {
+                $hasNameColumn = true;
+                break;
+            }
+        }
+        $hasPhoneColumn = false;
+        foreach ($phoneCandidates as $candidate) {
+            if (isset($lowerHeaderMap[strtolower($candidate)])) {
+                $hasPhoneColumn = true;
+                break;
+            }
+        }
+        if (!$hasNameColumn || !$hasPhoneColumn) {
+            fclose($handle);
+            $missing = array_filter([
+                !$hasNameColumn ? 'Name' : null,
+                !$hasPhoneColumn ? 'Phone' : null,
+            ]);
+            return response()->json([
+                'success' => false,
+                'message' => 'CSV is missing required column(s): ' . implode(', ', $missing)
+                    . '. Detected columns: ' . implode(', ', $headers),
+            ], 422);
+        }
+
         $imported = 0;
         $errors = [];
         $duplicates = 0;
@@ -278,16 +348,14 @@ class PortalController extends Controller
                     // and put the customer's name in "Billing Name" / "Shipping Name".
                     // So whenever those Shopify columns are present, prefer them and
                     // ignore "Name" — otherwise "#1082" ends up as the customer name.
-                    $hasShopifyNameColumns = array_key_exists('Billing Name', $data)
-                        || array_key_exists('Shipping Name', $data);
+                    $hasShopifyNameColumns = isset($lowerHeaderMap['billing name'])
+                        || isset($lowerHeaderMap['shipping name']);
                     $customerName = $hasShopifyNameColumns
-                        ? trim((string) ($data['Billing Name'] ?? $data['Shipping Name'] ?? ''))
-                        : trim((string) ($data['Name'] ?? ''));
+                        ? $this->csvField($data, $lowerHeaderMap, ['Billing Name', 'Shipping Name'])
+                        : $this->csvField($data, $lowerHeaderMap, ['Name']);
 
                     // ── Resolve phone ────────────────────────────────────────────
-                    $customerPhone = trim(
-                        (string) ($data['Phone'] ?? $data['Billing Phone'] ?? $data['Shipping Phone'] ?? '')
-                    );
+                    $customerPhone = $this->csvField($data, $lowerHeaderMap, ['Phone', 'Billing Phone', 'Shipping Phone']);
 
                     if ($customerName === '') {
                         $invalidRows++;
