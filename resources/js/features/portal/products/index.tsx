@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { usePage } from '@inertiajs/react'
-import { Search, X, LayoutGrid, List, Package, Eye, Truck, RotateCcw, Banknote, Warehouse, Phone, Receipt, Tag, Info } from 'lucide-react'
+import { Search, X, LayoutGrid, List, Package, Eye, Download, Truck, RotateCcw, Banknote, Warehouse, Phone, Receipt, Tag, Info } from 'lucide-react'
 import {
   type SortingState, type Updater,
   flexRender, getCoreRowModel, useReactTable, type ColumnDef,
@@ -28,6 +28,23 @@ import { PortalProductDetailsDialog } from './product-details-dialog'
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
+function triggerDownload(url: string) {
+  const link = document.createElement('a')
+  link.href = url
+  link.rel = 'noopener'
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+}
+
+function downloadProductsCsv(params: Record<string, string | undefined>) {
+  const search = new URLSearchParams()
+  Object.entries(params).forEach(([key, value]) => {
+    if (value) search.append(key, value)
+  })
+  triggerDownload(`/portal/api/products/download?${search}`)
+}
+
 const stockColor = (qty: number) => {
   if (qty === 0) return 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
   if (qty <= 5)  return 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400'
@@ -36,7 +53,7 @@ const stockColor = (qty: number) => {
 
 // ─── columns ─────────────────────────────────────────────────────────────────
 
-function buildColumns(onView: (p: Product) => void): ColumnDef<Product>[] {
+function buildColumns(onView: (p: Product) => void, onDownload: (p: Product) => void): ColumnDef<Product>[] {
   return [
     {
       id: 'image',
@@ -145,15 +162,26 @@ function buildColumns(onView: (p: Product) => void): ColumnDef<Product>[] {
     {
       id: 'actions',
       cell: ({ row }) => (
-        <Button
-          variant='ghost'
-          size='icon'
-          className='h-7 w-7'
-          onClick={() => onView(row.original)}
-          title='View product'
-        >
-          <Eye className='h-3.5 w-3.5' />
-        </Button>
+        <div className='flex items-center gap-1'>
+          <Button
+            variant='ghost'
+            size='icon'
+            className='h-7 w-7'
+            onClick={() => onView(row.original)}
+            title='View product'
+          >
+            <Eye className='h-3.5 w-3.5' />
+          </Button>
+          <Button
+            variant='ghost'
+            size='icon'
+            className='h-7 w-7'
+            onClick={() => onDownload(row.original)}
+            title='Download for Shopify import'
+          >
+            <Download className='h-3.5 w-3.5' />
+          </Button>
+        </div>
       ),
     },
   ]
@@ -233,11 +261,12 @@ interface TableViewProps {
   onPageSizeChange: (s: number) => void
   onSortChange: (by: string, order: 'asc' | 'desc') => void
   onView: (p: Product) => void
+  onDownload: (p: Product) => void
 }
 
-function ProductTableView({ data, meta, loading, onPageChange, onPageSizeChange, onSortChange, onView }: TableViewProps) {
+function ProductTableView({ data, meta, loading, onPageChange, onPageSizeChange, onSortChange, onView, onDownload }: TableViewProps) {
   const [sorting, setSorting] = useState<SortingState>([])
-  const columns = buildColumns(onView)
+  const columns = buildColumns(onView, onDownload)
 
   const handleSortingChange = (updater: Updater<SortingState>) => {
     const next = typeof updater === 'function' ? updater(sorting) : updater
@@ -331,9 +360,10 @@ interface CardViewProps {
   onPageChange: (p: number) => void
   onPageSizeChange: (s: number) => void
   onView: (p: Product) => void
+  onDownload: (p: Product) => void
 }
 
-function ProductCardView({ data, meta, loading, onPageChange, onPageSizeChange, onView }: CardViewProps) {
+function ProductCardView({ data, meta, loading, onPageChange, onPageSizeChange, onView, onDownload }: CardViewProps) {
   if (loading) return <CardsSkeleton />
 
   return (
@@ -375,7 +405,7 @@ function ProductCardView({ data, meta, loading, onPageChange, onPageSizeChange, 
                 </div>
 
                 {/* Quick view overlay */}
-                <div className='absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition-all duration-200 group-hover:bg-black/15 group-hover:opacity-100'>
+                <div className='absolute inset-0 flex items-center justify-center gap-1.5 bg-black/0 opacity-0 transition-all duration-200 group-hover:bg-black/15 group-hover:opacity-100'>
                   <Button
                     size='sm'
                     variant='secondary'
@@ -384,6 +414,15 @@ function ProductCardView({ data, meta, loading, onPageChange, onPageSizeChange, 
                   >
                     <Eye className='h-3.5 w-3.5' />
                     View Details
+                  </Button>
+                  <Button
+                    size='icon'
+                    variant='secondary'
+                    className='h-8 w-8 shadow-md'
+                    onClick={(e) => { e.stopPropagation(); onDownload(product) }}
+                    title='Download for Shopify import'
+                  >
+                    <Download className='h-3.5 w-3.5' />
                   </Button>
                 </div>
               </div>
@@ -520,9 +559,10 @@ interface FiltersProps {
   onFiltersChange: (f: Record<string, any>) => void
   viewMode: 'table' | 'card'
   onViewModeChange: (m: 'table' | 'card') => void
+  onDownloadAll: () => void
 }
 
-function ProductFilters({ filters, onFiltersChange, viewMode, onViewModeChange }: FiltersProps) {
+function ProductFilters({ filters, onFiltersChange, viewMode, onViewModeChange, onDownloadAll }: FiltersProps) {
   const { options } = usePortalProductFilterOptions()
   const [searchInput, setSearchInput] = useState(filters.search || '')
 
@@ -592,7 +632,18 @@ function ProductFilters({ filters, onFiltersChange, viewMode, onViewModeChange }
         </Button>
       )}
 
-      <div className='ml-auto flex shrink-0 items-center overflow-hidden rounded-md border border-muted/70'>
+      <Button
+        variant='outline'
+        size='sm'
+        className='ml-auto h-9 gap-1.5 shrink-0 text-xs'
+        onClick={onDownloadAll}
+        title='Download the current product list as a Shopify-importable CSV'
+      >
+        <Download className='h-3.5 w-3.5' />
+        Download CSV
+      </Button>
+
+      <div className='flex shrink-0 items-center overflow-hidden rounded-md border border-muted/70'>
         <Button
           variant={viewMode === 'table' ? 'secondary' : 'ghost'}
           size='sm'
@@ -630,6 +681,14 @@ export function PortalProducts() {
     setSelectedProduct(p)
     setDialogOpen(true)
   }
+
+  const handleDownload = (p: Product) => downloadProductsCsv({ ids: String(p.id) })
+
+  const handleDownloadAll = () => downloadProductsCsv({
+    search: filters.search,
+    vendor: filters.vendor,
+    type: filters.type,
+  })
 
   // ── Forbidden / error state ────────────────────────────────────────────────
   if (!loading && error) {
@@ -694,6 +753,7 @@ export function PortalProducts() {
           onFiltersChange={updateFilters}
           viewMode={viewMode}
           onViewModeChange={setViewMode}
+          onDownloadAll={handleDownloadAll}
         />
 
         {viewMode === 'table' ? (
@@ -702,6 +762,7 @@ export function PortalProducts() {
             meta={meta}
             loading={loading}
             onView={handleView}
+            onDownload={handleDownload}
             onPageChange={(page) => updateFilters({ page })}
             onPageSizeChange={(per_page) => updateFilters({ per_page, page: 1 })}
             onSortChange={(sort_by, sort_order) => updateFilters({ sort_by, sort_order, page: 1 })}
@@ -712,6 +773,7 @@ export function PortalProducts() {
             meta={meta}
             loading={loading}
             onView={handleView}
+            onDownload={handleDownload}
             onPageChange={(page) => updateFilters({ page })}
             onPageSizeChange={(per_page) => updateFilters({ per_page, page: 1 })}
           />

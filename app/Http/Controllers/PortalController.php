@@ -847,6 +847,106 @@ class PortalController extends Controller
         ]);
     }
 
+    public function productsDownload(Request $request)
+    {
+        $client = $this->resolveClient();
+
+        if (!$client || !$client->is_dropshipper) {
+            abort(403);
+        }
+
+        $query = \App\Models\Product::where('published', true);
+
+        if ($request->filled('ids')) {
+            $ids = array_filter(explode(',', (string) $request->get('ids')));
+            $query->whereIn('id', $ids);
+        } else {
+            if ($request->filled('search')) {
+                $query->search($request->search);
+            }
+            if ($request->filled('type')) {
+                $query->where('type', $request->type);
+            }
+            if ($request->filled('vendor')) {
+                $query->where('vendor', $request->vendor);
+            }
+        }
+
+        $products = $query->with('images')->orderBy('created_at', 'desc')->get();
+
+        $columns = [
+            'Handle', 'Title', 'Body (HTML)', 'Vendor', 'Product Category', 'Type', 'Tags', 'Published',
+            'Option1 Name', 'Option1 Value', 'Option2 Name', 'Option2 Value', 'Option3 Name', 'Option3 Value',
+            'Variant SKU', 'Variant Grams', 'Variant Inventory Tracker', 'Variant Inventory Qty',
+            'Variant Inventory Policy', 'Variant Fulfillment Service', 'Variant Price', 'Variant Compare At Price',
+            'Variant Requires Shipping', 'Variant Taxable', 'Variant Barcode',
+            'Image Src', 'Image Position', 'Image Alt Text', 'Gift Card', 'SEO Title', 'SEO Description',
+            'Variant Weight Unit', 'Status',
+        ];
+
+        $filename = 'ksadrop-products-' . now()->format('Y-m-d-His') . '.csv';
+
+        return response()->streamDownload(function () use ($products, $columns) {
+            $out = fopen('php://output', 'w');
+            fputcsv($out, $columns);
+
+            foreach ($products as $product) {
+                $images = $product->images;
+                $firstImage = $images->first();
+
+                fputcsv($out, [
+                    $product->handle,
+                    $product->title,
+                    $product->body_html,
+                    $product->vendor,
+                    $product->product_category,
+                    $product->type,
+                    is_array($product->tags) ? implode(', ', $product->tags) : $product->tags,
+                    $product->published ? 'TRUE' : 'FALSE',
+                    $product->option1_name, $product->option1_value,
+                    $product->option2_name, $product->option2_value,
+                    $product->option3_name, $product->option3_value,
+                    $product->variant_sku,
+                    $product->variant_grams,
+                    'shopify',
+                    $product->variant_inventory_qty,
+                    $product->variant_inventory_policy ?: 'deny',
+                    $product->variant_fulfillment_service ?: 'manual',
+                    $product->variant_price,
+                    $product->variant_compare_at_price,
+                    $product->variant_requires_shipping ? 'TRUE' : 'FALSE',
+                    $product->variant_taxable ? 'TRUE' : 'FALSE',
+                    $product->variant_barcode,
+                    $firstImage->src ?? $product->primary_image,
+                    $firstImage ? 1 : '',
+                    $firstImage->alt_text ?? '',
+                    'FALSE',
+                    $product->seo_title,
+                    $product->seo_description,
+                    'g',
+                    $product->status ?: 'active',
+                ]);
+
+                foreach ($images->slice(1)->values() as $index => $image) {
+                    fputcsv($out, [
+                        $product->handle, '', '', '', '', '', '', '',
+                        '', '', '', '', '', '',
+                        '', '', '', '',
+                        '', '', '', '',
+                        '', '', '',
+                        $image->src, $index + 2, $image->alt_text ?? '',
+                        '', '', '',
+                        '', '',
+                    ]);
+                }
+            }
+
+            fclose($out);
+        }, $filename, [
+            'Content-Type' => 'text/csv',
+        ]);
+    }
+
     public function revenue(Request $request)
     {
         $client = $this->resolveClient();

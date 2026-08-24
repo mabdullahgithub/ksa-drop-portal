@@ -288,6 +288,7 @@ Route::prefix('portal')->middleware(['auth', 'verified', 'role:client'])->group(
     Route::delete('/api/inventory/{product}/images/{image}', [PortalController::class, 'destroyInventoryImage'])->name('portal.api.inventory.images.destroy');
     Route::get('/api/products', [PortalController::class, 'products'])->name('portal.api.products');
     Route::get('/api/products/filter-options', [PortalController::class, 'productFilterOptions'])->name('portal.api.products.filter-options');
+    Route::get('/api/products/download', [PortalController::class, 'productsDownload'])->name('portal.api.products.download');
     Route::get('/api/products/{product}', [PortalController::class, 'productShow'])->name('portal.api.products.show');
     Route::get('/api/revenue', [PortalController::class, 'revenue'])->name('portal.api.revenue');
     Route::get('/api/finance', [PortalController::class, 'finance'])->name('portal.api.finance');

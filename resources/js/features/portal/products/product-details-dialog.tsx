@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { format } from 'date-fns'
-import { ChevronLeft, ChevronRight, Package, Tag, BarChart3, Info, Globe } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Package, Tag, BarChart3, Info, Globe, Download } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -276,7 +276,23 @@ export function PortalProductDetailsDialog({ product, open, onOpenChange }: Prop
         </div>
 
         <Separator className='mt-3' />
-        <div className='flex justify-end pt-2'>
+        <div className='flex justify-end gap-2 pt-2'>
+          <Button
+            variant='outline'
+            size='sm'
+            className='gap-1.5'
+            onClick={() => {
+              const link = document.createElement('a')
+              link.href = `/portal/api/products/download?ids=${p.id}`
+              link.rel = 'noopener'
+              document.body.appendChild(link)
+              link.click()
+              document.body.removeChild(link)
+            }}
+          >
+            <Download className='h-3.5 w-3.5' />
+            Download for Shopify
+          </Button>
           <Button variant='outline' size='sm' onClick={() => onOpenChange(false)}>Close</Button>
         </div>
       </DialogContent>
