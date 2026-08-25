@@ -14,6 +14,13 @@ export const SHOP = root?.dataset.shop || ''
 
 export const PORTAL_URL = root?.dataset.portalUrl || 'https://portal.ksadrop.com'
 
+/**
+ * Public pricing & off-platform billing disclosure page. Linked from the
+ * onboarding screen so merchants see how KSA Drop charges — outside of the
+ * Shopify Billing API — before they connect a store and start shipping.
+ */
+export const PORTAL_PRICING_URL = `${PORTAL_URL}/pricing`
+
 export const PORTAL_LOGIN_URL =
     root?.dataset.portalLoginUrl || 'https://portal.ksadrop.com/login'
 
