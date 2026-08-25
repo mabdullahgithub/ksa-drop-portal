@@ -20,6 +20,7 @@ import { NotificationsDropdown } from '@/components/layout/notifications-dropdow
 import { Main } from '@/components/layout/main'
 import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search as SearchBar } from '@/components/search'
+import { SearchBeam } from '@/components/search-beam'
 import { ThemeSwitch } from '@/components/theme-switch'
 import { InventoryPagination } from '@/features/inventory/components/inventory-pagination'
 import { usePortalProducts, usePortalProductFilterOptions } from '@/hooks/usePortal'
@@ -584,12 +585,14 @@ function ProductFilters({ filters, onFiltersChange, viewMode, onViewModeChange, 
     <div className='flex flex-wrap items-center gap-2'>
       <div className='relative min-w-[180px] flex-1'>
         <Search className='absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground' />
-        <Input
-          placeholder='Search products, SKU, vendor...'
-          value={searchInput}
-          onChange={(e) => setSearchInput(e.target.value)}
-          className='h-9 pl-8 text-sm'
-        />
+        <SearchBeam>
+          <Input
+            placeholder='Search products, SKU, vendor...'
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            className='h-9 pl-8 text-sm'
+          />
+        </SearchBeam>
       </div>
 
       {options?.vendors && options.vendors.length > 0 && (

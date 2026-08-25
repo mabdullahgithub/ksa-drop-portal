@@ -1,6 +1,7 @@
 import { Search, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { SearchBeam } from '@/components/search-beam'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import type { ClientFilters, ClientFilterOptions } from '@/types/client'
 
@@ -28,12 +29,14 @@ export function ClientFiltersComponent({ filters, filterOptions, onFiltersChange
     <div className='flex flex-col gap-3 sm:flex-row sm:items-center'>
       <div className='relative flex-1'>
         <Search className='absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground' />
-        <Input
-          placeholder='Search clients...'
-          value={filters.search || ''}
-          onChange={(e) => onFiltersChange({ search: e.target.value, page: 1 })}
-          className='pl-8'
-        />
+        <SearchBeam>
+          <Input
+            placeholder='Search clients...'
+            value={filters.search || ''}
+            onChange={(e) => onFiltersChange({ search: e.target.value, page: 1 })}
+            className='pl-8'
+          />
+        </SearchBeam>
       </div>
       <Select
         value={filters.status || 'all'}

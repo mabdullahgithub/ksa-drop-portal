@@ -42,6 +42,7 @@ import { NotificationsDropdown } from '@/components/layout/notifications-dropdow
 import { Main } from '@/components/layout/main'
 import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
+import { SearchBeam } from '@/components/search-beam'
 import { ThemeSwitch } from '@/components/theme-switch'
 import { usePortalInventory, usePortalInventoryMutations } from '@/hooks/usePortal'
 import { PortalProductFormDialog } from './portal-product-form-dialog'
@@ -151,12 +152,14 @@ export function PortalInventory() {
           <div className='flex flex-wrap items-center gap-2'>
             <div className='relative'>
               <SearchIcon className='absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground' />
-              <Input
-                placeholder='Search products...'
-                value={search}
-                onChange={(e) => handleSearch(e.target.value)}
-                className='pl-8 w-56'
-              />
+              <SearchBeam>
+                <Input
+                  placeholder='Search products...'
+                  value={search}
+                  onChange={(e) => handleSearch(e.target.value)}
+                  className='pl-8 w-56'
+                />
+              </SearchBeam>
             </div>
             <Select value={statusFilter} onValueChange={handleStatusFilter}>
               <SelectTrigger className='w-40'>

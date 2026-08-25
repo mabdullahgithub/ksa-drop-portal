@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Search, X, SlidersHorizontal, LayoutGrid, List } from 'lucide-react'
 import { type Table } from '@tanstack/react-table'
 import { Input } from '@/components/ui/input'
+import { SearchBeam } from '@/components/search-beam'
 import { Button } from '@/components/ui/button'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -48,12 +49,14 @@ export function InventoryFilters({ filters, onFiltersChange, table }: InventoryF
     <div className='flex items-center gap-2 flex-wrap'>
       <div className='relative flex-1 min-w-[180px]'>
         <Search className='absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground' />
-        <Input
-          placeholder='Search products, SKU, vendor...'
-          value={searchInput}
-          onChange={(e) => setSearchInput(e.target.value)}
-          className='pl-8 h-9 text-sm'
-        />
+        <SearchBeam>
+          <Input
+            placeholder='Search products, SKU, vendor...'
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            className='pl-8 h-9 text-sm'
+          />
+        </SearchBeam>
       </div>
 
       <Select
