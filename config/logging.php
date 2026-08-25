@@ -143,6 +143,32 @@ return [
             'replace_placeholders' => true,
         ],
 
+        // LogesTechs pushes each status change exactly once with no retry
+        // ("only status 200, its send one time"), so this log is the only
+        // record of a push we failed to process — worth keeping longer than
+        // the other courier webhook logs.
+        'logestechs_webhooks' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/logestechs-webhooks.log'),
+            'level' => 'debug',
+            'days' => 60,
+            'replace_placeholders' => true,
+        ],
+
+        // Outbound LogesTechs API traffic (the above is inbound only). Split
+        // out because LogesTechs publishes no error-code catalogue and returns
+        // empty bodies on 5xx — the request we sent is the only thing left to
+        // debug from, so LogesTechsDriver logs the payload on a server error.
+        // Keeping that out of the shared app log makes it findable, and bounds
+        // how long recipient names/phones/addresses linger in plain text.
+        'logestechs' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/logestechs-api.log'),
+            'level' => 'debug',
+            'days' => 30,
+            'replace_placeholders' => true,
+        ],
+
         // Everything Shopify — OAuth/token exchange, webhook delivery and
         // registration, order sync, and the GDPR compliance topics — lands here
         // rather than in the shared app log. Kept 90 days so the compliance

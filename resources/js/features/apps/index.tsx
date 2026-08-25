@@ -11,25 +11,28 @@ import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
 import { usePermissions } from '@/hooks/use-permissions'
 import { useConnectors, type Connector } from '@/hooks/useConnectors'
-import { IconShopify, IconJnt, IconImile } from '@/assets/brand-icons'
+import { IconShopify, IconJnt, IconImile, IconLogesTechs } from '@/assets/brand-icons'
 
 const logoMap: Record<string, React.ReactNode> = {
   shopify: <IconShopify />,
   jnt_express: <IconJnt />,
   imile: <IconImile />,
+  logestechs: <IconLogesTechs />,
 }
 
-// Fixed display order: J&T first, then iMile, then Shopify.
+// Fixed display order: couriers first (J&T, iMile, LogesTechs), then Shopify.
 const displayOrder: Record<string, number> = {
   jnt_express: 0,
   imile: 1,
-  shopify: 2,
+  logestechs: 2,
+  shopify: 3,
 }
 
 // Connectors that have a dedicated settings page
 const settingsRouteMap: Record<string, string> = {
   jnt_express: '/apps/jnt-express',
   imile: '/apps/imile',
+  logestechs: '/apps/logestechs',
 }
 
 export function Apps() {

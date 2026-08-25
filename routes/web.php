@@ -4,6 +4,8 @@ use App\Http\Controllers\Api\ClientController;
 use App\Http\Controllers\Api\ClientPaymentController;
 use App\Http\Controllers\Api\ConnectorSettingsController;
 use App\Http\Controllers\Api\ImileWebhookController;
+use App\Http\Controllers\Api\LogesTechsController;
+use App\Http\Controllers\Api\LogesTechsWebhookController;
 use App\Http\Controllers\Api\InvoiceController;
 use App\Http\Controllers\Api\OrderController;
 use App\Http\Controllers\Api\ShipmentController;
@@ -74,6 +76,16 @@ Route::middleware(['auth', 'verified', 'role:!client'])->group(function () {
 
     // iMile Settings Page
     Route::get('/apps/imile', fn () => Inertia::render('Apps/ImileSettings'))->middleware('permission:edit apps')->name('apps.imile');
+
+    // LogesTechs (Navix) Settings Page
+    Route::get('/apps/logestechs', fn () => Inertia::render('Apps/LogesTechsSettings'))->middleware('permission:edit apps')->name('apps.logestechs');
+
+    // LogesTechs district lookup — feeds the Create Shipment dialog's district
+    // picker. Gated on 'edit orders' rather than 'edit apps' since it's used
+    // while creating a shipment, not while configuring the connector.
+    Route::get('/api/logestechs/villages', [LogesTechsController::class, 'villages'])
+        ->middleware('permission:edit orders')
+        ->name('api.logestechs.villages');
 
     // Warehouses API
     Route::prefix('api/warehouses')->middleware('permission:edit apps')->group(function () {
@@ -329,6 +341,12 @@ Route::post('/webhooks/jnt-express/otp', [WebhookController::class, 'handleJntOt
 // iMile tracking-push webhook — no signature to verify (iMile support confirmed
 // the payload requires no encryption/decryption); see ImileWebhookController.
 Route::post('/webhooks/imile/tracking', [ImileWebhookController::class, 'handleTracking'])->name('webhooks.imile.tracking');
+
+// LogesTechs (Navix) status webhook — authenticated by the webhookUsername/
+// webhookPassword pair LogesTechs echoes in the payload (set in their portal's
+// webhook panel; no signature exists). Fires once per status change with no
+// retry, so SyncShipmentTracking is the backstop. See LogesTechsWebhookController.
+Route::post('/webhooks/logestechs/tracking', [LogesTechsWebhookController::class, 'handleTracking'])->name('webhooks.logestechs.tracking');
 
 // Shopify webhooks — public, HMAC-verified inside the controller (CSRF excluded via bootstrap/app.php 'webhooks/*')
 Route::post('/webhooks/shopify', [ShopifyWebhookController::class, 'handle'])->name('webhooks.shopify');

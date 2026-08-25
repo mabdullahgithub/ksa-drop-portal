@@ -18,6 +18,50 @@ class ConnectorSetting extends Model
         'is_encrypted' => 'boolean',
     ];
 
+    /**
+     * Encrypt on the way to the database, once both `value` and `is_encrypted`
+     * are known.
+     *
+     * This deliberately does NOT live in a `value` mutator. Mass assignment
+     * fills attributes in array order, so `updateOrCreate([...], ['value' =>
+     * ..., 'is_encrypted' => true])` sets `value` while `is_encrypted` is still
+     * false on a *new* row — a mutator would store the secret in plain text and
+     * then flag it as encrypted, after which every read fails to decrypt and
+     * silently returns null. That bug only shows up on the first save of a
+     * given key (a later save sees the flag already persisted), which makes it
+     * especially easy to miss.
+     */
+    protected static function booted(): void
+    {
+        static::saving(function (self $setting): void {
+            $value = $setting->attributes['value'] ?? null;
+
+            if (! $setting->is_encrypted || $value === null || $value === '') {
+                return;
+            }
+
+            // Re-saving a loaded row would otherwise double-encrypt it.
+            if (! static::isEncryptedPayload($value)) {
+                $setting->attributes['value'] = Crypt::encryptString($value);
+            }
+        });
+    }
+
+    /**
+     * Whether a stored value is already a Laravel-encrypted payload, as opposed
+     * to plain text that still needs encrypting.
+     */
+    public static function isEncryptedPayload(string $value): bool
+    {
+        try {
+            Crypt::decryptString($value);
+
+            return true;
+        } catch (\Throwable $e) {
+            return false;
+        }
+    }
+
     public function connector()
     {
         return $this->belongsTo(Connector::class);
@@ -34,15 +78,6 @@ class ConnectorSetting extends Model
         }
 
         return $value;
-    }
-
-    public function setValueAttribute($value)
-    {
-        if ($this->is_encrypted && $value) {
-            $this->attributes['value'] = Crypt::encryptString($value);
-        } else {
-            $this->attributes['value'] = $value;
-        }
     }
 
     public static function getForConnector(string $connectorKey, string $settingKey): ?string
