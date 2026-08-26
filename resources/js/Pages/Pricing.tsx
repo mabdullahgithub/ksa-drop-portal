@@ -15,14 +15,13 @@ const COMPANY = {
   legalName: 'KSA DROP',
   email:     'support@ksadrop.com',
   location:  "Hayer Road, Al-Masani', Riyadh 14711, Saudi Arabia",
-  // Primary number first — it is the one every CTA on the page dials.
+  // The single contact number — every CTA on the page dials it.
   phones: [
-    { display: '+966 55 510 0752', href: 'https://wa.me/966555100752' },
     { display: '+966 50 300 7729', href: 'https://wa.me/966503007729' },
   ],
   // Accounts are opened by our team over WhatsApp — there is no self-serve signup form.
   whatsappSignupHref:
-    'https://wa.me/966555100752?text=Hi%20KSA%20Drop%2C%20I%27d%20like%20to%20open%20a%20merchant%20account%20for%20my%20Shopify%20store.',
+    'https://wa.me/966503007729?text=Hi%20KSA%20Drop%2C%20I%27d%20like%20to%20open%20a%20merchant%20account%20for%20my%20Shopify%20store.',
   responseTime: 'within one business day',
 }
 
