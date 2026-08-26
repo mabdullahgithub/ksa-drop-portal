@@ -327,6 +327,12 @@ Route::prefix('portal')->middleware(['auth', 'verified', 'role:client'])->group(
     Route::delete('/api/shopify/pending/{orderId}/dismiss', [ShopifyPendingOrderController::class, 'dismiss'])->name('portal.shopify.pending.dismiss');
 });
 
+// Merchant pricing & off-platform billing disclosure — public, no auth.
+// Linked from the Shopify App Store listing ("Pricing details" → off-platform
+// billing), so it must stay reachable without a session.
+Route::get('/pricing', fn () => Inertia::render('Pricing'))->name('pricing');
+Route::redirect('/billing', '/pricing');
+
 // Tracking — single search page + JSON API for AJAX lookup
 Route::get('/track', [TrackingController::class, 'search'])->name('tracking.search');
 Route::get('/api/track/{identifier}', [TrackingController::class, 'api'])->name('tracking.api');

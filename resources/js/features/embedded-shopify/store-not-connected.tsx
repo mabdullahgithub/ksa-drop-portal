@@ -1,5 +1,10 @@
 import { useEffect, useState } from 'react'
-import { PORTAL_LOGIN_URL, buildPortalConnectUrl, getPortalConnectUrl } from './config'
+import {
+    PORTAL_LOGIN_URL,
+    PORTAL_PRICING_URL,
+    buildPortalConnectUrl,
+    getPortalConnectUrl,
+} from './config'
 
 /**
  * Shown when the store isn't linked to a KSA Drop account yet. Rather than a
@@ -73,6 +78,30 @@ export function StoreNotConnected({
                         </s-paragraph>
                         <s-button variant="primary" href={connectUrl} target="_blank">
                             Connect your store
+                        </s-button>
+                    </s-stack>
+                </s-banner>
+            </s-section>
+
+            {/*
+             * Off-platform billing disclosure. KSA Drop charges for delivery,
+             * cash-on-delivery collection, and warehousing outside the Shopify
+             * Billing API, so the merchant is told before they connect a store
+             * and start shipping — not after the first invoice.
+             */}
+            <s-section>
+                <s-banner tone="info" heading="Shipping charges are billed outside of Shopify">
+                    <s-stack gap="base">
+                        <s-paragraph>
+                            The KSA Drop app is free to install and use. Delivery,
+                            cash-on-delivery collection, and warehousing are paid services
+                            invoiced directly by KSA Drop — they are not charged through
+                            Shopify and will not appear on your Shopify bill. You receive a
+                            written rate card before your account is opened, and nothing is
+                            charged until your first shipment is picked up.
+                        </s-paragraph>
+                        <s-button href={PORTAL_PRICING_URL} target="_blank">
+                            View pricing and billing details
                         </s-button>
                     </s-stack>
                 </s-banner>
