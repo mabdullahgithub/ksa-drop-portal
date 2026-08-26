@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Head } from '@inertiajs/react'
+import { ThinkingOrb } from 'thinking-orbs'
 import {
   Moon, Sun, Truck, Warehouse, Wallet, MapPin, RotateCcw, Package,
   FileText, CreditCard, Clock, MessageCircle, Mail, ArrowRight,
@@ -26,6 +27,18 @@ const COMPANY = {
 }
 
 const LAST_UPDATED = 'August 2026'
+
+/**
+ * Decorative background orb. thinking-orbs is strictly monochrome — it draws a
+ * single grey channel with no colour of its own — so the only tuning needed is
+ * opacity, which drops the near-black light-theme ink to a soft grey.
+ *
+ * 64 is the largest size the library ships (its two sizes are separate designs,
+ * not a scale factor), so the backdrop is CSS-scaled up from there. The upscale
+ * softens the dots, which at this opacity reads as an intended watermark rather
+ * than a defect.
+ */
+const BACKDROP_SPEED = 0.4
 
 const SERVICES: { icon: LucideIcon; title: string; body: string }[] = [
   {
@@ -203,10 +216,25 @@ export default function Pricing() {
         />
       </Head>
 
-      <div className="min-h-screen bg-white text-slate-900 antialiased dark:bg-slate-950 dark:text-slate-100">
+      <div className="relative min-h-screen bg-white text-slate-900 antialiased dark:bg-slate-950 dark:text-slate-100">
+
+        {/* ── Decorative background ──────────────────────────────── */}
+        <div
+          aria-hidden="true"
+          className="pointer-events-none fixed inset-0 z-0 flex select-none items-center justify-center overflow-hidden"
+        >
+          <div className="scale-[4.5] opacity-[0.10] sm:scale-[6] lg:scale-[8] dark:opacity-[0.09]">
+            <ThinkingOrb
+              state="connecting"
+              size={64}
+              speed={BACKDROP_SPEED}
+              theme={isDark ? 'dark' : 'light'}
+            />
+          </div>
+        </div>
 
         {/* ── Header ─────────────────────────────────────────────── */}
-        <header className="mx-auto flex max-w-3xl items-center justify-between px-6 pt-8">
+        <header className="relative z-10 mx-auto flex max-w-3xl items-center justify-between px-6 pt-8">
           <img
             src={isDark ? '/images/email/logo-white.png' : '/images/email/logo.png'}
             alt="KSA Drop"
@@ -231,7 +259,7 @@ export default function Pricing() {
           </div>
         </header>
 
-        <main className="mx-auto max-w-3xl px-6">
+        <main className="relative z-10 mx-auto max-w-3xl px-6">
 
           {/* ── Hero ─────────────────────────────────────────────── */}
           <section className="pb-16 pt-20 sm:pt-24">
