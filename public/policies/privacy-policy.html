@@ -4,95 +4,178 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Privacy Policy - KSA Drop</title>
+    <meta name="description" content="How the KSA Drop Order Sync app collects, uses, and safeguards data from your Shopify store.">
+    <link rel="icon" type="image/png" href="/ksa-al-logo-files/App Branding/Launcher Icons-03.png">
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
+        /* Mirrors the design of /pricing: light by default, one narrow column,
+           soft filled cards instead of rules, and no dividers between sections. */
+
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+        :root {
+            --ink:      #0f172a; /* slate-900 */
+            --body:     #475569; /* slate-600 */
+            --muted:    #64748b; /* slate-500 */
+            --faint:    #94a3b8; /* slate-400 */
+            --surface:  #f8fafc; /* slate-50  */
+            --accent:   #f97316; /* orange-500 */
+            --accent-d: #ea580c; /* orange-600 */
         }
+
+        html { -webkit-text-size-adjust: 100%; }
+
         body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-            line-height: 1.6;
-            color: #333;
-            background: #f9f9f9;
+            font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+                         "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+            background: #fff;
+            color: var(--ink);
+            line-height: 1.625;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
         }
-        .container {
-            max-width: 900px;
-            margin: 0 auto;
-            padding: 40px 20px;
-            background: white;
+
+        .wrap { max-width: 48rem; margin: 0 auto; padding: 0 1.5rem; }
+
+        /* ── Header ─────────────────────────────────────────────── */
+        header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+            padding-top: 2rem;
+        }
+        header img { height: 1.75rem; width: auto; display: block; }
+        header a {
+            font-size: .875rem;
+            font-weight: 500;
+            color: var(--body);
+            text-decoration: none;
+            transition: color .15s;
+        }
+        header a:hover { color: var(--ink); }
+
+        /* ── Hero ───────────────────────────────────────────────── */
+        .hero { padding: 5rem 0 1rem; }
+        .eyebrow {
+            font-size: .875rem;
+            font-weight: 500;
+            color: var(--accent-d);
+            margin-bottom: 1rem;
         }
         h1 {
-            font-size: 32px;
-            margin-bottom: 10px;
-            color: #1a1a1a;
+            font-size: 2.5rem;
+            font-weight: 600;
+            letter-spacing: -.025em;
+            line-height: 1.1;
         }
         .last-updated {
-            font-size: 14px;
-            color: #666;
-            margin-bottom: 30px;
-            border-bottom: 1px solid #eee;
-            padding-bottom: 20px;
+            font-size: .875rem;
+            color: var(--muted);
+            margin-top: 1.5rem;
         }
+
+        /* ── Content ────────────────────────────────────────────── */
+        main { padding-bottom: 1rem; }
+
         h2 {
-            font-size: 24px;
-            margin-top: 40px;
-            margin-bottom: 15px;
-            color: #1a1a1a;
-            border-left: 4px solid #2a78d6;
-            padding-left: 15px;
+            font-size: 1.5rem;
+            font-weight: 600;
+            letter-spacing: -.025em;
+            margin-top: 4rem;
+            margin-bottom: 1.25rem;
         }
         h3 {
-            font-size: 18px;
-            margin-top: 25px;
-            margin-bottom: 10px;
-            color: #333;
+            font-size: 1rem;
+            font-weight: 500;
+            margin-top: 2rem;
+            margin-bottom: .5rem;
         }
-        p {
-            margin-bottom: 15px;
-            line-height: 1.7;
-        }
-        ul, ol {
-            margin-left: 25px;
-            margin-bottom: 15px;
-        }
+        p  { color: var(--body); margin-bottom: 1rem; }
+        h3 + p { margin-top: 0; }
+        strong { color: var(--ink); font-weight: 600; }
+
+        ul, ol { list-style: none; margin: 0 0 1.25rem; }
         li {
-            margin-bottom: 8px;
+            position: relative;
+            color: var(--body);
+            padding-left: 1.25rem;
+            margin-bottom: .5rem;
         }
-        .highlight {
-            background: #f0f7ff;
-            border-left: 4px solid #2a78d6;
-            padding: 15px 20px;
-            margin: 20px 0;
+        ul > li::before {
+            content: "";
+            position: absolute;
+            left: 0;
+            top: .7em;
+            width: .25rem;
+            height: .25rem;
+            border-radius: 9999px;
+            background: var(--accent);
         }
-        .contact-info {
-            background: #f9f9f9;
-            padding: 20px;
-            border-radius: 8px;
-            margin-top: 20px;
+        ol { counter-reset: item; }
+        ol > li { counter-increment: item; }
+        ol > li::before {
+            content: counter(item) ".";
+            position: absolute;
+            left: 0;
+            color: var(--faint);
+            font-size: .875rem;
         }
-        .contact-info p {
-            margin-bottom: 8px;
+
+        a { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
+        a:hover { color: var(--accent-d); }
+
+        /* Soft filled cards — no rules, matching the pricing page. */
+        .highlight, .contact-info {
+            background: var(--surface);
+            border-radius: 1rem;
+            padding: 2rem;
+            margin: 2rem 0;
+            color: var(--body);
         }
-        a {
-            color: #2a78d6;
-            text-decoration: none;
+        .highlight p:last-child, .contact-info p:last-child { margin-bottom: 0; }
+        .contact-info p { margin-bottom: .5rem; }
+
+        /* ── Footer ─────────────────────────────────────────────── */
+        footer {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            gap: .5rem;
+            padding: 4rem 0 3rem;
+            font-size: .875rem;
+            color: var(--faint);
         }
-        a:hover {
-            text-decoration: underline;
+        footer a { color: inherit; text-decoration: none; }
+        footer a:hover { color: var(--body); }
+
+        @media (max-width: 640px) {
+            h1 { font-size: 2rem; }
+            h2 { font-size: 1.375rem; margin-top: 3rem; }
+            .hero { padding-top: 3.5rem; }
+            .highlight, .contact-info { padding: 1.5rem; }
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>Privacy Policy</h1>
-        <div class="last-updated">Last updated: July 10, 2026</div>
+    <div class="wrap">
+        <header>
+            <img src="/images/email/logo.png" alt="KSA Drop">
+            <a href="/pricing">Pricing &amp; billing</a>
+        </header>
 
+        <div class="hero">
+            <p class="eyebrow">Legal</p>
+            <h1>Privacy Policy</h1>
+            <p class="last-updated">Last updated: July 10, 2026</p>
+        </div>
+
+        <main>
         <h2>Introduction</h2>
         <p>KSA Drop ("we," "us," "our," or "Company") operates the KSA Drop Order Sync application (the "App"). This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you use our App in connection with Shopify's platform.</p>
 
         <div class="highlight">
-            <strong>Key Point:</strong> The App only processes order data from your Shopify store. We do not store, process, or retain customer payment information, credit card numbers, or sensitive financial data beyond what Shopify shares in order records.
+            <p><strong>Key Point:</strong> The App only processes order data from your Shopify store. We do not store, process, or retain customer payment information, credit card numbers, or sensitive financial data beyond what Shopify shares in order records.</p>
         </div>
 
         <h2>1. Information We Collect</h2>
@@ -116,7 +199,7 @@
             <li>Your configured sync filters (status, tags, payment method preferences)</li>
         </ul>
 
-        <h3>1.3 Session & Interaction Data</h3>
+        <h3>1.3 Session &amp; Interaction Data</h3>
         <p>We do not use cookies or tracking scripts. The App authenticates using Shopify's session tokens (JWT) within the Shopify Admin iframe, and we do not log or store interaction details beyond error logs for debugging.</p>
 
         <h2>2. How We Use Your Information</h2>
@@ -156,7 +239,7 @@
             <li><strong>No public exposure:</strong> The App is embedded in Shopify Admin only (iframe-restricted via CSP)</li>
         </ul>
 
-        <h2>5. GDPR & Data Rights</h2>
+        <h2>5. GDPR &amp; Data Rights</h2>
         <p>If you are a merchant in the EU, you have the following rights:</p>
 
         <h3>5.1 Right to Access</h3>
@@ -174,7 +257,7 @@
         <h3>5.5 Right to Restrict Processing</h3>
         <p>You can restrict processing by pausing sync in the App's Settings or uninstalling the App.</p>
 
-        <h2>6. Customer PII & GDPR Compliance</h2>
+        <h2>6. Customer PII &amp; GDPR Compliance</h2>
         <p>Shopify's customers (your shoppers) are subject to Shopify's own privacy policies. We process their personally identifiable information (PII) only as a data processor on your behalf, in accordance with Shopify's Data Processing Addendum (DPA).</p>
 
         <p>When a customer requests their data or deletion under GDPR:</p>
@@ -189,19 +272,19 @@
         <h2>7. Children's Privacy</h2>
         <p>The App is intended for business use by merchants and is not directed to children under 13. We do not knowingly collect personal information from children under 13. If we become aware that a child has provided us with personal information, we will take steps to delete such information and terminate the child's account.</p>
 
-        <h2>8. Contact & Support</h2>
+        <h2>8. Contact &amp; Support</h2>
         <p>If you have questions about this Privacy Policy, wish to exercise your rights, or need to report a data breach:</p>
         <div class="contact-info">
-            <p><strong>Email:</strong> support@ksadrop.com</p>
-            <p><strong>Support Portal:</strong> <a href="https://ksadrop.com/support">https://ksadrop.com/support</a></p>
-            <p><strong>Mailing Address:</strong><br>KSA Drop<br>[Your Company Address]<br>[City, Country]</p>
+            <p><strong>Email:</strong> <a href="mailto:support@ksadrop.com">support@ksadrop.com</a></p>
+            <p><strong>WhatsApp:</strong> <a href="https://wa.me/966503007729">+966 50 300 7729</a></p>
+            <p><strong>Mailing Address:</strong><br>KSA DROP<br>Hayer Road, Al-Masani'<br>Riyadh 14711, Saudi Arabia</p>
             <p>We will respond to all data subject requests within 30 days.</p>
         </div>
 
         <h2>9. Changes to This Policy</h2>
         <p>We may update this Privacy Policy from time to time. We will notify you of any material changes by updating the "Last updated" date at the top of this page and, where required, by obtaining your consent. Your continued use of the App after changes constitutes your acceptance of the updated Privacy Policy.</p>
 
-        <h2>10. Third-Party Links & Integrations</h2>
+        <h2>10. Third-Party Links &amp; Integrations</h2>
         <p>The App integrates with:</p>
         <ul>
             <li><strong>Shopify:</strong> Order data is read from Shopify and synced to your KSA Drop account via our API</li>
@@ -212,7 +295,7 @@
         <h2>11. Shopify's Role</h2>
         <p>This App is a third-party application built for Shopify's platform. Shopify is the data controller for your store data; we are a data processor. Shopify's Privacy Policy governs their collection and use of data. See <a href="https://www.shopify.com/legal/privacy">https://www.shopify.com/legal/privacy</a> for details.</p>
 
-        <h2>12. Compliance & Certifications</h2>
+        <h2>12. Compliance &amp; Certifications</h2>
         <p>KSA Drop is compliant with:</p>
         <ul>
             <li><strong>GDPR (EU):</strong> General Data Protection Regulation</li>
@@ -221,8 +304,14 @@
         </ul>
 
         <div class="highlight">
-            <strong>Questions?</strong> Contact our Privacy team at <a href="mailto:support@ksadrop.com">support@ksadrop.com</a> or visit our <a href="https://ksadrop.com/support">support portal</a>.
+            <p><strong>Questions?</strong> Contact our Privacy team at <a href="mailto:support@ksadrop.com">support@ksadrop.com</a> or message us on <a href="https://wa.me/966503007729">WhatsApp</a>.</p>
         </div>
+        </main>
+
+        <footer>
+            <p>&copy; 2026 KSA DROP</p>
+            <p><a href="/pricing">Pricing &amp; billing</a></p>
+        </footer>
     </div>
 </body>
 </html>
