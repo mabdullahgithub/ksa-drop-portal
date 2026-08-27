@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\Mailer\Exception\TransportExceptionInterface;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -46,6 +47,27 @@ return Application::configure(basePath: dirname(__DIR__))
         });
     })
     ->withExceptions(function (Exceptions $exceptions): void {
+        // Any mail transport failure (SMTP auth refused, TLS handshake, host
+        // unreachable, message rejected) gets its full cause chain recorded in
+        // the mail channel before the exception continues on its way.
+        $exceptions->report(function (TransportExceptionInterface $e) {
+            $causes = [];
+
+            for ($current = $e; $current !== null; $current = $current->getPrevious()) {
+                $causes[] = $current::class.': '.$current->getMessage();
+            }
+
+            Log::channel('mail')->error('Mail transport failed', [
+                'transport' => config('mail.default'),
+                'host' => config('mail.mailers.'.config('mail.default').'.host'),
+                'port' => config('mail.mailers.'.config('mail.default').'.port'),
+                'username' => config('mail.mailers.'.config('mail.default').'.username'),
+                'encryption' => config('mail.mailers.'.config('mail.default').'.encryption'),
+                'causes' => $causes,
+                'trace' => $e->getTraceAsString(),
+            ]);
+        });
+
         // Statuses we own a designed page for. Anything else keeps Laravel's
         // default response.
         $rendered = [401, 403, 404, 419, 429, 500, 503];

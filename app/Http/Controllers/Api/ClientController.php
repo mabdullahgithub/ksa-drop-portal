@@ -276,13 +276,39 @@ class ClientController extends Controller
             ], 422);
         }
 
-        $status = Password::sendResetLink(['email' => $user->email]);
+        try {
+            $status = Password::sendResetLink(['email' => $user->email]);
+        } catch (\Throwable $e) {
+            // A transport failure here would otherwise surface as a bare 500.
+            // The cause chain is already in storage/logs/mail-*.log via the
+            // report handler in bootstrap/app.php.
+            \Log::channel('mail')->error('Password reset link failed for client ' . $client->id, [
+                'client_id' => $client->id,
+                'email' => $user->email,
+                'error' => $e->getMessage(),
+            ]);
+
+            return response()->json([
+                'message' => 'Could not send the reset link: ' . $e->getMessage(),
+            ], 500);
+        }
 
         if ($status === Password::RESET_LINK_SENT) {
+            \Log::channel('mail')->info('Password reset link sent for client ' . $client->id, [
+                'client_id' => $client->id,
+                'email' => $user->email,
+            ]);
+
             return response()->json([
                 'message' => 'Password reset link sent to ' . $user->email . '.',
             ]);
         }
+
+        \Log::channel('mail')->warning('Password reset link not sent for client ' . $client->id, [
+            'client_id' => $client->id,
+            'email' => $user->email,
+            'status' => $status,
+        ]);
 
         return response()->json([
             'message' => trans($status),
