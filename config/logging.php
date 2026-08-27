@@ -135,6 +135,18 @@ return [
             'replace_placeholders' => true,
         ],
 
+        // Outbound sends, delivery/read callbacks and inbound replies for the
+        // WhatsApp order-confirmation flow. Kept 60 days: this is the only
+        // record of what we told a customer and when they read it, which is
+        // what ops relies on when a delivery is disputed.
+        'whatsapp' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/whatsapp.log'),
+            'level' => 'debug',
+            'days' => 60,
+            'replace_placeholders' => true,
+        ],
+
         'imile_webhooks' => [
             'driver' => 'daily',
             'path' => storage_path('logs/imile-webhooks.log'),

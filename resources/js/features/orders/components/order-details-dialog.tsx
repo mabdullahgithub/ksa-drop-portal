@@ -19,6 +19,7 @@ import { ShipmentPanel } from './shipment-panel'
 import { CreateShipmentDialog } from './create-shipment-dialog'
 import { JntProvinceSelect, JntCitySelect } from '@/components/jnt-location-select'
 import { InvoicePanel } from './invoice-panel'
+import { CallDispositionPanel } from './call-disposition-panel'
 import { useState, useEffect, useCallback } from 'react'
 import axios from 'axios'
 import { usePermissions } from '@/hooks/use-permissions'
@@ -352,6 +353,10 @@ export function OrderDetailsDialog({ order, open, onOpenChange, onSaved, startIn
               </div>
             )}
           </div>
+
+          <Separator />
+
+          <CallDispositionPanel order={order} onSaved={onSaved} />
 
           <Separator />
 

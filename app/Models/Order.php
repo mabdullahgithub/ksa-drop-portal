@@ -26,6 +26,36 @@ class Order extends Model
         });
     }
 
+    /**
+     * Call disposition — the outcome of the ops confirmation call. A separate
+     * axis from `fulfillment_status`, which stays Shopify-shaped.
+     */
+    public const CALL_NOT_CALLED = 'not_called';
+    public const CALL_NO_ANSWER = 'no_answer';
+    public const CALL_CONFIRMED = 'confirmed';
+    public const CALL_CANCELLED = 'cancelled';
+    public const CALL_WRONG_NUMBER = 'wrong_number';
+
+    public const CALL_STATUSES = [
+        self::CALL_NOT_CALLED,
+        self::CALL_NO_ANSWER,
+        self::CALL_CONFIRMED,
+        self::CALL_CANCELLED,
+        self::CALL_WRONG_NUMBER,
+    ];
+
+    /**
+     * WhatsApp conversation flow state. Per-message delivery state (delivered/
+     * read/failed) lives on `whatsapp_messages` instead — see
+     * {@see \App\Models\WhatsAppMessage}.
+     */
+    public const WHATSAPP_SENT = 'sent';
+    public const WHATSAPP_FOLLOWUP_SENT = 'followup_sent';
+    public const WHATSAPP_REPLIED = 'replied';
+    public const WHATSAPP_CONFIRMED = 'confirmed';
+    public const WHATSAPP_GRAVEYARD = 'graveyard';
+    public const WHATSAPP_FAILED = 'failed';
+
     protected $fillable = [
         'client_id',
         'order_number',
@@ -56,6 +86,18 @@ class Order extends Model
         'shipping_phone',
         'financial_status',
         'fulfillment_status',
+        'call_status',
+        'call_attempts',
+        'last_called_at',
+        'call_notes',
+        'whatsapp_status',
+        'whatsapp_phone_e164',
+        'whatsapp_sent_at',
+        'whatsapp_followup_sent_at',
+        'whatsapp_replied_at',
+        'whatsapp_delivered_at',
+        'whatsapp_read_at',
+        'whatsapp_reply_message',
         'payment_method',
         'payment_reference',
         'currency',
@@ -102,6 +144,12 @@ class Order extends Model
         'paid_at' => 'datetime',
         'fulfilled_at' => 'datetime',
         'cancelled_at' => 'datetime',
+        'last_called_at' => 'datetime',
+        'whatsapp_sent_at' => 'datetime',
+        'whatsapp_followup_sent_at' => 'datetime',
+        'whatsapp_replied_at' => 'datetime',
+        'whatsapp_delivered_at' => 'datetime',
+        'whatsapp_read_at' => 'datetime',
         'accepts_marketing' => 'boolean',
         'note_attributes' => 'json',
         'tags' => 'array',
@@ -137,6 +185,19 @@ class Order extends Model
     public function invoices()
     {
         return $this->hasMany(Invoice::class);
+    }
+
+    public function whatsappMessages()
+    {
+        return $this->hasMany(WhatsAppMessage::class);
+    }
+
+    /**
+     * Orders the WhatsApp confirmation flow is still actively chasing.
+     */
+    public function scopeAwaitingWhatsAppReply($query)
+    {
+        return $query->whereIn('whatsapp_status', [self::WHATSAPP_SENT, self::WHATSAPP_FOLLOWUP_SENT]);
     }
 
     /**

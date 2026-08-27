@@ -20,6 +20,7 @@ import {
   Wallet,
   Truck,
   Plug,
+  MessageCircle,
 } from 'lucide-react'
 import { type SidebarData } from '../types'
 
@@ -67,6 +68,12 @@ export const sidebarData: SidebarData = {
           title: 'Orders',
           url: '/orders',
           icon: ShoppingCart,
+          permission: 'view orders',
+        },
+        {
+          title: 'WhatsApp',
+          url: '/whatsapp',
+          icon: MessageCircle,
           permission: 'view orders',
         },
         {

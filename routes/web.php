@@ -9,6 +9,8 @@ use App\Http\Controllers\Api\LogesTechsWebhookController;
 use App\Http\Controllers\Api\InvoiceController;
 use App\Http\Controllers\Api\OrderController;
 use App\Http\Controllers\Api\ShipmentController;
+use App\Http\Controllers\Api\TwilioWhatsAppWebhookController;
+use App\Http\Controllers\Api\WhatsAppConversationController;
 use App\Http\Controllers\Api\WarehouseController;
 use App\Http\Controllers\Api\WebhookController;
 use App\Http\Controllers\Api\ShipmentAnalyticsController;
@@ -61,6 +63,11 @@ Route::middleware(['auth', 'verified', 'role:!client'])->group(function () {
     Route::get('/client/{client}', [ClientPageController::class, 'show'])->middleware('permission:view client')->name('client.show');
     Route::get('/inventory', fn () => Inertia::render('Inventory'))->middleware('permission:view inventory')->name('inventory');
     Route::get('/orders', fn () => Inertia::render('Orders'))->middleware('permission:view orders')->name('orders');
+
+    // WhatsApp inbox — the confirmation conversations started when an agent
+    // marks a call unanswered. Gated on order permissions: a conversation is
+    // just an order's message thread.
+    Route::get('/whatsapp', fn () => Inertia::render('WhatsApp'))->middleware('permission:view orders')->name('whatsapp');
     Route::get('/apps', fn () => Inertia::render('Apps'))->middleware('permission:view apps')->name('apps');
 
     // Connectors API
@@ -79,6 +86,8 @@ Route::middleware(['auth', 'verified', 'role:!client'])->group(function () {
 
     // LogesTechs (Navix) Settings Page
     Route::get('/apps/logestechs', fn () => Inertia::render('Apps/LogesTechsSettings'))->middleware('permission:edit apps')->name('apps.logestechs');
+
+    Route::get('/apps/whatsapp', fn () => Inertia::render('Apps/WhatsAppSettings'))->middleware('permission:edit apps')->name('apps.whatsapp');
 
     // LogesTechs district lookup — feeds the Create Shipment dialog's district
     // picker. Gated on 'edit orders' rather than 'edit apps' since it's used
@@ -137,7 +146,16 @@ Route::middleware(['auth', 'verified', 'role:!client'])->group(function () {
         Route::put('/{order}', [OrderController::class, 'update'])->middleware('permission:edit orders')->name('api.orders.update');
         Route::post('/{order}/fulfillment-status', [OrderController::class, 'updateFulfillmentStatus'])->middleware('permission:edit orders')->name('api.orders.fulfillment-status');
         Route::post('/{order}/financial-status', [OrderController::class, 'updateFinancialStatus'])->middleware('permission:edit orders')->name('api.orders.financial-status');
+        Route::post('/{order}/call-status', [OrderController::class, 'updateCallStatus'])->middleware('permission:edit orders')->name('api.orders.call-status');
+        Route::get('/{order}/whatsapp-messages', [OrderController::class, 'whatsappMessages'])->middleware('permission:view orders')->name('api.orders.whatsapp-messages');
         Route::post('/bulk-update', [OrderController::class, 'bulkUpdate'])->middleware('permission:edit orders')->name('api.orders.bulk-update');
+    });
+
+    // WhatsApp inbox API
+    Route::prefix('api/whatsapp')->middleware('permission:view orders')->group(function () {
+        Route::get('/conversations', [WhatsAppConversationController::class, 'index'])->name('api.whatsapp.conversations');
+        Route::get('/stats', [WhatsAppConversationController::class, 'stats'])->name('api.whatsapp.stats');
+        Route::get('/conversations/{order}', [WhatsAppConversationController::class, 'show'])->name('api.whatsapp.conversation');
     });
 
     // Clients API
@@ -353,6 +371,12 @@ Route::post('/webhooks/imile/tracking', [ImileWebhookController::class, 'handleT
 // webhook panel; no signature exists). Fires once per status change with no
 // retry, so SyncShipmentTracking is the backstop. See LogesTechsWebhookController.
 Route::post('/webhooks/logestechs/tracking', [LogesTechsWebhookController::class, 'handleTracking'])->name('webhooks.logestechs.tracking');
+
+// Twilio WhatsApp — inbound customer replies and message delivery/read
+// receipts. Both verify Twilio's X-Twilio-Signature HMAC inside the
+// controller. Register these two URLs on the Twilio sender/sandbox.
+Route::post('/webhooks/twilio/whatsapp', [TwilioWhatsAppWebhookController::class, 'handleIncoming'])->name('webhooks.twilio.whatsapp');
+Route::post('/webhooks/twilio/whatsapp/status', [TwilioWhatsAppWebhookController::class, 'handleStatus'])->name('webhooks.twilio.whatsapp.status');
 
 // Shopify webhooks — public, HMAC-verified inside the controller (CSRF excluded via bootstrap/app.php 'webhooks/*')
 Route::post('/webhooks/shopify', [ShopifyWebhookController::class, 'handle'])->name('webhooks.shopify');

@@ -1,0 +1,202 @@
+<?php
+
+namespace App\Http\Controllers\Api;
+
+use App\Http\Controllers\Controller;
+use App\Models\Order;
+use App\Models\WhatsAppMessage;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+
+/**
+ * Read model behind the WhatsApp inbox.
+ *
+ * A "conversation" is just an order that has entered the confirmation flow —
+ * there is no separate conversation entity, because the order *is* the subject
+ * of every message. Keeping it that way means the inbox can link straight into
+ * the order without an extra join table to keep in sync.
+ */
+class WhatsAppConversationController extends Controller
+{
+    /**
+     * Paginated conversation list for the left pane.
+     *
+     * Messages are eager-loaded rather than fetched per row: a conversation
+     * holds at most a handful (ping, follow-up, replies), so one extra query
+     * beats N+1 and beats the contortions needed to limit a hasMany per parent.
+     */
+    public function index(Request $request): JsonResponse
+    {
+        $request->validate([
+            'status' => 'nullable|string',
+            'search' => 'nullable|string|max:255',
+            'per_page' => 'nullable|integer|min:1|max:100',
+        ]);
+
+        $query = Order::withoutGlobalScope('shopify_visible')
+            ->whereNotNull('whatsapp_status')
+            ->with(['client:id,company_name', 'whatsappMessages'])
+            ->orderByRaw('COALESCE(whatsapp_replied_at, whatsapp_followup_sent_at, whatsapp_sent_at) DESC');
+
+        if ($status = $request->input('status')) {
+            if ($status === 'needs_attention') {
+                // A customer replied and nobody has acted on it yet — the only
+                // bucket that represents work waiting on an agent.
+                $query->where('whatsapp_status', Order::WHATSAPP_REPLIED);
+            } elseif ($status !== 'all') {
+                $query->where('whatsapp_status', $status);
+            }
+        }
+
+        if ($search = trim((string) $request->input('search'))) {
+            $query->where(function ($q) use ($search) {
+                $q->where('order_number', 'like', "%{$search}%")
+                    ->orWhere('customer_name', 'like', "%{$search}%")
+                    ->orWhere('customer_phone', 'like', "%{$search}%")
+                    ->orWhere('whatsapp_phone_e164', 'like', "%{$search}%");
+            });
+        }
+
+        $paginator = $query->paginate((int) $request->input('per_page', 25));
+
+        return response()->json([
+            'data' => collect($paginator->items())->map(fn (Order $o) => $this->summarise($o))->all(),
+            'meta' => [
+                'current_page' => $paginator->currentPage(),
+                'last_page' => $paginator->lastPage(),
+                'total' => $paginator->total(),
+            ],
+        ]);
+    }
+
+    /**
+     * One conversation: the full thread plus the order context the agent needs
+     * without leaving the inbox.
+     */
+    public function show(Order $order): JsonResponse
+    {
+        abort_unless($order->whatsapp_status !== null, 404);
+
+        $order->load(['client:id,company_name', 'items', 'whatsappMessages', 'latestShipment']);
+
+        return response()->json([
+            'conversation' => $this->summarise($order),
+            'messages' => $order->whatsappMessages
+                ->sortBy([['created_at', 'asc'], ['id', 'asc']])
+                ->values()
+                ->map(fn (WhatsAppMessage $m) => [
+                    'id' => $m->id,
+                    'direction' => $m->direction,
+                    'body' => $m->body,
+                    'template_key' => $m->template_key,
+                    'status' => $m->status,
+                    'created_at' => $m->created_at,
+                    'sent_at' => $m->sent_at,
+                    'delivered_at' => $m->delivered_at,
+                    'read_at' => $m->read_at,
+                    'failed_at' => $m->failed_at,
+                    'error_code' => $m->error_code,
+                    'error_message' => $m->error_message,
+                ]),
+            'order' => [
+                'id' => $order->id,
+                'order_number' => $order->order_number,
+                'customer_name' => $order->customer_name,
+                'customer_phone' => $order->customer_phone,
+                'customer_email' => $order->customer_email,
+                'shipping_name' => $order->shipping_name,
+                'shipping_address1' => $order->shipping_address1,
+                'shipping_address2' => $order->shipping_address2,
+                'shipping_city' => $order->shipping_city,
+                'shipping_province' => $order->shipping_province,
+                'shipping_country' => $order->shipping_country,
+                'total' => $order->total,
+                'currency' => $order->currency,
+                'payment_method' => $order->payment_method,
+                'is_cod' => $order->isCashOnDelivery(),
+                'financial_status' => $order->financial_status,
+                'fulfillment_status' => $order->fulfillment_status,
+                'call_status' => $order->call_status,
+                'call_attempts' => $order->call_attempts,
+                'call_notes' => $order->call_notes,
+                'last_called_at' => $order->last_called_at,
+                'tags' => $order->tags,
+                'created_at' => $order->created_at,
+                'client' => $order->client?->only(['id', 'company_name']),
+                'items' => $order->items->map(fn ($i) => [
+                    'id' => $i->id,
+                    'name' => $i->name,
+                    'quantity' => $i->quantity,
+                    'price' => $i->price,
+                ]),
+                'tracking_number' => $order->latestShipment?->tracking_number,
+            ],
+        ]);
+    }
+
+    /**
+     * Counts for the filter tabs. One grouped query rather than six.
+     */
+    public function stats(): JsonResponse
+    {
+        $counts = Order::withoutGlobalScope('shopify_visible')
+            ->whereNotNull('whatsapp_status')
+            ->selectRaw('whatsapp_status, COUNT(*) as aggregate')
+            ->groupBy('whatsapp_status')
+            ->pluck('aggregate', 'whatsapp_status');
+
+        return response()->json([
+            'all' => (int) $counts->sum(),
+            'needs_attention' => (int) ($counts[Order::WHATSAPP_REPLIED] ?? 0),
+            'sent' => (int) ($counts[Order::WHATSAPP_SENT] ?? 0),
+            'followup_sent' => (int) ($counts[Order::WHATSAPP_FOLLOWUP_SENT] ?? 0),
+            'replied' => (int) ($counts[Order::WHATSAPP_REPLIED] ?? 0),
+            'confirmed' => (int) ($counts[Order::WHATSAPP_CONFIRMED] ?? 0),
+            'graveyard' => (int) ($counts[Order::WHATSAPP_GRAVEYARD] ?? 0),
+            'failed' => (int) ($counts[Order::WHATSAPP_FAILED] ?? 0),
+        ]);
+    }
+
+    /**
+     * List-row shape: enough to render the row and its preview without the
+     * client having to fetch the thread.
+     */
+    private function summarise(Order $order): array
+    {
+        $messages = $order->whatsappMessages->sortBy([['created_at', 'asc'], ['id', 'asc']]);
+        $last = $messages->last();
+        $lastOutbound = $messages->where('direction', WhatsAppMessage::DIRECTION_OUTBOUND)->last();
+
+        return [
+            'id' => $order->id,
+            'order_number' => $order->order_number,
+            'customer_name' => $order->customer_name ?: $order->shipping_name,
+            'phone' => $order->whatsapp_phone_e164 ?: $order->customer_phone,
+            'client_name' => $order->client?->company_name,
+            'total' => $order->total,
+            'currency' => $order->currency,
+
+            'whatsapp_status' => $order->whatsapp_status,
+            'call_status' => $order->call_status,
+            'tags' => $order->tags,
+
+            'sent_at' => $order->whatsapp_sent_at,
+            'followup_sent_at' => $order->whatsapp_followup_sent_at,
+            'replied_at' => $order->whatsapp_replied_at,
+            'delivered_at' => $order->whatsapp_delivered_at,
+            'read_at' => $order->whatsapp_read_at,
+
+            'last_message' => $last?->body,
+            'last_message_at' => $last?->created_at,
+            'last_message_direction' => $last?->direction,
+            // Delivery state of the newest message we sent — what the ticks on
+            // the row render from.
+            'last_outbound_status' => $lastOutbound?->status,
+            'message_count' => $messages->count(),
+
+            // Drives the unread dot: the customer said something and the flow
+            // hasn't been resolved by an agent yet.
+            'needs_attention' => $order->whatsapp_status === Order::WHATSAPP_REPLIED,
+        ];
+    }
+}

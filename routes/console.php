@@ -18,3 +18,10 @@ Schedule::command('email:cleanup-logs --days=180')->dailyAt('02:00');
 Schedule::command('shipments:sync-tracking --limit=200')
     ->everyTenMinutes()
     ->withoutOverlapping();
+
+// WhatsApp order-confirmation sweep. Advances "sent" → "followup_sent" at 24h
+// of silence and "followup_sent" → "graveyard" at 48h. Runs every 15 minutes,
+// so the thresholds are "at least 24h", never early.
+Schedule::command('whatsapp:process-followups')
+    ->everyFifteenMinutes()
+    ->withoutOverlapping();

@@ -1,3 +1,35 @@
+export type CallStatus =
+  | 'not_called'
+  | 'no_answer'
+  | 'confirmed'
+  | 'cancelled'
+  | 'wrong_number'
+
+export type WhatsAppStatus =
+  | 'sent'
+  | 'followup_sent'
+  | 'replied'
+  | 'confirmed'
+  | 'graveyard'
+  | 'failed'
+
+export interface WhatsAppMessage {
+  id: number
+  order_id: number
+  direction: 'outbound' | 'inbound'
+  twilio_sid: string | null
+  template_key: string | null
+  body: string | null
+  status: string | null
+  sent_at: string | null
+  delivered_at: string | null
+  read_at: string | null
+  failed_at: string | null
+  error_code: string | null
+  error_message: string | null
+  created_at: string
+}
+
 export interface Order {
   id: number
   client_id: number | null
@@ -32,6 +64,20 @@ export interface Order {
   shipping_phone: string | null
   financial_status: 'pending' | 'paid' | 'refunded' | 'partially_refunded'
   fulfillment_status: 'pending' | 'unfulfilled' | 'fulfilled' | 'cancelled'
+  // Outcome of the ops confirmation call — a separate axis from
+  // fulfillment_status. 'no_answer' is what starts the WhatsApp flow.
+  call_status: CallStatus
+  call_attempts: number
+  last_called_at: string | null
+  call_notes: string | null
+  whatsapp_status: WhatsAppStatus | null
+  whatsapp_phone_e164: string | null
+  whatsapp_sent_at: string | null
+  whatsapp_followup_sent_at: string | null
+  whatsapp_replied_at: string | null
+  whatsapp_delivered_at: string | null
+  whatsapp_read_at: string | null
+  whatsapp_reply_message: string | null
   payment_method: string | null
   payment_reference: string | null
   currency: string
@@ -229,8 +275,9 @@ export interface PaginatedOrders {
 
 export interface BulkUpdatePayload {
   order_ids: number[]
-  action: 'update_fulfillment' | 'update_financial' | 'add_tags' | 'cancel'
+  action: 'update_fulfillment' | 'update_financial' | 'update_call_status' | 'add_tags' | 'cancel'
   fulfillment_status?: string
   financial_status?: string
+  call_status?: string
   tags?: string[]
 }

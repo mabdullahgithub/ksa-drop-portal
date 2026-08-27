@@ -1,0 +1,1 @@
+import{c as e,h as t,l as n,m as r}from"./format-DQmW2rCy.js";function i(e,n,i){let a=r(e,i?.in);return isNaN(n)?t(i?.in||e,NaN):(n&&a.setDate(a.getDate()+n),a)}function a(t,r,i){let[a,o]=n(i?.in,t,r);return+e(a)==+e(o)}export{i as n,a as t};

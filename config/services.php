@@ -128,4 +128,22 @@ return [
         'app_store_url' => env('SHOPIFY_APP_STORE_URL'),
     ],
 
+    /*
+    | Twilio — fallback credentials used only when the matching ConnectorSetting
+    | (saved from Apps → WhatsApp Settings) is missing, same precedence as the
+    | courier connectors above.
+    |
+    | `whatsapp_from` must carry Twilio's `whatsapp:` prefix, e.g.
+    | whatsapp:+14155238886 (the shared sandbox number). The two template SIDs
+    | are Meta-approved Content templates; while they are blank the service
+    | falls back to plain-text sends, which work in the Twilio sandbox only.
+    */
+    'twilio' => [
+        'account_sid' => env('TWILIO_ACCOUNT_SID'),
+        'auth_token' => env('TWILIO_AUTH_TOKEN'),
+        'whatsapp_from' => env('TWILIO_WHATSAPP_FROM'),
+        'template_sid_order_pending' => env('TWILIO_TEMPLATE_SID_ORDER_PENDING'),
+        'template_sid_followup' => env('TWILIO_TEMPLATE_SID_FOLLOWUP'),
+    ],
+
 ];

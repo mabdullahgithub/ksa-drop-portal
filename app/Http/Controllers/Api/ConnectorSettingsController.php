@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Connector;
 use App\Models\ConnectorSetting;
 use App\Services\Shipping\CourierManager;
+use App\Services\WhatsApp\TwilioWhatsAppService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 
@@ -100,6 +101,12 @@ class ConnectorSettingsController extends Controller
 
     public function test(Request $request, Connector $connector)
     {
+        // WhatsApp is not a courier — it validates against Twilio's account
+        // endpoint rather than through CourierManager.
+        if ($connector->key === 'whatsapp') {
+            return $this->testWhatsApp();
+        }
+
         $courierLabels = [
             'jnt_express' => 'J&T Express',
             'imile' => 'iMile',
@@ -126,6 +133,35 @@ class ConnectorSettingsController extends Controller
                 'success' => false,
                 'message' => $e->getMessage(),
             ]);
+        }
+    }
+
+    /**
+     * Validate the saved Twilio credentials by fetching the account itself —
+     * cheap, read-only, and it exercises exactly the auth path the sends use.
+     */
+    private function testWhatsApp()
+    {
+        try {
+            $service = new TwilioWhatsAppService();
+
+            if (! $service->isConfigured()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Account SID, Auth Token and WhatsApp From number are all required.',
+                ]);
+            }
+
+            $ok = $service->testConnection();
+
+            return response()->json([
+                'success' => $ok,
+                'message' => $ok
+                    ? 'Connection successful! Twilio credentials are valid.'
+                    : 'Twilio rejected the credentials or the account is not active.',
+            ]);
+        } catch (\Exception $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()]);
         }
     }
 }

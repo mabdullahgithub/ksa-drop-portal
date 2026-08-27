@@ -7,6 +7,7 @@ import { DataTableRowActions } from './data-table-row-actions'
 import { format } from 'date-fns'
 import { useAvailableTags } from '@/hooks/useTags'
 import { useOrdersContext } from './orders-provider'
+import { callStatusClass, callStatusLabel, WHATSAPP_STATUS_META } from '../data/call-status'
 
 function hexToRgba(hex: string | null | undefined, alpha: number) {
   if (!hex || hex.length < 4) return `rgba(128, 128, 128, ${alpha})`
@@ -230,6 +231,67 @@ export const ordersColumns: ColumnDef<Order>[] = [
       return (
         <Badge variant='outline' className={`capitalize text-xs py-0 h-5 px-1.5 ${statusColorMap[color] || statusColorMap.default}`}>
           {status}
+        </Badge>
+      )
+    },
+    filterFn: (row, id, value) => {
+      return value.includes(row.getValue(id))
+    },
+  },
+  {
+    accessorKey: 'call_status',
+    header: ({ column }) => (
+      <DataTableColumnHeader column={column} title='Call' />
+    ),
+    meta: { className: 'ps-1', tdClassName: 'ps-4' },
+    cell: ({ row }) => {
+      const status = row.original.call_status
+      const attempts = row.original.call_attempts
+
+      return (
+        <div className='flex items-center gap-1.5'>
+          <Badge variant='outline' className={`text-xs py-0 h-5 px-1.5 ${callStatusClass(status)}`}>
+            {callStatusLabel(status)}
+          </Badge>
+          {attempts > 1 && (
+            <span className='text-[10px] text-muted-foreground' title={`${attempts} call attempts`}>
+              ×{attempts}
+            </span>
+          )}
+        </div>
+      )
+    },
+    filterFn: (row, id, value) => {
+      return value.includes(row.getValue(id))
+    },
+  },
+  {
+    accessorKey: 'whatsapp_status',
+    header: ({ column }) => (
+      <DataTableColumnHeader column={column} title='WhatsApp' />
+    ),
+    meta: { className: 'ps-1', tdClassName: 'ps-4' },
+    cell: ({ row }) => {
+      const status = row.original.whatsapp_status
+      if (!status) return <span className='text-xs text-muted-foreground'>—</span>
+
+      const meta = WHATSAPP_STATUS_META[status]
+      // Read receipts only arrive when the customer has them enabled, so the
+      // absence of whatsapp_read_at means "unknown", never "unread" — the
+      // tooltip stops ops reading it as proof the message was ignored.
+      const receipt = row.original.whatsapp_read_at
+        ? `Read ${format(new Date(row.original.whatsapp_read_at), 'dd MMM HH:mm')}`
+        : row.original.whatsapp_delivered_at
+          ? `Delivered ${format(new Date(row.original.whatsapp_delivered_at), 'dd MMM HH:mm')} · read receipt not available`
+          : undefined
+
+      return (
+        <Badge
+          variant='outline'
+          className={`text-xs py-0 h-5 px-1.5 ${meta?.className ?? statusColorMap.default}`}
+          title={receipt}
+        >
+          {meta?.label ?? status}
         </Badge>
       )
     },

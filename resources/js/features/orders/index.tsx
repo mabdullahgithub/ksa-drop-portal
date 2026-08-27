@@ -9,6 +9,7 @@ import { ThemeSwitch } from '@/components/theme-switch'
 import { OrdersDialogs } from './components/orders-dialogs'
 import { OrdersPrimaryButtons } from './components/orders-primary-buttons'
 import { OrdersProvider } from './components/orders-provider'
+import { OrderDeepLink } from './components/order-deep-link'
 import { OrdersTable } from './components/orders-table'
 import { OrdersFilters } from './components/orders-filters'
 import { ShipmentStatusCards } from './components/shipment-status-cards'
@@ -51,6 +52,9 @@ export function Orders() {
 
   return (
     <OrdersProvider refresh={refresh}>
+      {/* Opens ?order=<number> straight into its details dialog. */}
+      <OrderDeepLink />
+
       <Header fixed>
         <Search className='me-auto' />
         <ThemeSwitch />

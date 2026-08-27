@@ -15,7 +15,8 @@
         "laravel/tinker": "^3.0",
         "pragmarx/google2fa-laravel": "^3.0",
         "spatie/laravel-permission": "^7.4",
-        "tightenco/ziggy": "^2.0"
+        "tightenco/ziggy": "^2.0",
+        "twilio/sdk": "^8.12"
     },
     "require-dev": {
         "fakerphp/faker": "^1.23",

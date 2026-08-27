@@ -9,6 +9,7 @@ use App\Models\Tag;
 use App\Services\OrderExportService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 
 class OrderController extends Controller
 {
@@ -460,9 +461,10 @@ class OrderController extends Controller
         $request->validate([
             'order_ids' => 'required|array',
             'order_ids.*' => 'exists:orders,id',
-            'action' => 'required|in:update_fulfillment,update_financial,add_tags,cancel',
+            'action' => 'required|in:update_fulfillment,update_financial,update_call_status,add_tags,cancel',
             'fulfillment_status' => 'required_if:action,update_fulfillment',
             'financial_status' => 'required_if:action,update_financial',
+            'call_status' => ['required_if:action,update_call_status', Rule::in(Order::CALL_STATUSES)],
             'tags' => 'required_if:action,add_tags|array|max:1',
             'tags.*' => 'string|max:255',
         ]);
@@ -488,6 +490,24 @@ class OrderController extends Controller
                     $order->update($updates);
                     break;
 
+                case 'update_call_status':
+                    // Mirrors updateCallStatus() — the observer picks the
+                    // no_answer transition up from the saved model, so a bulk
+                    // "mark 40 orders no answer" fans out 40 WhatsApp sends.
+                    $callUpdates = [
+                        'call_status' => $request->call_status,
+                        'last_called_at' => now(),
+                    ];
+                    if ($request->call_status !== Order::CALL_NOT_CALLED) {
+                        $callUpdates['call_attempts'] = $order->call_attempts + 1;
+                    }
+                    if ($request->call_status === Order::CALL_CANCELLED) {
+                        $callUpdates['fulfillment_status'] = 'cancelled';
+                        $callUpdates['cancelled_at'] = $order->cancelled_at ?? now();
+                    }
+                    $order->update($callUpdates);
+                    break;
+
                 case 'add_tags':
                     // Only one tag can be assigned at a time; the new tag replaces any existing one
                     $order->update(['tags' => array_values(array_unique($request->tags))]);
@@ -505,6 +525,67 @@ class OrderController extends Controller
         return response()->json([
             'message' => 'Orders updated successfully',
             'updated_count' => $orders->count(),
+        ]);
+    }
+
+    /**
+     * Record the outcome of an ops confirmation call.
+     *
+     * Setting `no_answer` is what starts the WhatsApp confirmation flow — see
+     * {@see \App\Observers\OrderObserver}, which reacts to the saved change
+     * rather than being dispatched from here, so every path that changes a
+     * call outcome behaves identically.
+     */
+    public function updateCallStatus(Request $request, Order $order)
+    {
+        $validated = $request->validate([
+            'call_status' => ['required', Rule::in(Order::CALL_STATUSES)],
+            'call_notes' => 'nullable|string|max:2000',
+        ]);
+
+        $updates = [
+            'call_status' => $validated['call_status'],
+            'last_called_at' => now(),
+        ];
+
+        if (array_key_exists('call_notes', $validated)) {
+            $updates['call_notes'] = $validated['call_notes'];
+        }
+
+        // Only an actual call attempt increments the counter — clearing the
+        // status back to not_called (a correction) must not inflate it.
+        if ($validated['call_status'] !== Order::CALL_NOT_CALLED) {
+            $updates['call_attempts'] = $order->call_attempts + 1;
+        }
+
+        // A customer reached on the phone settles the order there and then.
+        if ($validated['call_status'] === Order::CALL_CANCELLED) {
+            $updates['fulfillment_status'] = 'cancelled';
+            $updates['cancelled_at'] = $order->cancelled_at ?? now();
+        }
+
+        $order->update($updates);
+
+        return response()->json([
+            'message' => 'Call status updated successfully',
+            'order' => $order->fresh(['items']),
+        ]);
+    }
+
+    /**
+     * Full WhatsApp conversation for one order — outbound templates with their
+     * delivery/read receipts, plus every inbound reply, oldest first.
+     */
+    public function whatsappMessages(Order $order)
+    {
+        return response()->json([
+            'messages' => $order->whatsappMessages()->orderBy('created_at')->get(),
+            'whatsapp_status' => $order->whatsapp_status,
+            'whatsapp_sent_at' => $order->whatsapp_sent_at,
+            'whatsapp_followup_sent_at' => $order->whatsapp_followup_sent_at,
+            'whatsapp_replied_at' => $order->whatsapp_replied_at,
+            'whatsapp_delivered_at' => $order->whatsapp_delivered_at,
+            'whatsapp_read_at' => $order->whatsapp_read_at,
         ]);
     }
 
