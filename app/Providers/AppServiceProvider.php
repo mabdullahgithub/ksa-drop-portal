@@ -2,15 +2,12 @@
 
 namespace App\Providers;
 
-<<<<<<< HEAD
+use App\Listeners\LogMailActivity;
 use App\Models\Order;
 use App\Observers\OrderObserver;
-=======
-use App\Listeners\LogMailActivity;
 use Illuminate\Mail\Events\MessageSending;
 use Illuminate\Mail\Events\MessageSent;
 use Illuminate\Support\Facades\Event;
->>>>>>> navix
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Facades\Vite;
 use Illuminate\Support\ServiceProvider;
