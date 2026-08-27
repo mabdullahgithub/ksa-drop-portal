@@ -229,4 +229,56 @@ class WhatsAppOrderConfirmationTest extends TestCase
 
         $this->assertNull($order->fresh()->whatsapp_status);
     }
+
+    /**
+     * The customer bought from our client's store, not from us. Naming the
+     * fulfilment platform in an outbound message would expose the dropshipping
+     * relationship, so no brand of ours may appear in the copy or the
+     * variables — including as a fallback when an order has no client.
+     */
+    public function test_outbound_copy_never_names_the_fulfilment_platform(): void
+    {
+        $service = new TwilioWhatsAppService();
+
+        $render = function (string $templateKey) use ($service) {
+            $method = new \ReflectionMethod($service, 'renderFallbackBody');
+
+            return $method->invoke($service, $templateKey, [
+                '1' => 'Zain',
+                '2' => 'KSA-1001',
+                '3' => 'Al Suwaidi District, Riyadh',
+            ]);
+        };
+
+        foreach ([TwilioWhatsAppService::TEMPLATE_ORDER_PENDING, TwilioWhatsAppService::TEMPLATE_FOLLOWUP] as $key) {
+            $body = $render($key);
+
+            foreach (['KSA Drop', 'ksadrop', config('app.name')] as $forbidden) {
+                $this->assertStringNotContainsStringIgnoringCase(
+                    (string) $forbidden,
+                    $body,
+                    "Template '{$key}' leaks the platform name '{$forbidden}'"
+                );
+            }
+
+            // Every slot must still be filled — an unsubstituted {{n}} would
+            // reach the customer as literal braces.
+            $this->assertStringNotContainsString('{{', $body);
+        }
+    }
+
+    public function test_no_template_variable_falls_back_to_our_app_name(): void
+    {
+        // An order with no client is exactly the case that used to substitute
+        // config('app.name') into the message.
+        $order = $this->makeOrder(['client_id' => null]);
+
+        $method = new \ReflectionMethod(SendWhatsAppOrderMessageJob::class, 'variablesFor');
+        $variables = $method->invoke(new SendWhatsAppOrderMessageJob($order->id), $order);
+
+        foreach ($variables as $value) {
+            $this->assertStringNotContainsStringIgnoringCase('KSA Drop', (string) $value);
+            $this->assertStringNotContainsStringIgnoringCase((string) config('app.name'), (string) $value);
+        }
+    }
 }

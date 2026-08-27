@@ -73,19 +73,23 @@ function Card({
         </div>
       </div>
 
-      {/* Bubble badge, overhanging the top-start corner. */}
-      <span className='absolute end-1 top-0 z-10'>
+      {/*
+        Bubble badge, overhanging the top-end corner.
+
+        One element, not a circle plus a rotated square: squaring the
+        bottom-start corner of a full-round shape gives the bubble its point,
+        so the 1px ring traces a single silhouette. The two-element version
+        left a visible seam where the ring outlined each piece separately.
+        Logical corner (`rounded-es`) so the point still faces the card in RTL.
+      */}
+      <span className='absolute end-3 top-0 z-10'>
         <span
           className={cn(
-            'relative grid h-7 w-7 place-items-center rounded-full text-white shadow-md ring-1 ring-background',
+            'grid h-7 w-7 place-items-center rounded-full rounded-es-none text-white shadow-md ring-1 ring-background',
             badge
           )}
         >
           {icon}
-          <span
-            aria-hidden
-            className={cn('absolute -bottom-0.5 end-1.5 h-2.5 w-2.5 rotate-45 rounded-[2px] ring-1 ring-background', badge)}
-          />
         </span>
       </span>
     </div>

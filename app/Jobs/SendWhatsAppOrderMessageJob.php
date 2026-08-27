@@ -143,11 +143,15 @@ class SendWhatsAppOrderMessageJob implements ShouldQueue
             $order->shipping_province,
         ])->filter()->implode(', ');
 
+        // Three slots, and none of them is a brand name. See
+        // TwilioWhatsAppService::defaultBody() — the customer ordered from our
+        // client's store, so naming the fulfilment platform would expose the
+        // dropshipping relationship. There is deliberately no company-name
+        // variable to fall back on.
         return [
             '1' => $order->customer_name ?: $order->shipping_name ?: 'there',
-            '2' => $order->client?->company_name ?: config('app.name'),
-            '3' => $order->order_number,
-            '4' => $address ?: 'not on file',
+            '2' => $order->order_number,
+            '3' => $address ?: 'not on file',
         ];
     }
 }

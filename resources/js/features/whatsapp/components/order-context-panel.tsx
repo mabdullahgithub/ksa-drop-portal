@@ -1,11 +1,9 @@
 import { Link } from '@inertiajs/react'
 import { format } from 'date-fns'
 import { ExternalLink, MapPin, Package, Phone, Wallet, Truck } from 'lucide-react'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
-import { callStatusClass, callStatusLabel } from '@/features/orders/data/call-status'
 import type { ConversationOrder } from '../types'
 
 /**
@@ -63,23 +61,6 @@ export function OrderContextPanel({ order }: { order: ConversationOrder }) {
             View full order details
           </Link>
         </Button>
-
-        <div className='flex flex-wrap gap-1.5'>
-          <Badge variant='outline' className={`text-xs ${callStatusClass(order.call_status)}`}>
-            Call: {callStatusLabel(order.call_status)}
-          </Badge>
-          <Badge variant='outline' className='text-xs capitalize'>
-            {order.fulfillment_status}
-          </Badge>
-          <Badge variant='outline' className='text-xs capitalize'>
-            {order.financial_status}
-          </Badge>
-          {order.is_cod && (
-            <Badge variant='outline' className='text-xs text-amber-700 dark:text-amber-400'>
-              COD
-            </Badge>
-          )}
-        </div>
 
         <Separator />
 

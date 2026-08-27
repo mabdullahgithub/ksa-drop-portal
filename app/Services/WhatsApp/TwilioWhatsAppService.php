@@ -200,23 +200,33 @@ class TwilioWhatsAppService
         return $body;
     }
 
+    /**
+     * ⚠️ No sender name appears in this copy, deliberately.
+     *
+     * The customer bought from our client's store, not from us — naming the
+     * fulfilment platform would confuse them and expose the dropshipping
+     * relationship. WhatsApp already shows the sending business's profile name
+     * in the chat header, so the message is still attributable without us
+     * putting a brand in the body. Never reintroduce a name variable here, and
+     * never fall back to config('app.name').
+     */
     private function defaultBody(string $templateKey): string
     {
         return match ($templateKey) {
-            self::TEMPLATE_ORDER_PENDING => "Hello {{1}}, this is {{2}}.\n\n"
-                . "We tried calling you about your order {{3}} but couldn't reach you.\n\n"
+            self::TEMPLATE_ORDER_PENDING => "Hello {{1}},\n\n"
+                . "We tried calling you about your order {{2}} but couldn't reach you.\n\n"
                 . "Please reply:\n"
                 . "1 — to CONFIRM your order\n"
                 . "2 — to UPDATE your delivery address\n"
                 . "3 — to CANCEL\n\n"
-                . 'Delivery address on file: {{4}}',
-            self::TEMPLATE_FOLLOWUP => "Hello {{1}}, a reminder from {{2}} about your order {{3}}.\n\n"
+                . 'Delivery address on file: {{3}}',
+            self::TEMPLATE_FOLLOWUP => "Hello {{1}}, a reminder about your order {{2}}.\n\n"
                 . "We still need your confirmation to ship it. Please reply:\n"
                 . "1 — to CONFIRM\n"
                 . "2 — to UPDATE your address\n"
                 . "3 — to CANCEL\n\n"
                 . 'If we do not hear back, the order will be put on hold.',
-            default => 'Hello {{1}}, please contact us regarding your order {{3}}.',
+            default => 'Hello {{1}}, please get in touch regarding your order {{2}}.',
         };
     }
 

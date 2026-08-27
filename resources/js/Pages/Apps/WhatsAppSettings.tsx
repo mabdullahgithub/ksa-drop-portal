@@ -334,9 +334,12 @@ export default function WhatsAppSettings() {
 
               <div className='rounded-md bg-muted p-3 text-xs text-muted-foreground'>
                 Templates use positional variables: <code>{'{{1}}'}</code> customer name,{' '}
-                <code>{'{{2}}'}</code> store name, <code>{'{{3}}'}</code> order number,{' '}
-                <code>{'{{4}}'}</code> delivery address. Submit them to Meta under the{' '}
-                <span className='font-medium'>Utility</span> category.
+                <code>{'{{2}}'}</code> order number, <code>{'{{3}}'}</code> delivery address.
+                Submit them to Meta under the <span className='font-medium'>Utility</span> category.
+                <br />
+                Do <span className='font-medium'>not</span> put a company name in the copy — the
+                customer ordered from the client&apos;s store, and WhatsApp already shows the
+                sending business profile in the chat header.
               </div>
             </CardContent>
           </Card>
