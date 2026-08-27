@@ -2,6 +2,10 @@
 
 namespace App\Providers;
 
+use App\Listeners\LogMailActivity;
+use Illuminate\Mail\Events\MessageSending;
+use Illuminate\Mail\Events\MessageSent;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Facades\Vite;
 use Illuminate\Support\ServiceProvider;
@@ -29,5 +33,9 @@ class AppServiceProvider extends ServiceProvider
         if (str_starts_with((string) config('app.url'), 'https://')) {
             URL::forceScheme('https');
         }
+
+        // Trace every outbound email into storage/logs/mail-*.log.
+        Event::listen(MessageSending::class, [LogMailActivity::class, 'sending']);
+        Event::listen(MessageSent::class, [LogMailActivity::class, 'sent']);
     }
 }

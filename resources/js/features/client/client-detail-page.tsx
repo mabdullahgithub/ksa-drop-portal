@@ -117,11 +117,13 @@ function ClientDetailContent({ client }: ClientDetailPageProps) {
       toast.error('This client has no associated user account.')
       return
     }
-    const ok = await sendResetLink(client.id)
-    if (ok) {
-      toast.success(`Password reset link sent to ${client.user?.email}`)
+    const result = await sendResetLink(client.id)
+    if (result.success) {
+      toast.success(
+        result.message ?? `Password reset link sent to ${client.user?.email}`
+      )
     } else {
-      toast.error('Failed to send reset link')
+      toast.error(result.message ?? 'Failed to send reset link')
     }
   }
 

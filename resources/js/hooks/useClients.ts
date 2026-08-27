@@ -213,7 +213,9 @@ export function useClientMutations() {
     }
   }
 
-  const sendResetLink = async (clientId: number): Promise<boolean> => {
+  const sendResetLink = async (
+    clientId: number
+  ): Promise<{ success: boolean; message?: string }> => {
     setLoading(true)
     try {
       const response = await fetch(`/api/clients/${clientId}/send-reset-link`, {
@@ -223,11 +225,14 @@ export function useClientMutations() {
           'X-CSRF-TOKEN': getCsrfToken(),
         },
       })
-      if (!response.ok) throw new Error('Failed')
-      return true
+      const payload = await response.json().catch(() => null)
+      if (!response.ok) {
+        return { success: false, message: payload?.message }
+      }
+      return { success: true, message: payload?.message }
     } catch (error) {
       console.error('Error sending reset link:', error)
-      return false
+      return { success: false }
     } finally {
       setLoading(false)
     }

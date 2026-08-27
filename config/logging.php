@@ -147,6 +147,18 @@ return [
         // registration, order sync, and the GDPR compliance topics — lands here
         // rather than in the shared app log. Kept 90 days so the compliance
         // records (customers/redact, shop/redact) outlive their action window.
+        // Every outbound email — the message envelope on the way out, the
+        // confirmed handoff to the transport, and any transport failure with
+        // its full exception chain. Split out from the app log because SMTP
+        // failures are otherwise buried under unrelated stack traces.
+        'mail' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/mail.log'),
+            'level' => 'debug',
+            'days' => 30,
+            'replace_placeholders' => true,
+        ],
+
         'shopify' => [
             'driver' => 'daily',
             'path' => storage_path('logs/shopify.log'),
