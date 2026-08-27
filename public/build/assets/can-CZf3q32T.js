@@ -1,5 +1,0 @@
-<<<<<<<< HEAD:public/build/assets/can-CZf3q32T.js
-import{t as e}from"./jsx-runtime-iwbtINeH.js";import{t}from"./use-permissions-BSoKp_HT.js";var n=e();function r({permission:e,role:r,requireAll:i=!1,fallback:a=null,children:o}){let{can:s,canAll:c,hasRole:l,hasAllRoles:u}=t(),d=!0;return e&&(d=Array.isArray(e)&&i?c(e):s(e)),r&&d&&(d=Array.isArray(r)&&i?u(r):l(r)),d?(0,n.jsx)(n.Fragment,{children:o}):(0,n.jsx)(n.Fragment,{children:a})}export{r as t};
-========
-import{t as e}from"./jsx-runtime-iwbtINeH.js";import{t}from"./use-permissions-CO6cY9FZ.js";var n=e();function r({permission:e,role:r,requireAll:i=!1,fallback:a=null,children:o}){let{can:s,canAll:c,hasRole:l,hasAllRoles:u}=t(),d=!0;return e&&(d=Array.isArray(e)&&i?c(e):s(e)),r&&d&&(d=Array.isArray(r)&&i?u(r):l(r)),d?(0,n.jsx)(n.Fragment,{children:o}):(0,n.jsx)(n.Fragment,{children:a})}export{r as t};
->>>>>>>> navix:public/build/assets/can-8MoQaPLk.js
