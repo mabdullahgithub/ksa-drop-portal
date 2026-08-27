@@ -6,6 +6,15 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { DeliveryTicks } from './delivery-ticks'
 import type { ThreadMessage } from '../types'
 
+/**
+ * Radix's ScrollArea viewport wraps children in a `display: table` div, which
+ * sizes to its content — so `w-full` and `truncate` inside measure against that
+ * expanded width, overflow the pane, and clip with no ellipsis. Forcing the
+ * wrapper back to `block` makes children respect the container width.
+ */
+const VIEWPORT_BLOCK = '[&>[data-slot=scroll-area-viewport]>div]:!block'
+
+
 const TEMPLATE_LABELS: Record<string, string> = {
   order_pending: 'Initial confirmation',
   followup: '24h follow-up',
@@ -56,7 +65,7 @@ export function MessageThread({
   }, {})
 
   return (
-    <ScrollArea className='flex-1'>
+    <ScrollArea className={`min-h-0 flex-1 ${VIEWPORT_BLOCK}`}>
       <div className='flex flex-col gap-4 p-4 sm:p-6'>
         {Object.entries(grouped).map(([day, dayMessages]) => (
           <Fragment key={day}>

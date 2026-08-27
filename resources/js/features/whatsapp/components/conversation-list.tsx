@@ -8,6 +8,15 @@ import { Badge } from '@/components/ui/badge'
 import { RowTicks } from './delivery-ticks'
 import type { ConversationSummary } from '../types'
 
+/**
+ * Radix's ScrollArea viewport wraps children in a `display: table` div, which
+ * sizes to its content — so `w-full` and `truncate` inside measure against that
+ * expanded width, overflow the pane, and clip with no ellipsis. Forcing the
+ * wrapper back to `block` makes children respect the container width.
+ */
+const VIEWPORT_BLOCK = '[&>[data-slot=scroll-area-viewport]>div]:!block'
+
+
 function initials(name: string | null, fallback: string) {
   const source = (name ?? '').trim() || fallback
   return source
@@ -15,6 +24,13 @@ function initials(name: string | null, fallback: string) {
     .slice(0, 2)
     .map((part) => part[0]?.toUpperCase() ?? '')
     .join('')
+}
+
+/** Collapse whitespace and cap the preview — the row shows ~40 chars at this width. */
+function preview(body: string | null) {
+  if (!body) return '—'
+  const flat = body.replace(/\s+/g, ' ').trim()
+  return flat.length > 80 ? `${flat.slice(0, 80)}…` : flat
 }
 
 /** Relative for anything recent, absolute once it stops being useful. */
@@ -57,7 +73,7 @@ export function ConversationList({
   }
 
   return (
-    <ScrollArea className='flex-1'>
+    <ScrollArea className={`min-h-0 flex-1 ${VIEWPORT_BLOCK}`}>
       <div className='divide-y'>
         {conversations.map((c) => {
           const meta = WHATSAPP_STATUS_META[c.whatsapp_status]
@@ -70,7 +86,7 @@ export function ConversationList({
               type='button'
               onClick={() => onSelect(c)}
               className={cn(
-                'flex w-full items-start gap-3 px-3 py-3 text-start transition-colors',
+                'flex w-full min-w-0 items-start gap-3 px-3 py-3 text-start transition-colors',
                 'hover:bg-muted/60 focus-visible:bg-muted/60 focus-visible:outline-none',
                 isSelected && 'bg-muted'
               )}
@@ -91,10 +107,10 @@ export function ConversationList({
                   </span>
                 </div>
 
-                <div className='mt-0.5 flex items-center gap-1.5'>
+                <div className='mt-0.5 flex min-w-0 items-center gap-1.5'>
                   {outbound && <RowTicks status={c.last_outbound_status} />}
-                  <span className='truncate text-xs text-muted-foreground'>
-                    {c.last_message?.replace(/\s+/g, ' ') || '—'}
+                  <span className='min-w-0 flex-1 truncate text-xs text-muted-foreground'>
+                    {preview(c.last_message)}
                   </span>
                 </div>
 

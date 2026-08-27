@@ -22,18 +22,19 @@ import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
 import { WHATSAPP_STATUS_META } from '@/features/orders/data/call-status'
 import { ConversationList } from './components/conversation-list'
+import { InboxStats } from './components/inbox-stats'
 import { MessageThread } from './components/message-thread'
 import { OrderContextPanel } from './components/order-context-panel'
 import {
   INBOX_FILTERS,
   type ConversationDetail,
   type ConversationSummary,
-  type InboxStats,
+  type InboxStats as InboxStatsData,
 } from './types'
 
 export function WhatsAppInbox() {
   const [conversations, setConversations] = useState<ConversationSummary[]>([])
-  const [stats, setStats] = useState<InboxStats | null>(null)
+  const [stats, setStats] = useState<InboxStatsData | null>(null)
   const [filter, setFilter] = useState('all')
   const [search, setSearch] = useState('')
   const [loadingList, setLoadingList] = useState(true)
@@ -123,12 +124,14 @@ export function WhatsAppInbox() {
         <ProfileDropdown />
       </Header>
 
-      <Main fixed fluid className='flex flex-col'>
-        <section className='flex h-full min-h-0 overflow-hidden rounded-lg border bg-background'>
+      <Main fixed fluid className='flex flex-col gap-3'>
+        <InboxStats stats={stats} />
+
+        <section className='flex min-h-0 flex-1 overflow-hidden rounded-lg border bg-background'>
           {/* ── Conversation list ─────────────────────────────────────── */}
           <div
             className={cn(
-              'flex w-full min-w-0 flex-col border-e md:w-80 lg:w-96',
+              'flex w-full min-h-0 min-w-0 flex-col border-e md:w-64 md:shrink-0 lg:w-72 xl:w-80',
               mobileShowThread ? 'hidden md:flex' : 'flex'
             )}
           >
@@ -136,12 +139,7 @@ export function WhatsAppInbox() {
               <div className='flex items-center justify-between gap-2'>
                 <div className='flex items-center gap-2'>
                   <MessageCircle className='h-5 w-5 text-emerald-600 dark:text-emerald-500' />
-                  <h1 className='text-lg font-bold'>WhatsApp</h1>
-                  {stats && stats.needs_attention > 0 && (
-                    <Badge className='h-5 bg-emerald-600 px-1.5 text-[11px] hover:bg-emerald-600'>
-                      {stats.needs_attention}
-                    </Badge>
-                  )}
+                  <h1 className='text-base font-bold'>Inbox</h1>
                 </div>
                 <Button
                   size='icon'

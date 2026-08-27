@@ -8,6 +8,15 @@ import { Separator } from '@/components/ui/separator'
 import { callStatusClass, callStatusLabel } from '@/features/orders/data/call-status'
 import type { ConversationOrder } from '../types'
 
+/**
+ * Radix's ScrollArea viewport wraps children in a `display: table` div, which
+ * sizes to its content — so `w-full` and `truncate` inside measure against that
+ * expanded width, overflow the pane, and clip with no ellipsis. Forcing the
+ * wrapper back to `block` makes children respect the container width.
+ */
+const VIEWPORT_BLOCK = '[&>[data-slot=scroll-area-viewport]>div]:!block'
+
+
 function Row({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className='flex items-baseline justify-between gap-3 text-sm'>
@@ -35,7 +44,7 @@ export function OrderContextPanel({ order }: { order: ConversationOrder }) {
     .join(', ')
 
   return (
-    <ScrollArea className='h-full'>
+    <ScrollArea className={`h-full ${VIEWPORT_BLOCK}`}>
       <div className='space-y-5 p-4'>
         <div>
           <div className='flex items-center justify-between gap-2'>

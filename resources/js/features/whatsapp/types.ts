@@ -87,6 +87,8 @@ export interface InboxStats {
   confirmed: number
   graveyard: number
   failed: number
+  delivered: number
+  read: number
 }
 
 export const INBOX_FILTERS: { value: string; label: string; statKey: keyof InboxStats }[] = [

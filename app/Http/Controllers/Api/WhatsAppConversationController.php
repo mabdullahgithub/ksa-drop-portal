@@ -123,11 +123,13 @@ class WhatsAppConversationController extends Controller
                 'tags' => $order->tags,
                 'created_at' => $order->created_at,
                 'client' => $order->client?->only(['id', 'company_name']),
+                // order_items columns are lineitem_*-prefixed; flatten them to
+                // plain names for the panel.
                 'items' => $order->items->map(fn ($i) => [
                     'id' => $i->id,
-                    'name' => $i->name,
-                    'quantity' => $i->quantity,
-                    'price' => $i->price,
+                    'name' => $i->lineitem_name,
+                    'quantity' => $i->lineitem_quantity,
+                    'price' => $i->lineitem_price,
                 ]),
                 'tracking_number' => $order->latestShipment?->tracking_number,
             ],
@@ -145,6 +147,15 @@ class WhatsAppConversationController extends Controller
             ->groupBy('whatsapp_status')
             ->pluck('aggregate', 'whatsapp_status');
 
+        // Delivery reach, counted off the order mirrors rather than the message
+        // log so one query covers it. `read` is reported only for customers who
+        // leave read receipts on, so it is a floor, never a true readership
+        // figure — the UI has to say so wherever it shows this.
+        $reach = Order::withoutGlobalScope('shopify_visible')
+            ->whereNotNull('whatsapp_status')
+            ->selectRaw('COUNT(whatsapp_delivered_at) as delivered, COUNT(whatsapp_read_at) as `read`')
+            ->first();
+
         return response()->json([
             'all' => (int) $counts->sum(),
             'needs_attention' => (int) ($counts[Order::WHATSAPP_REPLIED] ?? 0),
@@ -154,6 +165,8 @@ class WhatsAppConversationController extends Controller
             'confirmed' => (int) ($counts[Order::WHATSAPP_CONFIRMED] ?? 0),
             'graveyard' => (int) ($counts[Order::WHATSAPP_GRAVEYARD] ?? 0),
             'failed' => (int) ($counts[Order::WHATSAPP_FAILED] ?? 0),
+            'delivered' => (int) ($reach->delivered ?? 0),
+            'read' => (int) ($reach->read ?? 0),
         ]);
     }
 
