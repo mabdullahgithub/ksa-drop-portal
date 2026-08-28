@@ -36,9 +36,36 @@ interface ShipmentStatusCardsProps {
   onStatusClick?: (status: string) => void
 }
 
+/** Orders page: fetches its own copy of the statistics. */
 export function ShipmentStatusCards({ onStatusClick }: ShipmentStatusCardsProps) {
   const { statistics, loading } = useOrderStatistics()
 
+  return (
+    <ShipmentStatusCardsView
+      byStatus={statistics?.by_shipment_status ?? null}
+      loading={loading}
+      onStatusClick={onStatusClick}
+    />
+  )
+}
+
+/**
+ * The grid itself, fed from outside, so the dashboard can render it from the
+ * statistics payload it already has instead of fetching it again.
+ *
+ * With no `onStatusClick` the cards render as plain tiles: the orders list
+ * does not read filters off the URL, so a click from another page has
+ * nowhere to land.
+ */
+export function ShipmentStatusCardsView({
+  byStatus,
+  loading,
+  onStatusClick,
+}: {
+  byStatus: Array<{ status: string; count: number }> | null
+  loading: boolean
+  onStatusClick?: (status: string) => void
+}) {
   if (loading) {
     return (
       <div className='grid gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5'>
@@ -49,11 +76,11 @@ export function ShipmentStatusCards({ onStatusClick }: ShipmentStatusCardsProps)
     )
   }
 
-  if (!statistics?.by_shipment_status) {
+  if (!byStatus) {
     return null
   }
 
-  const shipmentStats = statistics.by_shipment_status.reduce(
+  const shipmentStats = byStatus.reduce(
     (acc, item) => {
       acc[item.status] = item.count
       return acc
@@ -71,11 +98,15 @@ export function ShipmentStatusCards({ onStatusClick }: ShipmentStatusCardsProps)
 
   return (
     <div className='grid gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5'>
-      {orderedStatuses.map(({ key, label, icon: Icon, color, gradient, count }) => (
-        <button
+      {orderedStatuses.map(({ key, label, icon: Icon, color, gradient, count }) => {
+        const Tile = onStatusClick ? 'button' : 'div'
+        return (
+        <Tile
           key={key}
-          onClick={() => onStatusClick?.(key)}
-          className={`flex flex-col justify-between rounded-lg border border-muted/60 bg-gradient-to-bl ${gradient} to-card p-3 shadow-sm hover:shadow-md hover:border-muted transition-all cursor-pointer`}
+          onClick={onStatusClick ? () => onStatusClick(key) : undefined}
+          className={`flex flex-col justify-between rounded-lg border border-muted/60 bg-gradient-to-bl ${gradient} to-card p-3 shadow-sm ${
+            onStatusClick ? 'cursor-pointer transition-all hover:border-muted hover:shadow-md' : ''
+          }`}
         >
           <div className='flex items-center justify-between mb-2'>
             <p className='text-[10px] font-medium uppercase tracking-wide text-muted-foreground leading-none'>
@@ -86,8 +117,9 @@ export function ShipmentStatusCards({ onStatusClick }: ShipmentStatusCardsProps)
             </span>
           </div>
           <p className='text-sm font-bold tabular-nums'>{count}</p>
-        </button>
-      ))}
+        </Tile>
+        )
+      })}
     </div>
   )
 }

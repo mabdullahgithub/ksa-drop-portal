@@ -1,1 +1,0 @@
-import{t as e}from"./jsx-runtime-iwbtINeH.js";import t from"./Error-CYH7RTdd.js";var n=e();function r(){return(0,n.jsx)(t,{status:401})}export{r as default};

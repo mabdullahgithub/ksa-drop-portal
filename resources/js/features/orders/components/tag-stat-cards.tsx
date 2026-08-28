@@ -23,11 +23,42 @@ interface TagStatCardsProps {
   onTagClick?: (tagName: string) => void
 }
 
+/** Orders page: fetches its own copy of the statistics. */
 export function TagStatCards({ activeTag, onTagClick }: TagStatCardsProps) {
   const { statistics, loading } = useOrderStatistics()
 
-  const tags = statistics?.by_tag ?? []
+  return (
+    <TagStatCardsView
+      tags={statistics?.by_tag ?? []}
+      loading={loading}
+      activeTag={activeTag}
+      onTagClick={onTagClick}
+    />
+  )
+}
 
+type TagStat = { id: number; name: string; color: string; count: number }
+
+/**
+ * The grid itself, fed from outside. The dashboard already holds the
+ * statistics payload, and that endpoint counts orders per tag one query at a
+ * time — no reason to pay for it twice on the same screen.
+ *
+ * With no `onTagClick` the cards render as plain tiles: the orders list does
+ * not read filters off the URL, so there is nowhere for a click to go from
+ * another page.
+ */
+export function TagStatCardsView({
+  tags,
+  loading,
+  activeTag,
+  onTagClick,
+}: {
+  tags: TagStat[]
+  loading: boolean
+  activeTag?: string | null
+  onTagClick?: (tagName: string) => void
+}) {
   if (!loading && tags.length === 0) return null
 
   return (
@@ -47,11 +78,14 @@ export function TagStatCards({ activeTag, onTagClick }: TagStatCardsProps) {
         <div className='grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-6'>
           {tags.map((tag) => {
             const isActive = activeTag === tag.name
+            const Tile = onTagClick ? 'button' : 'div'
             return (
-              <button
+              <Tile
                 key={tag.id}
-                onClick={() => onTagClick?.(tag.name)}
-                className='flex flex-col justify-between rounded-lg border p-3 shadow-sm hover:shadow-md transition-all cursor-pointer text-left'
+                onClick={onTagClick ? () => onTagClick(tag.name) : undefined}
+                className={`flex flex-col justify-between rounded-lg border p-3 shadow-sm text-left ${
+                  onTagClick ? 'cursor-pointer transition-all hover:shadow-md' : ''
+                }`}
                 style={{
                   backgroundColor: hexToRgba(tag.color, isActive ? 0.14 : 0.06),
                   borderColor: isActive ? tag.color : hexToRgba(tag.color, 0.3),
@@ -66,7 +100,7 @@ export function TagStatCards({ activeTag, onTagClick }: TagStatCardsProps) {
                 <p className='text-sm font-bold tabular-nums' style={{ color: tag.color }}>
                   {tag.count.toLocaleString()}
                 </p>
-              </button>
+              </Tile>
             )
           })}
         </div>
