@@ -419,9 +419,10 @@ class MetaWhatsAppService
                 . "1 — to CONFIRM your order\n"
                 . "2 — to UPDATE your delivery address\n"
                 . "3 — to CANCEL\n\n"
-                . 'Delivery address on file: {{3}}',
+                . 'Delivery address on file: {{3}}. Please confirm to proceed.',
             self::TEMPLATE_FOLLOWUP => "Hello {{1}}, a reminder about your order {{2}}.\n\n"
-                . "We still need your confirmation to ship it. Please reply:\n"
+                . "We still need your confirmation to ship it to: {{3}}.\n\n"
+                . "Please reply:\n"
                 . "1 — to CONFIRM\n"
                 . "2 — to UPDATE your address\n"
                 . "3 — to CANCEL\n\n"
