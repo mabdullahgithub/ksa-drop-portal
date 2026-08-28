@@ -12,7 +12,7 @@ class WhatsAppMessage extends Model
     protected $fillable = [
         'order_id',
         'direction',
-        'twilio_sid',
+        'provider_message_id',
         'template_key',
         'sent_by_user_id',
         'body',
@@ -38,12 +38,17 @@ class WhatsAppMessage extends Model
     public const DIRECTION_INBOUND = 'inbound';
 
     /**
-     * Twilio statuses that mean the message will never arrive — almost always
+     * Meta statuses that mean the message will never arrive — almost always
      * because the number isn't registered on WhatsApp. Worth distinguishing
      * from "not read yet", since there is no point spending a follow-up
      * template on a number that can't receive it.
+     *
+     * The Cloud API has no `undelivered`; `failed` is the only terminal
+     * state, with the reason carried in `error_code` (131026 = not a
+     * WhatsApp user, 131047 = 24h window closed, 132000 = template
+     * parameter mismatch).
      */
-    public const TERMINAL_FAILURE_STATUSES = ['failed', 'undelivered'];
+    public const TERMINAL_FAILURE_STATUSES = ['failed'];
 
     public function order(): BelongsTo
     {

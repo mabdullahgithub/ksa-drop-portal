@@ -19,7 +19,14 @@ namespace App\Support;
  */
 class PhoneNumber
 {
-    /** Country calling code → expected national significant number length. */
+    /**
+     * Country calling code → expected national significant number length.
+     *
+     * GCC codes are the delivery markets. Pakistan is here because staff and
+     * WhatsApp test recipients use +92 numbers — without it, Meta's registered
+     * test recipient normalises to null and the send job bails before it ever
+     * reaches the API.
+     */
     private const NSN_LENGTH = [
         '966' => 9,  // Saudi Arabia
         '971' => 9,  // UAE
@@ -27,6 +34,7 @@ class PhoneNumber
         '965' => 8,  // Kuwait
         '968' => 8,  // Oman
         '974' => 8,  // Qatar
+        '92' => 10,  // Pakistan — staff / WhatsApp test recipients
     ];
 
     /**
@@ -94,26 +102,5 @@ class PhoneNumber
         $value = str_replace($easternArabicIndic, $ascii, $value);
 
         return preg_replace('/\D+/', '', $value) ?? '';
-    }
-
-    /**
-     * Twilio addresses WhatsApp endpoints as `whatsapp:+966501234567`.
-     */
-    public static function toWhatsAppAddress(string $e164): string
-    {
-        return str_starts_with($e164, 'whatsapp:') ? $e164 : 'whatsapp:' . $e164;
-    }
-
-    /**
-     * Inverse of {@see toWhatsAppAddress()} — Twilio sends the `whatsapp:`
-     * prefix back on inbound webhooks.
-     */
-    public static function fromWhatsAppAddress(?string $address): ?string
-    {
-        if ($address === null) {
-            return null;
-        }
-
-        return preg_replace('/^whatsapp:/i', '', trim($address)) ?: null;
     }
 }

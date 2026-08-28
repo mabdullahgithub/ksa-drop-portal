@@ -6,7 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Connector;
 use App\Models\ConnectorSetting;
 use App\Services\Shipping\CourierManager;
-use App\Services\WhatsApp\TwilioWhatsAppService;
+use App\Services\WhatsApp\MetaWhatsAppService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 
@@ -101,8 +101,8 @@ class ConnectorSettingsController extends Controller
 
     public function test(Request $request, Connector $connector)
     {
-        // WhatsApp is not a courier — it validates against Twilio's account
-        // endpoint rather than through CourierManager.
+        // WhatsApp is not a courier — it validates against Meta's Graph API
+        // rather than through CourierManager.
         if ($connector->key === 'whatsapp') {
             return $this->testWhatsApp();
         }
@@ -137,28 +137,38 @@ class ConnectorSettingsController extends Controller
     }
 
     /**
-     * Validate the saved Twilio credentials by fetching the account itself —
+     * Validate the saved Meta credentials by fetching the phone number itself —
      * cheap, read-only, and it exercises exactly the auth path the sends use.
+     * The verified name is echoed back so the operator can confirm they wired up
+     * the right WhatsApp Business number, not just a syntactically valid token.
      */
     private function testWhatsApp()
     {
         try {
-            $service = new TwilioWhatsAppService();
+            $service = new MetaWhatsAppService();
 
             if (! $service->isConfigured()) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Account SID, Auth Token and WhatsApp From number are all required.',
+                    'message' => 'Phone Number ID and Access Token are both required.',
                 ]);
             }
 
-            $ok = $service->testConnection();
+            $number = $service->fetchPhoneNumber();
+            $display = $number['display_phone_number'] ?? null;
+
+            if (! $display) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Meta accepted the token but returned no phone number — check the Phone Number ID.',
+                ]);
+            }
+
+            $name = $number['verified_name'] ?? 'unverified';
 
             return response()->json([
-                'success' => $ok,
-                'message' => $ok
-                    ? 'Connection successful! Twilio credentials are valid.'
-                    : 'Twilio rejected the credentials or the account is not active.',
+                'success' => true,
+                'message' => "Connection successful! Connected to {$display} ({$name}).",
             ]);
         } catch (\Exception $e) {
             return response()->json(['success' => false, 'message' => $e->getMessage()]);

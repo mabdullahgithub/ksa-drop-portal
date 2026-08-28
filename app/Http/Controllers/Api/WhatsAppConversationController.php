@@ -5,7 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Order;
 use App\Models\WhatsAppMessage;
-use App\Services\WhatsApp\TwilioWhatsAppService;
+use App\Services\WhatsApp\MetaWhatsAppService;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 use Illuminate\Http\JsonResponse;
@@ -153,10 +153,10 @@ class WhatsAppConversationController extends Controller
      *
      * Guarded on the 24-hour customer service window rather than attempted and
      * left to fail: Meta rejects free-form outside it, and a clear 422 telling
-     * the agent the window closed is far more useful than a generic Twilio
+     * the agent the window closed is far more useful than a generic Meta
      * error surfacing in the UI.
      */
-    public function reply(Request $request, Order $order, TwilioWhatsAppService $twilio)
+    public function reply(Request $request, Order $order, MetaWhatsAppService $whatsapp)
     {
         abort_unless($order->whatsapp_status !== null, 404);
 
@@ -171,7 +171,7 @@ class WhatsAppConversationController extends Controller
         }
 
         try {
-            $message = $twilio->sendFreeform($order, trim($validated['body']), $request->user()?->id);
+            $message = $whatsapp->sendFreeform($order, trim($validated['body']), $request->user()?->id);
         } catch (Throwable $e) {
             Log::channel('whatsapp')->error('Agent reply failed', [
                 'order_id' => $order->id,

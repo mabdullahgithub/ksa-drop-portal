@@ -45,16 +45,4 @@ class PhoneNumberTest extends TestCase
     {
         $this->assertNull(PhoneNumber::toE164(null));
     }
-
-    public function test_it_wraps_and_unwraps_twilio_whatsapp_addresses(): void
-    {
-        $this->assertSame('whatsapp:+966501234567', PhoneNumber::toWhatsAppAddress('+966501234567'));
-
-        // Idempotent — the sender number is stored with the prefix already on it.
-        $this->assertSame('whatsapp:+966501234567', PhoneNumber::toWhatsAppAddress('whatsapp:+966501234567'));
-
-        $this->assertSame('+966501234567', PhoneNumber::fromWhatsAppAddress('whatsapp:+966501234567'));
-        $this->assertSame('+966501234567', PhoneNumber::fromWhatsAppAddress('+966501234567'));
-        $this->assertNull(PhoneNumber::fromWhatsAppAddress(null));
-    }
 }

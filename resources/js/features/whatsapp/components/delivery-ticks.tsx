@@ -11,6 +11,10 @@ import type { ThreadMessage } from '../types'
  * WhatsApp's own tick language, because agents already know how to read it:
  * one tick sent, two ticks delivered, two blue ticks read.
  *
+ * Meta's message lifecycle is accepted → sent → delivered → read, with `failed`
+ * as the only terminal failure — there is no `undelivered`, the reason lives in
+ * the error code instead.
+ *
  * The tooltip carries the part the ticks can't: a message with no blue ticks
  * has NOT necessarily gone unread — WhatsApp only reports a read receipt when
  * the recipient has them switched on. Stating that explicitly stops agents
@@ -27,9 +31,9 @@ export function DeliveryTicks({
 
   let icon = <Clock className='h-3.5 w-3.5' />
   let tone = 'text-muted-foreground'
-  let label = 'Queued — not sent yet'
+  let label = 'Accepted by WhatsApp — not sent yet'
 
-  if (message.status === 'failed' || message.status === 'undelivered') {
+  if (message.status === 'failed') {
     icon = <AlertCircle className='h-3.5 w-3.5' />
     tone = 'text-red-500'
     label = message.error_message
@@ -68,7 +72,7 @@ export function DeliveryTicks({
 export function RowTicks({ status }: { status: string | null }) {
   if (!status) return null
 
-  if (status === 'failed' || status === 'undelivered') {
+  if (status === 'failed') {
     return <AlertCircle className='h-3.5 w-3.5 shrink-0 text-red-500' />
   }
   if (status === 'read') {

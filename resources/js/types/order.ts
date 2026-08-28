@@ -17,7 +17,7 @@ export interface WhatsAppMessage {
   id: number
   order_id: number
   direction: 'outbound' | 'inbound'
-  twilio_sid: string | null
+  provider_message_id: string | null
   template_key: string | null
   body: string | null
   status: string | null

@@ -6,7 +6,7 @@ use App\Jobs\SendWhatsAppOrderMessageJob;
 use App\Models\Order;
 use App\Models\Tag;
 use App\Models\WhatsAppMessage;
-use App\Services\WhatsApp\TwilioWhatsAppService;
+use App\Services\WhatsApp\MetaWhatsAppService;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Log;
 
@@ -71,7 +71,7 @@ class ProcessWhatsAppFollowUps extends Command
                 continue;
             }
 
-            SendWhatsAppOrderMessageJob::dispatch($order->id, TwilioWhatsAppService::TEMPLATE_FOLLOWUP);
+            SendWhatsAppOrderMessageJob::dispatch($order->id, MetaWhatsAppService::TEMPLATE_FOLLOWUP);
             $queued++;
         }
 
@@ -104,8 +104,8 @@ class ProcessWhatsAppFollowUps extends Command
     }
 
     /**
-     * True when every outbound message on this order hit a terminal Twilio
-     * failure. Requires status callbacks to be reaching us — if they aren't,
+     * True when every outbound message on this order hit a terminal Meta
+     * failure. Requires the status webhook to be reaching us — if they aren't,
      * nothing is marked failed and the follow-up sends as normal.
      */
     private function initialSendFailed(Order $order): bool

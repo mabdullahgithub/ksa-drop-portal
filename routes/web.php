@@ -9,7 +9,7 @@ use App\Http\Controllers\Api\LogesTechsWebhookController;
 use App\Http\Controllers\Api\InvoiceController;
 use App\Http\Controllers\Api\OrderController;
 use App\Http\Controllers\Api\ShipmentController;
-use App\Http\Controllers\Api\TwilioWhatsAppWebhookController;
+use App\Http\Controllers\Api\MetaWhatsAppWebhookController;
 use App\Http\Controllers\Api\WhatsAppConversationController;
 use App\Http\Controllers\Api\WarehouseController;
 use App\Http\Controllers\Api\WebhookController;
@@ -373,11 +373,12 @@ Route::post('/webhooks/imile/tracking', [ImileWebhookController::class, 'handleT
 // retry, so SyncShipmentTracking is the backstop. See LogesTechsWebhookController.
 Route::post('/webhooks/logestechs/tracking', [LogesTechsWebhookController::class, 'handleTracking'])->name('webhooks.logestechs.tracking');
 
-// Twilio WhatsApp — inbound customer replies and message delivery/read
-// receipts. Both verify Twilio's X-Twilio-Signature HMAC inside the
-// controller. Register these two URLs on the Twilio sender/sandbox.
-Route::post('/webhooks/twilio/whatsapp', [TwilioWhatsAppWebhookController::class, 'handleIncoming'])->name('webhooks.twilio.whatsapp');
-Route::post('/webhooks/twilio/whatsapp/status', [TwilioWhatsAppWebhookController::class, 'handleStatus'])->name('webhooks.twilio.whatsapp.status');
+// Meta WhatsApp Cloud API — one URL for everything. GET is Meta's one-time
+// subscription handshake; POST carries both inbound customer replies and
+// delivery/read receipts, verified against the X-Hub-Signature-256 HMAC
+// inside the controller. Register this single URL in the Meta app dashboard.
+Route::get('/webhooks/whatsapp', [MetaWhatsAppWebhookController::class, 'verify'])->name('webhooks.whatsapp.verify');
+Route::post('/webhooks/whatsapp', [MetaWhatsAppWebhookController::class, 'handle'])->name('webhooks.whatsapp');
 
 // Shopify webhooks — public, HMAC-verified inside the controller (CSRF excluded via bootstrap/app.php 'webhooks/*')
 Route::post('/webhooks/shopify', [ShopifyWebhookController::class, 'handle'])->name('webhooks.shopify');

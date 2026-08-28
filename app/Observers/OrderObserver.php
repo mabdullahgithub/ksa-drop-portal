@@ -4,7 +4,7 @@ namespace App\Observers;
 
 use App\Jobs\SendWhatsAppOrderMessageJob;
 use App\Models\Order;
-use App\Services\WhatsApp\TwilioWhatsAppService;
+use App\Services\WhatsApp\MetaWhatsAppService;
 
 /**
  * Starts the WhatsApp confirmation conversation the moment an ops agent marks
@@ -52,6 +52,6 @@ class OrderObserver
             return;
         }
 
-        SendWhatsAppOrderMessageJob::dispatch($order->id, TwilioWhatsAppService::TEMPLATE_ORDER_PENDING);
+        SendWhatsAppOrderMessageJob::dispatch($order->id, MetaWhatsAppService::TEMPLATE_ORDER_PENDING);
     }
 }

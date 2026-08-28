@@ -50,17 +50,20 @@ interface Connector {
 export default function WhatsAppSettings() {
   const [connectorId, setConnectorId] = useState<number | null>(null)
   const [settings, setSettings] = useState({
-    account_sid: '',
-    auth_token: '',
-    whatsapp_from: '',
-    template_sid_order_pending: '',
-    template_sid_followup: '',
+    phone_number_id: '',
+    waba_id: '',
+    access_token: '',
+    app_secret: '',
+    webhook_verify_token: '',
+    template_language: 'en_US',
+    template_name_order_pending: '',
+    template_name_followup: '',
   })
   const [saving, setSaving] = useState(false)
   const [testing, setTesting] = useState(false)
   const [loading, setLoading] = useState(true)
-  const [revealingToken, setRevealingToken] = useState(false)
-  const [tokenJustRevealed, setTokenJustRevealed] = useState(false)
+  const [revealing, setRevealing] = useState<string | null>(null)
+  const [justRevealed, setJustRevealed] = useState<Record<string, boolean>>({})
 
   const origin = typeof window !== 'undefined' ? window.location.origin : ''
 
@@ -83,11 +86,14 @@ export default function WhatsAppSettings() {
       const data = res.data.settings || {}
       setSettings((prev) => ({
         ...prev,
-        account_sid: data.account_sid?.value || '',
-        auth_token: data.auth_token?.value || '',
-        whatsapp_from: data.whatsapp_from?.value || '',
-        template_sid_order_pending: data.template_sid_order_pending?.value || '',
-        template_sid_followup: data.template_sid_followup?.value || '',
+        phone_number_id: data.phone_number_id?.value || '',
+        waba_id: data.waba_id?.value || '',
+        access_token: data.access_token?.value || '',
+        app_secret: data.app_secret?.value || '',
+        webhook_verify_token: data.webhook_verify_token?.value || '',
+        template_language: data.template_language?.value || 'en_US',
+        template_name_order_pending: data.template_name_order_pending?.value || '',
+        template_name_followup: data.template_name_followup?.value || '',
       }))
     } catch {
       // Settings not yet configured
@@ -102,11 +108,14 @@ export default function WhatsAppSettings() {
     try {
       await axios.put(`/api/connectors/${connectorId}/settings`, {
         settings: [
-          { key: 'account_sid', value: settings.account_sid, is_encrypted: false },
-          { key: 'auth_token', value: settings.auth_token, is_encrypted: true },
-          { key: 'whatsapp_from', value: settings.whatsapp_from, is_encrypted: false },
-          { key: 'template_sid_order_pending', value: settings.template_sid_order_pending, is_encrypted: false },
-          { key: 'template_sid_followup', value: settings.template_sid_followup, is_encrypted: false },
+          { key: 'phone_number_id', value: settings.phone_number_id, is_encrypted: false },
+          { key: 'waba_id', value: settings.waba_id, is_encrypted: false },
+          { key: 'access_token', value: settings.access_token, is_encrypted: true },
+          { key: 'app_secret', value: settings.app_secret, is_encrypted: true },
+          { key: 'webhook_verify_token', value: settings.webhook_verify_token, is_encrypted: false },
+          { key: 'template_language', value: settings.template_language, is_encrypted: false },
+          { key: 'template_name_order_pending', value: settings.template_name_order_pending, is_encrypted: false },
+          { key: 'template_name_followup', value: settings.template_name_followup, is_encrypted: false },
         ],
       })
       toast.success('Settings saved successfully!')
@@ -117,17 +126,17 @@ export default function WhatsAppSettings() {
     }
   }
 
-  const revealToken = async () => {
+  const revealSecret = async (key: 'access_token' | 'app_secret') => {
     if (!connectorId) return
-    setRevealingToken(true)
+    setRevealing(key)
     try {
-      const res = await axios.post(`/api/connectors/${connectorId}/settings/reveal`, { key: 'auth_token' })
-      setSettings((prev) => ({ ...prev, auth_token: res.data.value }))
-      setTokenJustRevealed(true)
+      const res = await axios.post(`/api/connectors/${connectorId}/settings/reveal`, { key })
+      setSettings((prev) => ({ ...prev, [key]: res.data.value }))
+      setJustRevealed((prev) => ({ ...prev, [key]: true }))
     } catch (err: any) {
-      toast.error(err.response?.data?.message || 'Failed to reveal auth token')
+      toast.error(err.response?.data?.message || `Failed to reveal ${key.replace('_', ' ')}`)
     } finally {
-      setRevealingToken(false)
+      setRevealing(null)
     }
   }
 
@@ -188,54 +197,125 @@ export default function WhatsAppSettings() {
           <div>
             <h1 className='text-3xl font-bold tracking-tight'>WhatsApp Settings</h1>
             <p className='text-muted-foreground'>
-              Confirm orders and verify delivery addresses over WhatsApp, via Twilio
+              Confirm orders and verify delivery addresses over WhatsApp, via the Meta Cloud API
             </p>
           </div>
 
           <Card>
             <CardHeader>
-              <CardTitle>Twilio Credentials</CardTitle>
+              <CardTitle>Meta Credentials</CardTitle>
               <CardDescription>
-                From the Twilio Console home page — Account SID is shown at the top, the Auth Token behind
-                &ldquo;API keys and Auth tokens&rdquo;
+                From the Meta App Dashboard — IDs and token under WhatsApp &rarr; API Setup, the App Secret
+                under App settings &rarr; Basic
               </CardDescription>
             </CardHeader>
             <CardContent className='space-y-4'>
               <div className='grid gap-4 md:grid-cols-2'>
                 <div className='space-y-2'>
                   <div className='flex items-center gap-1.5'>
-                    <Label htmlFor='account_sid'>Account SID</Label>
-                    <FieldInfo title='Account SID'>
-                      <p>Public identifier for your Twilio account. Always starts with <code>AC</code>.</p>
-                      <p><span className='font-medium'>Where to get it:</span> console.twilio.com → Account home.</p>
+                    <Label htmlFor='phone_number_id'>Phone Number ID</Label>
+                    <FieldInfo title='Phone Number ID'>
+                      <p>Numeric ID of the WhatsApp sender. Not the phone number itself &mdash; every send
+                        is addressed to this ID.</p>
+                      <p><span className='font-medium'>Where to get it:</span> developers.facebook.com &rarr;
+                        your app &rarr; WhatsApp &rarr; API Setup.</p>
                     </FieldInfo>
                   </div>
                   <Input
-                    id='account_sid'
-                    value={settings.account_sid}
-                    onChange={(e) => setSettings({ ...settings, account_sid: e.target.value })}
-                    placeholder='ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
+                    id='phone_number_id'
+                    value={settings.phone_number_id}
+                    onChange={(e) => setSettings({ ...settings, phone_number_id: e.target.value })}
+                    placeholder='123456789012345'
                   />
                 </div>
                 <div className='space-y-2'>
                   <div className='flex items-center gap-1.5'>
-                    <Label htmlFor='auth_token'>Auth Token</Label>
-                    <FieldInfo title='Auth Token'>
-                      <p>The secret paired with your Account SID. Also used to verify the signature on every
-                        webhook Twilio sends us.</p>
-                      <p><span className='font-medium'>Where to get it:</span> console.twilio.com → Account home →
-                        API keys and Auth tokens. Stored encrypted — leave the masked value untouched to keep
-                        the saved token.</p>
+                    <Label htmlFor='waba_id'>WhatsApp Business Account ID</Label>
+                    <FieldInfo title='WhatsApp Business Account ID'>
+                      <p>Identifies the WABA that owns the number and its message templates.</p>
+                      <p><span className='font-medium'>Where to get it:</span> same API Setup page, directly
+                        below the Phone Number ID.</p>
                     </FieldInfo>
                   </div>
-                  {settings.auth_token === MASKED_VALUE ? (
+                  <Input
+                    id='waba_id'
+                    value={settings.waba_id}
+                    onChange={(e) => setSettings({ ...settings, waba_id: e.target.value })}
+                    placeholder='123456789012345'
+                  />
+                </div>
+              </div>
+
+              <div className='space-y-2'>
+                <div className='flex items-center gap-1.5'>
+                  <Label htmlFor='access_token'>Access Token</Label>
+                  <FieldInfo title='Access Token'>
+                    <p>Bearer token for every Graph API call.</p>
+                    <p><span className='font-medium'>Important:</span> the token shown on the API Setup page
+                      is temporary and expires in 24 hours. For production, create a System User in Business
+                      Settings and generate a permanent token with the
+                      <code> whatsapp_business_messaging</code> and <code> whatsapp_business_management</code>
+                      permissions.</p>
+                    <p>Stored encrypted &mdash; leave the masked value untouched to keep the saved token.</p>
+                  </FieldInfo>
+                </div>
+                {settings.access_token === MASKED_VALUE ? (
+                  <div className='relative rounded-md'>
+                    <Input
+                      id='access_token'
+                      type='password'
+                      value={settings.access_token}
+                      onChange={(e) => setSettings({ ...settings, access_token: e.target.value })}
+                      placeholder='EAAG...'
+                      autoComplete='off'
+                      className='pe-9'
+                    />
+                    <Button
+                      type='button'
+                      size='icon'
+                      variant='ghost'
+                      disabled={revealing === 'access_token'}
+                      className='absolute inset-e-1 top-1/2 h-6 w-6 -translate-y-1/2 rounded-md text-muted-foreground'
+                      onClick={() => revealSecret('access_token')}
+                    >
+                      {revealing === 'access_token' ? <Loader2 size={18} className='animate-spin' /> : <Eye size={18} />}
+                      <span className='sr-only'>Reveal saved access token</span>
+                    </Button>
+                  </div>
+                ) : (
+                  <PasswordInput
+                    id='access_token'
+                    value={settings.access_token}
+                    onChange={(e) => setSettings({ ...settings, access_token: e.target.value })}
+                    placeholder='EAAG...'
+                    autoComplete='off'
+                    data-1p-ignore
+                    data-lpignore='true'
+                    data-form-type='other'
+                    defaultVisible={justRevealed.access_token}
+                  />
+                )}
+              </div>
+
+              <div className='grid gap-4 md:grid-cols-2'>
+                <div className='space-y-2'>
+                  <div className='flex items-center gap-1.5'>
+                    <Label htmlFor='app_secret'>App Secret</Label>
+                    <FieldInfo title='App Secret'>
+                      <p>Signs every webhook Meta sends us. The portal rejects any request whose
+                        <code> X-Hub-Signature-256</code> does not verify against this.</p>
+                      <p><span className='font-medium'>Where to get it:</span> App Dashboard &rarr; App
+                        settings &rarr; Basic &rarr; App Secret (click Show).</p>
+                      <p>Without it, no replies or delivery receipts are accepted at all.</p>
+                    </FieldInfo>
+                  </div>
+                  {settings.app_secret === MASKED_VALUE ? (
                     <div className='relative rounded-md'>
                       <Input
-                        id='auth_token'
+                        id='app_secret'
                         type='password'
-                        value={settings.auth_token}
-                        onChange={(e) => setSettings({ ...settings, auth_token: e.target.value })}
-                        placeholder='Your Twilio auth token'
+                        value={settings.app_secret}
+                        onChange={(e) => setSettings({ ...settings, app_secret: e.target.value })}
                         autoComplete='off'
                         className='pe-9'
                       />
@@ -243,47 +323,43 @@ export default function WhatsAppSettings() {
                         type='button'
                         size='icon'
                         variant='ghost'
-                        disabled={revealingToken}
+                        disabled={revealing === 'app_secret'}
                         className='absolute inset-e-1 top-1/2 h-6 w-6 -translate-y-1/2 rounded-md text-muted-foreground'
-                        onClick={revealToken}
+                        onClick={() => revealSecret('app_secret')}
                       >
-                        {revealingToken ? <Loader2 size={18} className='animate-spin' /> : <Eye size={18} />}
-                        <span className='sr-only'>Reveal saved auth token</span>
+                        {revealing === 'app_secret' ? <Loader2 size={18} className='animate-spin' /> : <Eye size={18} />}
+                        <span className='sr-only'>Reveal saved app secret</span>
                       </Button>
                     </div>
                   ) : (
                     <PasswordInput
-                      id='auth_token'
-                      value={settings.auth_token}
-                      onChange={(e) => setSettings({ ...settings, auth_token: e.target.value })}
-                      placeholder='Your Twilio auth token'
+                      id='app_secret'
+                      value={settings.app_secret}
+                      onChange={(e) => setSettings({ ...settings, app_secret: e.target.value })}
                       autoComplete='off'
                       data-1p-ignore
                       data-lpignore='true'
                       data-form-type='other'
-                      defaultVisible={tokenJustRevealed}
+                      defaultVisible={justRevealed.app_secret}
                     />
                   )}
                 </div>
-              </div>
-
-              <div className='space-y-2'>
-                <div className='flex items-center gap-1.5'>
-                  <Label htmlFor='whatsapp_from'>WhatsApp From Number</Label>
-                  <FieldInfo title='WhatsApp From Number'>
-                    <p>The sender number messages go out from. Must include Twilio&apos;s
-                      <code> whatsapp:</code> prefix.</p>
-                    <p><span className='font-medium'>Sandbox:</span> the number shown on Twilio&apos;s
-                      &ldquo;Try out WhatsApp&rdquo; page, e.g. <code>whatsapp:+17372212163</code>.</p>
-                    <p><span className='font-medium'>Production:</span> your approved WhatsApp Sender number.</p>
-                  </FieldInfo>
+                <div className='space-y-2'>
+                  <div className='flex items-center gap-1.5'>
+                    <Label htmlFor='webhook_verify_token'>Webhook Verify Token</Label>
+                    <FieldInfo title='Webhook Verify Token'>
+                      <p>A string you invent. Meta echoes it back once when you save the webhook URL, and the
+                        portal only completes the handshake if the two match.</p>
+                      <p>Paste the same value here and in the Meta dashboard webhook config.</p>
+                    </FieldInfo>
+                  </div>
+                  <Input
+                    id='webhook_verify_token'
+                    value={settings.webhook_verify_token}
+                    onChange={(e) => setSettings({ ...settings, webhook_verify_token: e.target.value })}
+                    placeholder='any random string'
+                  />
                 </div>
-                <Input
-                  id='whatsapp_from'
-                  value={settings.whatsapp_from}
-                  onChange={(e) => setSettings({ ...settings, whatsapp_from: e.target.value })}
-                  placeholder='whatsapp:+17372212163'
-                />
               </div>
             </CardContent>
           </Card>
@@ -292,52 +368,69 @@ export default function WhatsAppSettings() {
             <CardHeader>
               <CardTitle>Message Templates</CardTitle>
               <CardDescription>
-                Meta-approved Content template SIDs. Leave both blank while testing in the sandbox — plain-text
-                messages are sent instead
+                Names of templates approved in WhatsApp Manager. Both are required &mdash; Meta rejects
+                business-initiated messages that are not an approved template
               </CardDescription>
             </CardHeader>
             <CardContent className='space-y-4'>
               <div className='grid gap-4 md:grid-cols-2'>
                 <div className='space-y-2'>
                   <div className='flex items-center gap-1.5'>
-                    <Label htmlFor='template_sid_order_pending'>Initial Message Template SID</Label>
+                    <Label htmlFor='template_name_order_pending'>Initial Message Template</Label>
                     <FieldInfo title='Initial Message Template'>
                       <p>Sent as soon as an agent marks a call &ldquo;No Answer&rdquo;. Asks the customer to
                         confirm the order or correct the address.</p>
-                      <p><span className='font-medium'>Where to get it:</span> Twilio Console → Content Template
-                        Builder. Starts with <code>HX</code>.</p>
+                      <p><span className='font-medium'>Where to get it:</span> business.facebook.com &rarr;
+                        WhatsApp Manager &rarr; Message Templates. Use the template <em>name</em>, lowercase
+                        with underscores.</p>
                     </FieldInfo>
                   </div>
                   <Input
-                    id='template_sid_order_pending'
-                    value={settings.template_sid_order_pending}
-                    onChange={(e) => setSettings({ ...settings, template_sid_order_pending: e.target.value })}
-                    placeholder='HXxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
+                    id='template_name_order_pending'
+                    value={settings.template_name_order_pending}
+                    onChange={(e) => setSettings({ ...settings, template_name_order_pending: e.target.value })}
+                    placeholder='order_pending'
                   />
                 </div>
                 <div className='space-y-2'>
                   <div className='flex items-center gap-1.5'>
-                    <Label htmlFor='template_sid_followup'>Follow-up Template SID</Label>
+                    <Label htmlFor='template_name_followup'>Follow-up Template</Label>
                     <FieldInfo title='Follow-up Template'>
                       <p>Sent 24 hours later if the customer never replied. After a further 24 hours of silence
                         the order is tagged <code>Graveyard</code>.</p>
                     </FieldInfo>
                   </div>
                   <Input
-                    id='template_sid_followup'
-                    value={settings.template_sid_followup}
-                    onChange={(e) => setSettings({ ...settings, template_sid_followup: e.target.value })}
-                    placeholder='HXxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
+                    id='template_name_followup'
+                    value={settings.template_name_followup}
+                    onChange={(e) => setSettings({ ...settings, template_name_followup: e.target.value })}
+                    placeholder='followup'
                   />
                 </div>
+              </div>
+
+              <div className='space-y-2 md:max-w-xs'>
+                <div className='flex items-center gap-1.5'>
+                  <Label htmlFor='template_language'>Template Language</Label>
+                  <FieldInfo title='Template Language'>
+                    <p>Locale code of the approved templates, e.g. <code>ar</code> for Arabic or
+                      <code> en_US</code> for English. Must match exactly or the send is rejected.</p>
+                  </FieldInfo>
+                </div>
+                <Input
+                  id='template_language'
+                  value={settings.template_language}
+                  onChange={(e) => setSettings({ ...settings, template_language: e.target.value })}
+                  placeholder='en_US'
+                />
               </div>
 
               <div className='rounded-md bg-muted p-3 text-xs text-muted-foreground'>
                 Templates use positional variables: <code>{'{{1}}'}</code> customer name,{' '}
                 <code>{'{{2}}'}</code> order number, <code>{'{{3}}'}</code> delivery address.
-                Submit them to Meta under the <span className='font-medium'>Utility</span> category.
+                Submit them under the <span className='font-medium'>Utility</span> category.
                 <br />
-                Do <span className='font-medium'>not</span> put a company name in the copy — the
+                Do <span className='font-medium'>not</span> put a company name in the copy &mdash; the
                 customer ordered from the client&apos;s store, and WhatsApp already shows the
                 sending business profile in the chat header.
               </div>
@@ -346,41 +439,34 @@ export default function WhatsAppSettings() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Webhook URLs</CardTitle>
+              <CardTitle>Webhook URL</CardTitle>
               <CardDescription>
-                Register both in the Twilio Console so replies and delivery receipts reach the portal
+                One URL handles both inbound replies and delivery receipts. Register it in the Meta App
+                Dashboard under WhatsApp &rarr; Configuration
               </CardDescription>
             </CardHeader>
             <CardContent className='space-y-3'>
-              {[
-                {
-                  label: 'Incoming replies',
-                  hint: 'Sandbox settings → "When a message comes in"',
-                  url: `${origin}/webhooks/twilio/whatsapp`,
-                },
-                {
-                  label: 'Delivery & read receipts',
-                  hint: 'Sandbox settings → "Status callback URL"',
-                  url: `${origin}/webhooks/twilio/whatsapp/status`,
-                },
-              ].map((row) => (
-                <div key={row.url} className='space-y-1'>
-                  <div className='flex items-baseline gap-2'>
-                    <Label className='text-xs'>{row.label}</Label>
-                    <span className='text-xs text-muted-foreground'>{row.hint}</span>
-                  </div>
-                  <div className='flex gap-2'>
-                    <Input readOnly value={row.url} className='font-mono text-xs' />
-                    <Button type='button' variant='outline' onClick={() => copy(row.url)}>
-                      Copy
-                    </Button>
-                  </div>
+              <div className='space-y-1'>
+                <div className='flex items-baseline gap-2'>
+                  <Label className='text-xs'>Callback URL</Label>
+                  <span className='text-xs text-muted-foreground'>
+                    Paste the Verify Token above into the field beside it
+                  </span>
                 </div>
-              ))}
+                <div className='flex gap-2'>
+                  <Input readOnly value={`${origin}/webhooks/whatsapp`} className='font-mono text-xs' />
+                  <Button type='button' variant='outline' onClick={() => copy(`${origin}/webhooks/whatsapp`)}>
+                    Copy
+                  </Button>
+                </div>
+              </div>
 
               <div className='rounded-md bg-muted p-3 text-xs text-muted-foreground'>
-                Both URLs must be publicly reachable over HTTPS — use an ngrok tunnel while developing locally.
-                Twilio signs every request, and the portal rejects any that fails signature verification.
+                After saving, subscribe the app to the <code>messages</code> webhook field &mdash; nothing
+                arrives until you do.
+                <br />
+                The URL must be publicly reachable over HTTPS; use an ngrok tunnel while developing locally.
+                Meta signs every request and the portal rejects any that fails signature verification.
               </div>
             </CardContent>
           </Card>

@@ -3,7 +3,7 @@
 namespace App\Jobs;
 
 use App\Models\Order;
-use App\Services\WhatsApp\TwilioWhatsAppService;
+use App\Services\WhatsApp\MetaWhatsAppService;
 use App\Support\PhoneNumber;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -32,10 +32,10 @@ class SendWhatsAppOrderMessageJob implements ShouldQueue
 
     public function __construct(
         private int $orderId,
-        private string $templateKey = TwilioWhatsAppService::TEMPLATE_ORDER_PENDING,
+        private string $templateKey = MetaWhatsAppService::TEMPLATE_ORDER_PENDING,
     ) {}
 
-    public function handle(TwilioWhatsAppService $twilio): void
+    public function handle(MetaWhatsAppService $whatsapp): void
     {
         $order = Order::withoutGlobalScope('shopify_visible')->with('client')->find($this->orderId);
 
@@ -69,7 +69,7 @@ class SendWhatsAppOrderMessageJob implements ShouldQueue
         }
 
         try {
-            $twilio->sendTemplate($order, $this->templateKey, $this->variablesFor($order));
+            $whatsapp->sendTemplate($order, $this->templateKey, $this->variablesFor($order));
         } catch (Throwable $e) {
             Log::channel('whatsapp')->error('WhatsApp send failed', [
                 'order_id' => $order->id,
@@ -78,7 +78,7 @@ class SendWhatsAppOrderMessageJob implements ShouldQueue
             ]);
 
             // Only give up once Laravel has exhausted the retries; a transient
-            // Twilio 5xx on attempt 1 shouldn't strand the order as failed.
+            // Meta 5xx on attempt 1 shouldn't strand the order as failed.
             if ($this->attempts() >= $this->tries) {
                 $order->forceFill(['whatsapp_status' => Order::WHATSAPP_FAILED])->save();
             }
@@ -86,7 +86,7 @@ class SendWhatsAppOrderMessageJob implements ShouldQueue
             throw $e;
         }
 
-        $order->forceFill($this->templateKey === TwilioWhatsAppService::TEMPLATE_FOLLOWUP
+        $order->forceFill($this->templateKey === MetaWhatsAppService::TEMPLATE_FOLLOWUP
             ? ['whatsapp_status' => Order::WHATSAPP_FOLLOWUP_SENT, 'whatsapp_followup_sent_at' => now()]
             : ['whatsapp_status' => Order::WHATSAPP_SENT, 'whatsapp_sent_at' => now()]
         )->save();
@@ -122,16 +122,16 @@ class SendWhatsAppOrderMessageJob implements ShouldQueue
         }
 
         return match ($this->templateKey) {
-            TwilioWhatsAppService::TEMPLATE_ORDER_PENDING => $order->whatsapp_status === null
+            MetaWhatsAppService::TEMPLATE_ORDER_PENDING => $order->whatsapp_status === null
                 || $order->whatsapp_status === Order::WHATSAPP_FAILED,
-            TwilioWhatsAppService::TEMPLATE_FOLLOWUP => $order->whatsapp_status === Order::WHATSAPP_SENT,
+            MetaWhatsAppService::TEMPLATE_FOLLOWUP => $order->whatsapp_status === Order::WHATSAPP_SENT,
             default => false,
         };
     }
 
     /**
-     * Positional Content-template variables. Order matters and must match the
-     * template submitted to Meta — see TwilioWhatsAppService::defaultBody().
+     * Positional template body variables. Order matters and must match the
+     * template approved in WhatsApp Manager — see MetaWhatsAppService::defaultBody().
      *
      * @return array<string,string>
      */
@@ -144,7 +144,7 @@ class SendWhatsAppOrderMessageJob implements ShouldQueue
         ])->filter()->implode(', ');
 
         // Three slots, and none of them is a brand name. See
-        // TwilioWhatsAppService::defaultBody() — the customer ordered from our
+        // MetaWhatsAppService::defaultBody() — the customer ordered from our
         // client's store, so naming the fulfilment platform would expose the
         // dropshipping relationship. There is deliberately no company-name
         // variable to fall back on.

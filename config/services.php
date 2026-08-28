@@ -129,21 +129,31 @@ return [
     ],
 
     /*
-    | Twilio — fallback credentials used only when the matching ConnectorSetting
-    | (saved from Apps → WhatsApp Settings) is missing, same precedence as the
-    | courier connectors above.
+    | Meta WhatsApp Cloud API — fallback credentials used only when the matching
+    | ConnectorSetting (saved from Apps → WhatsApp Settings) is missing, same
+    | precedence as the courier connectors above.
     |
-    | `whatsapp_from` must carry Twilio's `whatsapp:` prefix, e.g.
-    | whatsapp:+14155238886 (the shared sandbox number). The two template SIDs
-    | are Meta-approved Content templates; while they are blank the service
-    | falls back to plain-text sends, which work in the Twilio sandbox only.
+    | `phone_number_id` and `waba_id` come from the Meta app dashboard →
+    | WhatsApp → API Setup. `app_secret` signs the inbound webhook;
+    | `webhook_verify_token` is a string you invent and paste into both the Meta
+    | dashboard and here.
+    |
+    | The two template names must match templates APPROVED in WhatsApp Manager.
+    | Unlike the Twilio integration this replaced there is no plain-text
+    | fallback — Meta rejects any business-initiated message that is not an
+    | approved template, so a blank name is a hard error, not a degraded send.
     */
-    'twilio' => [
-        'account_sid' => env('TWILIO_ACCOUNT_SID'),
-        'auth_token' => env('TWILIO_AUTH_TOKEN'),
-        'whatsapp_from' => env('TWILIO_WHATSAPP_FROM'),
-        'template_sid_order_pending' => env('TWILIO_TEMPLATE_SID_ORDER_PENDING'),
-        'template_sid_followup' => env('TWILIO_TEMPLATE_SID_FOLLOWUP'),
+    'whatsapp' => [
+        'phone_number_id' => env('WHATSAPP_PHONE_NUMBER_ID'),
+        'waba_id' => env('WHATSAPP_BUSINESS_ACCOUNT_ID'),
+        'access_token' => env('WHATSAPP_ACCESS_TOKEN'),
+        'app_secret' => env('WHATSAPP_APP_SECRET'),
+        'webhook_verify_token' => env('WHATSAPP_WEBHOOK_VERIFY_TOKEN'),
+        'display_phone_number' => env('WHATSAPP_DISPLAY_PHONE_NUMBER'),
+        'api_version' => env('WHATSAPP_API_VERSION'),
+        'template_language' => env('WHATSAPP_TEMPLATE_LANGUAGE'),
+        'template_name_order_pending' => env('WHATSAPP_TEMPLATE_ORDER_PENDING'),
+        'template_name_followup' => env('WHATSAPP_TEMPLATE_FOLLOWUP'),
     ],
 
 ];

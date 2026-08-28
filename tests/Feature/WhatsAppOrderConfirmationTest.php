@@ -4,7 +4,8 @@ namespace Tests\Feature;
 
 use App\Jobs\SendWhatsAppOrderMessageJob;
 use App\Models\Order;
-use App\Services\WhatsApp\TwilioWhatsAppService;
+use App\Services\WhatsApp\MetaWhatsAppService;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Queue;
@@ -22,12 +23,20 @@ class WhatsAppOrderConfirmationTest extends TestCase
     {
         parent::setUp();
 
-        config()->set('services.twilio', [
-            'account_sid' => 'ACtest',
-            'auth_token' => 'test-token',
-            'whatsapp_from' => 'whatsapp:+17372212163',
-            'template_sid_order_pending' => null,
-            'template_sid_followup' => null,
+        config()->set('services.whatsapp', [
+            'phone_number_id' => '1221052164432743',
+            'access_token' => 'test-token',
+            'app_secret' => 'test-app-secret',
+            'webhook_verify_token' => 'test-verify-token',
+            'template_name_order_pending' => 'order_pending',
+            'template_name_followup' => 'followup',
+        ]);
+
+        // No real Graph calls from the send path.
+        Http::fake([
+            'graph.facebook.com/*' => Http::response([
+                'messages' => [['id' => 'wamid.TEST', 'message_status' => 'accepted']],
+            ], 200),
         ]);
     }
 
@@ -125,7 +134,7 @@ class WhatsAppOrderConfirmationTest extends TestCase
         Queue::assertPushed(
             SendWhatsAppOrderMessageJob::class,
             fn ($job) => (fn () => $this->orderId)->call($job) === $order->id
-                && (fn () => $this->templateKey)->call($job) === TwilioWhatsAppService::TEMPLATE_FOLLOWUP
+                && (fn () => $this->templateKey)->call($job) === MetaWhatsAppService::TEMPLATE_FOLLOWUP
         );
     }
 
@@ -214,7 +223,7 @@ class WhatsAppOrderConfirmationTest extends TestCase
             'call_status' => Order::CALL_NO_ANSWER,
         ]);
 
-        (new SendWhatsAppOrderMessageJob($order->id))->handle(app(TwilioWhatsAppService::class));
+        (new SendWhatsAppOrderMessageJob($order->id))->handle(app(MetaWhatsAppService::class));
 
         $this->assertSame(Order::WHATSAPP_FAILED, $order->fresh()->whatsapp_status);
     }
@@ -225,7 +234,7 @@ class WhatsAppOrderConfirmationTest extends TestCase
         // worker picked the job up.
         $order = $this->makeOrder(['call_status' => Order::CALL_CONFIRMED]);
 
-        (new SendWhatsAppOrderMessageJob($order->id))->handle(app(TwilioWhatsAppService::class));
+        (new SendWhatsAppOrderMessageJob($order->id))->handle(app(MetaWhatsAppService::class));
 
         $this->assertNull($order->fresh()->whatsapp_status);
     }
@@ -238,10 +247,10 @@ class WhatsAppOrderConfirmationTest extends TestCase
      */
     public function test_outbound_copy_never_names_the_fulfilment_platform(): void
     {
-        $service = new TwilioWhatsAppService();
+        $service = new MetaWhatsAppService();
 
         $render = function (string $templateKey) use ($service) {
-            $method = new \ReflectionMethod($service, 'renderFallbackBody');
+            $method = new \ReflectionMethod($service, 'renderPreview');
 
             return $method->invoke($service, $templateKey, [
                 '1' => 'Zain',
@@ -250,7 +259,7 @@ class WhatsAppOrderConfirmationTest extends TestCase
             ]);
         };
 
-        foreach ([TwilioWhatsAppService::TEMPLATE_ORDER_PENDING, TwilioWhatsAppService::TEMPLATE_FOLLOWUP] as $key) {
+        foreach ([MetaWhatsAppService::TEMPLATE_ORDER_PENDING, MetaWhatsAppService::TEMPLATE_FOLLOWUP] as $key) {
             $body = $render($key);
 
             foreach (['KSA Drop', 'ksadrop', config('app.name')] as $forbidden) {

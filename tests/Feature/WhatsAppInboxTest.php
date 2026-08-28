@@ -76,7 +76,7 @@ class WhatsAppInboxTest extends TestCase
         $message = WhatsAppMessage::create(array_merge([
             'order_id' => $order->id,
             'direction' => WhatsAppMessage::DIRECTION_OUTBOUND,
-            'twilio_sid' => 'SM' . random_int(100000, 999999),
+            'provider_message_id' => 'wamid.' . random_int(100000, 999999),
             'template_key' => 'order_pending',
             'body' => 'Please confirm your order',
             'to_number' => '+966501234567',
@@ -405,12 +405,12 @@ class WhatsAppInboxTest extends TestCase
             'created_at' => now()->subHour(),
         ]);
 
-        // The Twilio call itself is not exercised here — this pins the
+        // The Graph call itself is not exercised here — this pins the
         // attribution contract the thread renders from.
         $message = WhatsAppMessage::create([
             'order_id' => $order->id,
             'direction' => WhatsAppMessage::DIRECTION_OUTBOUND,
-            'twilio_sid' => 'SMagent1',
+            'provider_message_id' => 'wamid.AGENT1',
             'template_key' => null,
             'sent_by_user_id' => $agent->id,
             'body' => 'We can deliver Thursday.',
