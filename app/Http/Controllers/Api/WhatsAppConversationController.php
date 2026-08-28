@@ -5,6 +5,9 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Order;
 use App\Models\WhatsAppMessage;
+use App\Services\WhatsApp\TwilioWhatsAppService;
+use Illuminate\Support\Facades\Log;
+use Throwable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -77,10 +80,18 @@ class WhatsAppConversationController extends Controller
     {
         abort_unless($order->whatsapp_status !== null, 404);
 
-        $order->load(['client:id,company_name', 'items', 'whatsappMessages', 'latestShipment']);
+        $order->load(['client:id,company_name', 'items', 'whatsappMessages.sentBy:id,name', 'latestShipment']);
+
+        $windowExpiresAt = $order->whatsAppWindowExpiresAt();
 
         return response()->json([
             'conversation' => $this->summarise($order),
+            // Gates the reply box: free-form is only legal inside WhatsApp's
+            // 24h customer service window.
+            'window' => [
+                'open' => $order->whatsAppWindowIsOpen(),
+                'expires_at' => $windowExpiresAt,
+            ],
             'messages' => $order->whatsappMessages
                 ->sortBy([['created_at', 'asc'], ['id', 'asc']])
                 ->values()
@@ -89,6 +100,7 @@ class WhatsAppConversationController extends Controller
                     'direction' => $m->direction,
                     'body' => $m->body,
                     'template_key' => $m->template_key,
+                    'sent_by' => $m->sentBy?->name,
                     'status' => $m->status,
                     'created_at' => $m->created_at,
                     'sent_at' => $m->sent_at,
@@ -132,6 +144,65 @@ class WhatsAppConversationController extends Controller
                     'price' => $i->lineitem_price,
                 ]),
                 'tracking_number' => $order->latestShipment?->tracking_number,
+            ],
+        ]);
+    }
+
+    /**
+     * Send an agent-typed reply into an open conversation.
+     *
+     * Guarded on the 24-hour customer service window rather than attempted and
+     * left to fail: Meta rejects free-form outside it, and a clear 422 telling
+     * the agent the window closed is far more useful than a generic Twilio
+     * error surfacing in the UI.
+     */
+    public function reply(Request $request, Order $order, TwilioWhatsAppService $twilio)
+    {
+        abort_unless($order->whatsapp_status !== null, 404);
+
+        $validated = $request->validate([
+            'body' => 'required|string|max:1500',
+        ]);
+
+        if (! $order->whatsAppWindowIsOpen()) {
+            return response()->json([
+                'message' => 'The 24-hour reply window has closed. WhatsApp only allows an approved template now — call the customer instead.',
+            ], 422);
+        }
+
+        try {
+            $message = $twilio->sendFreeform($order, trim($validated['body']), $request->user()?->id);
+        } catch (Throwable $e) {
+            Log::channel('whatsapp')->error('Agent reply failed', [
+                'order_id' => $order->id,
+                'user_id' => $request->user()?->id,
+                'error' => $e->getMessage(),
+            ]);
+
+            return response()->json(['message' => 'Could not send: ' . $e->getMessage()], 502);
+        }
+
+        Log::channel('whatsapp')->info('Agent reply sent', [
+            'order_id' => $order->id,
+            'user_id' => $request->user()?->id,
+        ]);
+
+        return response()->json([
+            'message' => 'Reply sent',
+            'sent' => [
+                'id' => $message->id,
+                'direction' => $message->direction,
+                'body' => $message->body,
+                'sent_by' => $request->user()?->name,
+                'status' => $message->status,
+                'created_at' => $message->created_at,
+                'sent_at' => $message->sent_at,
+                'delivered_at' => null,
+                'read_at' => null,
+                'failed_at' => null,
+                'template_key' => null,
+                'error_code' => null,
+                'error_message' => null,
             ],
         ]);
     }

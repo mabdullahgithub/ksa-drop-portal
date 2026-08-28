@@ -187,6 +187,31 @@ class Order extends Model
         return $this->hasMany(Invoice::class);
     }
 
+    /**
+     * When WhatsApp's 24-hour customer service window closes for this order.
+     *
+     * The customer opens it by messaging us; it runs 24h from their most recent
+     * inbound message. Inside it an agent may send free-form text. Outside it,
+     * Meta only accepts approved templates — so this is what gates the reply
+     * box in the inbox. Null means no window was ever opened.
+     */
+    public function whatsAppWindowExpiresAt(): ?\Illuminate\Support\Carbon
+    {
+        $lastInbound = $this->whatsappMessages()
+            ->where('direction', WhatsAppMessage::DIRECTION_INBOUND)
+            ->latest('created_at')
+            ->value('created_at');
+
+        return $lastInbound ? \Illuminate\Support\Carbon::parse($lastInbound)->addHours(24) : null;
+    }
+
+    public function whatsAppWindowIsOpen(): bool
+    {
+        $expiry = $this->whatsAppWindowExpiresAt();
+
+        return $expiry !== null && $expiry->isFuture();
+    }
+
     public function whatsappMessages()
     {
         return $this->hasMany(WhatsAppMessage::class);

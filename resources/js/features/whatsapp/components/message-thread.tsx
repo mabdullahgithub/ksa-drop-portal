@@ -91,10 +91,12 @@ export function MessageThread({
                         : 'rounded-bl-sm bg-card'
                     )}
                   >
-                    {outbound && message.template_key && (
+                    {outbound && (message.template_key || message.sent_by) && (
                       <div className='mb-1 flex items-center gap-1 text-[10px] font-medium uppercase tracking-wide text-emerald-700/70 dark:text-emerald-400/70'>
                         <Info className='h-3 w-3' />
-                        {TEMPLATE_LABELS[message.template_key] ?? message.template_key}
+                        {message.template_key
+                          ? (TEMPLATE_LABELS[message.template_key] ?? message.template_key)
+                          : message.sent_by}
                       </div>
                     )}
 

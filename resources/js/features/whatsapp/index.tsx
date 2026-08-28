@@ -25,10 +25,12 @@ import { ConversationList } from './components/conversation-list'
 import { InboxStats } from './components/inbox-stats'
 import { MessageThread } from './components/message-thread'
 import { OrderContextPanel } from './components/order-context-panel'
+import { ReplyComposer } from './components/reply-composer'
 import {
   INBOX_FILTERS,
   type ConversationDetail,
   type ConversationSummary,
+  type ThreadMessage,
   type InboxStats as InboxStatsData,
 } from './types'
 
@@ -299,6 +301,22 @@ export function WhatsAppInbox() {
                     <MessageThread messages={detail?.messages ?? []} loading={loadingDetail} />
                   </div>
                 </div>
+
+                {detail && (
+                  <ReplyComposer
+                    orderId={detail.order.id}
+                    windowOpen={detail.window?.open ?? false}
+                    windowExpiresAt={detail.window?.expires_at ?? null}
+                    onSent={(message) => {
+                      // Append locally so the bubble appears instantly; the
+                      // list still refreshes for the preview and ordering.
+                      setDetail((prev) =>
+                        prev ? { ...prev, messages: [...prev.messages, message] } : prev
+                      )
+                      loadConversations()
+                    }}
+                  />
+                )}
 
                 {/* Below xl the order panel can't fit beside the thread, so it
                     stacks underneath rather than being lost entirely. */}

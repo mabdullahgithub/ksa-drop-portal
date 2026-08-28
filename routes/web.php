@@ -156,6 +156,7 @@ Route::middleware(['auth', 'verified', 'role:!client'])->group(function () {
         Route::get('/conversations', [WhatsAppConversationController::class, 'index'])->name('api.whatsapp.conversations');
         Route::get('/stats', [WhatsAppConversationController::class, 'stats'])->name('api.whatsapp.stats');
         Route::get('/conversations/{order}', [WhatsAppConversationController::class, 'show'])->name('api.whatsapp.conversation');
+        Route::post('/conversations/{order}/reply', [WhatsAppConversationController::class, 'reply'])->middleware('permission:edit orders')->name('api.whatsapp.reply');
     });
 
     // Clients API

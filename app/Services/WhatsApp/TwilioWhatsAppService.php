@@ -104,6 +104,56 @@ class TwilioWhatsAppService
     }
 
     /**
+     * Send an agent-typed reply as free-form text.
+     *
+     * Only legal inside WhatsApp's 24-hour customer service window, which the
+     * customer opens by messaging us and which closes 24h after their last
+     * inbound message. Inside it, free-form costs no template fee; outside it,
+     * Meta rejects anything that isn't an approved template. The caller must
+     * check {@see \App\Models\Order::whatsAppWindowExpiresAt()} first — this
+     * method deliberately does not, so the guard lives in one place with the
+     * HTTP response that reports it.
+     */
+    public function sendFreeform(Order $order, string $body, ?int $userId = null): WhatsAppMessage
+    {
+        $to = $order->whatsapp_phone_e164 ?: PhoneNumber::toE164($order->customer_phone ?: $order->shipping_phone);
+
+        if (! $to) {
+            throw new RuntimeException("Order {$order->id} has no usable phone number for WhatsApp.");
+        }
+
+        $from = $this->setting('whatsapp_from');
+
+        if (! $from) {
+            throw new RuntimeException('WhatsApp sender number is not configured.');
+        }
+
+        $options = ['from' => PhoneNumber::toWhatsAppAddress($from), 'body' => $body];
+
+        if ($callback = $this->statusCallbackUrl()) {
+            $options['statusCallback'] = $callback;
+        }
+
+        $message = $this->client()->messages->create(
+            PhoneNumber::toWhatsAppAddress($to),
+            $options
+        );
+
+        return WhatsAppMessage::create([
+            'order_id' => $order->id,
+            'direction' => WhatsAppMessage::DIRECTION_OUTBOUND,
+            'twilio_sid' => $message->sid,
+            'template_key' => null,
+            'sent_by_user_id' => $userId,
+            'body' => $body,
+            'to_number' => $to,
+            'from_number' => $from,
+            'status' => $message->status,
+            'sent_at' => now(),
+        ]);
+    }
+
+    /**
      * Validate the stored credentials by fetching the account — used by the
      * "Test Connection" button on the settings page.
      */

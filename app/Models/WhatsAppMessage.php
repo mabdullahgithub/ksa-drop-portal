@@ -14,6 +14,7 @@ class WhatsAppMessage extends Model
         'direction',
         'twilio_sid',
         'template_key',
+        'sent_by_user_id',
         'body',
         'to_number',
         'from_number',
@@ -47,6 +48,12 @@ class WhatsAppMessage extends Model
     public function order(): BelongsTo
     {
         return $this->belongsTo(Order::class);
+    }
+
+    /** Null for system-sent messages (the automated ping and follow-up). */
+    public function sentBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'sent_by_user_id');
     }
 
     public function hasFailed(): bool

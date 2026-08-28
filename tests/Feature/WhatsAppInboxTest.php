@@ -27,7 +27,13 @@ class WhatsAppInboxTest extends TestCase
         // rollback — see ConnectorSettingsRevealTest for the same guard.
         app(PermissionRegistrar::class)->forgetCachedPermissions();
 
-        Role::findOrCreate('admin')->givePermissionTo(Permission::findOrCreate('view orders'));
+        Role::findOrCreate('admin')->givePermissionTo([
+            Permission::findOrCreate('view orders'),
+            Permission::findOrCreate('edit orders'),
+        ]);
+
+        // Read-only role: can open the inbox, must not be able to message a customer.
+        Role::findOrCreate('order-viewer')->givePermissionTo(Permission::findOrCreate('view orders'));
     }
 
     private function actingAsAgent(): User
@@ -275,5 +281,148 @@ class WhatsAppInboxTest extends TestCase
                 'confirmed' => 2,
                 'graveyard' => 0,
             ]);
+    }
+
+    // ── Agent replies ────────────────────────────────────────────────────
+
+    public function test_the_window_is_open_for_24h_after_the_customer_writes(): void
+    {
+        $this->actingAsAgent();
+
+        $order = $this->makeConversation();
+        $this->addMessage($order, [
+            'direction' => WhatsAppMessage::DIRECTION_INBOUND,
+            'template_key' => null,
+            'body' => 'Yes',
+            'status' => 'received',
+            'created_at' => now()->subHours(2),
+        ]);
+
+        $response = $this->getJson("/api/whatsapp/conversations/{$order->id}")->assertOk();
+
+        $response->assertJsonPath('window.open', true);
+        $this->assertNotNull($response->json('window.expires_at'));
+    }
+
+    public function test_the_window_closes_24h_after_the_last_inbound_message(): void
+    {
+        $this->actingAsAgent();
+
+        $order = $this->makeConversation();
+        $this->addMessage($order, [
+            'direction' => WhatsAppMessage::DIRECTION_INBOUND,
+            'template_key' => null,
+            'body' => 'Yes',
+            'status' => 'received',
+            'created_at' => now()->subHours(25),
+        ]);
+
+        $this->getJson("/api/whatsapp/conversations/{$order->id}")
+            ->assertOk()
+            ->assertJsonPath('window.open', false);
+    }
+
+    public function test_a_conversation_with_no_reply_has_no_window(): void
+    {
+        $this->actingAsAgent();
+
+        // Only ever outbound — the customer never opened a window.
+        $order = $this->makeConversation();
+        $this->addMessage($order);
+
+        $this->getJson("/api/whatsapp/conversations/{$order->id}")
+            ->assertOk()
+            ->assertJsonPath('window.open', false)
+            ->assertJsonPath('window.expires_at', null);
+    }
+
+    public function test_a_reply_outside_the_window_is_refused_rather_than_attempted(): void
+    {
+        $this->actingAsAgent();
+
+        $order = $this->makeConversation();
+        $this->addMessage($order, [
+            'direction' => WhatsAppMessage::DIRECTION_INBOUND,
+            'template_key' => null,
+            'body' => 'Yes',
+            'status' => 'received',
+            'created_at' => now()->subHours(25),
+        ]);
+
+        $this->postJson("/api/whatsapp/conversations/{$order->id}/reply", ['body' => 'Hello?'])
+            ->assertStatus(422);
+
+        // Nothing was sent, so nothing was logged.
+        $this->assertDatabaseMissing('whatsapp_messages', ['body' => 'Hello?']);
+    }
+
+    public function test_replying_requires_edit_permission(): void
+    {
+        // view orders alone must not let someone message a customer.
+        $viewer = User::factory()->create();
+        $viewer->assignRole('order-viewer');
+        $this->actingAs($viewer);
+
+        $order = $this->makeConversation();
+        $this->addMessage($order, [
+            'direction' => WhatsAppMessage::DIRECTION_INBOUND,
+            'template_key' => null,
+            'body' => 'Yes',
+            'status' => 'received',
+            'created_at' => now()->subHour(),
+        ]);
+
+        $this->postJson("/api/whatsapp/conversations/{$order->id}/reply", ['body' => 'Hi'])
+            ->assertForbidden();
+    }
+
+    public function test_the_reply_body_is_validated(): void
+    {
+        $this->actingAsAgent();
+        $order = $this->makeConversation();
+        $this->addMessage($order, [
+            'direction' => WhatsAppMessage::DIRECTION_INBOUND,
+            'template_key' => null,
+            'body' => 'Yes',
+            'status' => 'received',
+            'created_at' => now()->subHour(),
+        ]);
+
+        $this->postJson("/api/whatsapp/conversations/{$order->id}/reply", ['body' => ''])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('body');
+    }
+
+    public function test_an_agent_message_records_who_sent_it(): void
+    {
+        $agent = $this->actingAsAgent();
+        $order = $this->makeConversation();
+        $this->addMessage($order, [
+            'direction' => WhatsAppMessage::DIRECTION_INBOUND,
+            'template_key' => null,
+            'body' => 'Yes',
+            'status' => 'received',
+            'created_at' => now()->subHour(),
+        ]);
+
+        // The Twilio call itself is not exercised here — this pins the
+        // attribution contract the thread renders from.
+        $message = WhatsAppMessage::create([
+            'order_id' => $order->id,
+            'direction' => WhatsAppMessage::DIRECTION_OUTBOUND,
+            'twilio_sid' => 'SMagent1',
+            'template_key' => null,
+            'sent_by_user_id' => $agent->id,
+            'body' => 'We can deliver Thursday.',
+            'status' => 'sent',
+            'sent_at' => now(),
+        ]);
+
+        $this->assertSame($agent->id, $message->fresh()->sentBy->id);
+
+        $thread = $this->getJson("/api/whatsapp/conversations/{$order->id}")->assertOk();
+        $agentMessage = collect($thread->json('messages'))->firstWhere('body', 'We can deliver Thursday.');
+
+        $this->assertSame($agent->name, $agentMessage['sent_by']);
     }
 }

@@ -33,6 +33,8 @@ export interface ThreadMessage {
   direction: 'outbound' | 'inbound'
   body: string | null
   template_key: string | null
+  /** Null when the system sent it (automated ping / follow-up). */
+  sent_by?: string | null
   status: string | null
   created_at: string
   sent_at: string | null
@@ -76,6 +78,11 @@ export interface ConversationDetail {
   conversation: ConversationSummary
   messages: ThreadMessage[]
   order: ConversationOrder
+  /** WhatsApp's 24h customer service window — gates free-form agent replies. */
+  window: {
+    open: boolean
+    expires_at: string | null
+  }
 }
 
 export interface InboxStats {
