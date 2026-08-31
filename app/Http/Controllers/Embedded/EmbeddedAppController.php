@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Embedded;
 
 use App\Http\Controllers\Controller;
 use App\Models\ClientShopifyConnection;
+use App\Services\EmbeddedPayloadService;
 use App\Services\ShopifyService;
 use Illuminate\Http\Request;
 
@@ -24,18 +25,26 @@ use Illuminate\Http\Request;
  */
 class EmbeddedAppController extends Controller
 {
-    public function __construct(private ShopifyService $shopify) {}
+    public function __construct(
+        private ShopifyService $shopify,
+        private EmbeddedPayloadService $payload,
+    ) {}
 
     public function index(Request $request)
     {
         $shop = $this->shopify->normalizeShopDomain((string) $request->query('shop', ''));
+
+        // One lookup, reused by the install check and the bootstrap below.
+        $connection = $this->shopify->isValidShopDomain($shop)
+            ? ClientShopifyConnection::with('client')->where('shop_domain', $shop)->first()
+            : null;
 
         // Fresh install (or reinstall after uninstall): top-level request for a
         // shop with no usable token. Start the OAuth grant right away. Only for
         // requests genuinely signed by Shopify — the HMAC covers the query string.
         if ($request->query('embedded') !== '1'
             && $this->shopify->isValidShopDomain($shop)
-            && $this->needsInstall($shop)
+            && $this->needsInstall($connection)
             && $request->filled('hmac')
             && $this->shopify->verifyOauthHmac($request->query(), $request->server('QUERY_STRING'))) {
             return redirect()->away(
@@ -45,22 +54,97 @@ class EmbeddedAppController extends Controller
 
         $portalUrl = rtrim((string) config('services.shopify.portal_url'), '/');
 
-        return view('embedded', [
+        // Both embedded routes render this same shell; the view decides which
+        // skeleton paints and which payload is worth inlining.
+        $view = $request->routeIs('embedded.shopify.settings') ? 'settings' : 'dashboard';
+
+        $bootstrap = $this->bootstrap($request, $connection, $view);
+
+        $response = response()->view('embedded', [
             'shop'           => $shop,
             'host'           => (string) $request->query('host', ''),
             'portalUrl'      => $portalUrl,
             'portalLoginUrl' => $portalUrl . '/login',
+            'view'           => $view,
+            'linkedHint'     => $this->isLinked($connection),
+            'bootstrap'      => $bootstrap,
         ]);
+
+        // The inlined payload is this merchant's order data. Never let a shared
+        // cache hold it, and never let the browser replay it for another shop.
+        if ($bootstrap !== null) {
+            $response->header('Cache-Control', 'private, no-store, max-age=0');
+        }
+
+        return $response;
+    }
+
+    /**
+     * Payload for the very first paint, inlined into the shell so the embedded
+     * app renders real content without waiting on a round trip.
+     *
+     * Only ever built from the `id_token` Shopify appends to the app URL on
+     * embedded loads — the same App Bridge session-token JWT the API routes
+     * authenticate with, verified the same way. The unsigned ?shop= param is
+     * never trusted for this. When the token is absent, expired, or belongs to
+     * a store that isn't linked to a client yet, this returns null and the app
+     * falls back to its normal fetch path.
+     *
+     * This is strictly a rendering shortcut. Installation still completes via
+     * /api/claim-token on every load, exactly as before — the frontend calls it
+     * regardless of whether a payload was inlined here.
+     */
+    private function bootstrap(Request $request, ?ClientShopifyConnection $connection, string $view): ?array
+    {
+        $idToken = (string) $request->query('id_token', '');
+
+        if ($idToken === '') {
+            return null;
+        }
+
+        $claims = $this->shopify->verifySessionToken($idToken);
+        $tokenShop = $claims ? $this->shopify->shopFromSessionTokenClaims($claims) : null;
+
+        if (! $tokenShop) {
+            return null;
+        }
+
+        // The verified token — not the query string — decides which store's data
+        // this is. A mismatch means the ?shop= param was rewritten; drop the
+        // shortcut and let the authenticated endpoints answer.
+        if (! $connection || $connection->shop_domain !== $tokenShop) {
+            return null;
+        }
+
+        if (! $this->isLinked($connection)) {
+            return null;
+        }
+
+        return $view === 'settings'
+            ? ['settings' => $this->payload->settings($connection)]
+            : ['dashboard' => $this->payload->dashboard($connection)];
+    }
+
+    /**
+     * Whether the store is installed AND linked to a KSA Drop client — the same
+     * condition VerifyShopifySessionToken enforces and claimToken reports as
+     * `linked`, so the shell can never disagree with the API about it.
+     */
+    private function isLinked(?ClientShopifyConnection $connection): bool
+    {
+        return (bool) $connection
+            && $connection->status === 'active'
+            && $connection->access_token
+            && $connection->client_id !== null
+            && $connection->client !== null;
     }
 
     /**
      * A store needs the OAuth grant when it has no connection at all, the
      * connection was disconnected (uninstall), or its tokens are gone.
      */
-    private function needsInstall(string $shop): bool
+    private function needsInstall(?ClientShopifyConnection $connection): bool
     {
-        $connection = ClientShopifyConnection::where('shop_domain', $shop)->first();
-
         return ! $connection
             || $connection->status !== 'active'
             || ! $connection->access_token;
