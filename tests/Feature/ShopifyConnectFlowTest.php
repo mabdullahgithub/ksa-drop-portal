@@ -2,7 +2,6 @@
 
 namespace Tests\Feature;
 
-use App\Jobs\ShopifyOrderSyncJob;
 use App\Models\Client;
 use App\Models\ClientShopifyConnection;
 use App\Models\User;
@@ -147,8 +146,6 @@ class ShopifyConnectFlowTest extends TestCase
         $this->assertSame(self::SHOP, $connection->shop_domain);
         $this->assertSame('active', $connection->status);
         $this->assertSame('tok-123', $connection->access_token);
-
-        Queue::assertPushed(ShopifyOrderSyncJob::class);
     }
 
     public function test_callback_with_invalid_state_returns_client_to_connectors(): void
@@ -256,8 +253,6 @@ class ShopifyConnectFlowTest extends TestCase
         $this->assertSame($user->client->id, $connection->client_id);
         $this->assertSame('active', $connection->status);
         $this->assertSame('tok-new', $connection->access_token);
-
-        Queue::assertPushed(ShopifyOrderSyncJob::class);
     }
 
     public function test_callback_without_login_and_invalid_state_lands_on_login_page(): void
@@ -461,8 +456,6 @@ class ShopifyConnectFlowTest extends TestCase
         $connection = ClientShopifyConnection::sole();
         $this->assertSame($user->client->id, $connection->client_id);
         $this->assertSame('tok-pending', $connection->access_token);
-
-        Queue::assertPushed(ShopifyOrderSyncJob::class);
     }
 
     public function test_claim_without_pending_connection_returns_404(): void

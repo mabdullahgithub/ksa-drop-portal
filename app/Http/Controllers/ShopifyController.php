@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use App\Jobs\ShopifyOrderSyncJob;
 use App\Models\Client;
 use App\Models\ClientShopifyConnection;
 use App\Services\ShopifyService;
@@ -185,8 +184,6 @@ class ShopifyController extends Controller
 
         $connection->update(['client_id' => $client->id]);
 
-        $this->dispatchSyncFor($connection, $shop);
-
         Log::channel('shopify')->info('Shopify connection claimed by client', ['shop' => $shop, 'client_id' => $client->id]);
 
         return response()->json([
@@ -240,7 +237,6 @@ class ShopifyController extends Controller
         );
 
         $this->registerWebhooksFor($connection, $shop, $token['access_token']);
-        $this->dispatchSyncFor($connection, $shop);
 
         session()->forget(['shopify_oauth_nonce', 'shopify_oauth_shop']);
 
@@ -267,7 +263,6 @@ class ShopifyController extends Controller
         ]);
 
         $this->registerWebhooksFor($connection, $shop, $token['access_token']);
-        $this->dispatchSyncFor($connection, $shop);
 
         Log::channel('shopify')->info('Shopify store relinked via admin re-grant', [
             'shop'      => $shop,
@@ -313,15 +308,6 @@ class ShopifyController extends Controller
             $connection->update(['webhooks_registered' => ! in_array(false, $results, true)]);
         } catch (\Throwable $e) {
             Log::channel('shopify')->warning('Shopify webhook registration error', ['shop' => $shop, 'error' => $e->getMessage()]);
-        }
-    }
-
-    private function dispatchSyncFor(ClientShopifyConnection $connection, string $shop): void
-    {
-        try {
-            ShopifyOrderSyncJob::dispatch($connection->id);
-        } catch (\Throwable $e) {
-            Log::channel('shopify')->warning('Shopify order sync dispatch failed', ['shop' => $shop, 'error' => $e->getMessage()]);
         }
     }
 
