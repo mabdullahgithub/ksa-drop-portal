@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { type Table } from '@tanstack/react-table'
-import { Package, DollarSign, Tag, Trash2, Truck, CheckCircle2, XCircle } from 'lucide-react'
+import { Package, DollarSign, Tag, Trash2, Truck, CheckCircle2, XCircle, AlertTriangle } from 'lucide-react'
 import { toast } from 'sonner'
 import axios from 'axios'
 import { Button } from '@/components/ui/button'
@@ -31,6 +31,14 @@ import { useOrderMutations } from '@/hooks/useOrders'
 import { usePermissions } from '@/hooks/use-permissions'
 import { useOrdersContext } from './orders-provider'
 import { OrderTagsDialog } from './order-tags-dialog'
+
+type Courier = 'jnt_express' | 'imile' | 'logestechs'
+
+const COURIER_LABELS: Record<Courier, string> = {
+  jnt_express: 'J&T Express',
+  imile: 'iMile',
+  logestechs: 'LogesTechs',
+}
 
 interface Warehouse {
   id: number
@@ -63,13 +71,16 @@ export function DataTableBulkActions<TData>({
   const [showShipmentDialog, setShowShipmentDialog] = useState(false)
   const [warehouses, setWarehouses] = useState<Warehouse[]>([])
   const [selectedWarehouse, setSelectedWarehouse] = useState<number | ''>('')
-  const [shipmentCourier, setShipmentCourier] = useState<'jnt_express' | 'imile'>('jnt_express')
+  const [shipmentCourier, setShipmentCourier] = useState<Courier>('jnt_express')
   const [shipmentServiceType, setShipmentServiceType] = useState('02')
   const [shipmentGoodsType, setShipmentGoodsType] = useState('ITN1')
+  const [logesTechsServiceType, setLogesTechsServiceType] = useState('STANDARD')
   const [shipmentWeight, setShipmentWeight] = useState('0.5')
   const [shipmentRemark, setShipmentRemark] = useState('')
   const [creatingShipments, setCreatingShipments] = useState(false)
   const [shipmentResult, setShipmentResult] = useState<BulkShipmentResult | null>(null)
+
+  const isLogesTechs = shipmentCourier === 'logestechs'
 
   useEffect(() => {
     if (showShipmentDialog && warehouses.length === 0) {
@@ -102,6 +113,11 @@ export function DataTableBulkActions<TData>({
         ...(shipmentCourier === 'jnt_express'
           ? { service_type: shipmentServiceType, goods_type: shipmentGoodsType }
           : {}),
+        // LogesTechs uses plain-string service types instead of J&T's '01'/'02'.
+        // Its district and National Address are assigned server-side per order
+        // (see ShipmentController::bulkStore) — there is no per-order field for
+        // them in a bulk run.
+        ...(isLogesTechs ? { service_type: logesTechsServiceType } : {}),
         ...(shipmentRemark.trim() ? { remark: shipmentRemark.trim() } : {}),
       })
       setShipmentResult({ created: res.data.created || [], failed: res.data.failed || [] })
@@ -379,7 +395,7 @@ export function DataTableBulkActions<TData>({
           <DialogHeader>
             <DialogTitle>Create Shipments</DialogTitle>
             <DialogDescription>
-              Create J&amp;T Express shipments for {selectedRows.length} selected order
+              Create {COURIER_LABELS[shipmentCourier]} shipments for {selectedRows.length} selected order
               {selectedRows.length > 1 ? 's' : ''}. Orders that already have an active shipment will be skipped.
             </DialogDescription>
           </DialogHeader>
@@ -391,12 +407,26 @@ export function DataTableBulkActions<TData>({
                 <select
                   className='flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm'
                   value={shipmentCourier}
-                  onChange={(e) => setShipmentCourier(e.target.value as 'jnt_express' | 'imile')}
+                  onChange={(e) => setShipmentCourier(e.target.value as Courier)}
                 >
                   <option value='jnt_express'>J&amp;T Express</option>
                   <option value='imile'>iMile</option>
+                  <option value='logestechs'>LogesTechs</option>
                 </select>
               </div>
+
+              {isLogesTechs && (
+                <div className='flex gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-400'>
+                  <AlertTriangle className='mt-0.5 h-4 w-4 shrink-0' />
+                  <p>
+                    LogesTechs requires a destination district and a Saudi National Address, and
+                    orders carry neither. In a bulk run both are assigned automatically — a random
+                    district from LogesTechs&apos; own list and a generated National Address — so the
+                    destination on these shipments will not match the customer&apos;s real address.
+                    Use the single-order dialog when the real district matters.
+                  </p>
+                </div>
+              )}
               <div className='space-y-2'>
                 <Label>Sender Warehouse</Label>
                 <select
@@ -427,6 +457,19 @@ export function DataTableBulkActions<TData>({
                     onChange={(e) => setShipmentWeight(e.target.value)}
                   />
                 </div>
+                {isLogesTechs && (
+                  <div className='space-y-2'>
+                    <Label>Service Type</Label>
+                    <select
+                      className='flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm'
+                      value={logesTechsServiceType}
+                      onChange={(e) => setLogesTechsServiceType(e.target.value)}
+                    >
+                      <option value='STANDARD'>Standard</option>
+                      <option value='EXPRESS'>Express</option>
+                    </select>
+                  </div>
+                )}
                 {shipmentCourier === 'jnt_express' && (
                   <div className='space-y-2'>
                     <Label>Service Type</Label>

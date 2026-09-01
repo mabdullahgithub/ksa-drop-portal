@@ -7,6 +7,7 @@ use App\Models\Order;
 use App\Models\Shipment;
 use App\Models\Warehouse;
 use App\Services\Shipping\CourierManager;
+use App\Services\Shipping\Drivers\LogesTechsDriver;
 use App\Services\Shipping\DTOs\ShipmentData;
 use App\Services\Shipping\Enums\ShipmentStatus;
 use Illuminate\Http\Request;
@@ -158,6 +159,43 @@ class ShipmentController extends Controller
         $warehouse = Warehouse::findOrFail($validated['warehouse_id']);
         $driver = $this->courierManager->driver($courier);
 
+        // LogesTechs rejects a shipment without a destination district and a
+        // Saudi National Address (see LogesTechsDriver::createShipment()), and
+        // neither has an order field to pre-fill it from — which is what made
+        // bulk create unusable for this courier. Per product decision both are
+        // assigned automatically here: the district is drawn at random from
+        // LogesTechs' own lookup, the national address is a generated code.
+        // The pool is fetched once per batch rather than once per order.
+        $districtPool = [];
+
+        if ($courier === 'logestechs' && $driver instanceof LogesTechsDriver) {
+            // A district name alone is never resolved server-side, so entries
+            // without an id are useless to us — drop them here rather than
+            // letting every order fail one by one at the courier.
+            try {
+                $districtPool = array_values(array_filter(
+                    $driver->getVillages(),
+                    fn ($village) => ! empty($village['id']) && ! empty($village['name']),
+                ));
+            } catch (\RuntimeException $e) {
+                // Credentials not configured yet — same clean 422 the district
+                // lookup endpoint returns, rather than a 500.
+                return response()->json([
+                    'message' => 'LogesTechs is not configured yet. Add your credentials in Apps → LogesTechs Settings.',
+                    'created' => [],
+                    'failed'  => [],
+                ], 422);
+            }
+
+            if ($districtPool === []) {
+                return response()->json([
+                    'message' => 'Could not load districts from LogesTechs, so no shipments were created.',
+                    'created' => [],
+                    'failed'  => [],
+                ], 422);
+            }
+        }
+
         $created = [];
         $failed = [];
 
@@ -180,6 +218,16 @@ class ShipmentController extends Controller
                 'goods_type'   => $validated['goods_type'] ?? null,
                 'remark'       => $validated['remark'] ?? null,
             ]);
+
+            if ($districtPool !== []) {
+                // Picked per order, not per batch, so a bulk run spreads across
+                // districts the way real orders would.
+                $district = $districtPool[array_rand($districtPool)];
+
+                $options['receiver_village']       = $district['name'];
+                $options['receiver_village_id']    = $district['id'];
+                $options['receiver_short_address'] = $this->randomNationalAddress();
+            }
 
             $shipmentData = ShipmentData::fromOrder($order, $warehouse, $options);
             $result = $driver->createShipment($shipmentData);
@@ -398,6 +446,23 @@ class ShipmentController extends Controller
             'message' => 'Shipment cancelled successfully.',
             'shipment' => $shipment->fresh(),
         ]);
+    }
+
+    /**
+     * A Saudi National Address short code: four uppercase letters followed by
+     * four digits (e.g. RDLC4305). LogesTechs enforces no format — any
+     * non-empty string is accepted — so this only has to look like the real
+     * thing for their staff reading the waybill.
+     */
+    protected function randomNationalAddress(): string
+    {
+        $letters = '';
+
+        for ($i = 0; $i < 4; $i++) {
+            $letters .= chr(random_int(65, 90));
+        }
+
+        return $letters . str_pad((string) random_int(0, 9999), 4, '0', STR_PAD_LEFT);
     }
 
     protected function courierLabel(string $courier): string
