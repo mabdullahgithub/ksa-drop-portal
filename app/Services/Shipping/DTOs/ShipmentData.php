@@ -31,6 +31,9 @@ class ShipmentData
     {
         $sender = [
             'name'         => $warehouse->contact_name,
+            // LogesTechs prints a separate business name on the waybill; the
+            // other drivers ignore this key.
+            'businessName' => $warehouse->name ?? '',
             'phone'        => $warehouse->phone,
             'province'     => $warehouse->province,
             'city'         => $warehouse->city,
@@ -44,13 +47,23 @@ class ShipmentData
         $receiver = [
             'name'         => $options['receiver_name'] ?? $order->shipping_name ?? $order->customer_name,
             'phone'        => $options['receiver_phone'] ?? $order->shipping_phone ?? $order->customer_phone,
+            'phone2'       => $options['receiver_phone2'] ?? '',
             'province'     => $options['receiver_province'] ?? $order->shipping_province ?? '',
             'city'         => $options['receiver_city'] ?? $order->shipping_city ?? '',
             'area'         => $options['receiver_area'] ?? '',
             'address'      => $options['receiver_address'] ?? $order->shipping_address1 ?? '',
             'postCode'     => $options['receiver_post_code'] ?? $order->shipping_zip ?? '',
             'countryCode'  => $options['receiver_country_code'] ?? $order->shipping_country ?? 'KSA',
+            // Saudi National Address short code (e.g. RDLC4305). Introduced for
+            // iMile; LogesTechs sends the same value as `nationalAddress`.
             'shortAddress' => $options['receiver_short_address'] ?? '',
+            // LogesTechs resolves the destination from a district ("village")
+            // rather than free-text city. No order field maps to it, so these
+            // only ever arrive as explicit options from the create dialog.
+            // District names aren't unique, so the id is preferred when the
+            // dialog resolved one against LogesTechs' district lookup.
+            'village'      => $options['receiver_village'] ?? '',
+            'villageId'    => $options['receiver_village_id'] ?? '',
         ];
 
         $itemDescription = $order->items->pluck('lineitem_name')->filter()->implode(', ') ?: 'Package';

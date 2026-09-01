@@ -103,6 +103,7 @@ class ConnectorSettingsController extends Controller
         $courierLabels = [
             'jnt_express' => 'J&T Express',
             'imile' => 'iMile',
+            'logestechs' => 'LogesTechs',
         ];
 
         if (! isset($courierLabels[$connector->key])) {

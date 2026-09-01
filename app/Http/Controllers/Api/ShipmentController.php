@@ -61,25 +61,35 @@ class ShipmentController extends Controller
         $validated = $request->validate([
             'order_id'               => 'required|exists:orders,id',
             'warehouse_id'           => 'required|exists:warehouses,id',
-            'courier'                => 'nullable|in:jnt_express,imile',
+            'courier'                => 'nullable|in:jnt_express,imile,logestechs',
             'weight'                 => 'nullable|numeric|min:0.1',
             'length'                 => 'nullable|numeric|min:0',
             'width'                  => 'nullable|numeric|min:0',
             'height'                 => 'nullable|numeric|min:0',
-            'service_type'           => 'nullable|in:01,02',
+            // '01'/'02' are J&T's codes (also used as iMile's default);
+            // LogesTechs takes a plain string instead.
+            'service_type'           => 'nullable|in:01,02,STANDARD,EXPRESS',
             'goods_type'             => 'nullable|in:ITN1,ITN2,ITN3,ITN4,ITN5,ITN6,ITN7',
             'remark'                 => 'nullable|string|max:200',
             'receiver_name'          => 'nullable|string|max:255',
             'receiver_phone'         => 'nullable|string|max:20',
+            'receiver_phone2'        => 'nullable|string|max:20',
             'receiver_province'      => 'nullable|string|max:255',
             'receiver_city'          => 'nullable|string|max:255',
             'receiver_area'          => 'nullable|string|max:255',
             'receiver_address'       => 'nullable|string|max:500',
             'receiver_post_code'     => 'nullable|string|max:20',
             'receiver_short_address' => 'nullable|string|max:50',
+            // LogesTechs only — the destination district, resolved against
+            // their /addresses/villages lookup rather than free-text city.
+            // District names aren't unique, so the id is what actually
+            // disambiguates; the name is kept for display and as a fallback.
+            'receiver_village'       => 'nullable|string|max:255',
+            'receiver_village_id'    => 'nullable|integer',
         ]);
 
         $courier = $validated['courier'] ?? 'jnt_express';
+        $validated['service_type'] = $this->defaultServiceType($courier, $validated['service_type'] ?? null);
 
         $order = Order::with('items')->findOrFail($validated['order_id']);
 
@@ -135,14 +145,15 @@ class ShipmentController extends Controller
             'order_ids'    => 'required|array|min:1',
             'order_ids.*'  => 'exists:orders,id',
             'warehouse_id' => 'required|exists:warehouses,id',
-            'courier'      => 'nullable|in:jnt_express,imile',
+            'courier'      => 'nullable|in:jnt_express,imile,logestechs',
             'weight'       => 'nullable|numeric|min:0.1',
-            'service_type' => 'nullable|in:01,02',
+            'service_type' => 'nullable|in:01,02,STANDARD,EXPRESS',
             'goods_type'   => 'nullable|in:ITN1,ITN2,ITN3,ITN4,ITN5,ITN6,ITN7',
             'remark'       => 'nullable|string|max:200',
         ]);
 
         $courier = $validated['courier'] ?? 'jnt_express';
+        $validated['service_type'] = $this->defaultServiceType($courier, $validated['service_type'] ?? null);
 
         $warehouse = Warehouse::findOrFail($validated['warehouse_id']);
         $driver = $this->courierManager->driver($courier);
@@ -350,13 +361,27 @@ class ShipmentController extends Controller
 
         $driver = $this->courierManager->driver($shipment->courier);
 
-        // iMile's cancel API needs both its own order code and the courier
-        // waybill number; encode both so ImileDriver::cancelShipment can
-        // split them back out. J&T's cancelOrder only needs txlogistic_id,
-        // so its call path is untouched.
-        $identifier = $shipment->courier === 'imile' && $shipment->tracking_number
-            ? $shipment->txlogistic_id . '|' . $shipment->tracking_number
-            : $shipment->txlogistic_id;
+        // Each courier keys cancellation off a different identifier:
+        //  - iMile needs both its order code and the waybill number, encoded
+        //    together so ImileDriver::cancelShipment can split them back out.
+        //  - LogesTechs needs its own short numeric package id, which is stored
+        //    on sorting_code (its long barcode goes to tracking_number and is
+        //    *not* accepted here) — see LogesTechsDriver's class docblock.
+        //  - J&T's cancelOrder only needs txlogistic_id, so its path is untouched.
+        $identifier = match (true) {
+            $shipment->courier === 'imile' && (bool) $shipment->tracking_number
+                => $shipment->txlogistic_id . '|' . $shipment->tracking_number,
+            $shipment->courier === 'logestechs'
+                => (string) $shipment->sorting_code,
+            default => $shipment->txlogistic_id,
+        };
+
+        if ($shipment->courier === 'logestechs' && $identifier === '') {
+            return response()->json([
+                'message' => 'Cannot cancel this shipment.',
+                'error' => 'LogesTechs package id is missing on this shipment, so it cannot be cancelled through the API. Cancel it directly in the LogesTechs portal.',
+            ], 422);
+        }
 
         $result = $driver->cancelShipment($identifier, $request->input('reason'));
 
@@ -380,7 +405,24 @@ class ShipmentController extends Controller
         return match ($courier) {
             'jnt_express' => 'J&T Express',
             'imile' => 'iMile',
+            'logestechs' => 'LogesTechs',
             default => $courier,
         };
+    }
+
+    /**
+     * Service types aren't a shared vocabulary: J&T (and iMile, which inherits
+     * ShipmentData's default) use the numeric codes '01'/'02', while LogesTechs
+     * expects a plain string like STANDARD. Picking the default here — rather
+     * than letting ShipmentData's blanket '02' through — keeps the value stored
+     * on `shipments.service_type` meaningful for whichever courier shipped it.
+     */
+    protected function defaultServiceType(string $courier, ?string $serviceType): string
+    {
+        if ($serviceType !== null && $serviceType !== '') {
+            return $serviceType;
+        }
+
+        return $courier === 'logestechs' ? 'STANDARD' : '02';
     }
 }

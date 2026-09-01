@@ -73,6 +73,38 @@ return [
     ],
 
     /*
+    | LogesTechs (Navix) — fallback values used only when the matching
+    | ConnectorSetting (saved from Apps → LogesTechs Settings) is missing.
+    |
+    | Unlike J&T and iMile, LogesTechs authenticates every Create/Cancel
+    | Shipment call with the plain account email/password in the request body
+    | (confirmed with LogesTechs — their token endpoint is not used for
+    | server-to-server integrations), so those live in ConnectorSetting
+    | (encrypted) rather than here. The webhook username/password are the
+    | values configured in LogesTechs' own "Edit customer webhook" panel and
+    | echoed back on every push — see LogesTechsWebhookController.
+    |
+    | The defaults below are the shared Navix test account, so the integration
+    | works out of the box during development without any setup.
+    |
+    | ⚠️ These are NOT sandbox credentials. LogesTechs has no sandbox — company
+    | 722 is a live tenant and every shipment created against it dispatches a
+    | real driver. Override all five values in production, either via .env or
+    | (preferred) via Apps → LogesTechs Settings, which takes precedence.
+    */
+    'logestechs' => [
+        'company_id' => env('LOGESTECHS_COMPANY_ID', '722'),
+        'email' => env('LOGESTECHS_EMAIL', 'test@navix.com.sa'),
+        'password' => env('LOGESTECHS_PASSWORD', 'test@123'),
+        // Matches the values currently set in the Navix account's webhook panel.
+        'webhook_username' => env('LOGESTECHS_WEBHOOK_USERNAME', 'test'),
+        'webhook_password' => env('LOGESTECHS_WEBHOOK_PASSWORD', 'test'),
+        'base_url' => env('LOGESTECHS_BASE_URL', 'https://apisv2.logestechs.com/api'),
+        // "Package Source" in LogesTechs' portal.
+        'integration_source' => env('LOGESTECHS_INTEGRATION_SOURCE', 'ksadrop_portal'),
+    ],
+
+    /*
     | Shopify Integration — public app credentials (OAuth authorization code
     | grant with expiring offline tokens). Clients connect their own stores;
     | each connection stores its own access/refresh token in

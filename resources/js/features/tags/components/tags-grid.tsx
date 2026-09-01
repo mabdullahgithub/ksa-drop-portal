@@ -1,6 +1,7 @@
 import { Search, Tag as TagIcon } from 'lucide-react'
 import { useState } from 'react'
 import { Input } from '@/components/ui/input'
+import { SearchBeam } from '@/components/search-beam'
 import { type Tag } from '../data/schema'
 import { TagCard } from './tag-card'
 
@@ -16,12 +17,14 @@ export function TagsGrid({ data }: { data: Tag[] }) {
       {/* Search */}
       <div className='relative max-w-xs'>
         <Search className='absolute start-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground' />
-        <Input
-          placeholder='Search tags...'
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className='ps-8'
-        />
+        <SearchBeam>
+          <Input
+            placeholder='Search tags...'
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className='ps-8'
+          />
+        </SearchBeam>
       </div>
 
       {filtered.length === 0 ? (

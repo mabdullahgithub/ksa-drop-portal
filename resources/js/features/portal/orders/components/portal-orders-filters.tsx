@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Search, X, SlidersHorizontal } from 'lucide-react'
 import { type Table } from '@tanstack/react-table'
 import { Input } from '@/components/ui/input'
+import { SearchBeam } from '@/components/search-beam'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -68,12 +69,14 @@ export function PortalOrdersFilters({
       {/* Search */}
       <div className='relative flex-1 min-w-[180px]'>
         <Search className='absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground' />
-        <Input
-          placeholder='Search by order #, customer, phone...'
-          value={searchInput}
-          onChange={(e) => setSearchInput(e.target.value)}
-          className='pl-8 h-9 text-sm'
-        />
+        <SearchBeam>
+          <Input
+            placeholder='Search by order #, customer, phone...'
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            className='pl-8 h-9 text-sm'
+          />
+        </SearchBeam>
       </div>
 
       {/* Financial Status */}

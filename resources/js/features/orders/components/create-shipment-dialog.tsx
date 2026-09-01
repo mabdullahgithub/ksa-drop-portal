@@ -9,6 +9,9 @@ import axios from 'axios'
 import { useState, useEffect } from 'react'
 import { type Order } from '@/types/order'
 import { JntProvinceSelect, JntCitySelect } from '@/components/jnt-location-select'
+import { LogesTechsVillageSelect } from '@/components/logestechs-village-select'
+
+type Courier = 'jnt_express' | 'imile' | 'logestechs'
 
 interface Warehouse {
   id: number
@@ -40,7 +43,7 @@ export function CreateShipmentDialog({ order, open, onOpenChange, onSuccess }: C
   const [loading, setLoading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [selectedWarehouse, setSelectedWarehouse] = useState<number | ''>('')
-  const [courier, setCourier] = useState<'jnt_express' | 'imile'>('jnt_express')
+  const [courier, setCourier] = useState<Courier>('jnt_express')
   const [form, setForm] = useState({
     weight: '0.5',
     length: '',
@@ -57,7 +60,15 @@ export function CreateShipmentDialog({ order, open, onOpenChange, onSuccess }: C
     receiver_address: '',
     receiver_post_code: '',
     receiver_short_address: '',
+    // LogesTechs only — it resolves the destination from a district rather
+    // than province/city, and district names aren't unique, so the id is what
+    // actually gets submitted.
+    receiver_village: '',
+    receiver_village_id: '',
+    logestechs_service_type: 'STANDARD',
   })
+
+  const isLogesTechs = courier === 'logestechs'
 
   useEffect(() => {
     if (open) {
@@ -96,9 +107,28 @@ export function CreateShipmentDialog({ order, open, onOpenChange, onSuccess }: C
   const missingFields: string[] = []
   if (isBlankField(form.receiver_name)) missingFields.push('Receiver Name')
   if (isBlankField(form.receiver_phone)) missingFields.push('Receiver Phone')
-  if (isBlankField(form.receiver_province)) missingFields.push('Receiver Province')
-  if (isBlankField(form.receiver_city)) missingFields.push('Receiver City')
-  if (isBlankField(form.receiver_address)) missingFields.push('Receiver Address')
+  if (isLogesTechs) {
+    // LogesTechs resolves the destination from a district, not province/city,
+    // and rejects the shipment outright without a street address or a Saudi
+    // National Address ("العنوان الوطني إجباري").
+    // The id is what LogesTechs resolves against — a typed name alone is
+    // rejected with "Invalid Parameter 'model.cityId' null" — so the district
+    // must have come from the lookup, not free text.
+    if (isBlankField(form.receiver_village_id)) {
+      missingFields.push('District')
+    }
+    if (isBlankField(form.receiver_address)) missingFields.push('Street Address')
+    if (isBlankField(form.receiver_short_address)) missingFields.push('National Address')
+  } else {
+    if (isBlankField(form.receiver_province)) missingFields.push('Receiver Province')
+    if (isBlankField(form.receiver_city)) missingFields.push('Receiver City')
+    if (isBlankField(form.receiver_address)) missingFields.push('Receiver Address')
+  }
+
+  // For the other couriers a missing field is a warning — they may still
+  // accept it. LogesTechs rejects outright without a district and street
+  // address, so there's nothing to gain from letting the request go out.
+  const blockedByMissing = isLogesTechs && missingFields.length > 0
 
   const handleSubmit = async () => {
     if (!selectedWarehouse) {
@@ -128,6 +158,16 @@ export function CreateShipmentDialog({ order, open, onOpenChange, onSuccess }: C
       if (courier === 'jnt_express') {
         payload.service_type = form.service_type
         payload.goods_type = form.goods_type
+      }
+
+      if (isLogesTechs) {
+        payload.service_type = form.logestechs_service_type
+        payload.receiver_village = form.receiver_village || undefined
+        // The id is what disambiguates duplicate district names — send it
+        // whenever the picker resolved one.
+        payload.receiver_village_id = form.receiver_village_id
+          ? Number(form.receiver_village_id)
+          : undefined
       }
 
       if (form.length) payload.length = parseFloat(form.length)
@@ -164,7 +204,10 @@ export function CreateShipmentDialog({ order, open, onOpenChange, onSuccess }: C
                 <AlertTriangle className='h-4 w-4 mt-0.5 shrink-0' />
                 <div>
                   <span className='font-medium'>Missing fields: </span>
-                  {missingFields.join(', ')}. You can still proceed — the courier will reject if invalid.
+                  {missingFields.join(', ')}.{' '}
+                  {blockedByMissing
+                    ? 'LogesTechs requires these — fill them in to continue.'
+                    : 'You can still proceed — the courier will reject if invalid.'}
                 </div>
               </div>
             )}
@@ -175,10 +218,11 @@ export function CreateShipmentDialog({ order, open, onOpenChange, onSuccess }: C
               <select
                 className='flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm'
                 value={courier}
-                onChange={(e) => setCourier(e.target.value as 'jnt_express' | 'imile')}
+                onChange={(e) => setCourier(e.target.value as Courier)}
               >
                 <option value='jnt_express'>J&amp;T Express</option>
                 <option value='imile'>iMile</option>
+                <option value='logestechs'>LogesTechs</option>
               </select>
             </div>
 
@@ -224,29 +268,49 @@ export function CreateShipmentDialog({ order, open, onOpenChange, onSuccess }: C
                     onChange={(e) => setForm({ ...form, receiver_phone: e.target.value })}
                   />
                 </div>
-                <div className='space-y-1'>
-                  <Label className='text-xs text-muted-foreground'>Province / Region</Label>
-                  <JntProvinceSelect
-                    value={form.receiver_province}
-                    onChange={(province) => setForm({ ...form, receiver_province: province, receiver_city: '' })}
-                  />
-                </div>
-                <div className='space-y-1'>
-                  <Label className='text-xs text-muted-foreground'>City</Label>
-                  <JntCitySelect
-                    province={form.receiver_province}
-                    value={form.receiver_city}
-                    onChange={(city) => setForm((prev) => ({ ...prev, receiver_city: city }))}
-                    onProvinceChange={(province) => setForm((prev) => ({ ...prev, receiver_province: province }))}
-                  />
-                </div>
-                <div className='space-y-1'>
-                  <Label className='text-xs text-muted-foreground'>Area / District <span className='italic'>(optional)</span></Label>
-                  <Input
-                    value={form.receiver_area}
-                    onChange={(e) => setForm({ ...form, receiver_area: e.target.value })}
-                  />
-                </div>
+                {isLogesTechs ? (
+                  // LogesTechs has no province/city fields — it resolves the
+                  // destination (and its own city/region) from the district id.
+                  <div className='space-y-1 md:col-span-2'>
+                    <Label className='text-xs text-muted-foreground'>District</Label>
+                    <LogesTechsVillageSelect
+                      value={form.receiver_village}
+                      valueId={form.receiver_village_id}
+                      onChange={({ id, name }) =>
+                        setForm((prev) => ({ ...prev, receiver_village: name, receiver_village_id: id }))
+                      }
+                    />
+                    <p className='text-xs text-muted-foreground'>
+                      LogesTechs delivers by district — the city and region are derived from your selection.
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    <div className='space-y-1'>
+                      <Label className='text-xs text-muted-foreground'>Province / Region</Label>
+                      <JntProvinceSelect
+                        value={form.receiver_province}
+                        onChange={(province) => setForm({ ...form, receiver_province: province, receiver_city: '' })}
+                      />
+                    </div>
+                    <div className='space-y-1'>
+                      <Label className='text-xs text-muted-foreground'>City</Label>
+                      <JntCitySelect
+                        province={form.receiver_province}
+                        value={form.receiver_city}
+                        onChange={(city) => setForm((prev) => ({ ...prev, receiver_city: city }))}
+                        onProvinceChange={(province) => setForm((prev) => ({ ...prev, receiver_province: province }))}
+                      />
+                    </div>
+                    <div className='space-y-1'>
+                      <Label className='text-xs text-muted-foreground'>Area / District <span className='italic'>(optional)</span></Label>
+                      <Input
+                        value={form.receiver_area}
+                        onChange={(e) => setForm({ ...form, receiver_area: e.target.value })}
+                      />
+                    </div>
+                  </>
+                )}
                 <div className='space-y-1'>
                   <Label className='text-xs text-muted-foreground'>Postal Code <span className='italic'>(optional)</span></Label>
                   <Input
@@ -255,20 +319,32 @@ export function CreateShipmentDialog({ order, open, onOpenChange, onSuccess }: C
                   />
                 </div>
                 <div className='space-y-1 md:col-span-2'>
-                  <Label className='text-xs text-muted-foreground'>Short Address (Saudi National Address — optional)</Label>
+                  <Label className='text-xs text-muted-foreground'>
+                    Short Address (Saudi National Address
+                    {isLogesTechs ? '' : ' — optional'})
+                    {isLogesTechs && <span className='ms-1 text-destructive'>*</span>}
+                  </Label>
                   <Input
                     value={form.receiver_short_address}
                     onChange={(e) => setForm({ ...form, receiver_short_address: e.target.value })}
                     placeholder='e.g. BLDN1234'
                     maxLength={50}
                   />
+                  {isLogesTechs && (
+                    <p className='text-xs text-muted-foreground'>Required by LogesTechs.</p>
+                  )}
                 </div>
                 <div className='space-y-1 md:col-span-2'>
-                  <Label className='text-xs text-muted-foreground'>Street Address</Label>
+                  <Label className='text-xs text-muted-foreground'>
+                    Street Address{isLogesTechs && <span className='ms-1 text-destructive'>*</span>}
+                  </Label>
                   <Input
                     value={form.receiver_address}
                     onChange={(e) => setForm({ ...form, receiver_address: e.target.value })}
                   />
+                  {isLogesTechs && (
+                    <p className='text-xs text-muted-foreground'>Required by LogesTechs.</p>
+                  )}
                 </div>
               </div>
             </div>
@@ -316,6 +392,24 @@ export function CreateShipmentDialog({ order, open, onOpenChange, onSuccess }: C
                   />
                 </div>
               </div>
+              {isLogesTechs && (
+                <div className='grid gap-3 md:grid-cols-2'>
+                  <div className='space-y-1'>
+                    <Label className='text-xs text-muted-foreground'>Service Type</Label>
+                    <select
+                      className='flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm'
+                      value={form.logestechs_service_type}
+                      onChange={(e) => setForm({ ...form, logestechs_service_type: e.target.value })}
+                    >
+                      <option value='STANDARD'>Standard</option>
+                      <option value='EXPRESS'>Express</option>
+                      <option value='THREE_TO_FIVE_DAYS'>3–5 Days</option>
+                      <option value='SEA'>Sea</option>
+                      <option value='AIR'>Air</option>
+                    </select>
+                  </div>
+                </div>
+              )}
               {courier === 'jnt_express' && (
                 <div className='grid gap-3 md:grid-cols-2'>
                   <div className='space-y-1'>
@@ -364,7 +458,7 @@ export function CreateShipmentDialog({ order, open, onOpenChange, onSuccess }: C
           <Button variant='outline' onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button onClick={handleSubmit} disabled={submitting || !selectedWarehouse}>
+          <Button onClick={handleSubmit} disabled={submitting || !selectedWarehouse || blockedByMissing}>
             {submitting ? 'Creating...' : 'Create Shipment'}
           </Button>
         </DialogFooter>
