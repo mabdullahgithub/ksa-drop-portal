@@ -27,7 +27,10 @@ class AuthenticationTest extends TestCase
         ]);
 
         $this->assertAuthenticated();
-        $response->assertRedirect(route('dashboard', absolute: false));
+        // Landing is per-user, not a fixed /dashboard: clients go to the portal
+        // and staff to the first page their permissions allow
+        // (User::defaultLandingRoute).
+        $response->assertRedirect(route($user->defaultLandingRoute(), absolute: false));
     }
 
     public function test_users_can_not_authenticate_with_invalid_password(): void

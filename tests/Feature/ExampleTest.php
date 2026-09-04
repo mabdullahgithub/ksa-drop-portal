@@ -2,18 +2,17 @@
 
 namespace Tests\Feature;
 
-// use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 class ExampleTest extends TestCase
 {
-    /**
-     * A basic test example.
-     */
-    public function test_the_application_returns_a_successful_response(): void
+    public function test_the_root_url_sends_a_guest_to_the_login_screen(): void
     {
-        $response = $this->get('/');
+        // There is no public landing page: "/" routes a guest at the dashboard,
+        // which the auth middleware then bounces to login. The scaffolded
+        // version of this test asserted a 200 the app has never returned.
+        $this->get('/')->assertRedirect();
 
-        $response->assertStatus(200);
+        $this->followingRedirects()->get('/')->assertOk()->assertSee('login', false);
     }
 }

@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Client;
 use App\Models\ClientShopifyConnection;
+use App\Models\Tag;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -21,6 +22,9 @@ class ShopifyService
     /** Latest stable Admin API version. Bump on each Shopify quarterly release.
      *  Keep in sync with `api_version` in shopify.app.toml. */
     public const API_VERSION = '2026-07';
+
+    /** The workflow tag every order starts on, whatever its source. */
+    public const PENDING_TAG = 'Pending';
 
     private string $apiKey;
     private string $apiSecret;
@@ -1080,13 +1084,43 @@ class ShopifyService
         return $tags ? array_values(array_filter(array_map('trim', explode(',', (string) $tags)))) : [];
     }
 
+    /**
+     * The workflow tags a synced order starts life with.
+     *
+     * Every order enters the portal as Pending, however it arrived — CSV import
+     * and manual creation already do this via PortalController::
+     * defaultOrderTags(), and a Shopify order is no different once it is in the
+     * list. Only that tag and the buyease marker are carried; the merchant's own
+     * Shopify tags stay in shopify_raw_tags, which is what the sync filters read.
+     *
+     * If the order already carries its own spelling of the tag — "pending",
+     * "PENDING" — that spelling is kept rather than adding a near-duplicate the
+     * portal would then show as two separate tags.
+     */
     private function filterShopifyTags($tags): array
     {
         $all = $this->splitTags($tags);
 
-        $buyease = array_values(array_filter($all, fn($t) => stripos($t, 'buyease') !== false));
+        $buyease = array_values(array_filter($all, fn ($t) => stripos($t, 'buyease') !== false));
 
-        return $buyease ?: [];
+        $existing = array_values(array_filter($all, fn ($t) => strcasecmp(trim($t), self::PENDING_TAG) === 0));
+
+        return array_merge($buyease, [$existing[0] ?? $this->pendingTagName()]);
+    }
+
+    /**
+     * Ensure the Pending tag exists, and return the name to store on the order.
+     *
+     * Mirrors PortalController::defaultOrderTags() — the row has to exist for
+     * the portal's tag filters and colour to work, and firstOrCreate keeps the
+     * two paths from racing each other into duplicate rows.
+     */
+    private function pendingTagName(): string
+    {
+        return Tag::firstOrCreate(
+            ['name' => self::PENDING_TAG],
+            ['color' => '#f59e0b', 'description' => 'Order awaiting processing']
+        )->name;
     }
 
     /**
