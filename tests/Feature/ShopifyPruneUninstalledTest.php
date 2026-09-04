@@ -68,7 +68,7 @@ class ShopifyPruneUninstalledTest extends TestCase
     {
         $connection = $this->makeConnection();
 
-        // What Shopify answers once the app is gone.
+        // The token is live, so no renewal happens; Shopify refuses the call.
         Http::fake(['https://' . self::SHOP . '/admin/api/*' => Http::response(
             ['errors' => '[API] Invalid API key or access token (unrecognized login or wrong password)'],
             401
@@ -159,6 +159,100 @@ class ShopifyPruneUninstalledTest extends TestCase
 
         $this->artisan('shopify:prune-uninstalled')->assertSuccessful();
 
+        Http::assertNothingSent();
+    }
+
+    // ── Expired access tokens ────────────────────────────────────────────────
+    //
+    //  Shopify's access tokens are short-lived and ours are normally already
+    //  expired; the refresh token is the credential that lasts. Testing the
+    //  stored token directly reported every store as uninstalled — live paying
+    //  merchants included — because an expired token is refused with the same
+    //  401 as a revoked one.
+
+    public function test_an_expired_token_on_a_live_store_is_renewed_not_disconnected(): void
+    {
+        $connection = $this->makeConnection();
+        $connection->update(['token_expires_at' => now()->subDay()]);
+
+        Http::fake([
+            'https://' . self::SHOP . '/admin/oauth/access_token' => Http::response([
+                'access_token'             => 'tok-fresh',
+                'refresh_token'            => 'ref-fresh',
+                'expires_in'               => 86400,
+                'refresh_token_expires_in' => 7776000,
+            ]),
+            'https://' . self::SHOP . '/admin/api/*' => Http::response(
+                ['data' => ['shop' => ['name' => 'My Store']]]
+            ),
+        ]);
+
+        $this->artisan('shopify:prune-uninstalled')->assertSuccessful();
+
+        $connection->refresh();
+
+        $this->assertSame('active', $connection->status);
+        // Renewed rather than discarded — a healthy row is left better than found.
+        $this->assertSame('tok-fresh', $connection->access_token);
+        $this->assertFalse($connection->isTokenExpired());
+    }
+
+    public function test_an_expired_token_whose_grant_shopify_refuses_is_disconnected(): void
+    {
+        // The genuine uninstall signature: the refresh token is still within its
+        // ninety days, and Shopify refuses it anyway because the grant is gone.
+        $connection = $this->makeConnection();
+        $connection->update(['token_expires_at' => now()->subDay()]);
+
+        Http::fake([
+            'https://' . self::SHOP . '/admin/oauth/access_token' => Http::response(
+                ['error' => 'invalid_grant'], 400
+            ),
+        ]);
+
+        $this->artisan('shopify:prune-uninstalled')
+            ->expectsOutputToContain('uninstalled')
+            ->assertSuccessful();
+
+        $connection->refresh();
+        $this->assertSame('disconnected', $connection->status);
+        $this->assertNull($connection->access_token);
+    }
+
+    public function test_a_failing_token_endpoint_leaves_the_store_alone(): void
+    {
+        // Shopify having a bad moment is not a merchant leaving.
+        $connection = $this->makeConnection();
+        $connection->update(['token_expires_at' => now()->subDay()]);
+
+        Http::fake([
+            'https://' . self::SHOP . '/admin/oauth/access_token' => Http::response('', 503),
+        ]);
+
+        $this->artisan('shopify:prune-uninstalled')
+            ->expectsOutputToContain('could not determine')
+            ->assertSuccessful();
+
+        $this->assertSame('active', $connection->fresh()->status);
+    }
+
+    public function test_an_expired_refresh_token_is_not_treated_as_an_uninstall(): void
+    {
+        // The merchant has to reconnect either way, but a lapsed refresh window
+        // is not proof the app was removed, so nothing is concluded.
+        $connection = $this->makeConnection();
+        $connection->update([
+            'token_expires_at'         => now()->subDay(),
+            'refresh_token_expires_at' => now()->subDay(),
+        ]);
+
+        Http::fake();
+
+        $this->artisan('shopify:prune-uninstalled')
+            ->expectsOutputToContain('could not determine')
+            ->assertSuccessful();
+
+        $this->assertSame('active', $connection->fresh()->status);
         Http::assertNothingSent();
     }
 }

@@ -56,12 +56,12 @@ class PruneUninstalledShopifyStores extends Command
         foreach ($connections as $connection) {
             $shop = $connection->shop_domain;
 
-            // The stored token as-is, deliberately not getValidToken(): that
-            // would try to refresh, and a refresh against an uninstalled app
-            // fails for its own reasons. A revoked token answers 401 on the
-            // first call, which is the signal we want — and an expired-but-live
-            // token comes back undetermined rather than being mistaken for gone.
-            $state = $shopify->isAppInstalled($shop, $connection->access_token);
+            // Renews the grant before testing it. Our stored access tokens are
+            // the short-lived kind and are normally already expired, and an
+            // expired token is refused with the same 401 as a revoked one — so
+            // spending the stored token directly reported every store on the
+            // account as uninstalled, live merchants included.
+            $state = $shopify->determineInstallState($connection);
 
             if ($state === true) {
                 $installed++;
