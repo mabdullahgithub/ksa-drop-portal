@@ -65,7 +65,8 @@ class ShopifyWebhookController extends Controller
         //
         // Only this job moves. Mail and notifications stay on the default
         // connection, so nothing else in the app changes behaviour — and mail
-        // in particular keeps sending inline rather than depending on a worker.
+        // in particular keeps sending inline rather than depending on a worker
+        // (User::sendPasswordResetNotification relies on that).
         ProcessShopifyWebhookJob::dispatch($shop, $topic, $payload)->onConnection('database');
 
         return response('OK', 200);

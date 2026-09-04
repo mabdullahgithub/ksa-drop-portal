@@ -775,6 +775,141 @@ class ShopifyService
     }
 
     /**
+     * Whether the app is still installed on this shop, asked of Shopify itself.
+     *
+     * Shopify announces an uninstall with an app/uninstalled webhook, but that
+     * delivery can fail like any other — and when it does nothing tells us. The
+     * connection stays `active` with a grant Shopify has already revoked, and
+     * the store looks connected forever while receiving nothing.
+     *
+     * The check cannot simply spend the stored access token. Those are the
+     * short-lived kind: every one of ours is normally expired, and an expired
+     * token is refused with the same 401 as a revoked one — so testing it
+     * directly reports every store on the account as uninstalled, live ones
+     * included. The refresh token is the durable credential (ninety days), so
+     * the grant is renewed first and the *fresh* token is what gets tested.
+     *
+     * Deliberately three-valued, never two. A transient network failure, a 5xx
+     * or a rate limit must not read as "uninstalled" — disconnecting a live
+     * store on a blip silently stops a paying merchant's orders, which is far
+     * worse than leaving a dead row in place. Only Shopify positively refusing
+     * the grant counts as gone; everything else is null, meaning "ask again".
+     *
+     * A successful renewal is persisted, so a healthy connection is left better
+     * than it was found.
+     *
+     * @return bool|null  true installed, false uninstalled, null undetermined
+     */
+    public function determineInstallState(ClientShopifyConnection $connection): ?bool
+    {
+        $token = $connection->access_token;
+
+        if ($connection->isTokenExpired() || ! $token) {
+            $token = $this->renewForInstallCheck($connection);
+
+            // Renewal outcome is itself the answer when it is definitive.
+            if (! is_string($token)) {
+                return $token;
+            }
+        }
+
+        return $this->probeWithToken($connection->shop_domain, $token);
+    }
+
+    /**
+     * Renew the grant for an install check.
+     *
+     * @return string|bool|null  the new token, or the install state if the
+     *                           renewal settled the question by itself
+     */
+    private function renewForInstallCheck(ClientShopifyConnection $connection): string|bool|null
+    {
+        // No usable refresh credential: the store must reconnect either way, but
+        // that is not proof the app is gone, so nothing is concluded here.
+        if (! $connection->refresh_token || $connection->isRefreshTokenExpired()) {
+            return null;
+        }
+
+        try {
+            $response = Http::asForm()->timeout(20)->post("https://{$connection->shop_domain}/admin/oauth/access_token", [
+                'client_id'     => $this->apiKey,
+                'client_secret' => $this->apiSecret,
+                'grant_type'    => 'refresh_token',
+                'refresh_token' => $connection->refresh_token,
+            ]);
+        } catch (\Throwable $e) {
+            Log::channel('shopify')->warning('Shopify install check could not reach the token endpoint', [
+                'shop' => $connection->shop_domain, 'error' => $e->getMessage(),
+            ]);
+
+            return null;
+        }
+
+        // Shopify refusing an unexpired refresh token is the real signal: the
+        // grant is gone, which is what an uninstall leaves behind. 4xx only —
+        // a 5xx is Shopify having a bad moment, not a merchant leaving.
+        if ($response->status() >= 400 && $response->status() < 500) {
+            return false;
+        }
+
+        $token = $response->successful() ? $response->json('access_token') : null;
+
+        if (! is_string($token) || $token === '') {
+            Log::channel('shopify')->warning('Shopify install check renewal inconclusive', [
+                'shop' => $connection->shop_domain, 'status' => $response->status(),
+            ]);
+
+            return null;
+        }
+
+        // Healthy store: keep the renewed grant rather than discarding it.
+        $connection->update([
+            'access_token'             => $token,
+            'refresh_token'            => $response->json('refresh_token') ?? $connection->refresh_token,
+            'token_expires_at'         => $this->expiryFromSeconds($response->json('expires_in')),
+            'refresh_token_expires_at' => $this->expiryFromSeconds($response->json('refresh_token_expires_in')),
+        ]);
+
+        return $token;
+    }
+
+    /**
+     * Spend a known-live token against the Admin API.
+     */
+    private function probeWithToken(string $shop, string $token): ?bool
+    {
+        try {
+            $response = Http::withHeaders([
+                'X-Shopify-Access-Token' => $token,
+                'Content-Type'           => 'application/json',
+            ])->timeout(20)->post(
+                "https://{$shop}/admin/api/" . self::API_VERSION . '/graphql.json',
+                ['query' => '{ shop { name } }', 'variables' => (object) []]
+            );
+        } catch (\Throwable $e) {
+            Log::channel('shopify')->warning('Shopify install check failed to reach the API', [
+                'shop' => $shop, 'error' => $e->getMessage(),
+            ]);
+
+            return null;
+        }
+
+        if ($response->status() === 401) {
+            return false;
+        }
+
+        if ($response->successful() && ! empty($response->json('data.shop'))) {
+            return true;
+        }
+
+        Log::channel('shopify')->warning('Shopify install check inconclusive', [
+            'shop' => $shop, 'status' => $response->status(),
+        ]);
+
+        return null;
+    }
+
+    /**
      * Register order webhooks via the GraphQL webhookSubscriptionCreate mutation.
      * Idempotent on Shopify's side for identical topic+endpoint pairs.
      *

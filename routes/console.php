@@ -67,3 +67,12 @@ Schedule::command('shopify:cleanup-sync-failures')->dailyAt('03:30');
 Schedule::command('queue:work database --stop-when-empty --max-time=55 --tries=3')
     ->everyMinute()
     ->withoutOverlapping(2);
+
+// Find stores that uninstalled without us hearing about it. app/uninstalled is
+// the delivery our own stats show failing most often, and each miss leaves a row
+// `active` with a grant Shopify has already revoked. Weekly is often enough — a
+// stale row costs nothing but a wasted API call — and every run also renews the
+// grants of the stores that are still there, which is worth having on its own.
+Schedule::command('shopify:prune-uninstalled')
+    ->weeklyOn(1, '04:00')
+    ->withoutOverlapping(10);
