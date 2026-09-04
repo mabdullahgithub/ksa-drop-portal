@@ -518,4 +518,82 @@ class ShopifySyncRetryTest extends TestCase
         $this->assertSame('cancelled', $order->fulfillment_status);
         $this->assertTrue($cancelledAt->equalTo($order->cancelled_at));
     }
+
+    // ── Workflow tags ────────────────────────────────────────────────────────
+
+    public function test_a_synced_order_starts_on_the_pending_tag(): void
+    {
+        // Every order enters the portal as Pending whatever its source; CSV
+        // import and manual creation already did this, Shopify orders arrived
+        // with no tag at all and sat outside the workflow.
+        $client = $this->makeClient();
+        $this->connect($client);
+
+        ProcessShopifyWebhookJob::dispatchSync(self::SHOP, 'orders/create', $this->orderPayload());
+
+        $this->assertSame(['Pending'], Order::withoutGlobalScope('shopify_visible')->sole()->tags);
+
+        // The tag row itself has to exist or the portal cannot colour or filter it.
+        $this->assertDatabaseHas('tags', ['name' => 'Pending']);
+    }
+
+    public function test_it_reuses_the_orders_own_spelling_of_the_tag(): void
+    {
+        // Adding "Pending" next to a lowercase "pending" would show the merchant
+        // two tags for one state.
+        $client = $this->makeClient();
+        $this->connect($client);
+
+        $payload         = $this->orderPayload();
+        $payload['tags'] = 'pending, buyease-x';
+
+        ProcessShopifyWebhookJob::dispatchSync(self::SHOP, 'orders/create', $payload);
+
+        $tags = Order::withoutGlobalScope('shopify_visible')->sole()->tags;
+
+        $this->assertContains('pending', $tags);
+        $this->assertNotContains('Pending', $tags);
+        $this->assertContains('buyease-x', $tags);
+    }
+
+    public function test_a_later_sync_does_not_drag_the_order_back_to_pending(): void
+    {
+        // Tags are the portal's workflow state once an order is in the list. The
+        // mapper always produces the starting set, so writing it through on
+        // every orders/updated would undo the operator's work — and before
+        // Pending existed it emptied the tags outright.
+        $client = $this->makeClient();
+        $this->connect($client);
+
+        ProcessShopifyWebhookJob::dispatchSync(self::SHOP, 'orders/create', $this->orderPayload());
+
+        Order::withoutGlobalScope('shopify_visible')->sole()->update(['tags' => ['Confirmed']]);
+
+        ProcessShopifyWebhookJob::dispatchSync(self::SHOP, 'orders/updated', $this->orderPayload());
+
+        $this->assertSame(['Confirmed'], Order::withoutGlobalScope('shopify_visible')->sole()->tags);
+    }
+
+    public function test_the_workflow_tag_does_not_leak_into_the_merchants_own_tags(): void
+    {
+        // shopify_raw_tags keeps the merchant's list untouched, and that is what
+        // evaluateSyncFilters reads. Adding Pending to `tags` must not reach it,
+        // or a tags_exclude rule could start matching a tag we invented.
+        $client     = $this->makeClient();
+        $connection = $this->connect($client);
+        $connection->update(['sync_filters' => ['tags_include' => ['vip']]]);
+
+        $payload         = $this->orderPayload();
+        $payload['tags'] = 'wholesale, vip';
+
+        ProcessShopifyWebhookJob::dispatchSync(self::SHOP, 'orders/create', $payload);
+
+        $order = Order::withoutGlobalScope('shopify_visible')->sole();
+
+        // Passed the filter on its own tags, so it syncs normally...
+        $this->assertNull($order->shopify_sync_status);
+        // ...with the merchant's list intact and the workflow tag kept separate.
+        $this->assertSame(['wholesale', 'vip'], $order->shopify_raw_tags);
+        $this->assertSame(['Pending'], $order->tags);
+    }
 }

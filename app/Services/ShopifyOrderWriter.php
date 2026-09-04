@@ -46,6 +46,14 @@ class ShopifyOrderWriter
         if ($existing) {
             $data['shopify_sync_status'] = $existing->shopify_sync_status;
             $data = $this->preserveLocalFulfillment($data, $existing);
+
+            // Tags are the portal's workflow state once an order is in the list:
+            // an operator moves it off Pending as they work it. The mapper always
+            // produces the starting set, so writing that through on every
+            // orders/updated would drag a Confirmed order back to Pending — and
+            // before Pending was added at all, it silently emptied the tags of
+            // every Shopify order on each update.
+            unset($data['tags']);
         } else {
             $data['shopify_sync_status'] = $this->shopify->evaluateSyncFilters($data, $connection);
         }

@@ -18,6 +18,13 @@ class ClientProductReviewTest extends TestCase
     {
         parent::setUp();
 
+        // Spatie keeps its own in-memory registry, and RefreshDatabase rolls the
+        // tables back without touching it. The second test in the class then got
+        // cached models whose ids no longer existed, and givePermissionTo wrote a
+        // role_has_permissions row pointing at nothing — a foreign key violation
+        // that looked like a bug in the code under test.
+        app(\Spatie\Permission\PermissionRegistrar::class)->forgetCachedPermissions();
+
         // Seed basic Spatie role/permission
         $editClientPermission = Permission::findOrCreate('edit client');
         $adminRole = Role::findOrCreate('admin');
