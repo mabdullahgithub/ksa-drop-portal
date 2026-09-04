@@ -22,6 +22,21 @@ class ShopifyService
      *  Keep in sync with `api_version` in shopify.app.toml. */
     public const API_VERSION = '2026-07';
 
+    /**
+     * Every topic the app subscribes to. Shared with the health check that
+     * verifies Shopify still holds a subscription for each of them.
+     */
+    public const WEBHOOK_TOPICS = [
+        'ORDERS_CREATE',
+        'ORDERS_UPDATED',
+        'ORDERS_PAID',
+        'ORDERS_CANCELLED',
+        // Marks the connection disconnected so a reinstall re-triggers OAuth
+        // (handled in ProcessShopifyWebhookJob). Not gated on
+        // protected-customer-data approval, unlike the order topics.
+        'APP_UNINSTALLED',
+    ];
+
     private string $apiKey;
     private string $apiSecret;
     private string $scopes;
@@ -586,6 +601,174 @@ class ShopifyService
     }
 
     /**
+     * The endpoint Shopify is told to deliver to. Also what the health check
+     * compares against — a subscription pointing somewhere else (an old ngrok
+     * tunnel, a previous domain) is as broken as a missing one.
+     */
+    public function webhookCallbackUrl(): string
+    {
+        return rtrim((string) config('app.url'), '/') . '/webhooks/shopify';
+    }
+
+    /**
+     * One page of the shop's orders created at or after $since, newest last.
+     *
+     * This is the recovery path for orders Shopify never delivered to us at
+     * all — a webhook that exhausted Shopify's own retries (8 attempts over 4
+     * hours), or a subscription Shopify removed after repeated failures. In
+     * both cases nothing ever reaches our endpoint, so there is nothing for the
+     * dead-letter queue to park; the only way to notice is to go and look.
+     *
+     * Line items are deliberately NOT selected here. Shopify rejects any single
+     * query costing over 1,000 points *before* running it, and a connection is
+     * charged by its `first` argument multiplied through every nested one — so
+     * asking 50 orders for 100 line items each costs ~5,600 points and the
+     * query never executes at all. Line items are fetched per order, and only
+     * for the handful that turn out to be missing (fetchOrderLineItems).
+     *
+     * At 25 orders a page this costs roughly 25 x 12 = 300 points, which also
+     * leaves room under the leaky-bucket restore rate when paging a backlog.
+     *
+     * @param  string|null  $cursor  endCursor from a previous page
+     * @return array{orders: array<int,array>, cursor: string|null}
+     *                              cursor is null once the last page is read
+     */
+    public function fetchOrdersSince(string $shop, string $token, Carbon $since, ?string $cursor = null, int $pageSize = 25): array
+    {
+        $query = <<<'GQL'
+        query reconcileOrders($search: String!, $cursor: String, $pageSize: Int!) {
+          orders(first: $pageSize, after: $cursor, query: $search, sortKey: CREATED_AT) {
+            pageInfo { hasNextPage endCursor }
+            edges {
+              node {
+                id
+                name
+                email
+                phone
+                createdAt
+                processedAt
+                cancelledAt
+                note
+                tags
+                currencyCode
+                paymentGatewayNames
+                displayFinancialStatus
+                displayFulfillmentStatus
+                subtotalPriceSet { shopMoney { amount } }
+                totalPriceSet { shopMoney { amount } }
+                totalTaxSet { shopMoney { amount } }
+                totalShippingPriceSet { shopMoney { amount } }
+                discountCodes
+                customer { firstName lastName email phone }
+                billingAddress { firstName lastName address1 address2 company city zip province countryCodeV2 phone }
+                shippingAddress { firstName lastName address1 address2 company city zip province countryCodeV2 phone }
+              }
+            }
+          }
+        }
+        GQL;
+
+        $data = $this->graphql($shop, $token, $query, [
+            // Shopify's search syntax. ISO-8601 in UTC so the comparison is not
+            // interpreted against the shop's local timezone.
+            'search'   => 'created_at:>=' . $since->utc()->toIso8601ZuluString(),
+            'cursor'   => $cursor,
+            'pageSize' => $pageSize,
+        ]);
+
+        $connection = $data['orders'] ?? [];
+        $orders     = collect($connection['edges'] ?? [])->pluck('node')->all();
+
+        return [
+            'orders' => $orders,
+            'cursor' => ($connection['pageInfo']['hasNextPage'] ?? false)
+                ? ($connection['pageInfo']['endCursor'] ?? null)
+                : null,
+        ];
+    }
+
+    /**
+     * Line items for one order, in the shape mapLineItems('graphql') expects.
+     *
+     * Called only for orders reconciliation has decided to import, which keeps
+     * the expensive part of the query off the 99% of orders we already hold. A
+     * single order can safely ask for far more items than a paged listing could
+     * (250 nodes is ~250 points, well inside the 1,000-point ceiling), so unlike
+     * an inline selection this does not silently truncate a large order.
+     *
+     * @return array the node's `lineItems` sub-structure
+     */
+    public function fetchOrderLineItems(string $shop, string $token, string $orderGid): array
+    {
+        $query = <<<'GQL'
+        query orderLineItems($id: ID!) {
+          order(id: $id) {
+            lineItems(first: 250) {
+              edges {
+                node {
+                  name
+                  quantity
+                  sku
+                  requiresShipping
+                  taxable
+                  variantTitle
+                  originalUnitPriceSet { shopMoney { amount } }
+                }
+              }
+            }
+          }
+        }
+        GQL;
+
+        $data = $this->graphql($shop, $token, $query, ['id' => $orderGid]);
+
+        return $data['order']['lineItems'] ?? ['edges' => []];
+    }
+
+    /**
+     * The webhook subscriptions Shopify currently holds for this shop, as
+     * topic => callback URL.
+     *
+     * Shopify removes a subscription after repeated delivery failures in a
+     * 24-hour period, and tells us nothing when it does: our stored
+     * webhooks_registered flag stays true while the store quietly stops sending
+     * orders. Asking Shopify directly is the only way to find out.
+     *
+     * @return array<string,string>
+     */
+    public function listWebhookSubscriptions(string $shop, string $token): array
+    {
+        $query = <<<'GQL'
+        query {
+          webhookSubscriptions(first: 100) {
+            edges {
+              node {
+                topic
+                endpoint {
+                  ... on WebhookHttpEndpoint { callbackUrl }
+                }
+              }
+            }
+          }
+        }
+        GQL;
+
+        $data = $this->graphql($shop, $token, $query);
+
+        $subscriptions = [];
+
+        foreach ($data['webhookSubscriptions']['edges'] ?? [] as $edge) {
+            $node = $edge['node'] ?? [];
+
+            if (isset($node['topic'])) {
+                $subscriptions[$node['topic']] = $node['endpoint']['callbackUrl'] ?? '';
+            }
+        }
+
+        return $subscriptions;
+    }
+
+    /**
      * Register order webhooks via the GraphQL webhookSubscriptionCreate mutation.
      * Idempotent on Shopify's side for identical topic+endpoint pairs.
      *
@@ -600,18 +783,9 @@ class ShopifyService
     {
         $errors = [];
 
-        $callbackUrl = rtrim((string) config('app.url'), '/') . '/webhooks/shopify';
+        $callbackUrl = $this->webhookCallbackUrl();
 
-        $topics = [
-            'ORDERS_CREATE',
-            'ORDERS_UPDATED',
-            'ORDERS_PAID',
-            'ORDERS_CANCELLED',
-            // Marks the connection disconnected so a reinstall re-triggers
-            // OAuth (handled in ProcessShopifyWebhookJob). Not gated on
-            // protected-customer-data approval, unlike the order topics.
-            'APP_UNINSTALLED',
-        ];
+        $topics = self::WEBHOOK_TOPICS;
 
         $mutation = <<<'GQL'
         mutation webhookSubscriptionCreate($topic: WebhookSubscriptionTopic!, $sub: WebhookSubscriptionInput!) {
@@ -764,7 +938,10 @@ class ShopifyService
                 'total'              => $n['totalPriceSet']['shopMoney']['amount'] ?? 0,
                 'taxes'              => $n['totalTaxSet']['shopMoney']['amount'] ?? 0,
                 'shipping_cost'      => $n['totalShippingPriceSet']['shopMoney']['amount'] ?? 0,
-                'discount_code'      => $n['discountCode'] ?? null,
+                // discountCodes (a list) is the current field; discountCode
+                // (singular) is the legacy one. Accept either so the mapper
+                // works against whichever the API version in use returns.
+                'discount_code'      => $n['discountCodes'][0] ?? ($n['discountCode'] ?? null),
                 'notes'              => $n['note'] ?? null,
                 'tags'               => $this->filterShopifyTags($n['tags'] ?? null),
                 'shopify_raw_tags'   => $this->splitTags($n['tags'] ?? null),

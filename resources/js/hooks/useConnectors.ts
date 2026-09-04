@@ -16,6 +16,8 @@ export interface Connector {
   needs_reconnect?: boolean
   webhooks_registered?: boolean
   pending_count?: number
+  /** Orders Shopify sent that never synced, and are still unresolved. */
+  failed_count?: number
   // Reopens the app inside Shopify Admin — used for both first-time claim
   // discovery and reconnect, since OAuth only ever starts on a Shopify-owned
   // surface, never from a domain typed into the portal.

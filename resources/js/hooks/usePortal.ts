@@ -649,3 +649,127 @@ export function useShopifyPendingMutations() {
 
   return { submit, submitBulk, dismiss, loading }
 }
+
+export interface ShopifySyncFailure {
+  id: number
+  shop_domain: string
+  topic: string
+  shopify_order_id: string | null
+  order_number: string | null
+  reason: 'no_connection' | 'exception'
+  error_message: string | null
+  status: 'pending' | 'resolved' | 'abandoned'
+  attempts: number
+  next_attempt_at: string | null
+  last_attempted_at: string | null
+  created_at: string
+}
+
+/**
+ * Orders Shopify sent that never made it into the portal, with their retry
+ * state. The backend replays these on its own schedule; this is the merchant's
+ * view of what is still stuck and their way to push one through now.
+ */
+export function useShopifySyncFailures(initialFilters: Record<string, any> = {}) {
+  const [data, setData] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
+  const [filters, setFilters] = useState<Record<string, any>>(initialFilters)
+
+  const fetchFailures = useCallback(async (newFilters?: Record<string, any>) => {
+    setLoading(true)
+    const params = new URLSearchParams()
+    const activeFilters = newFilters || filters
+
+    Object.entries(activeFilters).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') {
+        params.append(key, String(value))
+      }
+    })
+
+    try {
+      const response = await fetch(`/portal/api/shopify/failures?${params}`, {
+        headers: { Accept: 'application/json' },
+      })
+      const json = await response.json()
+      setData(json)
+    } catch (error) {
+      console.error('Error fetching Shopify sync failures:', error)
+    } finally {
+      setLoading(false)
+    }
+  }, [filters])
+
+  useEffect(() => { fetchFailures() }, [])
+
+  const updateFilters = useCallback((newFilters: Record<string, any>) => {
+    const merged = { ...filters, ...newFilters }
+    setFilters(merged)
+    fetchFailures(merged)
+  }, [filters, fetchFailures])
+
+  return {
+    failures: (data?.data || []) as ShopifySyncFailure[],
+    meta: data ? {
+      current_page: data.current_page,
+      last_page: data.last_page,
+      per_page: data.per_page,
+      total: data.total,
+      from: data.from,
+      to: data.to,
+    } : null,
+    loading,
+    filters,
+    updateFilters,
+    refresh: () => fetchFailures(),
+  }
+}
+
+export function useShopifySyncFailureMutations() {
+  const [loading, setLoading] = useState(false)
+
+  const getCsrfToken = () =>
+    document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
+
+  const retry = useCallback(async (failureId: number): Promise<boolean> => {
+    setLoading(true)
+    try {
+      const res = await fetch(`/portal/api/shopify/failures/${failureId}/retry`, {
+        method: 'POST',
+        headers: { Accept: 'application/json', 'X-CSRF-TOKEN': getCsrfToken() },
+      })
+      return res.ok
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  const retryAll = useCallback(async (): Promise<number> => {
+    setLoading(true)
+    try {
+      const res = await fetch('/portal/api/shopify/failures/retry-all', {
+        method: 'POST',
+        headers: { Accept: 'application/json', 'X-CSRF-TOKEN': getCsrfToken() },
+      })
+      if (!res.ok) return 0
+      const json = await res.json()
+      return json.retried ?? 0
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  const discard = useCallback(async (failureId: number): Promise<boolean> => {
+    setLoading(true)
+    try {
+      const res = await fetch(`/portal/api/shopify/failures/${failureId}`, {
+        method: 'DELETE',
+        headers: { Accept: 'application/json', 'X-CSRF-TOKEN': getCsrfToken() },
+      })
+      return res.ok
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  return { retry, retryAll, discard, loading }
+}

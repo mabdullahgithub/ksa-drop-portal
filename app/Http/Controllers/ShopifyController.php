@@ -2,8 +2,10 @@
 
 namespace App\Http\Controllers;
 
+use App\Jobs\ProcessShopifyWebhookJob;
 use App\Models\Client;
 use App\Models\ClientShopifyConnection;
+use App\Models\ShopifySyncFailure;
 use App\Services\ShopifyService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -184,7 +186,13 @@ class ShopifyController extends Controller
 
         $connection->update(['client_id' => $client->id]);
 
-        Log::channel('shopify')->info('Shopify connection claimed by client', ['shop' => $shop, 'client_id' => $client->id]);
+        $replayed = $this->replayParkedFailures($shop, $client->id);
+
+        Log::channel('shopify')->info('Shopify connection claimed by client', [
+            'shop'      => $shop,
+            'client_id' => $client->id,
+            'replayed'  => $replayed,
+        ]);
 
         return response()->json([
             'message'     => 'Shopify store connected. Recent orders are syncing in the background.',
@@ -237,6 +245,7 @@ class ShopifyController extends Controller
         );
 
         $this->registerWebhooksFor($connection, $shop, $token['access_token']);
+        $this->replayParkedFailures($shop, $client->id);
 
         session()->forget(['shopify_oauth_nonce', 'shopify_oauth_shop']);
 
@@ -263,6 +272,7 @@ class ShopifyController extends Controller
         ]);
 
         $this->registerWebhooksFor($connection, $shop, $token['access_token']);
+        $this->replayParkedFailures($shop, $connection->client_id);
 
         Log::channel('shopify')->info('Shopify store relinked via admin re-grant', [
             'shop'      => $shop,
@@ -299,6 +309,38 @@ class ShopifyController extends Controller
         Log::channel('shopify')->info('Shopify install completed for unlinked store — token stored', ['shop' => $shop]);
 
         return redirect()->away($this->shopify->adminAppUrl($shop));
+    }
+
+    /**
+     * Replay every webhook that was parked because the store had no active,
+     * client-linked connection at the time.
+     *
+     * This is the payoff for parking those deliveries instead of dropping them:
+     * a merchant who installs the app and claims the store ten minutes later
+     * gets the orders that arrived in between, right at the moment of claiming,
+     * rather than waiting on the retry sweep — or, before this, not at all.
+     *
+     * @return int number of failures handed back to the queue
+     */
+    private function replayParkedFailures(string $shop, ?int $clientId): int
+    {
+        $failures = ShopifySyncFailure::where('shop_domain', $shop)
+            ->where('reason', ShopifySyncFailure::REASON_NO_CONNECTION)
+            ->unresolved()
+            ->get();
+
+        foreach ($failures as $failure) {
+            $failure->beginImmediateReplay($clientId);
+
+            ProcessShopifyWebhookJob::dispatch(
+                $failure->shop_domain,
+                $failure->topic,
+                $failure->payload,
+                $failure->id,
+            );
+        }
+
+        return $failures->count();
     }
 
     private function registerWebhooksFor(ClientShopifyConnection $connection, string $shop, string $accessToken): void

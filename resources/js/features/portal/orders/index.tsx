@@ -46,6 +46,7 @@ import { PortalOrderDetailsDialog } from './components/portal-order-details-dial
 import { usePortalOrderFilterOptions } from '@/hooks/usePortal'
 import { useEnabledConnectors } from '@/hooks/useEnabledConnectors'
 import { ShopifyQueuePanel } from './shopify-queue-panel'
+import { ShopifyFailedPanel } from './shopify-failed-panel'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -1153,16 +1154,24 @@ export function PortalOrders() {
   const columns = useMemo(() => makeColumns(tagColors, handleViewOrder), [tagColors])
   const { connectors, refresh: refreshConnectors } = useEnabledConnectors()
 
-  // Shopify manual-approval queue tab (only shown when connected + manual mode).
+  // Shopify queue tab. Shown for the manual-approval review list, and also
+  // whenever an order failed to sync — a failed import has nothing to do with
+  // sync mode, and an auto-sync store would otherwise have no way to see that
+  // an order Shopify sent never arrived.
   const shopifyConnector = connectors.find((c) => c.key === 'shopify')
-  const showShopifyTab =
-    !!shopifyConnector?.client_connected &&
-    shopifyConnector?.sync_mode === 'manual_approval'
   const shopifyPendingCount = shopifyConnector?.pending_count ?? 0
+  const shopifyFailedCount = shopifyConnector?.failed_count ?? 0
+  const shopifyManualMode = shopifyConnector?.sync_mode === 'manual_approval'
+  const showShopifyTab =
+    !!shopifyConnector?.client_connected && (shopifyManualMode || shopifyFailedCount > 0)
 
   const [shopifyTab, setShopifyTab] = useState(
     () => new URLSearchParams(window.location.search).get('tab') === 'shopify-queue'
   )
+  const [shopifySubTab, setShopifySubTab] = useState<'pending' | 'failed'>('pending')
+
+  // An auto-sync store has no review list, so the failures are the whole tab.
+  const shopifyView = shopifyManualMode ? shopifySubTab : 'failed'
 
   const table = useReactTable({
     data: orders,
@@ -1303,9 +1312,15 @@ export function PortalOrders() {
               }`}
             >
               Shopify Queue
-              {shopifyPendingCount > 0 && (
-                <span className='ml-1.5 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-amber-700 dark:bg-amber-900 dark:text-amber-400'>
-                  {shopifyPendingCount}
+              {shopifyPendingCount + shopifyFailedCount > 0 && (
+                <span
+                  className={`ml-1.5 rounded-full px-1.5 py-0.5 text-[10px] font-medium tabular-nums ${
+                    shopifyFailedCount > 0
+                      ? 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-400'
+                      : 'bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-400'
+                  }`}
+                >
+                  {shopifyPendingCount + shopifyFailedCount}
                 </span>
               )}
             </button>
@@ -1313,7 +1328,48 @@ export function PortalOrders() {
         </div>
 
         {shopifyTab ? (
-          <ShopifyQueuePanel onChanged={refreshConnectors} />
+          <div className='space-y-3'>
+            {shopifyManualMode && (
+              <div className='flex items-center gap-1 border-b'>
+                <button
+                  onClick={() => setShopifySubTab('pending')}
+                  className={`px-3 py-1.5 text-sm font-medium transition-colors ${
+                    shopifyView === 'pending'
+                      ? 'border-b-2 border-primary text-primary -mb-px'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  Pending review
+                  {shopifyPendingCount > 0 && (
+                    <span className='ml-1.5 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-amber-700 dark:bg-amber-900 dark:text-amber-400'>
+                      {shopifyPendingCount}
+                    </span>
+                  )}
+                </button>
+                <button
+                  onClick={() => setShopifySubTab('failed')}
+                  className={`px-3 py-1.5 text-sm font-medium transition-colors ${
+                    shopifyView === 'failed'
+                      ? 'border-b-2 border-primary text-primary -mb-px'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  Failed to sync
+                  {shopifyFailedCount > 0 && (
+                    <span className='ml-1.5 rounded-full bg-red-100 px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-red-700 dark:bg-red-950 dark:text-red-400'>
+                      {shopifyFailedCount}
+                    </span>
+                  )}
+                </button>
+              </div>
+            )}
+
+            {shopifyView === 'pending' ? (
+              <ShopifyQueuePanel onChanged={refreshConnectors} />
+            ) : (
+              <ShopifyFailedPanel onChanged={refreshConnectors} />
+            )}
+          </div>
         ) : (
           <>
         {/* Filters */}

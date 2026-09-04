@@ -31,6 +31,7 @@ use App\Http\Controllers\Embedded\EmbeddedSettingsController;
 use App\Http\Controllers\ShopifyController;
 use App\Http\Controllers\ShopifyWebhookController;
 use App\Http\Controllers\ShopifyPendingOrderController;
+use App\Http\Controllers\ShopifySyncFailureController;
 use App\Http\Controllers\TrackingController;
 use App\Http\Controllers\UserRoleController;
 use Illuminate\Support\Facades\Route;
@@ -325,6 +326,13 @@ Route::prefix('portal')->middleware(['auth', 'verified', 'role:client'])->group(
     Route::post('/api/shopify/pending/submit-bulk', [ShopifyPendingOrderController::class, 'submitBulk'])->name('portal.shopify.pending.submit-bulk');
     Route::post('/api/shopify/pending/{orderId}/submit', [ShopifyPendingOrderController::class, 'submit'])->name('portal.shopify.pending.submit');
     Route::delete('/api/shopify/pending/{orderId}/dismiss', [ShopifyPendingOrderController::class, 'dismiss'])->name('portal.shopify.pending.dismiss');
+
+    // Shopify — orders that failed to sync, and manual replay
+    Route::get('/api/shopify/failures', [ShopifySyncFailureController::class, 'index'])->name('portal.shopify.failures.index');
+    Route::get('/api/shopify/failures/count', [ShopifySyncFailureController::class, 'count'])->name('portal.shopify.failures.count');
+    Route::post('/api/shopify/failures/retry-all', [ShopifySyncFailureController::class, 'retryAll'])->name('portal.shopify.failures.retry-all');
+    Route::post('/api/shopify/failures/{failureId}/retry', [ShopifySyncFailureController::class, 'retry'])->name('portal.shopify.failures.retry');
+    Route::delete('/api/shopify/failures/{failureId}', [ShopifySyncFailureController::class, 'discard'])->name('portal.shopify.failures.discard');
 });
 
 // Merchant pricing & off-platform billing disclosure — public, no auth.
