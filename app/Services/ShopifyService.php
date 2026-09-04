@@ -586,6 +586,58 @@ class ShopifyService
     }
 
     /**
+     * Whether the app is still installed on this shop, asked of Shopify itself.
+     *
+     * Shopify announces an uninstall with an app/uninstalled webhook, but that
+     * delivery can fail like any other — and when it does nothing tells us. The
+     * connection stays `active` with a token Shopify has already revoked, and
+     * the store looks connected forever while receiving nothing.
+     *
+     * The only reliable answer is to spend the token and see. An uninstalled
+     * app gets 401 "Invalid API key or access token" on every Admin API call.
+     *
+     * Deliberately three-valued, never two. A transient network failure, a
+     * 5xx, or a rate limit must not read as "uninstalled" — disconnecting a
+     * live store on a blip would silently stop a paying merchant's orders,
+     * which is far worse than leaving a dead row in place. Only an outright
+     * 401 counts as gone; everything else is null, meaning "ask again later".
+     *
+     * @return bool|null  true installed, false uninstalled, null undetermined
+     */
+    public function isAppInstalled(string $shop, string $token): ?bool
+    {
+        try {
+            $response = Http::withHeaders([
+                'X-Shopify-Access-Token' => $token,
+                'Content-Type'           => 'application/json',
+            ])->timeout(20)->post(
+                "https://{$shop}/admin/api/" . self::API_VERSION . '/graphql.json',
+                ['query' => '{ shop { name } }', 'variables' => (object) []]
+            );
+        } catch (\Throwable $e) {
+            Log::channel('shopify')->warning('Shopify install check failed to reach the API', [
+                'shop' => $shop, 'error' => $e->getMessage(),
+            ]);
+
+            return null;
+        }
+
+        if ($response->status() === 401) {
+            return false;
+        }
+
+        if ($response->successful() && ! empty($response->json('data.shop'))) {
+            return true;
+        }
+
+        Log::channel('shopify')->warning('Shopify install check inconclusive', [
+            'shop' => $shop, 'status' => $response->status(),
+        ]);
+
+        return null;
+    }
+
+    /**
      * Register order webhooks via the GraphQL webhookSubscriptionCreate mutation.
      * Idempotent on Shopify's side for identical topic+endpoint pairs.
      *
