@@ -126,6 +126,16 @@ return [
         // manually-typed shop domain (App Store review requirement 2.3.1);
         // installation must start on a Shopify-owned surface.
         'app_store_url' => env('SHOPIFY_APP_STORE_URL'),
+
+        // Kill switches for the two background sweeps that reach out to
+        // Shopify, both off until a store has been checked by hand. They are
+        // the only scheduled work here that cannot be undone by editing our own
+        // database: reconciliation writes orders, and the webhook check
+        // registers subscriptions on the merchant's store. Toggling them is an
+        // .env change, so a sweep behaving badly can be stopped without a
+        // deploy.
+        'reconcile_orders'  => (bool) env('SHOPIFY_RECONCILE_ORDERS', false),
+        'verify_webhooks'   => (bool) env('SHOPIFY_VERIFY_WEBHOOKS', false),
     ],
 
 ];

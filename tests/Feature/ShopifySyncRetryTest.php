@@ -596,4 +596,76 @@ class ShopifySyncRetryTest extends TestCase
         $this->assertSame(['wholesale', 'vip'], $order->shopify_raw_tags);
         $this->assertSame(['Pending'], $order->tags);
     }
+
+    // ── Sync filters ─────────────────────────────────────────────────────────
+    //
+    //  These could not be written before: $table->enum() left a CHECK
+    //  constraint on sqlite that refused 'skipped_filtered' outright, so the
+    //  main outcome of the whole sync-filter feature had never been exercised.
+
+    public function test_an_order_the_filters_reject_is_stored_hidden_not_dropped(): void
+    {
+        // The record is kept — it is the receipt for having seen and rejected
+        // the order — but the shopify_visible scope keeps it out of every
+        // normal view.
+        $client     = $this->makeClient();
+        $connection = $this->connect($client);
+        $connection->update(['sync_filters' => ['tags_exclude' => ['wholesale']]]);
+
+        $payload         = $this->orderPayload();
+        $payload['tags'] = 'wholesale';
+
+        ProcessShopifyWebhookJob::dispatchSync(self::SHOP, 'orders/create', $payload);
+
+        $order = Order::withoutGlobalScope('shopify_visible')->sole();
+
+        $this->assertSame('skipped_filtered', $order->shopify_sync_status);
+        $this->assertSame(0, Order::count(), 'a filtered order must not appear in normal views');
+    }
+
+    public function test_each_filter_dimension_can_reject_an_order(): void
+    {
+        $client     = $this->makeClient();
+        $connection = $this->connect($client);
+
+        $cases = [
+            'financial status' => [['financial_statuses' => ['pending']], []],
+            'payment method'   => [['payment_method' => 'card'], []],
+            'excluded tag'     => [['tags_exclude' => ['vip']], ['tags' => 'vip']],
+            'missing tag'      => [['tags_include' => ['wholesale']], []],
+        ];
+
+        $id = 9100;
+
+        foreach ($cases as $label => [$filters, $overrides]) {
+            $connection->update(['sync_filters' => $filters]);
+
+            $payload = array_merge($this->orderPayload(++$id, $id), $overrides);
+
+            ProcessShopifyWebhookJob::dispatchSync(self::SHOP, 'orders/create', $payload);
+
+            $order = Order::withoutGlobalScope('shopify_visible')
+                ->where('shopify_order_id', (string) $id)
+                ->sole();
+
+            $this->assertSame('skipped_filtered', $order->shopify_sync_status, "{$label} should have rejected the order");
+        }
+    }
+
+    public function test_a_filtered_order_is_never_promoted_by_a_later_sync(): void
+    {
+        // Loosening the filters must not retroactively pull in an order the
+        // merchant already declined — the decision is made once, on arrival.
+        $client     = $this->makeClient();
+        $connection = $this->connect($client);
+        $connection->update(['sync_filters' => ['tags_include' => ['wholesale']]]);
+
+        ProcessShopifyWebhookJob::dispatchSync(self::SHOP, 'orders/create', $this->orderPayload());
+        $this->assertSame('skipped_filtered', Order::withoutGlobalScope('shopify_visible')->sole()->shopify_sync_status);
+
+        $connection->update(['sync_filters' => []]);
+        ProcessShopifyWebhookJob::dispatchSync(self::SHOP, 'orders/updated', $this->orderPayload());
+
+        $this->assertSame('skipped_filtered', Order::withoutGlobalScope('shopify_visible')->sole()->shopify_sync_status);
+    }
 }

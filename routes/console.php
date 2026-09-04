@@ -32,15 +32,22 @@ Schedule::command('shopify:retry-failed-syncs --limit=100')
 // reaches our endpoint, so the dead-letter queue never sees it and the order
 // exists only in Shopify. Hourly with a 6-hour lookback so a run that is missed
 // or fails is covered by the next several.
+// Off until SHOPIFY_RECONCILE_ORDERS=true: its GraphQL queries have never run
+// against a real store, and it writes orders.
 Schedule::command('shopify:reconcile-orders --hours=6')
     ->hourly()
+    ->when(fn () => config('services.shopify.reconcile_orders'))
     ->withoutOverlapping();
 
 // Shopify removes a webhook subscription after repeated delivery failures in a
 // 24-hour period and never notifies us — order sync then stops dead, silently
 // and with no failures to show for it. Check twice a day and re-register.
+// Off until SHOPIFY_VERIFY_WEBHOOKS=true. This is the only scheduled task that
+// writes to the merchant's Shopify store rather than our own database, so it
+// does not run unattended until a dry run has been read.
 Schedule::command('shopify:verify-webhooks')
     ->twiceDaily(3, 15)
+    ->when(fn () => config('services.shopify.verify_webhooks'))
     ->withoutOverlapping();
 
 // Settled sync failures still hold the webhook payload that produced them, so
