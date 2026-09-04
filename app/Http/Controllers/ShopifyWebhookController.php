@@ -51,7 +51,22 @@ class ShopifyWebhookController extends Controller
             return response('Shop mismatch', 401);
         }
 
-        ProcessShopifyWebhookJob::dispatch($shop, $topic, $payload);
+        // Pinned to the database queue rather than the app's default connection,
+        // which is `sync` in production — and under `sync` this "dispatch" runs
+        // the whole order sync inline: mapping, upsert, line-item replacement,
+        // all before Shopify gets its 200. That put the p90 response at ~1.1s
+        // per delivery, and on shared hosting a webhook holding a PHP worker
+        // for a full second is what actually loses deliveries: when two arrive
+        // at once the spare connection is dropped, and Shopify records it as
+        // "No response from app" at ~1s — not a timeout, a refused connection.
+        //
+        // Queued, this handler does an HMAC check and one INSERT, so the worker
+        // is free again in tens of milliseconds instead of a second.
+        //
+        // Only this job moves. Mail and notifications stay on the default
+        // connection, so nothing else in the app changes behaviour — and mail
+        // in particular keeps sending inline rather than depending on a worker.
+        ProcessShopifyWebhookJob::dispatch($shop, $topic, $payload)->onConnection('database');
 
         return response('OK', 200);
     }

@@ -64,8 +64,37 @@ class VerifyShopifyWebhooks extends Command
 
             $missing = array_values(array_filter(
                 ShopifyService::WEBHOOK_TOPICS,
-                fn (string $topic) => ($held[$topic] ?? null) !== $expectedUrl,
+                fn (string $topic) => ! in_array($expectedUrl, $held[$topic] ?? [], true),
             ));
+
+            // Checked independently of $missing. A topic can hold our
+            // subscription *and* a stale one at the same time — the ordinary
+            // result of an earlier re-registration against a different app URL
+            // — and that topic is not missing anything, so gating this on
+            // $missing hid the stale endpoint in the very case it matters.
+            $stale = [];
+
+            foreach (ShopifyService::WEBHOOK_TOPICS as $topic) {
+                foreach ($held[$topic] ?? [] as $url) {
+                    if ($url !== '' && $url !== $expectedUrl) {
+                        $stale[$url] = true;
+                    }
+                }
+            }
+
+            if ($stale !== []) {
+                $staleUrls = implode(', ', array_keys($stale));
+
+                $this->error("  · {$shop}: STALE subscriptions still delivering to: {$staleUrls}");
+                $this->error('    These fail on every order and count towards the rate that gets subscriptions deleted.');
+                $this->error('    Remove them in the Partner Dashboard — this command will not delete them for you.');
+
+                Log::channel('shopify')->error('Shopify stale webhook subscriptions found', [
+                    'shop'     => $shop,
+                    'urls'     => array_keys($stale),
+                    'expected' => $expectedUrl,
+                ]);
+            }
 
             if ($missing === []) {
                 $connection->update(['webhooks_registered' => true]);
@@ -81,12 +110,6 @@ class VerifyShopifyWebhooks extends Command
             $connection->update(['webhooks_registered' => false]);
 
             $this->warn("  · {$shop}: missing " . implode(', ', $missing));
-
-            Log::channel('shopify')->error('Shopify webhook subscriptions missing', [
-                'shop'    => $shop,
-                'missing' => $missing,
-                'held'    => array_keys($held),
-            ]);
 
             if ($this->option('dry-run')) {
                 continue;

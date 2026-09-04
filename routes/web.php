@@ -363,7 +363,41 @@ Route::post('/webhooks/imile/tracking', [ImileWebhookController::class, 'handleT
 Route::post('/webhooks/logestechs/tracking', [LogesTechsWebhookController::class, 'handleTracking'])->name('webhooks.logestechs.tracking');
 
 // Shopify webhooks — public, HMAC-verified inside the controller (CSRF excluded via bootstrap/app.php 'webhooks/*')
-Route::post('/webhooks/shopify', [ShopifyWebhookController::class, 'handle'])->name('webhooks.shopify');
+//
+// Stripped of the session/cookie/Inertia half of the `web` group. Shopify must
+// get a response inside five seconds or it records the delivery as failed, and
+// the session middleware alone was spending two database round trips on every
+// single webhook to no purpose: Shopify sends no cookie, so StartSession opened
+// a brand-new session each time and wrote a junk row to the `sessions` table
+// that nothing would ever read.
+//
+// The row itself was not the expensive part — the table it grew was. Session
+// garbage collection fires on a [2, 100] lottery, so roughly one webhook in
+// fifty ran DELETE FROM sessions WHERE last_activity <= ? across a table these
+// same webhooks had been inflating for months. On MySQL that scan takes seconds
+// and locks, and every concurrent webhook waiting behind it blew the five-second
+// budget too — which is why the failures arrive in bursts rather than evenly.
+//
+// Nothing here needs any of it: the handler verifies an HMAC, queues a job and
+// returns a bare 200. It never reads the session, sets a cookie, or renders a
+// view.
+Route::post('/webhooks/shopify', [ShopifyWebhookController::class, 'handle'])
+    ->withoutMiddleware([
+        // Must go together with StartSession. The path is already CSRF-exempt
+        // via bootstrap/app.php, but the middleware still runs and still tries
+        // to attach an XSRF cookie on the way out — which reads the session,
+        // and with no session store on the request that throws, turning every
+        // webhook into a 500. Removing the session without removing this is
+        // strictly worse than leaving both in place.
+        \Illuminate\Foundation\Http\Middleware\PreventRequestForgery::class,
+        \Illuminate\Session\Middleware\StartSession::class,
+        \Illuminate\View\Middleware\ShareErrorsFromSession::class,
+        \Illuminate\Cookie\Middleware\EncryptCookies::class,
+        \Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse::class,
+        \App\Http\Middleware\HandleInertiaRequests::class,
+        \App\Http\Middleware\AddLinkHeadersForPreloadedAssetsUnlessInertia::class,
+    ])
+    ->name('webhooks.shopify');
 
 // Embedded Shopify Admin app — rendered inside the Shopify Admin iframe.
 // No Laravel session: the shell loads publicly (App Bridge boots it), and the

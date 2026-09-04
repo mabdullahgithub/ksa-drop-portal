@@ -48,3 +48,22 @@ Schedule::command('shopify:verify-webhooks')
 // dead weight within a fortnight; abandoned ones are kept a quarter, since they
 // are the record of orders that never arrived.
 Schedule::command('shopify:cleanup-sync-failures')->dailyAt('03:30');
+
+// Drains the Shopify webhook queue. The webhook endpoint pins its job to the
+// `database` connection so it can answer Shopify immediately; this is what then
+// does the work. --stop-when-empty keeps the run short, and --max-time caps it
+// under the minute so the next tick always starts clean.
+//
+// Named explicitly so it drains only that connection: the app's default is
+// `sync`, and mail must keep sending inline rather than waiting on a worker.
+//
+// The mutex expiry is explicit and short. withoutOverlapping() defaults to 24
+// hours, and a worker killed outside PHP's reach — an OOM kill on shared
+// hosting, a process reaper — never releases its lock. The queue would then be
+// skipped every tick for a day while the endpoint kept answering 200, so
+// Shopify would never retry and orders would simply stop appearing. Two minutes
+// covers the 55-second run with room to spare and bounds that failure to one
+// missed tick.
+Schedule::command('queue:work database --stop-when-empty --max-time=55 --tries=3')
+    ->everyMinute()
+    ->withoutOverlapping(2);

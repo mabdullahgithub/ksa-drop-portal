@@ -55,6 +55,20 @@ class ShopifySyncRetryTest extends TestCase
         ]);
     }
 
+    /**
+     * Drain the queue the Shopify jobs are pinned to.
+     *
+     * Every Shopify dispatch names the `database` connection so the webhook
+     * endpoint can answer Shopify immediately and the scheduled worker is
+     * guaranteed to pick the job up. That makes replays genuinely asynchronous,
+     * so a test that triggers one has to run the worker before asserting —
+     * which is also what production does a minute later.
+     */
+    private function drainQueue(): void
+    {
+        $this->artisan('queue:work database --stop-when-empty')->assertSuccessful();
+    }
+
     private function connect(Client $client): ClientShopifyConnection
     {
         return ClientShopifyConnection::create([
@@ -166,6 +180,7 @@ class ShopifySyncRetryTest extends TestCase
         $this->travel(2)->minutes();
 
         $this->artisan('shopify:retry-failed-syncs')->assertSuccessful();
+        $this->drainQueue();
 
         $order = Order::withoutGlobalScope('shopify_visible')->sole();
         $this->assertSame('9001', $order->shopify_order_id);
@@ -253,8 +268,10 @@ class ShopifySyncRetryTest extends TestCase
             'claim_token' => app(ShopifyService::class)->makeClaimToken(self::SHOP),
         ])->assertOk();
 
-        // No waiting on the sweep: the order the merchant is looking for is
-        // already in the portal by the time the claim response comes back.
+        // Queued at the moment of claiming rather than waiting on the sweep,
+        // so the merchant's missing orders land on the next worker tick.
+        $this->drainQueue();
+
         $order = Order::withoutGlobalScope('shopify_visible')->sole();
         $this->assertSame('9001', $order->shopify_order_id);
         $this->assertSame(ShopifySyncFailure::STATUS_RESOLVED, ShopifySyncFailure::sole()->status);
@@ -290,7 +307,7 @@ class ShopifySyncRetryTest extends TestCase
         $this->assertArrayNotHasKey('payload', $response->json('data.0'));
     }
 
-    public function test_portal_retry_imports_the_order_immediately(): void
+    public function test_portal_retry_queues_the_order_for_import(): void
     {
         $client = $this->makeClient();
 
@@ -307,6 +324,8 @@ class ShopifySyncRetryTest extends TestCase
         $this->actingAs($client->user)
             ->postJson(route('portal.shopify.failures.retry', $failure->id))
             ->assertOk();
+
+        $this->drainQueue();
 
         $this->assertSame('9001', Order::withoutGlobalScope('shopify_visible')->sole()->shopify_order_id);
         $this->assertSame(ShopifySyncFailure::STATUS_RESOLVED, $failure->fresh()->status);

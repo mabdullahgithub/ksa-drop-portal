@@ -337,7 +337,7 @@ class ShopifyController extends Controller
                 $failure->topic,
                 $failure->payload,
                 $failure->id,
-            );
+            )->onConnection('database');
         }
 
         return $failures->count();

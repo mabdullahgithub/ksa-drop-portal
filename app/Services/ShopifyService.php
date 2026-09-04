@@ -734,7 +734,13 @@ class ShopifyService
      * webhooks_registered flag stays true while the store quietly stops sending
      * orders. Asking Shopify directly is the only way to find out.
      *
-     * @return array<string,string>
+     * Every URL held for a topic is returned, not just one. Shopify permits
+     * several subscriptions per topic when their addresses differ, which is
+     * exactly the situation the health check exists to catch — collapsing them
+     * to a single entry hid the stale one whenever ours happened to come back
+     * last, in the one case that matters most.
+     *
+     * @return array<string,array<int,string>>  topic => callback URLs
      */
     public function listWebhookSubscriptions(string $shop, string $token): array
     {
@@ -761,7 +767,7 @@ class ShopifyService
             $node = $edge['node'] ?? [];
 
             if (isset($node['topic'])) {
-                $subscriptions[$node['topic']] = $node['endpoint']['callbackUrl'] ?? '';
+                $subscriptions[$node['topic']][] = $node['endpoint']['callbackUrl'] ?? '';
             }
         }
 

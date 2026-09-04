@@ -51,12 +51,17 @@ class RetryShopifySyncFailures extends Command
             // or this row would be retried forever.
             $failure->registerAttempt();
 
+            // Same connection the scheduled worker drains, and the same one
+            // the live webhook uses. Left on the default, a replay would be
+            // enqueued where nothing is listening while still spending an
+            // attempt — the row would march to `abandoned` without a single
+            // replay ever having run.
             ProcessShopifyWebhookJob::dispatch(
                 $failure->shop_domain,
                 $failure->topic,
                 $failure->payload,
                 $failure->id,
-            );
+            )->onConnection('database');
 
             $this->line("  · {$failure->shop_domain} {$failure->topic} "
                 . ($failure->order_number ?? $failure->shopify_order_id ?? '—')

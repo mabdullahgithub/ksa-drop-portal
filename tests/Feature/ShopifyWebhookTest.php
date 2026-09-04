@@ -202,4 +202,49 @@ class ShopifyWebhookTest extends TestCase
         $this->assertNull($connection->access_token);
         $this->assertFalse((bool) $connection->webhooks_registered);
     }
+
+    public function test_the_endpoint_does_not_run_session_or_view_middleware(): void
+    {
+        // Shopify records a delivery as failed if we take longer than five
+        // seconds. Shopify sends no cookie, so StartSession opened a fresh
+        // session for every webhook and wrote a junk row to the `sessions`
+        // table that nothing would ever read — two database round trips per
+        // delivery, and a table these webhooks inflated indefinitely. Session
+        // GC then fires on a [2, 100] lottery, so roughly one webhook in fifty
+        // ran a DELETE across that bloated table: seconds of work, holding
+        // locks, with every concurrent webhook queued behind it.
+        //
+        // Nothing in this path reads a session, sets a cookie or renders a
+        // view, so none of it may come back.
+        $route = collect(app('router')->getRoutes()->getRoutes())
+            ->firstWhere(fn ($r) => $r->uri() === 'webhooks/shopify');
+
+        $this->assertNotNull($route, 'The Shopify webhook route is missing.');
+
+        $gathered = app('router')->gatherRouteMiddleware($route);
+
+        foreach ([
+            \Illuminate\Session\Middleware\StartSession::class,
+            \Illuminate\View\Middleware\ShareErrorsFromSession::class,
+            \Illuminate\Cookie\Middleware\EncryptCookies::class,
+            \Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse::class,
+            \App\Http\Middleware\HandleInertiaRequests::class,
+        ] as $forbidden) {
+            $this->assertNotContains($forbidden, $gathered, "{$forbidden} must not run on the Shopify webhook endpoint.");
+        }
+    }
+
+    public function test_the_endpoint_sets_no_session_cookie(): void
+    {
+        // The observable half of the same guarantee: a response that still
+        // handed back a session cookie would mean a session was started.
+        Queue::fake();
+
+        $response = $this->postWebhook(['id' => 9001], 'orders/create', self::SHOP)->assertOk();
+
+        $this->assertEmpty(
+            $response->headers->getCookies(),
+            'The webhook endpoint must not set cookies.'
+        );
+    }
 }

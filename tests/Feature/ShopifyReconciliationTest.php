@@ -298,13 +298,15 @@ class ShopifyReconciliationTest extends TestCase
         Http::fake([
             'https://' . self::SHOP . '/admin/api/*' => function (Request $request) use ($held) {
                 if (str_contains($request->body(), 'webhookSubscriptions')) {
-                    return Http::response(['data' => ['webhookSubscriptions' => [
-                        'edges' => array_map(
-                            fn ($url, $topic) => ['node' => ['topic' => $topic, 'endpoint' => ['callbackUrl' => $url]]],
-                            $held,
-                            array_keys($held),
-                        ),
-                    ]]]);
+                    $edges = [];
+
+                    foreach ($held as $topic => $urls) {
+                        foreach ((array) $urls as $url) {
+                            $edges[] = ['node' => ['topic' => $topic, 'endpoint' => ['callbackUrl' => $url]]];
+                        }
+                    }
+
+                    return Http::response(['data' => ['webhookSubscriptions' => ['edges' => $edges]]]);
                 }
 
                 return Http::response(['data' => ['webhookSubscriptionCreate' => [
@@ -317,7 +319,7 @@ class ShopifyReconciliationTest extends TestCase
 
     private function allTopicsAt(string $url): array
     {
-        return array_fill_keys(\App\Services\ShopifyService::WEBHOOK_TOPICS, $url);
+        return array_fill_keys(\App\Services\ShopifyService::WEBHOOK_TOPICS, [$url]);
     }
 
     public function test_it_re_registers_a_subscription_shopify_dropped(): void
@@ -350,6 +352,10 @@ class ShopifyReconciliationTest extends TestCase
 
         $this->artisan('shopify:verify-webhooks')
             ->expectsOutputToContain('missing ORDERS_CREATE')
+            // Re-registering does not remove the stale one — Shopify keeps both
+            // — so it has to be reported, or it goes on failing on every order
+            // and dragging the failure rate up.
+            ->expectsOutputToContain('STALE subscriptions still delivering to: https://old-tunnel.ngrok.io/webhooks/shopify')
             ->assertSuccessful();
     }
 
@@ -504,5 +510,29 @@ class ShopifyReconciliationTest extends TestCase
 
         Http::assertSent(fn (Request $request) => str_contains($request->body(), 'reconcileOrders')
             && ! str_contains($request->body(), 'lineItems'));
+    }
+
+    public function test_it_reports_a_stale_subscription_sitting_alongside_the_current_one(): void
+    {
+        // The ordinary result of an earlier re-registration against a different
+        // app URL: Shopify keeps both, so the topic is not missing anything and
+        // the store looks healthy — while the stale endpoint goes on failing on
+        // every single order and dragging the failure rate up.
+        $this->makeConnection();
+
+        $held = $this->allTopicsAt('https://portal.test/webhooks/shopify');
+        // Ours listed last on purpose. The bug this covers was a topic => URL
+        // map that kept only the final entry, so with ours last the stale one
+        // vanished, the topic looked complete, and the check returned early.
+        $held['ORDERS_CREATE'] = [
+            'https://old-tunnel.ngrok.io/webhooks/shopify',
+            'https://portal.test/webhooks/shopify',
+        ];
+
+        $this->fakeSubscriptions($held);
+
+        $this->artisan('shopify:verify-webhooks')
+            ->expectsOutputToContain('STALE subscriptions still delivering to: https://old-tunnel.ngrok.io/webhooks/shopify')
+            ->assertSuccessful();
     }
 }
