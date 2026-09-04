@@ -57,4 +57,12 @@ class Product extends Model
               ->orWhere('type', 'like', "%{$term}%");
         });
     }
+
+    /**
+     * Append-only stock ledger for this product's pool.
+     */
+    public function stockMovements()
+    {
+        return $this->morphMany(StockMovement::class, 'stockable');
+    }
 }
