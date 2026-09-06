@@ -20,6 +20,7 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Password;
 use Illuminate\Validation\Rules\Password as PasswordRule;
 use App\Services\EmailService;
+use App\Services\Inventory\InventoryService;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 
@@ -477,7 +478,7 @@ class ClientController extends Controller
         ], 201);
     }
 
-    public function updateProduct(Request $request, Client $client, ClientProduct $product)
+    public function updateProduct(Request $request, Client $client, ClientProduct $product, InventoryService $inventory)
     {
         if ($product->client_id !== $client->id) {
             abort(404);
@@ -488,11 +489,28 @@ class ClientController extends Controller
             'sku' => 'nullable|string|max:100',
             'description' => 'nullable|string',
             'quantity' => 'sometimes|integer|min:0',
+            'stock_note' => 'sometimes|nullable|string|max:500',
             'unit_price' => 'nullable|numeric|min:0',
             'notes' => 'nullable|string',
         ]);
 
-        $product->update($validated);
+        $note = $validated['stock_note'] ?? null;
+        unset($validated['stock_note']);
+
+        // The quantity is applied through the ledger so a manual correction is
+        // recorded next to the automatic dispatch/return movements.
+        $newQuantity = array_key_exists('quantity', $validated)
+            ? (int) $validated['quantity']
+            : null;
+        unset($validated['quantity']);
+
+        if ($validated !== []) {
+            $product->update($validated);
+        }
+
+        if ($newQuantity !== null) {
+            $inventory->adjust($product, $newQuantity, $request->user()?->id, $note);
+        }
 
         return response()->json([
             'message' => 'Product updated successfully',

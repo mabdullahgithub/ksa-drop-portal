@@ -1233,7 +1233,7 @@ class PortalController extends Controller
         ], 201);
     }
 
-    public function updateInventory(Request $request, ClientProduct $product)
+    public function updateInventory(Request $request, ClientProduct $product, \App\Services\Inventory\InventoryService $inventory)
     {
         $client = $this->resolveFulfilmentClient();
 
@@ -1258,7 +1258,18 @@ class PortalController extends Controller
             'remove_image_ids.*' => 'integer',
         ]);
 
+        // The quantity goes through the ledger so every change to a stock pool
+        // — client edit, admin correction, courier movement — leaves a record.
+        $newQuantity = array_key_exists('quantity', $validated)
+            ? (int) $validated['quantity']
+            : null;
+        unset($validated['quantity']);
+
         $product->update($validated);
+
+        if ($newQuantity !== null) {
+            $inventory->adjust($product, $newQuantity, $request->user()?->id);
+        }
 
         if (!empty($validated['remove_image_ids'])) {
             $toDelete = $product->images()->whereIn('id', $validated['remove_image_ids'])->get();

@@ -106,4 +106,12 @@ class ClientProduct extends Model
 
         return $client->client_id . '-' . str_pad($nextNumber, 3, '0', STR_PAD_LEFT);
     }
+
+    /**
+     * Append-only stock ledger for this product's pool.
+     */
+    public function stockMovements()
+    {
+        return $this->morphMany(StockMovement::class, 'stockable');
+    }
 }
