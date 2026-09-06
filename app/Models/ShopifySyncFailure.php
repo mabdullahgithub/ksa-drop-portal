@@ -9,17 +9,19 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Carbon;
 
 /**
- * A Shopify webhook delivery that did not become an order, parked with the
+ * A Shopify webhook delivery that failed to become an order, parked with the
  * payload that produced it so it can be replayed.
+ *
+ * Only genuine failures land here — a delivery we accepted and could not
+ * process. A webhook from a store that has not been connected to a KSA Drop
+ * account is not a failure and is not held: syncing begins when the merchant
+ * connects, and orders placed before that stay in Shopify.
  *
  * @see \App\Jobs\ProcessShopifyWebhookJob  records and resolves these
  * @see \App\Console\Commands\RetryShopifySyncFailures  drains them on a schedule
  */
 class ShopifySyncFailure extends Model
 {
-    /** The store was unknown, disconnected, or not yet claimed by a client. */
-    public const REASON_NO_CONNECTION = 'no_connection';
-
     /** The sync itself threw — mapping, validation or database error. */
     public const REASON_EXCEPTION = 'exception';
 

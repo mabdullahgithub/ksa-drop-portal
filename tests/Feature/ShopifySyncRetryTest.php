@@ -98,11 +98,13 @@ class ShopifySyncRetryTest extends TestCase
 
     // ── Parking ──────────────────────────────────────────────────────────────
 
-    public function test_order_for_an_unclaimed_store_is_parked_instead_of_dropped(): void
+    public function test_an_order_for_an_unconnected_store_is_not_held_at_all(): void
     {
-        // The store is installed but not yet claimed by a client, which is the
-        // normal state for the first few minutes after install. Orders landing
-        // in that window used to be discarded with only a log line.
+        // A store can install the app and never connect it to a KSA Drop
+        // account. That is not a failure and nothing is kept for it: syncing
+        // begins when the merchant connects, and orders placed before that stay
+        // in Shopify. Holding them would mean retrying against a state no amount
+        // of retrying can change.
         ClientShopifyConnection::create([
             'shop_domain'  => self::SHOP,
             'client_id'    => null,
@@ -113,16 +115,8 @@ class ShopifySyncRetryTest extends TestCase
 
         ProcessShopifyWebhookJob::dispatchSync(self::SHOP, 'orders/create', $this->orderPayload());
 
-        $failure = ShopifySyncFailure::sole();
-
-        $this->assertSame(self::SHOP, $failure->shop_domain);
-        $this->assertSame('orders/create', $failure->topic);
-        $this->assertSame('9001', $failure->shopify_order_id);
-        $this->assertSame('#1042', $failure->order_number);
-        $this->assertSame(ShopifySyncFailure::REASON_NO_CONNECTION, $failure->reason);
-        $this->assertSame(ShopifySyncFailure::STATUS_PENDING, $failure->status);
-        // The payload is kept verbatim so a replay reproduces the original sync.
-        $this->assertSame('250.00', $failure->payload['total_price']);
+        $this->assertSame(0, ShopifySyncFailure::count(), 'nothing should be parked for an unconnected store');
+        $this->assertSame(0, Order::withoutGlobalScope('shopify_visible')->count());
     }
 
     public function test_repeated_failures_for_one_order_collapse_into_a_single_row(): void
@@ -130,8 +124,10 @@ class ShopifySyncRetryTest extends TestCase
         // orders/create then orders/updated for the same stuck order is one
         // problem, and must not queue up as two rows the merchant has to
         // retry separately.
-        ProcessShopifyWebhookJob::dispatchSync(self::SHOP, 'orders/create', $this->orderPayload());
-        ProcessShopifyWebhookJob::dispatchSync(self::SHOP, 'orders/updated', $this->orderPayload());
+        (new ProcessShopifyWebhookJob(self::SHOP, 'orders/create', $this->orderPayload()))
+            ->failed(new RuntimeException('first'));
+        (new ProcessShopifyWebhookJob(self::SHOP, 'orders/updated', $this->orderPayload()))
+            ->failed(new RuntimeException('second'));
 
         $this->assertSame(1, ShopifySyncFailure::count());
         $this->assertSame('orders/updated', ShopifySyncFailure::sole()->topic);
@@ -163,19 +159,13 @@ class ShopifySyncRetryTest extends TestCase
     public function test_retry_sweep_replays_a_due_failure_and_clears_it(): void
     {
         $client = $this->makeClient();
+        $this->connect($client);
 
-        // Order arrives before the store is claimed…
-        ProcessShopifyWebhookJob::dispatchSync(self::SHOP, 'orders/create', $this->orderPayload());
+        // A delivery we accepted and could not process — the only thing parked.
+        (new ProcessShopifyWebhookJob(self::SHOP, 'orders/create', $this->orderPayload()))
+            ->failed(new RuntimeException('transient database error'));
+
         $this->assertSame(0, Order::withoutGlobalScope('shopify_visible')->count());
-
-        // …the store is connected, and the backoff elapses.
-        ClientShopifyConnection::create([
-            'shop_domain'  => self::SHOP,
-            'client_id'    => $client->id,
-            'access_token' => 'tok-123',
-            'status'       => 'active',
-            'connected_at' => now(),
-        ]);
 
         $this->travel(2)->minutes();
 
@@ -194,7 +184,8 @@ class ShopifySyncRetryTest extends TestCase
 
     public function test_retry_sweep_leaves_a_failure_alone_until_its_backoff_elapses(): void
     {
-        ProcessShopifyWebhookJob::dispatchSync(self::SHOP, 'orders/create', $this->orderPayload());
+        (new ProcessShopifyWebhookJob(self::SHOP, 'orders/create', $this->orderPayload()))
+            ->failed(new RuntimeException('boom'));
 
         // Faked only now, so the sweep's dispatches are observable without
         // swallowing the parking that set the failure up.
@@ -207,12 +198,19 @@ class ShopifySyncRetryTest extends TestCase
 
     public function test_a_failure_is_abandoned_once_its_attempts_run_out(): void
     {
-        // The store never gets connected, so every replay re-parks the delivery.
-        ProcessShopifyWebhookJob::dispatchSync(self::SHOP, 'orders/create', $this->orderPayload());
+        $client = $this->makeClient();
+        $this->connect($client);
+
+        (new ProcessShopifyWebhookJob(self::SHOP, 'orders/create', $this->orderPayload()))
+            ->failed(new RuntimeException('boom'));
+
+        // Every replay fails the same way, so the budget is spent in full.
+        OrderItem::creating(fn () => throw new RuntimeException('still broken'));
 
         for ($i = 0; $i < ShopifySyncFailure::MAX_ATTEMPTS; $i++) {
             $this->travel(2)->days();
             $this->artisan('shopify:retry-failed-syncs')->assertSuccessful();
+            rescue(fn () => $this->drainQueue());
         }
 
         $failure = ShopifySyncFailure::sole();
@@ -230,16 +228,10 @@ class ShopifySyncRetryTest extends TestCase
     public function test_an_order_that_syncs_on_a_later_webhook_clears_its_parked_failure(): void
     {
         $client = $this->makeClient();
+        $this->connect($client);
 
-        ProcessShopifyWebhookJob::dispatchSync(self::SHOP, 'orders/create', $this->orderPayload());
-
-        ClientShopifyConnection::create([
-            'shop_domain'  => self::SHOP,
-            'client_id'    => $client->id,
-            'access_token' => 'tok-123',
-            'status'       => 'active',
-            'connected_at' => now(),
-        ]);
+        (new ProcessShopifyWebhookJob(self::SHOP, 'orders/create', $this->orderPayload()))
+            ->failed(new RuntimeException('boom'));
 
         // Shopify's own retry of the same order gets through on its own — the
         // parked row is moot even though nothing replayed it.
@@ -248,8 +240,10 @@ class ShopifySyncRetryTest extends TestCase
         $this->assertSame(ShopifySyncFailure::STATUS_RESOLVED, ShopifySyncFailure::sole()->status);
     }
 
-    public function test_claiming_the_store_replays_everything_parked_for_it(): void
+    public function test_claiming_the_store_brings_in_nothing_that_arrived_before_it(): void
     {
+        // Syncing starts at connection. Orders placed while the store was
+        // unconnected stay in Shopify — nothing was held, so nothing appears.
         $client = $this->makeClient();
 
         ClientShopifyConnection::create([
@@ -261,23 +255,21 @@ class ShopifySyncRetryTest extends TestCase
         ]);
 
         ProcessShopifyWebhookJob::dispatchSync(self::SHOP, 'orders/create', $this->orderPayload());
-        $this->assertSame(0, Order::withoutGlobalScope('shopify_visible')->count());
 
         $this->actingAs($client->user)->postJson(route('portal.shopify.claim'), [
             'shop'        => self::SHOP,
             'claim_token' => app(ShopifyService::class)->makeClaimToken(self::SHOP),
         ])->assertOk();
 
-        // Queued at the moment of claiming rather than waiting on the sweep,
-        // so the merchant's missing orders land on the next worker tick.
         $this->drainQueue();
 
-        $order = Order::withoutGlobalScope('shopify_visible')->sole();
-        $this->assertSame('9001', $order->shopify_order_id);
-        $this->assertSame(ShopifySyncFailure::STATUS_RESOLVED, ShopifySyncFailure::sole()->status);
-    }
+        $this->assertSame(0, Order::withoutGlobalScope('shopify_visible')->count());
+        $this->assertSame(0, ShopifySyncFailure::count());
 
-    // ── Portal surface ───────────────────────────────────────────────────────
+        // From here on it syncs normally.
+        ProcessShopifyWebhookJob::dispatchSync(self::SHOP, 'orders/create', $this->orderPayload(9002, 1043));
+        $this->assertSame(1, Order::withoutGlobalScope('shopify_visible')->count());
+    }
 
     public function test_portal_lists_only_this_clients_failures(): void
     {

@@ -106,17 +106,16 @@ class ProcessShopifyWebhookJob implements ShouldQueue
         // sync" cause (e.g. the store was disconnected, or claimed but the row
         // has no client), and silence made that indistinguishable from success.
         if (! $connection || ! $connection->client) {
-            // Park it rather than drop it. A store is routinely unclaimed for
-            // the first few minutes after install, and every order that lands
-            // in that window used to be lost for good — the merchant saw it in
-            // Shopify and never in the portal. Parked, it replays on the retry
-            // sweep and immediately on claim.
-            $this->parkFailure(
-                ShopifySyncFailure::REASON_NO_CONNECTION,
-                $connection ? 'Connection has no client linked yet.' : 'No active connection for this shop.',
-            );
-
-            Log::channel('shopify')->warning('Shopify webhook parked — no active linked connection', [
+            // A store that has installed the app but not yet been connected to a
+            // KSA Drop account is not a failure and nothing is held for it:
+            // syncing begins at the moment the merchant connects, and orders
+            // placed before that stay in Shopify. Retrying would only churn
+            // against a state that no amount of retrying can change.
+            //
+            // Still logged, because "the merchant installed us and is wondering
+            // why nothing appears" is a real support case, and this line is what
+            // answers it.
+            Log::channel('shopify')->info('Shopify webhook ignored — store not connected to a client yet', [
                 'shop'             => $this->shopDomain,
                 'topic'            => $this->topic,
                 'connection_found' => (bool) $connection,
