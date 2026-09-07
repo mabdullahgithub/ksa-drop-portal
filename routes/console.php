@@ -83,3 +83,13 @@ Schedule::command('queue:work database --stop-when-empty --max-time=55 --tries=3
 Schedule::command('shopify:prune-uninstalled')
     ->weeklyOn(1, '04:00')
     ->withoutOverlapping(10);
+
+// Yesterday's orders and pipeline health, posted to Slack. Runs at 01:00 UTC —
+// the Riyadh day ends at 21:00 UTC, and the four hours after it let the late
+// evening's webhooks, retries and tag changes settle before anything is counted.
+//
+// Nothing here writes: a failed run costs one missing message, so it is not
+// gated behind a kill switch the way the Shopify sweeps are.
+Schedule::command('report:daily')
+    ->dailyAt('01:00')
+    ->withoutOverlapping(10);

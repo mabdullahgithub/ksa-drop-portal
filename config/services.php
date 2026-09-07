@@ -33,6 +33,20 @@ return [
             'bot_user_oauth_token' => env('SLACK_BOT_USER_OAUTH_TOKEN'),
             'channel' => env('SLACK_BOT_USER_DEFAULT_CHANNEL'),
         ],
+
+        // Incoming Webhook that the daily operations report is posted to. The
+        // URL is bound to one channel and can only write to it, so it is a much
+        // narrower credential than a bot token — but it is still a credential,
+        // and anyone holding it can post as the app.
+        //
+        // Unset means the report simply does not send: report:daily fails
+        // loudly rather than reaching out to nothing.
+        'ops_webhook' => env('SLACK_OPS_WEBHOOK'),
+
+        // The report covers a business day, not a UTC one. Orders peak between
+        // 20:00 and 02:00 local, so a UTC boundary would cut the busiest part of
+        // the evening in half and spread it across two reports.
+        'ops_timezone' => env('SLACK_OPS_TIMEZONE', 'Asia/Riyadh'),
     ],
 
     /*
