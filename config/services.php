@@ -43,6 +43,13 @@ return [
         // loudly rather than reaching out to nothing.
         'ops_webhook' => env('SLACK_OPS_WEBHOOK'),
 
+        // The channel that webhook is bound to. Purely a label: an Incoming
+        // Webhook created after 2018 ignores any channel sent in the payload, so
+        // this cannot redirect a message. It exists so the command can name the
+        // destination when it reports success or failure — otherwise a report
+        // landing in the wrong place is diagnosed by opening Slack and guessing.
+        'ops_channel' => env('SLACK_OPS_CHANNEL'),
+
         // The report covers a business day, not a UTC one. Orders peak between
         // 20:00 and 02:00 local, so a UTC boundary would cut the busiest part of
         // the evening in half and spread it across two reports.

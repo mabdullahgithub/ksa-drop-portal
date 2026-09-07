@@ -87,8 +87,9 @@ class SendDailyOpsReport extends Command
         if ($response->failed()) {
             // Slack answers a bad webhook with a plain-text body, not JSON.
             Log::error('Daily ops report could not be posted to Slack', [
-                'status' => $response->status(),
-                'body'   => $response->body(),
+                'channel' => $this->destination(),
+                'status'  => $response->status(),
+                'body'    => $response->body(),
             ]);
 
             $this->error("Slack rejected the report: {$response->status()} {$response->body()}");
@@ -96,9 +97,25 @@ class SendDailyOpsReport extends Command
             return self::FAILURE;
         }
 
-        $this->info("Posted the report for {$day->toDateString()} to Slack.");
+        $this->info(sprintf(
+            'Posted the report for %s to %s.',
+            $day->toDateString(),
+            $this->destination()
+        ));
 
         return self::SUCCESS;
+    }
+
+    /**
+     * Where the configured webhook posts, for the command's own output. Falls
+     * back to a generic word rather than an empty string so a message never
+     * reads "Posted the report for 2026-09-06 to .".
+     */
+    private function destination(): string
+    {
+        $channel = (string) config('services.slack.ops_channel');
+
+        return $channel === '' ? 'Slack' : '#' . ltrim($channel, '#');
     }
 
     /**

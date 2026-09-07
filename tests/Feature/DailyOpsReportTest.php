@@ -297,6 +297,17 @@ class DailyOpsReportTest extends TestCase
         );
     }
 
+    public function test_it_names_the_destination_channel_when_it_posts(): void
+    {
+        $this->fakeSlack();
+
+        config(['services.slack.ops_channel' => 'daily-reports-portal']);
+
+        $this->artisan('report:daily', ['--date' => '2026-09-06'])
+            ->expectsOutputToContain('#daily-reports-portal')
+            ->assertSuccessful();
+    }
+
     public function test_dry_run_prints_the_report_without_posting(): void
     {
         $this->fakeSlack();
