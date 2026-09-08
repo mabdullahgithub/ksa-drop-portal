@@ -121,8 +121,6 @@ return [
         'webhook_username' => env('LOGESTECHS_WEBHOOK_USERNAME', 'test'),
         'webhook_password' => env('LOGESTECHS_WEBHOOK_PASSWORD', 'test'),
         'base_url' => env('LOGESTECHS_BASE_URL', 'https://apisv2.logestechs.com/api'),
-        // "Package Source" in LogesTechs' portal.
-        'integration_source' => env('LOGESTECHS_INTEGRATION_SOURCE', 'ksadrop_portal'),
     ],
 
     /*

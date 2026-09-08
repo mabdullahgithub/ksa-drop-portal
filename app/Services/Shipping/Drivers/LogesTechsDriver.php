@@ -162,7 +162,6 @@ class LogesTechsDriver implements CourierDriver
                 mb_substr($data->itemDescription ?: 'Package', 0, 500),
                 fallback: 'Package',
             ),
-            'integrationSource' => $credentials['integration_source'],
             // Not required by LogesTechs, but omitting them makes every parcel
             // show up in their portal weighing 0 kg with no dimensions, which
             // misrepresents the shipment to their staff and drivers. Verified
@@ -771,11 +770,6 @@ class LogesTechsDriver implements CourierDriver
             'email' => trim((string) (ConnectorSetting::getForConnector('logestechs', 'email') ?: config('services.logestechs.email'))),
             'password' => (string) (ConnectorSetting::getForConnector('logestechs', 'password') ?: config('services.logestechs.password')),
             'base_url' => rtrim(trim((string) (ConnectorSetting::getForConnector('logestechs', 'base_url') ?: config('services.logestechs.base_url', 'https://apisv2.logestechs.com/api'))), '/'),
-            // Shown as "Package Source" in LogesTechs' portal. Their UI renders
-            // it as a translation key (INTEGRATION_SOURCE.<value>), so a value
-            // they haven't registered displays raw — ask LogesTechs to add ours
-            // to their list if you want a friendly label there.
-            'integration_source' => trim((string) (ConnectorSetting::getForConnector('logestechs', 'integration_source') ?: config('services.logestechs.integration_source', 'ksadrop_portal'))),
         ];
 
         if (! $this->credentials['company_id'] || ! $this->credentials['email'] || ! $this->credentials['password']) {

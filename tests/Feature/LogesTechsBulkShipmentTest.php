@@ -36,7 +36,6 @@ class LogesTechsBulkShipmentTest extends TestCase
             'email' => 'test@example.com',
             'password' => 'secret',
             'base_url' => 'https://apisv2.logestechs.com/api',
-            'integration_source' => 'ksadrop_portal',
         ]);
     }
 
