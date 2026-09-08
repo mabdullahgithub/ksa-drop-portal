@@ -881,7 +881,7 @@ class PortalController extends Controller
             'Variant Inventory Policy', 'Variant Fulfillment Service', 'Variant Price', 'Variant Compare At Price',
             'Variant Requires Shipping', 'Variant Taxable', 'Variant Barcode',
             'Image Src', 'Image Position', 'Image Alt Text', 'Gift Card', 'SEO Title', 'SEO Description',
-            'Variant Weight Unit', 'Status',
+            'Variant Weight Unit', 'Cost per item', 'Status',
         ];
 
         $filename = 'ksadrop-products-' . now()->format('Y-m-d-His') . '.csv';
@@ -924,6 +924,7 @@ class PortalController extends Controller
                     $product->seo_title,
                     $product->seo_description,
                     'g',
+                    $product->merchantCost(),
                     $product->status ?: 'active',
                 ]);
 
@@ -936,7 +937,7 @@ class PortalController extends Controller
                         '', '', '',
                         $image->src, $index + 2, $image->alt_text ?? '',
                         '', '', '',
-                        '', '',
+                        '', '', '',
                     ]);
                 }
             }

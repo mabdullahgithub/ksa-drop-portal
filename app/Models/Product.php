@@ -47,6 +47,19 @@ class Product extends Model
         return $this->hasMany(ProductImage::class)->orderBy('position');
     }
 
+    /**
+     * What a dropshipper pays us for one unit: the price we list on the portal.
+     *
+     * This is the merchant's cost of goods sold, so it is exported as Shopify's
+     * "Cost per item" column and lands in the Cost field of their product page
+     * (App Store requirement 5.5.2). Not to be confused with cost_per_item,
+     * which is our own acquisition cost and never leaves the admin side.
+     */
+    public function merchantCost(): ?string
+    {
+        return $this->variant_price ?? $this->price_saudi_arabia;
+    }
+
     public function scopeSearch($query, string $term)
     {
         return $query->where(function ($q) use ($term) {
