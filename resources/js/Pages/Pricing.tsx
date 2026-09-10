@@ -3,7 +3,7 @@ import { Head } from '@inertiajs/react'
 import { ThinkingOrb } from 'thinking-orbs'
 import {
   Moon, Sun, Truck, Warehouse, Wallet, MapPin, RotateCcw, Package,
-  FileText, CreditCard, Clock, MessageCircle, Mail, ArrowRight,
+  FileText, CreditCard, Clock, MessageCircle, Mail, ArrowRight, ShoppingBag,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -66,6 +66,11 @@ const SERVICES: { icon: LucideIcon; title: string; body: string }[] = [
 // each merchant is quoted individually by the sales team.
 const CHARGEABLE: { icon: LucideIcon; title: string; body: string }[] = [
   {
+    icon: ShoppingBag,
+    title: 'Cost of goods sold',
+    body: 'Only if you source stock from our product catalogue. You pay our listed unit price for each item shipped on your behalf, and keep the difference between that and the price your customer paid. Merchants who send us their own inventory are never charged this.',
+  },
+  {
     icon: Truck,
     title: 'Delivery',
     body: 'Per shipment delivered, based on destination and weight. Remote destinations may carry a surcharge.',
@@ -111,7 +116,7 @@ const BILLING_STEPS: { icon: LucideIcon; title: string; body: string }[] = [
   {
     icon: CreditCard,
     title: 'You settle',
-    body: 'Pay by bank transfer, Mada, or by offsetting the amount against cash-on-delivery funds we hold for you.',
+    body: 'Pay by bank transfer to our company account, or let us offset the amount against cash-on-delivery funds we already hold for you. No card is charged and no card details are ever requested.',
   },
   {
     icon: Clock,
@@ -166,6 +171,14 @@ const FAQS: { q: string; a: string }[] = [
   {
     q: 'Does the KSADrop Portal app itself cost anything?',
     a: 'No. Installing and using the app is free, with no subscription, per-seat, or per-order software fee. You pay only for physical logistics services you actually use.',
+  },
+  {
+    q: 'How do I pay for goods I source from your catalogue?',
+    a: 'Product cost is added to the same consolidated invoice as your logistics fees. In practice most catalogue orders are cash on delivery, so we collect the full amount from your customer at the door, deduct the product cost and service fees, and remit the remaining profit to your bank account — meaning you usually pay nothing up front. Where a balance is still owed, you settle it by bank transfer.',
+  },
+  {
+    q: 'Do you charge my credit card?',
+    a: 'No. We do not accept card payments for any charge, and we do not use a payment gateway. Every invoice is settled by bank transfer or netted against cash-on-delivery funds we hold for you. Card details are never requested, entered into the app, or stored by us.',
   },
   {
     q: 'Why are rates not published on this page?',
@@ -406,7 +419,7 @@ export default function Pricing() {
 
             <div className="mt-12 grid gap-x-10 gap-y-7 sm:grid-cols-2">
               {[
-                { title: 'Accepted payment methods', body: 'Bank transfer in SAR, Mada, or settlement against cash-on-delivery funds held on your behalf.' },
+                { title: 'Accepted payment methods', body: 'Bank transfer in SAR to our company account, or settlement against cash-on-delivery funds we already hold on your behalf. We never ask for card details, and neither the app nor the portal collects, transmits, or stores card information.' },
                 { title: 'Where to find your invoices', body: 'Every invoice is available in the Finance section of your KSA Drop portal account and emailed to your billing contact.' },
               ].map(({ title, body }) => (
                 <div key={title}>
