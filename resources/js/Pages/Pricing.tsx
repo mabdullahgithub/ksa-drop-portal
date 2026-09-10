@@ -116,7 +116,7 @@ const BILLING_STEPS: { icon: LucideIcon; title: string; body: string }[] = [
   {
     icon: CreditCard,
     title: 'You settle',
-    body: 'Pay by bank transfer to our company account, or let us offset the amount against cash-on-delivery funds we already hold for you. No card is charged and no card details are ever requested.',
+    body: 'Pay by bank transfer to our company account, or let us offset the amount against cash-on-delivery funds we already hold for you. Settlement happens outside the app — nothing is charged automatically.',
   },
   {
     icon: Clock,
@@ -177,8 +177,8 @@ const FAQS: { q: string; a: string }[] = [
     a: 'Product cost is added to the same consolidated invoice as your logistics fees. In practice most catalogue orders are cash on delivery, so we collect the full amount from your customer at the door, deduct the product cost and service fees, and remit the remaining profit to your bank account — meaning you usually pay nothing up front. Where a balance is still owed, you settle it by bank transfer.',
   },
   {
-    q: 'Do you charge my credit card?',
-    a: 'No. We do not accept card payments for any charge, and we do not use a payment gateway. Every invoice is settled by bank transfer or netted against cash-on-delivery funds we hold for you. Card details are never requested, entered into the app, or stored by us.',
+    q: 'Does the app take payments or store my card?',
+    a: 'No. The app and portal do not process payments at all. Invoices are settled outside the app — by bank transfer to our company account, or by netting against cash-on-delivery funds we hold for you. No card details are ever entered into, transmitted by, or stored in our system.',
   },
   {
     q: 'Why are rates not published on this page?',
@@ -419,7 +419,7 @@ export default function Pricing() {
 
             <div className="mt-12 grid gap-x-10 gap-y-7 sm:grid-cols-2">
               {[
-                { title: 'Accepted payment methods', body: 'Bank transfer in SAR to our company account, or settlement against cash-on-delivery funds we already hold on your behalf. We never ask for card details, and neither the app nor the portal collects, transmits, or stores card information.' },
+                { title: 'Accepted payment methods', body: 'Bank transfer in SAR to our company account, or settlement against cash-on-delivery funds we already hold on your behalf. Card details are never entered into, transmitted by, or stored in the app or portal.' },
                 { title: 'Where to find your invoices', body: 'Every invoice is available in the Finance section of your KSA Drop portal account and emailed to your billing contact.' },
               ].map(({ title, body }) => (
                 <div key={title}>
