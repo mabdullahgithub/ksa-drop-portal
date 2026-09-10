@@ -874,14 +874,20 @@ class PortalController extends Controller
 
         $products = $query->with('images')->orderBy('created_at', 'desc')->get();
 
+        // Shopify's current product CSV headers. The older "Handle"/"Variant *"
+        // names still import, but Cost per item did not survive that legacy
+        // mapping and merchants ended up with an empty Cost field, which is what
+        // App Store requirement 5.5.2 was raised against. Columns are matched by
+        // name and a subset is allowed, so we emit only what the catalogue holds.
         $columns = [
-            'Handle', 'Title', 'Body (HTML)', 'Vendor', 'Product Category', 'Type', 'Tags', 'Published',
-            'Option1 Name', 'Option1 Value', 'Option2 Name', 'Option2 Value', 'Option3 Name', 'Option3 Value',
-            'Variant SKU', 'Variant Grams', 'Variant Inventory Tracker', 'Variant Inventory Qty',
-            'Variant Inventory Policy', 'Variant Fulfillment Service', 'Variant Price', 'Variant Compare At Price',
-            'Variant Requires Shipping', 'Variant Taxable', 'Variant Barcode',
-            'Image Src', 'Image Position', 'Image Alt Text', 'Gift Card', 'SEO Title', 'SEO Description',
-            'Variant Weight Unit', 'Cost per item', 'Status',
+            'Title', 'URL handle', 'Description', 'Vendor', 'Product category', 'Type', 'Tags',
+            'Published on online store', 'Status', 'SKU', 'Barcode',
+            'Option1 name', 'Option1 value', 'Option2 name', 'Option2 value', 'Option3 name', 'Option3 value',
+            'Price', 'Compare-at price', 'Cost per item', 'Charge tax',
+            'Inventory tracker', 'Inventory quantity', 'Continue selling when out of stock',
+            'Weight value (grams)', 'Weight unit for display', 'Requires shipping', 'Fulfillment service',
+            'Product image URL', 'Image position', 'Image alt text', 'Variant image URL', 'Gift card',
+            'SEO title', 'SEO description',
         ];
 
         $filename = 'ksadrop-products-' . now()->format('Y-m-d-His') . '.csv';
@@ -890,55 +896,59 @@ class PortalController extends Controller
             $out = fopen('php://output', 'w');
             fputcsv($out, $columns);
 
+            // Rows are keyed by header name so a column added later cannot shift
+            // the values of the ones after it.
+            $row = fn (array $values) => array_map(fn ($c) => $values[$c] ?? '', $columns);
+
             foreach ($products as $product) {
                 $images = $product->images;
                 $firstImage = $images->first();
 
-                fputcsv($out, [
-                    $product->handle,
-                    $product->title,
-                    $product->body_html,
-                    $product->vendor,
-                    $product->product_category,
-                    $product->type,
-                    is_array($product->tags) ? implode(', ', $product->tags) : $product->tags,
-                    $product->published ? 'TRUE' : 'FALSE',
-                    $product->option1_name, $product->option1_value,
-                    $product->option2_name, $product->option2_value,
-                    $product->option3_name, $product->option3_value,
-                    $product->variant_sku,
-                    $product->variant_grams,
-                    'shopify',
-                    $product->variant_inventory_qty,
-                    $product->variant_inventory_policy ?: 'deny',
-                    $product->variant_fulfillment_service ?: 'manual',
-                    $product->variant_price,
-                    $product->variant_compare_at_price,
-                    $product->variant_requires_shipping ? 'TRUE' : 'FALSE',
-                    $product->variant_taxable ? 'TRUE' : 'FALSE',
-                    $product->variant_barcode,
-                    $firstImage->src ?? $product->primary_image,
-                    $firstImage ? 1 : '',
-                    $firstImage->alt_text ?? '',
-                    'FALSE',
-                    $product->seo_title,
-                    $product->seo_description,
-                    'g',
-                    $product->merchantCost(),
-                    $product->status ?: 'active',
-                ]);
+                fputcsv($out, $row([
+                    'Title'                              => $product->title,
+                    'URL handle'                         => $product->handle,
+                    'Description'                        => $product->body_html,
+                    'Vendor'                             => $product->vendor,
+                    'Product category'                   => $product->product_category,
+                    'Type'                               => $product->type,
+                    'Tags'                               => is_array($product->tags) ? implode(', ', $product->tags) : $product->tags,
+                    'Published on online store'          => $product->published ? 'TRUE' : 'FALSE',
+                    'Status'                             => $product->status ?: 'active',
+                    'SKU'                                => $product->variant_sku,
+                    'Barcode'                            => $product->variant_barcode,
+                    'Option1 name'                       => $product->option1_name,
+                    'Option1 value'                      => $product->option1_value,
+                    'Option2 name'                       => $product->option2_name,
+                    'Option2 value'                      => $product->option2_value,
+                    'Option3 name'                       => $product->option3_name,
+                    'Option3 value'                      => $product->option3_value,
+                    'Price'                              => $product->variant_price,
+                    'Compare-at price'                   => $product->variant_compare_at_price,
+                    'Cost per item'                      => $product->merchantCost(),
+                    'Charge tax'                         => $product->variant_taxable ? 'TRUE' : 'FALSE',
+                    'Inventory tracker'                  => 'shopify',
+                    'Inventory quantity'                 => $product->variant_inventory_qty,
+                    'Continue selling when out of stock' => strtoupper($product->variant_inventory_policy ?: 'deny'),
+                    'Weight value (grams)'               => $product->variant_grams,
+                    'Weight unit for display'            => 'g',
+                    'Requires shipping'                  => $product->variant_requires_shipping ? 'TRUE' : 'FALSE',
+                    'Fulfillment service'                => $product->variant_fulfillment_service ?: 'manual',
+                    'Product image URL'                  => $firstImage->src ?? $product->primary_image,
+                    'Image position'                     => $firstImage ? 1 : '',
+                    'Image alt text'                     => $firstImage->alt_text ?? '',
+                    'Gift card'                          => 'FALSE',
+                    'SEO title'                          => $product->seo_title,
+                    'SEO description'                    => $product->seo_description,
+                ]));
 
+                // Extra images attach to the product through the handle alone.
                 foreach ($images->slice(1)->values() as $index => $image) {
-                    fputcsv($out, [
-                        $product->handle, '', '', '', '', '', '', '',
-                        '', '', '', '', '', '',
-                        '', '', '', '',
-                        '', '', '', '',
-                        '', '', '',
-                        $image->src, $index + 2, $image->alt_text ?? '',
-                        '', '', '',
-                        '', '', '',
-                    ]);
+                    fputcsv($out, $row([
+                        'URL handle'        => $product->handle,
+                        'Product image URL' => $image->src,
+                        'Image position'    => $index + 2,
+                        'Image alt text'    => $image->alt_text ?? '',
+                    ]));
                 }
             }
 

@@ -110,6 +110,30 @@ class DropshipperCatalogCostTest extends TestCase
         $this->assertNotContains('42.00', $row, 'cost_per_item is our margin, not the merchant"s.');
     }
 
+    public function test_headers_match_shopifys_current_csv_format(): void
+    {
+        $user = $this->dropshipper();
+
+        Product::create([
+            'handle'        => 'abaya-black',
+            'title'         => 'Black Abaya',
+            'variant_price' => 149.00,
+            'published'     => true,
+        ]);
+
+        [$header] = $this->download($user);
+
+        // The legacy "Handle"/"Variant *" names still import, but Cost per item
+        // was dropped on the way through, leaving merchants an empty Cost field.
+        $this->assertNotContains('Handle', $header);
+        $this->assertNotContains('Variant SKU', $header);
+        $this->assertNotContains('Body (HTML)', $header);
+
+        foreach (['Title', 'URL handle', 'Description', 'SKU', 'Price', 'Cost per item'] as $expected) {
+            $this->assertContains($expected, $header);
+        }
+    }
+
     public function test_every_row_lines_up_with_the_header(): void
     {
         $user = $this->dropshipper();
