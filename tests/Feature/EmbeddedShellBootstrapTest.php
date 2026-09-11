@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Client;
 use App\Models\ClientShopifyConnection;
 use App\Models\Order;
+use App\Models\Shipment;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Spatie\Permission\Models\Role;
@@ -188,6 +189,60 @@ class EmbeddedShellBootstrapTest extends TestCase
             '</script><script>alert(1)</script>',
             $payload['dashboard']['recent_orders'][0]['customer_name']
         );
+    }
+
+    public function test_recent_orders_carry_their_latest_shipment_and_nothing_more(): void
+    {
+        $connection = $this->makeLinkedConnection();
+
+        $shipped = Order::create([
+            'client_id'    => $connection->client_id,
+            'order_number' => 'TST9002',
+            'source'       => 'shopify',
+            'currency'     => 'SAR',
+            'total'        => '10.00',
+        ]);
+
+        // A failed booking our team then redid: only the newer one is shown.
+        Shipment::create([
+            'order_id'        => $shipped->id,
+            'courier'         => 'imile',
+            'txlogistic_id'   => 'TX-OLD',
+            'status'          => 'failed',
+        ]);
+        Shipment::create([
+            'order_id'         => $shipped->id,
+            'courier'          => 'jnt_express',
+            'tracking_number'  => 'JT0001',
+            'txlogistic_id'    => 'TX-NEW',
+            'status'           => 'in_transit',
+            'tracking_history' => [['timestamp' => '2026-09-10 10:00:00', 'raw_status' => 'x']],
+            'api_response'     => ['secret' => 'courier-internal'],
+        ]);
+
+        $unshipped = Order::create([
+            'client_id'    => $connection->client_id,
+            'order_number' => 'TST9003',
+            'source'       => 'shopify',
+            'currency'     => 'SAR',
+            'total'        => '20.00',
+        ]);
+
+        $orders = collect($this->withHeader('Authorization', 'Bearer ' . $this->makeSessionToken(self::SHOP))
+            ->getJson('/embedded/shopify/api/dashboard')
+            ->assertOk()
+            ->json('recent_orders'))
+            ->keyBy('order_number');
+
+        $this->assertSame(
+            ['courier' => 'jnt_express', 'tracking_number' => 'JT0001', 'status' => 'in_transit'],
+            $orders['TST9002']['shipment']
+        );
+        $this->assertNull($orders['TST9003']['shipment']);
+
+        // The relation itself must not ride along — it would carry the full
+        // tracking history and courier response into the inlined shell.
+        $this->assertArrayNotHasKey('latest_shipment', $orders['TST9002']);
     }
 
     // ─── Every fallback: the shell must emit nothing and the app fetches ─────

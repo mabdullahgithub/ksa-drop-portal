@@ -76,6 +76,12 @@
                 border-radius: 8px;
                 background: var(--eb-surface);
             }
+            /* Holds the "KSA Drop ships these orders for you" banner's place. */
+            .eb-skeleton-banner {
+                height: 136px;
+                border-radius: 12px;
+                background: var(--eb-surface);
+            }
             .eb-skeleton-table {
                 height: 320px;
                 border-radius: 8px;
@@ -123,10 +129,13 @@
                 <div class="eb-skeleton">
                     <h1 class="eb-skeleton-title">Order Sync</h1>
                     <div class="eb-skeleton-section">
+                        <div class="eb-skeleton-banner"></div>
+                    </div>
+                    <div class="eb-skeleton-section">
                         <h2 class="eb-skeleton-heading">Overview</h2>
                         <div class="eb-skeleton-grid">
                             <div class="eb-skeleton-card"><span class="eb-skeleton-label">Total orders synced</span><span class="eb-skeleton-value">&mdash;</span></div>
-                            <div class="eb-skeleton-card"><span class="eb-skeleton-label">Processed</span><span class="eb-skeleton-value">&mdash;</span></div>
+                            <div class="eb-skeleton-card"><span class="eb-skeleton-label">Sent to KSA Drop</span><span class="eb-skeleton-value">&mdash;</span></div>
                             <div class="eb-skeleton-card"><span class="eb-skeleton-label">Pending review</span><span class="eb-skeleton-value">&mdash;</span></div>
                             <div class="eb-skeleton-card"><span class="eb-skeleton-label">Skipped by filter</span><span class="eb-skeleton-value">&mdash;</span></div>
                         </div>

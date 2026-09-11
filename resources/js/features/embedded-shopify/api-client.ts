@@ -90,6 +90,15 @@ export interface RecentOrder {
     currency: string
     total: string
     created_at: string
+    /** Latest shipment KSA Drop booked for this order; null until one is. */
+    shipment: RecentOrderShipment | null
+}
+
+export interface RecentOrderShipment {
+    courier: 'jnt_express' | 'imile' | 'logestechs' | null
+    tracking_number: string | null
+    /** ShipmentStatus value (app/Services/Shipping/Enums/ShipmentStatus.php). */
+    status: string
 }
 
 export interface SyncFilters {

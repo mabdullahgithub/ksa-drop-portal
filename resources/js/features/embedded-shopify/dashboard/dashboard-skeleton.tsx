@@ -13,10 +13,14 @@ export function DashboardSkeleton() {
             <h1 className="eb-skeleton-title">Order Sync</h1>
 
             <div className="eb-skeleton-section">
+                <div className="eb-skeleton-banner" />
+            </div>
+
+            <div className="eb-skeleton-section">
                 <h2 className="eb-skeleton-heading">Overview</h2>
                 <div className="eb-skeleton-grid">
                     <SkeletonCard label="Total orders synced" />
-                    <SkeletonCard label="Processed" />
+                    <SkeletonCard label="Sent to KSA Drop" />
                     <SkeletonCard label="Pending review" />
                     <SkeletonCard label="Skipped by filter" />
                 </div>

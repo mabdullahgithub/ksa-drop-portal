@@ -47,9 +47,23 @@ class EmbeddedPayloadService
             $dailyOrders[] = ['date' => $key, 'orders' => (int) ($perDay[$key] ?? 0)];
         }
 
+        // Each order carries its latest shipment so the merchant can see what
+        // happened after the sync — our team books the courier, not the
+        // merchant, and without this the app showed nothing past "synced".
+        // Only the three merchant-facing fields: tracking_history and the raw
+        // courier response have no place in a payload inlined into the shell.
+        // Columns are qualified because latestOfMany() joins a subquery that
+        // has its own order_id.
         $recentOrders = Order::withoutGlobalScope('shopify_visible')
             ->where('client_id', $connection->client_id)
             ->where('source', 'shopify')
+            ->with(['latestShipment' => fn ($q) => $q->select([
+                'shipments.id',
+                'shipments.order_id',
+                'shipments.courier',
+                'shipments.tracking_number',
+                'shipments.status',
+            ])])
             ->orderByDesc('created_at')
             ->limit(10)
             ->get([
@@ -63,7 +77,20 @@ class EmbeddedPayloadService
                 'currency',
                 'total',
                 'created_at',
-            ]);
+            ])
+            ->map(function (Order $order) {
+                $shipment = $order->latestShipment;
+
+                $row = $order->withoutRelations()->toArray();
+
+                $row['shipment'] = $shipment ? [
+                    'courier'         => $shipment->courier,
+                    'tracking_number' => $shipment->tracking_number,
+                    'status'          => $shipment->status,
+                ] : null;
+
+                return $row;
+            });
 
         return [
             'shop_domain'    => $connection->shop_domain,

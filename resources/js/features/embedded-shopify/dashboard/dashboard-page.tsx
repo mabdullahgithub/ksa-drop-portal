@@ -5,8 +5,10 @@ import {
     EmbeddedApiError,
     type ConnectionState,
     type DashboardData,
+    type RecentOrder,
 } from "../api-client";
 import { BOOTSTRAP_DASHBOARD, LINKED_HINT } from "../bootstrap";
+import { PORTAL_URL } from "../config";
 import { StoreNotConnected } from "../store-not-connected";
 import { DashboardSkeleton } from "./dashboard-skeleton";
 
@@ -20,21 +22,65 @@ const OrdersChart = lazy(() =>
     import("./orders-chart").then((m) => ({ default: m.OrdersChart })),
 );
 
-const SYNC_STATUS_BADGES: Record<string, { label: string; tone: string }> = {
-    processed: { label: "Processed", tone: "success" },
-    approved: { label: "Approved", tone: "success" },
-    pending_review: { label: "Pending review", tone: "caution" },
+const PORTAL_ORDERS_URL = `${PORTAL_URL}/portal/orders`;
+
+type Badge = { label: string; tone: string };
+
+/** Orders that never reached our team, so there is no shipment to show. */
+const HELD_BADGES: Record<string, Badge> = {
+    pending_review: { label: "Awaiting your approval", tone: "caution" },
     skipped_filtered: { label: "Skipped by filter", tone: "warning" },
     dismissed: { label: "Dismissed", tone: "neutral" },
 };
 
-function syncBadge(status: string | null) {
-    return (
-        SYNC_STATUS_BADGES[status ?? "processed"] ?? {
-            label: status ?? "—",
-            tone: "neutral",
-        }
-    );
+/**
+ * Merchant-facing wording for ShipmentStatus values. `failed` is a courier
+ * booking our team still has to redo, so to the merchant the order is simply
+ * still being prepared.
+ */
+const SHIPMENT_BADGES: Record<string, Badge> = {
+    pending: { label: "Shipment booked", tone: "info" },
+    info_received: { label: "Shipment booked", tone: "info" },
+    in_transit: { label: "In transit", tone: "info" },
+    out_for_delivery: { label: "Out for delivery", tone: "info" },
+    attempt_fail: { label: "Delivery attempt failed", tone: "warning" },
+    delivered: { label: "Delivered", tone: "success" },
+    exception: { label: "Delivery issue", tone: "warning" },
+    returned: { label: "Returned", tone: "critical" },
+    cancelled: { label: "Shipment cancelled", tone: "neutral" },
+    failed: { label: "Preparing shipment", tone: "info" },
+};
+
+const PREPARING: Badge = { label: "Preparing shipment", tone: "info" };
+
+const COURIER_NAMES: Record<string, string> = {
+    jnt_express: "J&T Express",
+    imile: "iMile",
+    logestechs: "Navix",
+};
+
+/**
+ * Where the order is in KSA Drop's flow: held back before it reached us,
+ * wherever its shipment has got to, or — sent but not booked yet — being
+ * prepared by our team.
+ */
+function orderBadge(order: RecentOrder): Badge {
+    const held = HELD_BADGES[order.shopify_sync_status ?? ""];
+    if (held) return held;
+
+    if (order.shipment) {
+        return SHIPMENT_BADGES[order.shipment.status] ?? PREPARING;
+    }
+
+    if (order.fulfillment_status === "cancelled") {
+        return { label: "Cancelled", tone: "neutral" };
+    }
+
+    if (order.fulfillment_status === "fulfilled") {
+        return { label: "Fulfilled", tone: "success" };
+    }
+
+    return PREPARING;
 }
 
 export function DashboardPage() {
@@ -133,10 +179,56 @@ export function DashboardPage() {
                 </s-banner>
             )}
 
+            {/*
+             * The merchant never ships from this app — our team does — so say
+             * so up front. Without it the dashboard read as a list of orders
+             * with nothing to do next.
+             */}
+            <s-section>
+                <s-banner tone="info" heading="KSA Drop ships these orders for you">
+                    <s-stack gap="base">
+                        <s-paragraph>
+                            New Shopify orders are sent to KSA Drop
+                            automatically, so there's nothing to set up or
+                            click. Our team prepares each order and books the
+                            courier (J&T Express, iMile or Navix). The shipment
+                            status and tracking number appear under Recent
+                            orders as the parcel moves.
+                        </s-paragraph>
+                        <s-button href={PORTAL_ORDERS_URL} target="_blank">
+                            Open KSA Drop portal
+                        </s-button>
+                    </s-stack>
+                </s-banner>
+            </s-section>
+
+            {stats.pending_review > 0 && (
+                <s-section>
+                    <s-banner
+                        tone="warning"
+                        heading={`${stats.pending_review.toLocaleString()} ${
+                            stats.pending_review === 1 ? "order is" : "orders are"
+                        } awaiting your approval`}
+                    >
+                        <s-stack gap="base">
+                            <s-paragraph>
+                                Your store is set to manual approval, so new
+                                orders wait until you approve them in the KSA
+                                Drop portal. Approved orders are sent to our
+                                team for shipping.
+                            </s-paragraph>
+                            <s-button href={PORTAL_ORDERS_URL} target="_blank">
+                                Review orders
+                            </s-button>
+                        </s-stack>
+                    </s-banner>
+                </s-section>
+            )}
+
             <s-section heading="Overview">
                 <s-grid gridTemplateColumns="repeat(4, 1fr)" gap="base">
                     <StatCard label="Total orders synced" value={stats.total} />
-                    <StatCard label="Processed" value={stats.processed} />
+                    <StatCard label="Sent to KSA Drop" value={stats.processed} />
                     <StatCard
                         label="Pending review"
                         value={stats.pending_review}
@@ -153,22 +245,23 @@ export function DashboardPage() {
 
             <s-section heading="Recent orders">
                 {data.recent_orders.length === 0 ? (
-                    <s-paragraph>No orders synced yet.</s-paragraph>
+                    <s-paragraph>
+                        No orders yet. New Shopify orders appear here within a
+                        minute of being placed.
+                    </s-paragraph>
                 ) : (
                     <s-table>
                         <s-table-header-row>
                             <s-table-header>Order</s-table-header>
                             <s-table-header>Customer</s-table-header>
                             <s-table-header>Payment</s-table-header>
-                            <s-table-header>Status</s-table-header>
-                            <s-table-header>Sync</s-table-header>
                             <s-table-header>Total</s-table-header>
+                            <s-table-header>Shipping status</s-table-header>
+                            <s-table-header>Tracking</s-table-header>
                         </s-table-header-row>
                         <s-table-body>
                             {data.recent_orders.map((order) => {
-                                const badge = syncBadge(
-                                    order.shopify_sync_status,
-                                );
+                                const badge = orderBadge(order);
                                 return (
                                     <s-table-row key={order.id}>
                                         <s-table-cell>
@@ -186,8 +279,7 @@ export function DashboardPage() {
                                                   : "—"}
                                         </s-table-cell>
                                         <s-table-cell>
-                                            {order.financial_status || "—"} /{" "}
-                                            {order.fulfillment_status || "—"}
+                                            {order.currency} {order.total}
                                         </s-table-cell>
                                         <s-table-cell>
                                             <s-badge tone={badge.tone}>
@@ -195,7 +287,7 @@ export function DashboardPage() {
                                             </s-badge>
                                         </s-table-cell>
                                         <s-table-cell>
-                                            {order.currency} {order.total}
+                                            <TrackingCell order={order} />
                                         </s-table-cell>
                                     </s-table-row>
                                 );
@@ -205,6 +297,25 @@ export function DashboardPage() {
                 )}
             </s-section>
         </s-page>
+    );
+}
+
+function TrackingCell({ order }: { order: RecentOrder }) {
+    const shipment = order.shipment;
+
+    if (!shipment?.tracking_number) {
+        return <s-text tone="subdued">—</s-text>;
+    }
+
+    return (
+        <s-stack gap="small-300">
+            <s-text>{shipment.tracking_number}</s-text>
+            {shipment.courier && (
+                <s-text tone="subdued">
+                    {COURIER_NAMES[shipment.courier] ?? shipment.courier}
+                </s-text>
+            )}
+        </s-stack>
     );
 }
 
