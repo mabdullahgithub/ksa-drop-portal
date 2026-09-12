@@ -50,6 +50,18 @@ Schedule::command('shopify:verify-webhooks')
     ->when(fn () => config('services.shopify.verify_webhooks'))
     ->withoutOverlapping();
 
+// Stores that connected before the fulfillment scopes existed carry a grant
+// that predates them, and a store with no KSADrop location produces no
+// fulfillment orders for us while looking perfectly healthy — orders still
+// sync, webhooks still arrive. Registration is normally picked up at OAuth or
+// on the next embedded app load; this catches the stores that reach neither.
+// Shares the fulfillment kill switch, and skips every connection that is
+// already registered or still awaiting re-approval without an API call.
+Schedule::command('shopify:backfill-fulfillment-services')
+    ->dailyAt('04:15')
+    ->when(fn () => config('services.shopify.fulfillment'))
+    ->withoutOverlapping();
+
 // Settled sync failures still hold the webhook payload that produced them, so
 // the table grows fastest exactly when things are going wrong. Resolved rows are
 // dead weight within a fortnight; abandoned ones are kept a quarter, since they

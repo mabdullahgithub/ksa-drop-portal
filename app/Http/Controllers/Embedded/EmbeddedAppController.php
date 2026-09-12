@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Embedded;
 use App\Http\Controllers\Controller;
 use App\Models\ClientShopifyConnection;
 use App\Services\EmbeddedPayloadService;
+use App\Services\ShopifyFulfillmentService;
 use App\Services\ShopifyService;
 use Illuminate\Http\Request;
 
@@ -28,6 +29,7 @@ class EmbeddedAppController extends Controller
     public function __construct(
         private ShopifyService $shopify,
         private EmbeddedPayloadService $payload,
+        private ShopifyFulfillmentService $fulfillment,
     ) {}
 
     public function index(Request $request)
@@ -178,6 +180,17 @@ class EmbeddedAppController extends Controller
         }
 
         $connection = $this->shopify->ensureInstalled($shop, $token);
+
+        // Registering the fulfillment service is deliberately hung off the
+        // app load rather than off OAuth alone. The fulfillment scopes were
+        // added after the app shipped, so an existing store carries a grant
+        // that predates them; managed installation re-prompts the merchant
+        // here, on their next visit, and this is the first moment the new
+        // grant is readable. Cheap to repeat — it returns immediately once
+        // the service is registered, or while the scopes are still missing.
+        if ($connection) {
+            $this->fulfillment->ensureRegistered($connection);
+        }
 
         // Token exchange is the only thing standing between a fresh install and
         // a usable connection, and it can fail (revoked app, clock skew, bad

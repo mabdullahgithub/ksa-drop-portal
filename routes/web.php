@@ -30,6 +30,7 @@ use App\Http\Controllers\Embedded\EmbeddedDashboardController;
 use App\Http\Controllers\Embedded\EmbeddedSettingsController;
 use App\Http\Controllers\ShopifyController;
 use App\Http\Controllers\ShopifyWebhookController;
+use App\Http\Controllers\ShopifyFulfillmentCallbackController;
 use App\Http\Controllers\ShopifyPendingOrderController;
 use App\Http\Controllers\ShopifySyncFailureController;
 use App\Http\Controllers\TrackingController;
@@ -398,6 +399,31 @@ Route::post('/webhooks/shopify', [ShopifyWebhookController::class, 'handle'])
         \App\Http\Middleware\AddLinkHeadersForPreloadedAssetsUnlessInertia::class,
     ])
     ->name('webhooks.shopify');
+
+// Fulfillment service callbacks. Shopify is given only the prefix (at
+// fulfillmentServiceCreate) and appends these three paths itself, so the names
+// and shapes are Shopify's, not ours.
+//
+// Same middleware exclusions, for the same reasons as the webhook route above:
+// Shopify sends no cookie and reads no response body beyond the status.
+Route::prefix('webhooks/shopify/fulfillment')
+    ->withoutMiddleware([
+        \Illuminate\Foundation\Http\Middleware\PreventRequestForgery::class,
+        \Illuminate\Session\Middleware\StartSession::class,
+        \Illuminate\View\Middleware\ShareErrorsFromSession::class,
+        \Illuminate\Cookie\Middleware\EncryptCookies::class,
+        \Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse::class,
+        \App\Http\Middleware\HandleInertiaRequests::class,
+        \App\Http\Middleware\AddLinkHeadersForPreloadedAssetsUnlessInertia::class,
+    ])
+    ->group(function () {
+        Route::post('/fulfillment_order_notification', [ShopifyFulfillmentCallbackController::class, 'notification'])
+            ->name('webhooks.shopify.fulfillment.notification');
+        Route::get('/fetch_stock', [ShopifyFulfillmentCallbackController::class, 'fetchStock'])
+            ->name('webhooks.shopify.fulfillment.stock');
+        Route::get('/fetch_tracking_numbers', [ShopifyFulfillmentCallbackController::class, 'fetchTrackingNumbers'])
+            ->name('webhooks.shopify.fulfillment.tracking');
+    });
 
 // Embedded Shopify Admin app — rendered inside the Shopify Admin iframe.
 // No Laravel session: the shell loads publicly (App Bridge boots it), and the
