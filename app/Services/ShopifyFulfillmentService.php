@@ -104,9 +104,13 @@ class ShopifyFulfillmentService
             }
 
             $connection->update([
-                'fulfillment_service_id'    => $service['id'],
-                'fulfillment_location_id'   => $service['location']['id'] ?? null,
-                'fulfillment_registered_at' => now(),
+                'fulfillment_service_id'     => $service['id'],
+                // Shopify's own handle, not a slug of our name: where the handle
+                // was already taken Shopify appends a suffix, and the product
+                // CSV has to carry whatever this particular store ended up with.
+                'fulfillment_service_handle' => $service['handle'] ?? null,
+                'fulfillment_location_id'    => $service['location']['id'] ?? null,
+                'fulfillment_registered_at'  => now(),
             ]);
 
             if ($connection->hasFulfillmentService()) {
@@ -151,6 +155,7 @@ class ShopifyFulfillmentService
                 fulfillmentServices {
                     id
                     serviceName
+                    handle
                     callbackUrl
                     location { id }
                 }
@@ -168,6 +173,7 @@ class ShopifyFulfillmentService
             if ($callback === $ours || ($service['serviceName'] ?? null) === self::SERVICE_NAME) {
                 return [
                     'id'       => $service['id'],
+                    'handle'   => $service['handle'] ?? null,
                     'location' => $service['location'] ?? null,
                     'adopted'  => true,
                 ];
@@ -206,6 +212,7 @@ class ShopifyFulfillmentService
                 fulfillmentService {
                     id
                     serviceName
+                    handle
                     location { id }
                 }
                 userErrors { field message }
@@ -231,6 +238,7 @@ class ShopifyFulfillmentService
 
         return $service ? [
             'id'       => $service['id'],
+            'handle'   => $service['handle'] ?? null,
             'location' => $service['location'] ?? null,
             'adopted'  => false,
         ] : null;

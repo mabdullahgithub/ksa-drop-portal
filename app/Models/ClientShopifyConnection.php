@@ -20,6 +20,7 @@ class ClientShopifyConnection extends Model
         'status',
         'webhooks_registered',
         'fulfillment_service_id',
+        'fulfillment_service_handle',
         'fulfillment_location_id',
         'fulfillment_registered_at',
         'last_synced_at',

@@ -892,7 +892,29 @@ class PortalController extends Controller
 
         $filename = 'ksadrop-products-' . now()->format('Y-m-d-His') . '.csv';
 
-        return response()->streamDownload(function () use ($products, $columns) {
+        // Which fulfillment service the imported variants should stock at.
+        //
+        // This single value is what makes the whole fulfillment flow work. A
+        // variant left on `manual` is one the merchant fulfils themselves, so
+        // Shopify never creates a fulfillment order assigned to KSADrop, and
+        // there is nothing for requirement 5.5.1's
+        // fulfillmentOrderSubmitFulfillmentRequest to be called against — the
+        // merchant's orders simply never reach us for fulfillment.
+        //
+        // Shopify matches this column against a slug of the service name on the
+        // importing store, and silently falls back to `manual` when it matches
+        // nothing. That failure is invisible in the import report, which is why
+        // the handle comes from the store's own registration rather than from
+        // slugifying our name here: a client downloading before their store is
+        // connected, or before the service is registered, gets `manual` and a
+        // catalogue that still imports cleanly.
+        $connection = $client->shopifyConnection;
+
+        $fulfillmentService = $connection && $connection->hasFulfillmentService()
+            ? ($connection->fulfillment_service_handle ?: 'manual')
+            : 'manual';
+
+        return response()->streamDownload(function () use ($products, $columns, $fulfillmentService) {
             $out = fopen('php://output', 'w');
             fputcsv($out, $columns);
 
@@ -932,7 +954,7 @@ class PortalController extends Controller
                     'Weight value (grams)'               => $product->variant_grams,
                     'Weight unit for display'            => 'g',
                     'Requires shipping'                  => $product->variant_requires_shipping ? 'TRUE' : 'FALSE',
-                    'Fulfillment service'                => $product->variant_fulfillment_service ?: 'manual',
+                    'Fulfillment service'                => $fulfillmentService,
                     'Product image URL'                  => $firstImage->src ?? $product->primary_image,
                     'Image position'                     => $firstImage ? 1 : '',
                     'Image alt text'                     => $firstImage->alt_text ?? '',
