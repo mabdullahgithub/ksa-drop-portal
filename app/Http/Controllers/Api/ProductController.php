@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Product;
 use App\Models\ProductImage;
+use App\Services\Inventory\InventoryService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -62,7 +63,7 @@ class ProductController extends Controller
         return response()->json($product);
     }
 
-    public function update(Request $request, Product $product)
+    public function update(Request $request, Product $product, InventoryService $inventory)
     {
         $validated = $request->validate([
             'title' => 'sometimes|string|max:255',
@@ -70,12 +71,30 @@ class ProductController extends Controller
             'variant_price' => 'sometimes|numeric|min:0',
             'variant_compare_at_price' => 'sometimes|nullable|numeric|min:0',
             'variant_inventory_qty' => 'sometimes|integer',
+            'stock_note' => 'sometimes|nullable|string|max:500',
             'tags' => 'sometimes|array',
             'published' => 'sometimes|boolean',
         ]);
 
-        $product->update($validated);
-        $product->load('images');
+        $note = $validated['stock_note'] ?? null;
+        unset($validated['stock_note']);
+
+        // The quantity is applied through the ledger so a manual correction is
+        // recorded next to the automatic dispatch/return movements.
+        $newQuantity = array_key_exists('variant_inventory_qty', $validated)
+            ? (int) $validated['variant_inventory_qty']
+            : null;
+        unset($validated['variant_inventory_qty']);
+
+        if ($validated !== []) {
+            $product->update($validated);
+        }
+
+        if ($newQuantity !== null) {
+            $inventory->adjust($product, $newQuantity, $request->user()?->id, $note);
+        }
+
+        $product->refresh()->load('images');
 
         return response()->json($product);
     }
