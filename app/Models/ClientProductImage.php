@@ -19,6 +19,6 @@ class ClientProductImage extends Model
 
     public function getUrlAttribute(): string
     {
-        return Storage::url($this->path);
+        return Storage::disk('public')->url($this->path);
     }
 }
