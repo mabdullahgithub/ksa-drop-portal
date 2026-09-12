@@ -35,6 +35,16 @@ class ShopifyService
         'ORDERS_UPDATED',
         'ORDERS_PAID',
         'ORDERS_CANCELLED',
+
+        // Fulfillment service topics (App Store requirement 5.5.1). The first
+        // is how a merchant pressing "Request fulfillment" in Shopify admin
+        // reaches us; the second is how they ask for an accepted request back.
+        // Both also arrive on the registered callback URL, but these come
+        // through the ordinary webhook pipeline and so inherit its HMAC check,
+        // queueing and dead-letter retries — the callback is the safety net,
+        // not the main road.
+        'FULFILLMENT_ORDERS_FULFILLMENT_REQUEST_SUBMITTED',
+        'FULFILLMENT_ORDERS_CANCELLATION_REQUEST_SUBMITTED',
         // Marks the connection disconnected so a reinstall re-triggers OAuth
         // (handled in ProcessShopifyWebhookJob). Not gated on
         // protected-customer-data approval, unlike the order topics.

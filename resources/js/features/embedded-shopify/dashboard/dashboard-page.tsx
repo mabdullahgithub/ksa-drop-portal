@@ -2,6 +2,7 @@ import { Suspense, lazy, useEffect, useState } from "react";
 import {
     embeddedFetch,
     fetchConnectionState,
+    requestFulfillment,
     EmbeddedApiError,
     type ConnectionState,
     type DashboardData,
@@ -257,6 +258,7 @@ export function DashboardPage() {
                             <s-table-header>Payment</s-table-header>
                             <s-table-header>Total</s-table-header>
                             <s-table-header>Shipping status</s-table-header>
+                            <s-table-header>Fulfillment</s-table-header>
                             <s-table-header>Tracking</s-table-header>
                         </s-table-header-row>
                         <s-table-body>
@@ -287,6 +289,9 @@ export function DashboardPage() {
                                             </s-badge>
                                         </s-table-cell>
                                         <s-table-cell>
+                                            <FulfillmentCell order={order} />
+                                        </s-table-cell>
+                                        <s-table-cell>
                                             <TrackingCell order={order} />
                                         </s-table-cell>
                                     </s-table-row>
@@ -299,6 +304,63 @@ export function DashboardPage() {
         </s-page>
     );
 }
+
+/**
+ * The merchant's own "Request fulfillment" control — the same mutation Shopify
+ * admin's action calls (App Store requirement 5.5.1), offered here so they can
+ * do it without leaving the app.
+ *
+ * Auto-sync stores will rarely see the button: those orders are requested the
+ * moment they import, and this shows their state instead. It earns its place on
+ * manual-approval stores, and on any order the payment gate held back.
+ */
+function FulfillmentCell({ order }: { order: RecentOrder }) {
+    const [status, setStatus] = useState(order.shopify_fulfillment_status);
+    const [sending, setSending] = useState(false);
+
+    if (status) {
+        const tone = status === "rejected" ? "critical" : "info";
+        return <s-badge tone={tone}>{FULFILLMENT_LABELS[status] ?? status}</s-badge>;
+    }
+
+    const send = async () => {
+        setSending(true);
+        try {
+            const result = await requestFulfillment(order.id);
+            // The refusals are the useful answers here — an unpaid order, or
+            // products never routed to the KSA Drop location — so they are
+            // surfaced rather than left as a button that did nothing.
+            window.shopify.toast.show(result.message, {
+                isError: !result.requested,
+            });
+            if (result.requested) {
+                setStatus("requested");
+            }
+        } catch (e) {
+            window.shopify.toast.show((e as Error).message, { isError: true });
+        } finally {
+            setSending(false);
+        }
+    };
+
+    return (
+        <s-button
+            variant="secondary"
+            disabled={sending || undefined}
+            onClick={send}
+        >
+            {sending ? "Sending…" : "Request fulfillment"}
+        </s-button>
+    );
+}
+
+const FULFILLMENT_LABELS: Record<string, string> = {
+    requested: "Requested",
+    accepted: "In progress",
+    rejected: "Declined",
+    fulfilled: "Fulfilled",
+    cancelled: "Cancelled",
+};
 
 function TrackingCell({ order }: { order: RecentOrder }) {
     const shipment = order.shipment;

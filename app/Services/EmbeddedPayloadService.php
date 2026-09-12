@@ -74,6 +74,8 @@ class EmbeddedPayloadService
                 'fulfillment_status',
                 'payment_method',
                 'shopify_sync_status',
+                'shopify_fulfillment_status',
+                'shopify_fulfillment_requested_at',
                 'currency',
                 'total',
                 'created_at',

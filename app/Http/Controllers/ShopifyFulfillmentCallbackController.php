@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Jobs\SweepShopifyFulfillmentRequestsJob;
 use App\Services\ShopifyService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -54,10 +55,20 @@ class ShopifyFulfillmentCallbackController extends Controller
             return response('Unauthorized', 401);
         }
 
+        $shop = (string) $request->header('X-Shopify-Shop-Domain', '');
+        $kind = (string) $request->input('kind');
+
         Log::channel('shopify')->info('Fulfillment order notification received', [
-            'shop' => $request->header('X-Shopify-Shop-Domain'),
-            'kind' => $request->input('kind'),
+            'shop' => $shop,
+            'kind' => $kind,
         ]);
+
+        // Queued, and driven by what Shopify says is outstanding rather than by
+        // this body: the point of the sweep is to catch the requests whose own
+        // webhook never arrived, and those are not in the payload.
+        if ($shop !== '' && $kind === 'FULFILLMENT_REQUEST') {
+            SweepShopifyFulfillmentRequestsJob::dispatch($shop)->onConnection('database');
+        }
 
         return response('OK', 200);
     }

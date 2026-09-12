@@ -5,6 +5,7 @@ namespace App\Jobs;
 use App\Models\ClientShopifyConnection;
 use App\Models\Order;
 use App\Models\ShopifySyncFailure;
+use App\Services\ShopifyFulfillmentService;
 use App\Services\ShopifyOrderWriter;
 use App\Services\ShopifyService;
 use Illuminate\Bus\Queueable;
@@ -31,6 +32,7 @@ class ProcessShopifyWebhookJob implements ShouldQueue
         'orders/updated',
         'orders/paid',
         'orders/cancelled',
+        'fulfillment_orders/fulfillment_request_submitted',
         'customers/redact',
         'shop/redact',
         'app/uninstalled',
@@ -127,6 +129,7 @@ class ProcessShopifyWebhookJob implements ShouldQueue
         match ($this->topic) {
             'orders/create', 'orders/updated', 'orders/paid' => $this->upsertOrder($shopify, $connection),
             'orders/cancelled' => $this->cancelOrder(),
+            'fulfillment_orders/fulfillment_request_submitted' => $this->acceptFulfillmentRequest($connection),
             default            => null,
         };
     }
@@ -259,9 +262,11 @@ class ProcessShopifyWebhookJob implements ShouldQueue
         // The write itself — review status, locally-owned fulfillment, item
         // replacement, atomicity — lives in ShopifyOrderWriter, shared with the
         // reconciliation poll so the two paths cannot drift apart.
-        $this->writer->write($data, $shopify->mapLineItems($this->payload, 'webhook'), $connection);
+        $order = $this->writer->write($data, $shopify->mapLineItems($this->payload, 'webhook'), $connection);
 
         $connection->update(['last_synced_at' => now()]);
+
+        $this->requestFulfillmentIfAutoSync($order, $connection);
 
         Log::channel('shopify')->info('Shopify order synced from webhook', [
             'shop'         => $connection->shop_domain,
@@ -269,6 +274,77 @@ class ProcessShopifyWebhookJob implements ShouldQueue
             'order_number' => $data['order_number'] ?? null,
             'sync_status'  => $data['shopify_sync_status'] ?? 'processed',
         ]);
+    }
+
+    /**
+     * Hand an imported order straight to Shopify as a fulfillment request.
+     *
+     * Auto-sync stores only. Under manual approval the order is not ours to
+     * move — it is sitting in the portal queue precisely because the client has
+     * not accepted it yet — so the request is submitted on approval instead
+     * (ShopifyPendingOrderController).
+     *
+     * orders/paid matters as much as orders/create here, and is the reason this
+     * is not limited to creation: a card order lands unpaid, is refused by the
+     * payment gate in requestFulfillment(), and would then sit there forever.
+     * The paid webhook is what brings it back.
+     */
+    private function requestFulfillmentIfAutoSync(Order $order, ClientShopifyConnection $connection): void
+    {
+        if ($connection->sync_mode !== 'auto_sync') {
+            return;
+        }
+
+        // A queued order that never passed review, or that the filters skipped,
+        // is not one we are shipping.
+        if ($order->shopify_sync_status !== null && $order->shopify_sync_status !== 'approved') {
+            return;
+        }
+
+        RequestShopifyFulfillmentJob::dispatch($order)->onConnection('database');
+    }
+
+    /**
+     * The merchant pressed "Request fulfillment" in Shopify admin.
+     *
+     * This is the path requirement 5.5.1 is written about: the merchant asking
+     * us, through Shopify's own UI, rather than us deciding. Accept it, so the
+     * order shows as in progress with KSA Drop rather than sitting unanswered.
+     *
+     * The payload's fulfillment order is trusted only as far as its id — the
+     * accept mutation is scoped to fulfillment orders assigned to our own
+     * location, so a request for someone else's simply fails on Shopify's side.
+     */
+    private function acceptFulfillmentRequest(ClientShopifyConnection $connection): void
+    {
+        $fulfillmentOrderId = $this->payload['fulfillment_order']['id'] ?? $this->payload['id'] ?? null;
+
+        if (! $fulfillmentOrderId) {
+            return;
+        }
+
+        // The webhook body carries numeric ids; every mutation takes GIDs.
+        $gid = str_contains((string) $fulfillmentOrderId, 'gid://')
+            ? (string) $fulfillmentOrderId
+            : 'gid://shopify/FulfillmentOrder/' . $fulfillmentOrderId;
+
+        $accepted = app(ShopifyFulfillmentService::class)->acceptRequest($connection, $gid);
+
+        // Record it against the order when we can find one. A request raised in
+        // Shopify admin may well arrive before the order webhook that creates
+        // our copy, in which case there is nothing to write to yet — harmless,
+        // since the id is only used to stop us submitting a second request and
+        // no request of ours went out here.
+        $orderGid = $this->payload['fulfillment_order']['order_id'] ?? $this->payload['order_id'] ?? null;
+
+        if ($accepted && $orderGid) {
+            Order::withoutGlobalScope('shopify_visible')
+                ->where('shopify_order_id', (string) $orderGid)
+                ->update([
+                    'shopify_fulfillment_order_id' => $gid,
+                    'shopify_fulfillment_status'   => 'accepted',
+                ]);
+        }
     }
 
     /**

@@ -87,6 +87,9 @@ export interface RecentOrder {
     fulfillment_status: string | null
     payment_method: string | null
     shopify_sync_status: string | null
+    /** Where Shopify's fulfillment request stands: requested, accepted, rejected. */
+    shopify_fulfillment_status: string | null
+    shopify_fulfillment_requested_at: string | null
     currency: string
     total: string
     created_at: string
@@ -99,6 +102,27 @@ export interface RecentOrderShipment {
     tracking_number: string | null
     /** ShipmentStatus value (app/Services/Shipping/Enums/ShipmentStatus.php). */
     status: string
+}
+
+/**
+ * Ask KSA Drop to fulfil one order — the merchant-initiated half of App Store
+ * requirement 5.5.1, alongside Shopify admin's own Request fulfillment action.
+ *
+ * `requested` covers "already sent" as well as "sent just now", since both mean
+ * the merchant has nothing left to do. `message` carries the refusals, which
+ * are the answers worth showing: an unpaid order, or products that were never
+ * routed to the KSA Drop location.
+ */
+export interface FulfillmentRequestResult {
+    outcome: string
+    requested: boolean
+    message: string
+}
+
+export function requestFulfillment(orderId: number): Promise<FulfillmentRequestResult> {
+    return embeddedFetch<FulfillmentRequestResult>(`/orders/${orderId}/request-fulfillment`, {
+        method: 'POST',
+    })
 }
 
 export interface SyncFilters {

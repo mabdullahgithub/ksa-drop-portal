@@ -441,6 +441,12 @@ Route::prefix('embedded/shopify')->middleware('shopify.csp')->group(function () 
         Route::get('/dashboard', [EmbeddedDashboardController::class, 'index'])->name('embedded.shopify.dashboard');
         Route::get('/settings', [EmbeddedSettingsController::class, 'show'])->name('embedded.shopify.settings.show');
         Route::put('/settings', [EmbeddedSettingsController::class, 'update'])->name('embedded.shopify.settings.update');
+
+        // The merchant asking us for an order, from our own app rather than
+        // from Shopify admin's Request fulfillment action. Both end at the same
+        // mutation (App Store requirement 5.5.1).
+        Route::post('/orders/{order}/request-fulfillment', [EmbeddedDashboardController::class, 'requestFulfillment'])
+            ->name('embedded.shopify.orders.request-fulfillment');
     });
 });
 
