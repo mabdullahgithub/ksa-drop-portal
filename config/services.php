@@ -132,7 +132,7 @@ return [
     'shopify' => [
         'key'          => env('SHOPIFY_API_KEY'),
         'secret'       => env('SHOPIFY_API_SECRET'),
-        'scopes'       => env('SHOPIFY_SCOPES', 'read_orders,read_customers'),
+        'scopes'       => env('SHOPIFY_SCOPES', 'read_customers,read_orders,write_fulfillments,read_assigned_fulfillment_orders,write_assigned_fulfillment_orders,read_third_party_fulfillment_orders,write_third_party_fulfillment_orders'),
         // Must exactly match an "Allowed redirection URL" in the Partner
         // Dashboard. Defaults to the app's own /shopify/callback route so a
         // missing env var can't produce a broken authorize URL.
@@ -155,6 +155,14 @@ return [
         // deploy.
         'reconcile_orders'  => (bool) env('SHOPIFY_RECONCILE_ORDERS', false),
         'verify_webhooks'   => (bool) env('SHOPIFY_VERIFY_WEBHOOKS', false),
+
+        // Fulfillment service — App Store requirement 5.5.1. Every outbound
+        // fulfillment call checks this. It is the third kill switch for the
+        // same reason as the two above, and the most important of them: it
+        // creates locations, accepts fulfillment requests and marks orders
+        // fulfilled on stores we do not own. Left off until a store has been
+        // taken through the flow by hand.
+        'fulfillment'       => (bool) env('SHOPIFY_FULFILLMENT_ENABLED', false),
     ],
 
 ];
