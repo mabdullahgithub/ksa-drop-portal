@@ -138,6 +138,43 @@ class ShopifyFulfillmentService
     }
 
     /**
+     * Turn Shopify's stock lookups for the KSADrop location on or off.
+     *
+     * With it on, Shopify calls /fetch_stock for a SKU when the product is set
+     * up and for all SKUs hourly, and sets what we return as the location's
+     * on-hand stock. Off, the location's figures are whatever the merchant
+     * types, and an imported product arrives at 0.
+     *
+     * Reversible by design, and deliberately a command rather than something
+     * every app load does: Shopify does not document whether a CSV import
+     * counts as "set up", so this is proven on a development store before any
+     * merchant's stock starts coming from us.
+     */
+    public function setStockSync(ClientShopifyConnection $connection, bool $enabled): bool
+    {
+        if (! $connection->hasFulfillmentService()) {
+            return false;
+        }
+
+        $mutation = <<<'GQL'
+        mutation updateFulfillmentService($id: ID!, $inventoryManagement: Boolean!) {
+            fulfillmentServiceUpdate(id: $id, inventoryManagement: $inventoryManagement) {
+                fulfillmentService { id }
+                userErrors { field message }
+            }
+        }
+        GQL;
+
+        return $this->runFulfillmentOrderMutation(
+            $connection,
+            $mutation,
+            ['id' => $connection->fulfillment_service_id, 'inventoryManagement' => $enabled],
+            'fulfillmentServiceUpdate',
+            ['inventory_management' => $enabled],
+        );
+    }
+
+    /**
      * Our service on this store, if it is already there.
      *
      * `fulfillmentServices` lists every service installed on the shop, other
@@ -188,11 +225,12 @@ class ShopifyFulfillmentService
     /**
      * Register a new service. Shopify creates the matching location itself.
      *
-     * `inventoryManagement: false` — the portal is the stock system of record
-     * and merchants keep managing their own Shopify inventory. Turning it on
-     * would make Shopify treat us as the source of truth for these variants and
-     * poll /fetch_stock hourly per store, committing us to publishing live
-     * per-store stock we have no reason to publish.
+     * `inventoryManagement` follows SHOPIFY_FULFILLMENT_STOCK_SYNC. On, Shopify
+     * takes the KSADrop location's stock from /fetch_stock — when a product is
+     * set up and hourly after. That is the only route for real stock to reach
+     * the location: the product CSV's quantity column is ignored by Shopify on
+     * any store with more than one location, which every store with a KSADrop
+     * location is.
      *
      * `trackingSupport: true` — we do supply tracking, but we push it with
      * fulfillmentCreate the moment the waybill exists rather than waiting to be
@@ -203,12 +241,12 @@ class ShopifyFulfillmentService
     private function createService(string $shop, string $token): ?array
     {
         $mutation = <<<'GQL'
-        mutation createFulfillmentService($name: String!, $callbackUrl: URL!) {
+        mutation createFulfillmentService($name: String!, $callbackUrl: URL!, $inventoryManagement: Boolean!) {
             fulfillmentServiceCreate(
                 name: $name
                 callbackUrl: $callbackUrl
                 trackingSupport: true
-                inventoryManagement: false
+                inventoryManagement: $inventoryManagement
                 requiresShippingMethod: true
             ) {
                 fulfillmentService {
@@ -223,8 +261,9 @@ class ShopifyFulfillmentService
         GQL;
 
         $payload = $this->shopify->graphql($shop, $token, $mutation, [
-            'name'        => self::SERVICE_NAME,
-            'callbackUrl' => $this->callbackUrl(),
+            'name'                => self::SERVICE_NAME,
+            'callbackUrl'         => $this->callbackUrl(),
+            'inventoryManagement' => (bool) config('services.shopify.stock_sync'),
         ])['fulfillmentServiceCreate'] ?? [];
 
         if (! empty($payload['userErrors'])) {

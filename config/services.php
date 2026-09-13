@@ -163,6 +163,12 @@ return [
         // fulfilled on stores we do not own. Left off until a store has been
         // taken through the flow by hand.
         'fulfillment'       => (bool) env('SHOPIFY_FULFILLMENT_ENABLED', false),
+
+        // Whether newly registered KSADrop services ask Shopify to take their
+        // stock from /fetch_stock. Existing services are switched with
+        // shopify:fulfillment-stock-sync. Off until a store has shown the
+        // import-time lookup actually happens.
+        'stock_sync'        => (bool) env('SHOPIFY_FULFILLMENT_STOCK_SYNC', false),
     ],
 
 ];

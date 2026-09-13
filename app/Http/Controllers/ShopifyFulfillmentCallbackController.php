@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Jobs\SweepShopifyFulfillmentRequestsJob;
+use App\Models\ClientShopifyConnection;
+use App\Models\Product;
 use App\Services\ShopifyService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -15,18 +17,15 @@ use Illuminate\Support\Facades\Log;
  * itself — so all three must answer from the moment a service is registered,
  * whether or not we make use of them.
  *
- * Two of them we deliberately leave empty, and that is a design decision rather
- * than an omission:
+ * /fetch_stock reports the portal's catalogue stock by SKU, and Shopify writes
+ * it onto the KSADrop location. It is only called for a service switched to
+ * inventoryManagement (shopify:fulfillment-stock-sync), and it exists because
+ * the product CSV cannot carry stock once a store has more than one location —
+ * Shopify drops the quantity column and every import landed at 0.
  *
- *   /fetch_stock              the service is registered with
- *                             inventoryManagement: false — the portal is the
- *                             stock system of record and merchants keep
- *                             managing their own Shopify inventory.
- *
- *   /fetch_tracking_numbers   we push tracking with fulfillmentCreate the
- *                             moment the courier waybill exists, so there is
- *                             never anything here for Shopify to come and
- *                             collect.
+ * /fetch_tracking_numbers stays empty on purpose: tracking is pushed with
+ * fulfillmentCreate the moment the courier waybill exists, so there is never
+ * anything here for Shopify to come and collect.
  *
  * The real work arrives on the `fulfillment_orders/*` webhook topics, which
  * come through the ordinary webhook pipeline and so inherit its HMAC check,
@@ -74,11 +73,71 @@ class ShopifyFulfillmentCallbackController extends Controller
     }
 
     /**
-     * Inventory levels. Empty — see the class comment.
+     * On-hand stock by SKU, for Shopify to set on the KSADrop location.
+     *
+     * Shopify asks for a single SKU when a product is first set up and for
+     * everything once an hour, and expects {"SKU": on_hand, ...} back. SKUs
+     * are matched case-sensitively on Shopify's side, so they are returned
+     * exactly as the catalogue holds them.
+     *
+     * Answered only for a store that is connected and holds a KSADrop service.
+     * The figures are the same shared catalogue every dropshipper imports from,
+     * so there is nothing store-specific to leak — but an unknown caller still
+     * gets nothing, rather than a free read of the whole warehouse.
+     *
+     * Shopify's documentation does not say whether this request is signed. If
+     * an hmac parameter arrives it must verify; if none does, the call is
+     * served and logged as unsigned, so the first real request settles the
+     * question instead of a guess locking Shopify out.
      */
-    public function fetchStock()
+    public function fetchStock(Request $request)
     {
-        return response()->json([]);
+        $shop = (string) ($request->query('shop') ?: $request->header('X-Shopify-Shop-Domain', ''));
+        $sku  = $request->query('sku');
+
+        $signed = $request->query('hmac') !== null;
+
+        if ($signed && ! $this->shopify->verifyOauthHmac($request->query(), $request->server('QUERY_STRING'))) {
+            Log::channel('shopify')->warning('fetch_stock rejected — HMAC mismatch', ['shop' => $shop]);
+
+            return response('Unauthorized', 401);
+        }
+
+        $connection = $shop !== ''
+            ? ClientShopifyConnection::where('shop_domain', $shop)->where('status', 'active')->first()
+            : null;
+
+        if (! $connection || ! $connection->hasFulfillmentService()) {
+            Log::channel('shopify')->info('fetch_stock ignored — not a connected KSADrop store', [
+                'shop'   => $shop,
+                'signed' => $signed,
+            ]);
+
+            return response()->json((object) []);
+        }
+
+        $stock = Product::query()
+            ->whereNotNull('variant_sku')
+            ->where('variant_sku', '!=', '')
+            ->when(is_string($sku) && $sku !== '', fn ($q) => $q->where('variant_sku', $sku))
+            ->pluck('variant_inventory_qty', 'variant_sku')
+            // Shopify wants whole on-hand units; a negative or missing figure
+            // in the catalogue is reported as none rather than passed through.
+            ->map(fn ($qty) => max(0, (int) $qty))
+            ->all();
+
+        // Every call is logged, not just failures. Which requests Shopify makes,
+        // and when, is exactly what its documentation leaves out — this is how
+        // we find out whether an import triggers a lookup at all.
+        Log::channel('shopify')->info('fetch_stock served', [
+            'shop'      => $shop,
+            'sku'       => $sku,
+            'skus_sent' => count($stock),
+            'signed'    => $signed,
+            'params'    => array_keys($request->query()),
+        ]);
+
+        return response()->json((object) $stock);
     }
 
     /**

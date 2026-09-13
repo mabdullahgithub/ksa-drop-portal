@@ -421,6 +421,11 @@ Route::prefix('webhooks/shopify/fulfillment')
             ->name('webhooks.shopify.fulfillment.notification');
         Route::get('/fetch_stock', [ShopifyFulfillmentCallbackController::class, 'fetchStock'])
             ->name('webhooks.shopify.fulfillment.stock');
+        // Shopify's older fulfillment-service contract appended .json to these
+        // paths. Answering both costs nothing and removes one way for stock
+        // lookups to 404 without anyone noticing.
+        Route::get('/fetch_stock.json', [ShopifyFulfillmentCallbackController::class, 'fetchStock'])
+            ->name('webhooks.shopify.fulfillment.stock.json');
         Route::get('/fetch_tracking_numbers', [ShopifyFulfillmentCallbackController::class, 'fetchTrackingNumbers'])
             ->name('webhooks.shopify.fulfillment.tracking');
     });
