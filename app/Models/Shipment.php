@@ -3,10 +3,13 @@
 namespace App\Models;
 
 use App\Services\Shipping\DTOs\TrackingEvent;
+use App\Observers\ShipmentObserver;
 use App\Services\Shipping\Enums\ShipmentStatus;
+use Illuminate\Database\Eloquent\Attributes\ObservedBy;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
+#[ObservedBy(ShipmentObserver::class)]
 class Shipment extends Model
 {
     use HasFactory;
@@ -53,6 +56,8 @@ class Shipment extends Model
         'exception_escalated_at'  => 'datetime',
         'otp_verified'            => 'boolean',
         'otp_verified_at'         => 'datetime',
+        'stock_deducted_at'       => 'datetime',
+        'stock_restocked_at'      => 'datetime',
     ];
 
     protected $appends = [
@@ -72,6 +77,11 @@ class Shipment extends Model
     public function invoices()
     {
         return $this->hasMany(Invoice::class);
+    }
+
+    public function stockMovements()
+    {
+        return $this->hasMany(StockMovement::class);
     }
 
     public function scopeActive($query)

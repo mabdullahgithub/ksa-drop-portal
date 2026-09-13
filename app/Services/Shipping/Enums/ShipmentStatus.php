@@ -70,6 +70,44 @@ enum ShipmentStatus: string
     }
 
     /**
+     * Whether reaching this status means the parcel has physically left the
+     * warehouse, so the stock it carries should be deducted from its pool.
+     *
+     * ATTEMPT_FAIL and DELIVERED are included because a courier can report
+     * either without a preceding IN_TRANSIT scan ever reaching us — the
+     * goods are gone either way. EXCEPTION deliberately is not: it can be
+     * raised while the parcel is still sitting with us (pickup failed, bad
+     * address caught at booking), and once dispatched IN_TRANSIT has already
+     * done the deduction.
+     */
+    public function deductsStock(): bool
+    {
+        return in_array($this, [
+            self::IN_TRANSIT,
+            self::OUT_FOR_DELIVERY,
+            self::ATTEMPT_FAIL,
+            self::DELIVERED,
+        ], true);
+    }
+
+    /**
+     * Whether reaching this status means a dispatched parcel came back, so
+     * its stock should return to the pool.
+     *
+     * Only ever acted on for a shipment that actually deducted (see
+     * Shipment::$stock_deducted_at), so a shipment cancelled before it was
+     * ever picked up gives nothing back — there was nothing taken.
+     */
+    public function restocksStock(): bool
+    {
+        return in_array($this, [
+            self::RETURNED,
+            self::CANCELLED,
+            self::FAILED,
+        ], true);
+    }
+
+    /**
      * Relative depth of the non-terminal, non-exception "happy path" states,
      * used only by {@see shouldTransitionTo()} to stop an out-of-order courier
      * event from moving a shipment backward (e.g. iMile's `SCH` — a delivery
