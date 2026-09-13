@@ -703,6 +703,10 @@ class ShopifyConnectFlowTest extends TestCase
             // A healthy install holds an expiring token; without an expiry it
             // reads as the non-expiring kind and gets re-exchanged.
             'token_expires_at'    => now()->addHour(),
+            // And a grant covering the scopes the app now declares. One that
+            // predates them is deliberately re-exchanged on load, so it is not
+            // "already installed" in the sense this test means.
+            'scope'               => 'read_orders,write_fulfillments,write_third_party_fulfillment_orders',
             'status'              => 'active',
             'webhooks_registered' => true,
             'connected_at'        => now(),
@@ -898,6 +902,113 @@ class ShopifyConnectFlowTest extends TestCase
             ->assertJson(['installed' => false, 'linked' => false, 'token' => null]);
 
         $this->assertSame(0, ClientShopifyConnection::count());
+    }
+
+    // ─── Grant refresh after the app's scopes grow ──────────────────────────
+
+    /**
+     * The bug this guards: a store connected before the fulfillment scopes
+     * shipped kept a working token and the old `scope` string forever. The app
+     * load returned early because the token was healthy, and a refresh never
+     * rewrote the scope — so the store read as "awaiting re-approval" however
+     * many times its merchant approved.
+     */
+    public function test_app_load_refreshes_a_grant_that_predates_the_fulfillment_scopes(): void
+    {
+        $user = $this->makeClientUser();
+        $connectedAt = now()->subMonth()->startOfSecond();
+
+        ClientShopifyConnection::create([
+            'client_id'        => $user->client->id,
+            'shop_domain'      => self::SHOP,
+            'access_token'     => 'tok-old-grant',
+            'refresh_token'    => 'ref-old-grant',
+            'token_expires_at' => now()->addHour(),
+            'scope'            => 'read_customers,read_orders',
+            'status'           => 'active',
+            'connected_at'     => $connectedAt,
+        ]);
+
+        Http::fake([
+            'https://' . self::SHOP . '/admin/oauth/access_token' => Http::response([
+                'access_token'             => 'tok-new-grant',
+                'refresh_token'            => 'ref-new-grant',
+                'expires_in'               => 3600,
+                'refresh_token_expires_in' => 7776000,
+                'scope'                    => 'read_customers,read_orders,write_fulfillments,write_assigned_fulfillment_orders,write_third_party_fulfillment_orders',
+            ]),
+        ]);
+
+        $this->withHeader('Authorization', 'Bearer ' . $this->makeSessionToken(self::SHOP))
+            ->getJson('/embedded/shopify/api/claim-token')
+            ->assertOk()
+            ->assertJson(['linked' => true]);
+
+        $connection = ClientShopifyConnection::sole();
+
+        $this->assertTrue($connection->hasFulfillmentScopes());
+        $this->assertSame('tok-new-grant', $connection->access_token);
+
+        // A grant refresh, not a reinstall: the store never went anywhere.
+        $this->assertSame($user->client->id, $connection->client_id);
+        $this->assertTrue($connection->connected_at->equalTo($connectedAt));
+    }
+
+    public function test_a_failed_grant_refresh_keeps_the_working_token(): void
+    {
+        $user = $this->makeClientUser();
+
+        ClientShopifyConnection::create([
+            'client_id'        => $user->client->id,
+            'shop_domain'      => self::SHOP,
+            'access_token'     => 'tok-still-works',
+            'token_expires_at' => now()->addHour(),
+            'scope'            => 'read_orders',
+            'status'           => 'active',
+            'connected_at'     => now(),
+        ]);
+
+        Http::fake([
+            'https://' . self::SHOP . '/admin/oauth/access_token' => Http::response(['error' => 'invalid_subject_token'], 400),
+        ]);
+
+        $this->withHeader('Authorization', 'Bearer ' . $this->makeSessionToken(self::SHOP))
+            ->getJson('/embedded/shopify/api/claim-token')
+            ->assertOk()
+            ->assertJson(['installed' => true, 'linked' => true]);
+
+        $connection = ClientShopifyConnection::sole();
+        $this->assertSame('tok-still-works', $connection->access_token);
+        $this->assertSame('active', $connection->status);
+    }
+
+    public function test_a_token_refresh_records_the_scope_it_was_issued_under(): void
+    {
+        $user = $this->makeClientUser();
+
+        $connection = ClientShopifyConnection::create([
+            'client_id'        => $user->client->id,
+            'shop_domain'      => self::SHOP,
+            'access_token'     => 'tok-expired',
+            'refresh_token'    => 'ref-live',
+            'token_expires_at' => now()->subMinute(),
+            'scope'            => 'read_orders',
+            'status'           => 'active',
+            'connected_at'     => now(),
+        ]);
+
+        Http::fake([
+            'https://' . self::SHOP . '/admin/oauth/access_token' => Http::response([
+                'access_token'  => 'tok-refreshed',
+                'refresh_token' => 'ref-rotated',
+                'expires_in'    => 3600,
+                'scope'         => 'read_orders,write_third_party_fulfillment_orders',
+            ]),
+        ]);
+
+        app(ShopifyService::class)->getValidToken($connection);
+
+        $this->assertTrue($connection->fresh()->hasFulfillmentScopes());
     }
 
     /**

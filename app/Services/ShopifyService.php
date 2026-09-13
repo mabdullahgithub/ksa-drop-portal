@@ -213,6 +213,20 @@ class ShopifyService
             && $connection->access_token
             && $connection->token_expires_at;
 
+        // A healthy token is not the same as a current grant. When the app's
+        // declared scopes grow, managed installation has the merchant approve
+        // them on this very load — but the token and the `scope` we stored were
+        // issued before that, and nothing else ever rewrites them: a refresh
+        // keeps the old grant's scope string, and returning early here skipped
+        // the exchange entirely. Every store connected before the fulfillment
+        // scopes shipped would then read as "awaiting re-approval" forever,
+        // however many times its merchant approved. So a usable connection that
+        // lacks them is re-exchanged once; the fresh token carries the grant the
+        // merchant has just given, and the check passes from then on.
+        if ($usable && ! $connection->hasFulfillmentScopes()) {
+            return $this->refreshGrant($connection, $shop, $sessionToken);
+        }
+
         if ($usable) {
             return $connection;
         }
@@ -258,6 +272,48 @@ class ShopifyService
         Log::channel('shopify')->info('Shopify install completed via token exchange', [
             'shop'      => $shop,
             'client_id' => $connection->client_id,
+        ]);
+
+        return $connection;
+    }
+
+    /**
+     * Swap a working token for one issued under the store's current grant, and
+     * record the scopes that grant covers.
+     *
+     * Deliberately narrower than a reinstall: it touches only the token fields,
+     * so connected_at, the client link and the sync settings are left as they
+     * were, and webhooks are not re-registered — the store never went anywhere.
+     *
+     * Never throws. A failed exchange leaves the existing, still-working token
+     * in place; the store simply stays off the fulfillment flow until the next
+     * app load tries again.
+     */
+    private function refreshGrant(ClientShopifyConnection $connection, string $shop, string $sessionToken): ClientShopifyConnection
+    {
+        try {
+            $token = $this->exchangeSessionToken($shop, $sessionToken);
+        } catch (\Throwable $e) {
+            Log::channel('shopify')->warning('Shopify grant refresh failed — keeping the existing token', [
+                'shop'  => $shop,
+                'error' => $e->getMessage(),
+            ]);
+
+            return $connection;
+        }
+
+        $connection->update([
+            'access_token'             => $token['access_token'],
+            'refresh_token'            => $token['refresh_token'] ?? $connection->refresh_token,
+            'token_expires_at'         => $this->expiryFromSeconds($token['expires_in']),
+            'refresh_token_expires_at' => $this->expiryFromSeconds($token['refresh_token_expires_in']),
+            'scope'                    => $token['scope'] ?: $connection->scope,
+        ]);
+
+        Log::channel('shopify')->info('Shopify grant refreshed after scope change', [
+            'shop'             => $shop,
+            'scope'            => $connection->scope,
+            'fulfillment_ready' => $connection->hasFulfillmentScopes(),
         ]);
 
         return $connection;
@@ -329,6 +385,11 @@ class ShopifyService
             'refresh_token'            => $response->json('refresh_token') ?? $connection->refresh_token,
             'token_expires_at'         => $this->expiryFromSeconds($response->json('expires_in')),
             'refresh_token_expires_at' => $this->expiryFromSeconds($response->json('refresh_token_expires_in')),
+            // The refreshed token carries the store's grant as it stands now, so
+            // the scope we hold should too. Without this, a store whose merchant
+            // approved new scopes kept reporting the old ones for as long as its
+            // refresh token lived. Kept as-is when Shopify omits the field.
+            'scope'                    => $response->json('scope') ?: $connection->scope,
             'status'                   => 'active',
         ]);
 
