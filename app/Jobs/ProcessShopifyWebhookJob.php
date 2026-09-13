@@ -33,6 +33,7 @@ class ProcessShopifyWebhookJob implements ShouldQueue
         'orders/paid',
         'orders/cancelled',
         'fulfillment_orders/fulfillment_request_submitted',
+        'fulfillment_orders/cancellation_request_submitted',
         'customers/redact',
         'shop/redact',
         'app/uninstalled',
@@ -130,6 +131,7 @@ class ProcessShopifyWebhookJob implements ShouldQueue
             'orders/create', 'orders/updated', 'orders/paid' => $this->upsertOrder($shopify, $connection),
             'orders/cancelled' => $this->cancelOrder(),
             'fulfillment_orders/fulfillment_request_submitted' => $this->acceptFulfillmentRequest($connection),
+            'fulfillment_orders/cancellation_request_submitted' => $this->answerCancellationRequest($connection),
             default            => null,
         };
     }
@@ -344,6 +346,49 @@ class ProcessShopifyWebhookJob implements ShouldQueue
                     'shopify_fulfillment_order_id' => $gid,
                     'shopify_fulfillment_status'   => 'accepted',
                 ]);
+        }
+    }
+
+    /**
+     * The merchant wants an accepted order back.
+     *
+     * Answered on one question: has the parcel gone. Before a waybill exists we
+     * can simply stop, and accepting is the truthful answer. Once a courier
+     * holds it we cannot unsend it, and accepting would leave the merchant
+     * believing an order was stopped while it is still on its way to their
+     * customer — so that is rejected, saying so.
+     */
+    private function answerCancellationRequest(ClientShopifyConnection $connection): void
+    {
+        $fulfillmentOrderId = $this->payload['fulfillment_order']['id'] ?? $this->payload['id'] ?? null;
+
+        if (! $fulfillmentOrderId) {
+            return;
+        }
+
+        $gid = str_contains((string) $fulfillmentOrderId, 'gid://')
+            ? (string) $fulfillmentOrderId
+            : 'gid://shopify/FulfillmentOrder/' . $fulfillmentOrderId;
+
+        $order = Order::withoutGlobalScope('shopify_visible')
+            ->where('shopify_fulfillment_order_id', $gid)
+            ->where('shopify_shop_domain', $connection->shop_domain)
+            ->first();
+
+        $shipment = $order?->latestShipment;
+        $shipped  = $shipment && $shipment->is_trackable;
+
+        app(ShopifyFulfillmentService::class)->respondToCancellation(
+            $connection,
+            $gid,
+            ! $shipped,
+            $shipped
+                ? 'Already collected by the courier and on its way — this order cannot be cancelled now.'
+                : 'Cancelled before dispatch.',
+        );
+
+        if ($order && ! $shipped) {
+            $order->update(['shopify_fulfillment_status' => 'cancelled']);
         }
     }
 

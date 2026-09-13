@@ -120,11 +120,18 @@ class ShopifyOrderWriter
     /**
      * Keep the fulfillment state our courier flow has already reached.
      *
-     * Shopify keeps reporting an order as unfulfilled — it was never fulfilled
-     * *there*, we ship it — so every routine update carries a state older than
-     * ours, and writing it verbatim flips a delivered order back to unfulfilled
-     * in the merchant's list. Reconciliation makes this sharper still: it can
-     * pull an order days after we delivered it.
+     * This used to be needed because Shopify never heard from us at all: an
+     * order we had delivered was still unfulfilled there, so every routine
+     * update carried a state older than ours and writing it verbatim flipped a
+     * delivered order back to unfulfilled in the merchant's list.
+     *
+     * Now that fulfillments are reported (ShopifyFulfillmentService), that
+     * particular disagreement is gone for stores on the fulfillment flow — but
+     * the guard is if anything more necessary, not less. Two cases still need
+     * it. A returned parcel cancels the Shopify fulfillment, which puts the
+     * order back to *unfulfilled there* while ours is cancelled; and a store
+     * that has not re-granted the fulfillment scopes, or whose catalogue still
+     * imports as `manual`, behaves exactly as every store did before.
      *
      * Only regressions are blocked. Shopify moving the order forward — the
      * merchant fulfilling or cancelling on their own side — still lands.

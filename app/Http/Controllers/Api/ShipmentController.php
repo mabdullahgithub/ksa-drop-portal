@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Order;
+use App\Jobs\PushShopifyFulfillmentJob;
 use App\Models\Shipment;
 use App\Models\Warehouse;
 use App\Services\Shipping\CourierManager;
@@ -134,6 +135,12 @@ class ShipmentController extends Controller
             'shipped_at' => now(),
         ]);
 
+        // Tell Shopify the parcel is moving. Queued: the courier has already
+        // accepted it and charged us, so an Admin API outage must not turn a
+        // booking that succeeded into a failed request — or have the operator
+        // press the button again and buy a second waybill.
+        PushShopifyFulfillmentJob::dispatch($shipment)->onConnection('database');
+
         return response()->json([
             'message' => 'Shipment created successfully.',
             'shipment' => $shipment,
@@ -249,6 +256,8 @@ class ShipmentController extends Controller
                 'service_type' => $shipmentData->serviceType,
                 'shipped_at' => now(),
             ]);
+
+            PushShopifyFulfillmentJob::dispatch($shipment)->onConnection('database');
 
             $created[] = $shipment;
         }

@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\ClientShopifyConnection;
 use App\Models\Order;
+use App\Models\Shipment;
 use App\Models\Warehouse;
 use Illuminate\Support\Facades\Log;
 
@@ -698,5 +699,234 @@ class ShopifyFulfillmentService
 
             return false;
         }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    //  Fulfilling, and taking it back
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Courier names as Shopify writes them in its own carrier list, where a
+     * match lets Shopify build the tracking link itself.
+     *
+     * None of the three are on that list, which is why trackingUrl() supplies
+     * one. The names are still sent, because this is the text the customer sees
+     * next to the number in Shopify's shipping email.
+     */
+    private const COURIER_NAMES = [
+        'jnt_express' => 'J&T Express',
+        'imile'       => 'iMile',
+        'logestechs'  => 'Navix',
+    ];
+
+    /**
+     * Tell Shopify the parcel is on its way, with the courier's waybill.
+     *
+     * This is the point the merchant's order finally turns Fulfilled in their
+     * admin and Shopify emails their customer the tracking number — the half of
+     * the integration that did not exist before, and the reason orders used to
+     * sit unfulfilled in Shopify forever while we delivered them.
+     *
+     * Note that "fulfilled" here means *shipped*, which is Shopify's meaning
+     * and not ours: our own fulfillment_status stays unfulfilled until the
+     * courier delivers. The two are deliberately allowed to disagree, because
+     * each is right in its own system.
+     */
+    public function fulfillFromShipment(Shipment $shipment): bool
+    {
+        if (! $this->enabled()) {
+            return false;
+        }
+
+        // Already done. A shipment that is re-saved, or a job that is retried
+        // after a response we never read, must not produce a second
+        // fulfillment — Shopify would accept it and the customer would get a
+        // second shipping email.
+        if ($shipment->shopify_fulfillment_id) {
+            return true;
+        }
+
+        $order = $shipment->order;
+
+        if (! $order || ! $order->shopify_fulfillment_order_id) {
+            return false;
+        }
+
+        $connection = $this->connectionFor($order);
+
+        if (! $connection || ! $connection->hasFulfillmentScopes()) {
+            return false;
+        }
+
+        $mutation = <<<'GQL'
+        mutation createFulfillment($fulfillment: FulfillmentInput!) {
+            fulfillmentCreate(fulfillment: $fulfillment) {
+                fulfillment { id status }
+                userErrors { field message }
+            }
+        }
+        GQL;
+
+        try {
+            $token = $this->shopify->getValidToken($connection);
+
+            $payload = $this->shopify->graphql($connection->shop_domain, $token, $mutation, [
+                'fulfillment' => [
+                    // No line items named, which fulfils the whole fulfillment
+                    // order. Ours only ever holds the lines we supply — Shopify
+                    // groups a fulfillment order by location — so there is
+                    // nothing on it to leave behind.
+                    'lineItemsByFulfillmentOrder' => [
+                        ['fulfillmentOrderId' => $order->shopify_fulfillment_order_id],
+                    ],
+                    'trackingInfo' => array_filter([
+                        'number'  => $shipment->tracking_number,
+                        'url'     => $this->trackingUrl($shipment->tracking_number),
+                        'company' => self::COURIER_NAMES[$shipment->courier] ?? $shipment->courier,
+                    ]),
+                    'notifyCustomer' => true,
+                ],
+            ])['fulfillmentCreate'] ?? [];
+
+            if (! empty($payload['userErrors'])) {
+                Log::channel('shopify')->error('fulfillmentCreate rejected', [
+                    'shop'        => $connection->shop_domain,
+                    'shipment_id' => $shipment->id,
+                    'errors'      => $payload['userErrors'],
+                ]);
+
+                return false;
+            }
+
+            $fulfillmentId = $payload['fulfillment']['id'] ?? null;
+
+            if (! $fulfillmentId) {
+                return false;
+            }
+
+            $shipment->forceFill(['shopify_fulfillment_id' => $fulfillmentId])->save();
+            $order->forceFill(['shopify_fulfillment_status' => 'fulfilled'])->save();
+
+            Log::channel('shopify')->info('Shopify fulfillment created', [
+                'shop'        => $connection->shop_domain,
+                'order_id'    => $order->id,
+                'shipment_id' => $shipment->id,
+                'tracking'    => $shipment->tracking_number,
+            ]);
+
+            return true;
+        } catch (\Throwable $e) {
+            Log::channel('shopify')->error('fulfillmentCreate failed', [
+                'shop'        => $connection->shop_domain,
+                'shipment_id' => $shipment->id,
+                'error'       => $e->getMessage(),
+            ]);
+
+            return false;
+        }
+    }
+
+    /**
+     * Undo a fulfillment because the parcel came back.
+     *
+     * Left alone, the merchant's order stays Fulfilled with a tracking number
+     * their customer can still follow, and their own returns and reporting are
+     * wrong from then on.
+     */
+    public function cancelFulfillment(Shipment $shipment): bool
+    {
+        if (! $shipment->shopify_fulfillment_id) {
+            return false;
+        }
+
+        $order = $shipment->order;
+
+        if (! $order) {
+            return false;
+        }
+
+        $connection = $this->connectionFor($order);
+
+        if (! $connection) {
+            return false;
+        }
+
+        $mutation = <<<'GQL'
+        mutation cancelFulfillment($id: ID!) {
+            fulfillmentCancel(id: $id) {
+                fulfillment { id status }
+                userErrors { field message }
+            }
+        }
+        GQL;
+
+        $cancelled = $this->runFulfillmentOrderMutation(
+            $connection,
+            $mutation,
+            ['id' => $shipment->shopify_fulfillment_id],
+            'fulfillmentCancel',
+            ['shipment_id' => $shipment->id],
+        );
+
+        if ($cancelled) {
+            $order->forceFill(['shopify_fulfillment_status' => 'cancelled'])->save();
+        }
+
+        return $cancelled;
+    }
+
+    /**
+     * Answer a merchant asking for an accepted request back.
+     *
+     * Accepting is only honest while nothing has shipped. Once the courier
+     * holds the parcel we cannot unsend it, and saying yes would leave the
+     * merchant believing an order was stopped that is still on its way to their
+     * customer — so that case is rejected, with the reason.
+     */
+    public function respondToCancellation(ClientShopifyConnection $connection, string $fulfillmentOrderId, bool $accept, string $message): bool
+    {
+        $mutation = $accept
+            ? <<<'GQL'
+            mutation acceptCancellation($id: ID!, $message: String) {
+                fulfillmentOrderAcceptCancellationRequest(id: $id, message: $message) {
+                    fulfillmentOrder { id status requestStatus }
+                    userErrors { field message }
+                }
+            }
+            GQL
+            : <<<'GQL'
+            mutation rejectCancellation($id: ID!, $message: String) {
+                fulfillmentOrderRejectCancellationRequest(id: $id, message: $message) {
+                    fulfillmentOrder { id status requestStatus }
+                    userErrors { field message }
+                }
+            }
+            GQL;
+
+        return $this->runFulfillmentOrderMutation(
+            $connection,
+            $mutation,
+            ['id' => $fulfillmentOrderId, 'message' => $message],
+            $accept ? 'fulfillmentOrderAcceptCancellationRequest' : 'fulfillmentOrderRejectCancellationRequest',
+            ['fulfillment_order' => $fulfillmentOrderId],
+        );
+    }
+
+    /**
+     * Where the customer follows the parcel.
+     *
+     * Our own tracking page rather than the courier's. It already accepts a
+     * waybill as ?q= and renders the history the portal holds, it reads the
+     * same for all three couriers, and it cannot go stale the way a
+     * hand-written third-party URL would — a wrong link here reaches the
+     * merchant's customer directly, in Shopify's own shipping email.
+     */
+    public function trackingUrl(?string $trackingNumber): ?string
+    {
+        if (! $trackingNumber) {
+            return null;
+        }
+
+        return rtrim((string) config('app.url'), '/') . '/track?q=' . urlencode($trackingNumber);
     }
 }
