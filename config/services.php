@@ -132,7 +132,7 @@ return [
     'shopify' => [
         'key'          => env('SHOPIFY_API_KEY'),
         'secret'       => env('SHOPIFY_API_SECRET'),
-        'scopes'       => env('SHOPIFY_SCOPES', 'read_customers,read_orders,write_fulfillments,read_assigned_fulfillment_orders,write_assigned_fulfillment_orders,read_third_party_fulfillment_orders,write_third_party_fulfillment_orders'),
+        'scopes'       => env('SHOPIFY_SCOPES', 'read_customers,read_orders,write_fulfillments,read_assigned_fulfillment_orders,write_assigned_fulfillment_orders,read_third_party_fulfillment_orders,write_third_party_fulfillment_orders,read_locations'),
         // Must exactly match an "Allowed redirection URL" in the Partner
         // Dashboard. Defaults to the app's own /shopify/callback route so a
         // missing env var can't produce a broken authorize URL.

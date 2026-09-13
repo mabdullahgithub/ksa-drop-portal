@@ -31,7 +31,7 @@ class ShopifyFulfillmentRegistrationTest extends TestCase
 
     private const SHOP = 'mystore.myshopify.com';
 
-    private const SCOPES = 'read_orders,write_fulfillments,write_third_party_fulfillment_orders';
+    private const SCOPES = 'read_orders,write_fulfillments,write_third_party_fulfillment_orders,read_locations';
 
     protected function setUp(): void
     {

@@ -83,14 +83,33 @@ class ClientShopifyConnection extends Model
      * then this returns false and the fulfillment paths skip the store quietly
      * rather than filling the log with permission errors nobody can act on.
      *
-     * `write_third_party_fulfillment_orders` is the one checked because it is
-     * what fulfillmentOrderSubmitFulfillmentRequest itself requires — the
-     * narrowest scope the flow cannot work without. Shopify grants the set as
-     * declared in shopify.app.toml, so the others come with it.
+     * Two scopes are checked, each because the flow cannot work without it and
+     * each one arrived in a separate release:
+     *
+     *   write_third_party_fulfillment_orders  what fulfillmentOrderSubmitFulfillmentRequest
+     *                                         itself requires.
+     *   read_locations                        every Location field — the service's own
+     *                                         location, and the location a fulfillment
+     *                                         order is assigned to. Without it the
+     *                                         registration lookup is refused outright,
+     *                                         and so is the check that keeps us off
+     *                                         other suppliers' fulfillment orders.
+     *
+     * Checking both matters beyond correctness: this is also what triggers the
+     * grant refresh on app load (ShopifyService::ensureInstalled). A store that
+     * approved the first release's scopes but not read_locations must still
+     * read as not ready, or it would never be re-exchanged to pick it up.
      */
+    public const REQUIRED_FULFILLMENT_SCOPES = [
+        'write_third_party_fulfillment_orders',
+        'read_locations',
+    ];
+
     public function hasFulfillmentScopes(): bool
     {
-        return str_contains((string) $this->scope, 'write_third_party_fulfillment_orders');
+        $granted = array_map('trim', explode(',', (string) $this->scope));
+
+        return array_diff(self::REQUIRED_FULFILLMENT_SCOPES, $granted) === [];
     }
 
     /**

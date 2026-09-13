@@ -34,7 +34,7 @@ class ShopifyFulfillmentRequestTest extends TestCase
 
     private const LOCATION = 'gid://shopify/Location/9';
 
-    private const SCOPES = 'read_orders,write_fulfillments,write_third_party_fulfillment_orders';
+    private const SCOPES = 'read_orders,write_fulfillments,write_third_party_fulfillment_orders,read_locations';
 
     protected function setUp(): void
     {

@@ -63,7 +63,7 @@ class ShopifyFulfillmentPushTest extends TestCase
             'shop_domain'              => self::SHOP,
             'access_token'             => 'tok-123',
             'token_expires_at'         => now()->addHour(),
-            'scope'                    => 'read_orders,write_fulfillments,write_third_party_fulfillment_orders',
+            'scope'                    => 'read_orders,write_fulfillments,write_third_party_fulfillment_orders,read_locations',
             'status'                   => 'active',
             'fulfillment_service_id'   => 'gid://shopify/FulfillmentService/1',
             'fulfillment_location_id'  => 'gid://shopify/Location/9',

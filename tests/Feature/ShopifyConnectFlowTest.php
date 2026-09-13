@@ -706,7 +706,7 @@ class ShopifyConnectFlowTest extends TestCase
             // And a grant covering the scopes the app now declares. One that
             // predates them is deliberately re-exchanged on load, so it is not
             // "already installed" in the sense this test means.
-            'scope'               => 'read_orders,write_fulfillments,write_third_party_fulfillment_orders',
+            'scope'               => 'read_orders,write_fulfillments,write_third_party_fulfillment_orders,read_locations',
             'status'              => 'active',
             'webhooks_registered' => true,
             'connected_at'        => now(),
@@ -935,7 +935,7 @@ class ShopifyConnectFlowTest extends TestCase
                 'refresh_token'            => 'ref-new-grant',
                 'expires_in'               => 3600,
                 'refresh_token_expires_in' => 7776000,
-                'scope'                    => 'read_customers,read_orders,write_fulfillments,write_assigned_fulfillment_orders,write_third_party_fulfillment_orders',
+                'scope'                    => 'read_customers,read_orders,write_fulfillments,write_assigned_fulfillment_orders,write_third_party_fulfillment_orders,read_locations',
             ]),
         ]);
 
@@ -952,6 +952,48 @@ class ShopifyConnectFlowTest extends TestCase
         // A grant refresh, not a reinstall: the store never went anywhere.
         $this->assertSame($user->client->id, $connection->client_id);
         $this->assertTrue($connection->connected_at->equalTo($connectedAt));
+    }
+
+    /**
+     * Production's real state after the first release: a merchant approved the
+     * fulfillment scopes, but read_locations shipped a release later. Shopify
+     * refuses every Location field without it — the registration lookup failed
+     * with ACCESS_DENIED on every store — so the store must still read as not
+     * ready, which is what gets it re-exchanged once its merchant approves.
+     */
+    public function test_a_grant_missing_read_locations_is_refreshed_on_app_load(): void
+    {
+        $user = $this->makeClientUser();
+
+        ClientShopifyConnection::create([
+            'client_id'        => $user->client->id,
+            'shop_domain'      => self::SHOP,
+            'access_token'     => 'tok-first-release',
+            'refresh_token'    => 'ref-first-release',
+            'token_expires_at' => now()->addHour(),
+            // Verbatim from story-store-20bx9gl8 on 2026-09-13.
+            'scope'            => 'read_customers,read_orders,write_assigned_fulfillment_orders,write_fulfillments,write_third_party_fulfillment_orders',
+            'status'           => 'active',
+            'connected_at'     => now(),
+        ]);
+
+        $this->assertFalse(ClientShopifyConnection::sole()->hasFulfillmentScopes());
+
+        Http::fake([
+            'https://' . self::SHOP . '/admin/oauth/access_token' => Http::response([
+                'access_token'             => 'tok-with-locations',
+                'refresh_token'            => 'ref-with-locations',
+                'expires_in'               => 3600,
+                'refresh_token_expires_in' => 7776000,
+                'scope'                    => 'read_customers,read_orders,write_assigned_fulfillment_orders,write_fulfillments,write_third_party_fulfillment_orders,read_locations',
+            ]),
+        ]);
+
+        $this->withHeader('Authorization', 'Bearer ' . $this->makeSessionToken(self::SHOP))
+            ->getJson('/embedded/shopify/api/claim-token')
+            ->assertOk();
+
+        $this->assertTrue(ClientShopifyConnection::sole()->hasFulfillmentScopes());
     }
 
     public function test_a_failed_grant_refresh_keeps_the_working_token(): void
@@ -1002,7 +1044,7 @@ class ShopifyConnectFlowTest extends TestCase
                 'access_token'  => 'tok-refreshed',
                 'refresh_token' => 'ref-rotated',
                 'expires_in'    => 3600,
-                'scope'         => 'read_orders,write_third_party_fulfillment_orders',
+                'scope'         => 'read_orders,write_third_party_fulfillment_orders,read_locations',
             ]),
         ]);
 
