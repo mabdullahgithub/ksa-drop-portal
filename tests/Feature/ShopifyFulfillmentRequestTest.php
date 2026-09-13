@@ -282,4 +282,64 @@ class ShopifyFulfillmentRequestTest extends TestCase
         Http::assertSent(fn (Request $r) => str_contains($r->body(), 'fulfillmentOrderRejectFulfillmentRequest'));
         $this->assertSame('rejected', $order->fresh()->shopify_fulfillment_status);
     }
+
+
+    /**
+     * Shopify's actual fulfillment_orders/fulfillment_request_submitted body,
+     * verbatim in shape. The first version of the handler read a
+     * `fulfillment_order` key this topic does not have, returned early, and
+     * never accepted anything — and passed, because no test sent the real
+     * payload. This one does.
+     */
+    public function test_a_submitted_request_is_accepted_from_shopifys_real_payload(): void
+    {
+        $connection = $this->connection();
+        $order = $this->order($connection);
+
+        $this->fakeGraphql(
+            ['data' => ['assignedFulfillmentOrders' => ['nodes' => [[
+                'id'    => 'gid://shopify/FulfillmentOrder/77',
+                'order' => ['id' => 'gid://shopify/Order/5555'],
+            ]]]]],
+            ['data' => ['fulfillmentOrderAcceptFulfillmentRequest' => [
+                'fulfillmentOrder' => ['id' => 'gid://shopify/FulfillmentOrder/77', 'status' => 'IN_PROGRESS', 'requestStatus' => 'ACCEPTED'],
+                'userErrors' => [],
+            ]]],
+        );
+
+        \App\Jobs\ProcessShopifyWebhookJob::dispatchSync(self::SHOP, 'fulfillment_orders/fulfillment_request_submitted', [
+            'original_fulfillment_order' => [
+                'id' => 'gid://shopify/FulfillmentOrder/77', 'status' => 'open', 'request_status' => 'unsubmitted',
+            ],
+            'submitted_fulfillment_order' => [
+                'id' => 'gid://shopify/FulfillmentOrder/77', 'status' => 'open', 'request_status' => 'submitted',
+            ],
+            'fulfillment_order_merchant_request' => [
+                'id' => 'gid://shopify/FulfillmentOrderMerchantRequest/1', 'message' => 'Fragile',
+            ],
+        ]);
+
+        Http::assertSent(fn (Request $r) => str_contains($r->body(), 'fulfillmentOrderAcceptFulfillmentRequest'));
+
+        $order->refresh();
+        $this->assertSame('gid://shopify/FulfillmentOrder/77', $order->shopify_fulfillment_order_id);
+        $this->assertSame('accepted', $order->shopify_fulfillment_status);
+    }
+
+    public function test_the_sweep_only_asks_about_our_own_location(): void
+    {
+        $connection = $this->connection();
+
+        $this->fakeGraphql(['data' => ['assignedFulfillmentOrders' => ['nodes' => []]]]);
+
+        \App\Jobs\ProcessShopifyWebhookJob::dispatchSync(self::SHOP, 'fulfillment_orders/fulfillment_request_submitted', [
+            'submitted_fulfillment_order' => ['id' => 'gid://shopify/FulfillmentOrder/88'],
+        ]);
+
+        // Scoped to the KSADrop location, so another supplier's request on the
+        // same Shopify order is never in the list to be accepted.
+        Http::assertSent(fn (Request $r) => str_contains($r->body(), 'assignedFulfillmentOrders')
+            && str_contains($r->body(), 'gid:\/\/shopify\/Location\/9'));
+        Http::assertNotSent(fn (Request $r) => str_contains($r->body(), 'fulfillmentOrderAcceptFulfillmentRequest'));
+    }
 }

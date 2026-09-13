@@ -307,46 +307,27 @@ class ProcessShopifyWebhookJob implements ShouldQueue
     }
 
     /**
-     * The merchant pressed "Request fulfillment" in Shopify admin.
+     * A fulfillment request was submitted — by us on the merchant's behalf, or
+     * by the merchant pressing "Request fulfillment" in Shopify admin. Accept
+     * it, so the order shows as in progress with KSA Drop rather than sitting
+     * unanswered.
      *
-     * This is the path requirement 5.5.1 is written about: the merchant asking
-     * us, through Shopify's own UI, rather than us deciding. Accept it, so the
-     * order shows as in progress with KSA Drop rather than sitting unanswered.
+     * Handled as a sweep of the store rather than by reading the payload, and
+     * that is deliberate. The payload names the fulfillment order under
+     * `submitted_fulfillment_order` and carries no order id at all, so it can
+     * neither tell us which of our orders to record the acceptance against nor
+     * prove the fulfillment order sits at our location. assignedFulfillmentOrders
+     * answers both: it is scoped to our own location, so another supplier's
+     * request on the same Shopify order can never be accepted by us, and it
+     * returns each fulfillment order's order id.
      *
-     * The payload's fulfillment order is trusted only as far as its id — the
-     * accept mutation is scoped to fulfillment orders assigned to our own
-     * location, so a request for someone else's simply fails on Shopify's side.
+     * The same sweep backs the /fulfillment_order_notification callback, so a
+     * request both paths deliver is accepted once and refused by Shopify the
+     * second time — a logged user error, nothing worse.
      */
     private function acceptFulfillmentRequest(ClientShopifyConnection $connection): void
     {
-        $fulfillmentOrderId = $this->payload['fulfillment_order']['id'] ?? $this->payload['id'] ?? null;
-
-        if (! $fulfillmentOrderId) {
-            return;
-        }
-
-        // The webhook body carries numeric ids; every mutation takes GIDs.
-        $gid = str_contains((string) $fulfillmentOrderId, 'gid://')
-            ? (string) $fulfillmentOrderId
-            : 'gid://shopify/FulfillmentOrder/' . $fulfillmentOrderId;
-
-        $accepted = app(ShopifyFulfillmentService::class)->acceptRequest($connection, $gid);
-
-        // Record it against the order when we can find one. A request raised in
-        // Shopify admin may well arrive before the order webhook that creates
-        // our copy, in which case there is nothing to write to yet — harmless,
-        // since the id is only used to stop us submitting a second request and
-        // no request of ours went out here.
-        $orderGid = $this->payload['fulfillment_order']['order_id'] ?? $this->payload['order_id'] ?? null;
-
-        if ($accepted && $orderGid) {
-            Order::withoutGlobalScope('shopify_visible')
-                ->where('shopify_order_id', (string) $orderGid)
-                ->update([
-                    'shopify_fulfillment_order_id' => $gid,
-                    'shopify_fulfillment_status'   => 'accepted',
-                ]);
-        }
+        SweepShopifyFulfillmentRequestsJob::dispatchSync($connection->shop_domain);
     }
 
     /**

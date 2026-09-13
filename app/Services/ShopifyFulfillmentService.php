@@ -408,6 +408,18 @@ class ShopifyFulfillmentService
             $fulfillmentOrderId = $this->findRequestableFulfillmentOrder($connection, $token, $order);
 
             if (! $fulfillmentOrderId) {
+                // Logged, because this is the outcome a store with an
+                // un-routed catalogue produces on every single order — the
+                // variants still stock at the merchant's own location, so
+                // Shopify never assigned us anything — and without a line here
+                // it is indistinguishable from nothing having happened.
+                Log::channel('shopify')->warning('Fulfillment request found nothing to request', [
+                    'shop'             => $connection->shop_domain,
+                    'order_id'         => $order->id,
+                    'shopify_order_id' => $order->shopify_order_id,
+                    'hint'             => 'No open fulfillment order at the KSADrop location — check the variants were imported with the KSADrop fulfillment service.',
+                ]);
+
                 return self::REQUEST_NO_FULFILLMENT_ORDER;
             }
 
