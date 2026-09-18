@@ -178,7 +178,7 @@ class DailyOpsReportTest extends TestCase
         $blocks = $this->flatten($this->postedBlocks());
 
         $this->assertStringContainsString('Needs attention', $blocks);
-        $this->assertStringContainsString('2 of 3 orders have no shipping city', $blocks);
+        $this->assertStringContainsString('2 of 3 orders are missing a shipping city', $blocks);
     }
 
     public function test_it_flags_stores_that_installed_but_never_connected(): void
@@ -195,7 +195,7 @@ class DailyOpsReportTest extends TestCase
         $this->artisan('report:daily', ['--date' => '2026-09-06'])->assertSuccessful();
 
         $this->assertStringContainsString(
-            '1 store(s) installed the app but never connected it',
+            '1 store(s) installed the app but have not completed setup',
             $this->flatten($this->postedBlocks())
         );
     }

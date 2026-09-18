@@ -54,6 +54,7 @@ export function OrdersTable({
   const [sorting, setSorting] = useState<SortingState>([])
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({
     shipment: false,
+    shopify_order_number: false,
     shipping_country: false,
     payment_method: false,
     customer_email: false,

@@ -54,8 +54,14 @@ class ShopifyOrderWriter
             // before Pending was added at all, it silently emptied the tags of
             // every Shopify order on each update.
             unset($data['tags']);
+
+            // An order keeps the number it was first given. Shopify never
+            // renumbers an order, so the only way the mapped number can differ
+            // is that orderNumberFor() continued the client's sequence on import.
+            $data['order_number'] = $existing->order_number;
         } else {
             $data['shopify_sync_status'] = $this->shopify->evaluateSyncFilters($data, $connection);
+            $data['order_number'] = $this->orderNumberFor($data, $connection);
         }
 
         // One transaction around the order and its items. The item replacement
@@ -115,6 +121,99 @@ class ShopifyOrderWriter
             ->flip()
             ->map(fn () => true)
             ->all();
+    }
+
+    /**
+     * The portal number for a new order, continuing the client's sequence
+     * across every store it has connected.
+     *
+     * The number is the client's prefix plus Shopify's order number, shifted by
+     * an offset that is fixed per store:
+     *
+     *  - a client's first store has offset 0, so #1001 stays TST1001;
+     *  - a store the client already has orders from keeps the offset those
+     *    orders were given, so a reconnected store carries on where it was;
+     *  - a new store for a client that already has Shopify orders from another
+     *    store starts right after the client's highest number. Every store
+     *    numbers from #1001, and before this the second store's #1001 hit the
+     *    unique index as TST1001 again and every webhook for it failed — the
+     *    app-review account, which moves to a fresh store each review, first.
+     *
+     * Should the shifted number still be taken (an old order reached late by
+     * reconciliation, or a non-numeric Shopify name), the order takes the next
+     * free number after the client's highest instead. The unique index covers
+     * trashed and hidden rows too, so every lookup here ignores global scopes.
+     */
+    private function orderNumberFor(array $data, ClientShopifyConnection $connection): string
+    {
+        $prefix = $this->shopify->orderNumberPrefix($connection->client);
+        $number = $data['shopify_order_number'] ?? null;
+
+        $candidate = $number === null
+            ? $data['order_number']
+            : $prefix . ($number + $this->storeOffset($prefix, $number, $data));
+
+        if (! $this->taken($candidate)) {
+            return $candidate;
+        }
+
+        $next = ($this->highestShopifyNumber($prefix, $data['client_id']) ?? 0) + 1;
+
+        while ($this->taken($prefix . $next)) {
+            $next++;
+        }
+
+        return $prefix . $next;
+    }
+
+    /**
+     * How far this store's Shopify numbers are shifted into the client's sequence.
+     */
+    private function storeOffset(string $prefix, int $number, array $data): int
+    {
+        // The store's first order was the one that fixed its offset; later ones
+        // may have fallen back to the next free number and do not reflect it.
+        $first = Order::withoutGlobalScopes()
+            ->where('client_id', $data['client_id'])
+            ->where('shopify_shop_domain', $data['shopify_shop_domain'])
+            ->whereNotNull('shopify_order_number')
+            ->orderBy('id')
+            ->first(['order_number', 'shopify_order_number']);
+
+        if ($first && ($sequence = $this->sequenceOf($prefix, $first->order_number)) !== null) {
+            return $sequence - $first->shopify_order_number;
+        }
+
+        $highest = $this->highestShopifyNumber($prefix, $data['client_id']);
+
+        return $highest === null ? 0 : $highest + 1 - $number;
+    }
+
+    /**
+     * The highest sequence number among the client's Shopify orders, if any.
+     */
+    private function highestShopifyNumber(string $prefix, int $clientId): ?int
+    {
+        return Order::withoutGlobalScopes()
+            ->where('client_id', $clientId)
+            ->where('source', 'shopify')
+            ->pluck('order_number')
+            ->map(fn (string $orderNumber) => $this->sequenceOf($prefix, $orderNumber))
+            ->filter(fn (?int $sequence) => $sequence !== null)
+            ->max();
+    }
+
+    /**
+     * The numeric part of a portal number (TST1042 → 1042), or null.
+     */
+    private function sequenceOf(string $prefix, string $orderNumber): ?int
+    {
+        return preg_match('/^' . preg_quote($prefix, '/') . '(\d+)$/', $orderNumber, $m) ? (int) $m[1] : null;
+    }
+
+    private function taken(string $orderNumber): bool
+    {
+        return Order::withoutGlobalScopes()->where('order_number', $orderNumber)->exists();
     }
 
     /**

@@ -30,6 +30,7 @@ class Order extends Model
         'client_id',
         'order_number',
         'shopify_order_id',
+        'shopify_order_number',
         'shopify_shop_domain',
         'shopify_fulfillment_order_id',
         'shopify_fulfillment_status',
@@ -177,6 +178,13 @@ class Order extends Model
                 ->orWhere('customer_name', 'like', "%{$search}%")
                 ->orWhere('customer_email', 'like', "%{$search}%")
                 ->orWhere('customer_phone', 'like', "%{$search}%");
+
+            // "1001" or "#1001" also finds an order by Shopify's own number,
+            // which a client's second store no longer shares with order_number.
+            $number = ltrim(trim((string) $search), '#');
+            if (ctype_digit($number)) {
+                $q->orWhere('shopify_order_number', (int) $number);
+            }
         });
     }
 
