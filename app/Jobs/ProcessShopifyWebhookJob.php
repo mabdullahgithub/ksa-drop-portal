@@ -6,6 +6,7 @@ use App\Models\ClientShopifyConnection;
 use App\Models\Order;
 use App\Models\ShopifySyncFailure;
 use App\Services\ShopifyFulfillmentService;
+use App\Services\ShopifyMerchantMailer;
 use App\Services\ShopifyOrderWriter;
 use App\Services\ShopifyService;
 use Illuminate\Bus\Queueable;
@@ -206,9 +207,16 @@ class ProcessShopifyWebhookJob implements ShouldQueue
      */
     private function handleAppUninstalled(): void
     {
-        $connections = ClientShopifyConnection::where('shop_domain', $this->shopDomain)->get();
+        $connections = ClientShopifyConnection::with('client')
+            ->where('shop_domain', $this->shopDomain)
+            ->get();
 
         foreach ($connections as $connection) {
+            // Only a live, linked store is news to anyone. A redelivered
+            // webhook finds it already disconnected, and an unlinked store has
+            // no portal user to tell.
+            $notify = $connection->client && $connection->status !== 'disconnected';
+
             $connection->update([
                 'access_token'  => null,
                 'refresh_token' => null,
@@ -221,6 +229,10 @@ class ProcessShopifyWebhookJob implements ShouldQueue
                 // order webhooks at all.
                 'webhooks_registered' => false,
             ]);
+
+            if ($notify) {
+                app(ShopifyMerchantMailer::class)->storeDisconnected($connection->client, $this->shopDomain, 'uninstalled');
+            }
         }
 
         Log::channel('shopify')->info('Shopify app/uninstalled processed', [

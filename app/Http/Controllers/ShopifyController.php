@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Client;
 use App\Models\ClientShopifyConnection;
 use App\Services\ShopifyFulfillmentService;
+use App\Services\ShopifyMerchantMailer;
 use App\Services\ShopifyService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -14,6 +15,7 @@ class ShopifyController extends Controller
     public function __construct(
         private ShopifyService $shopify,
         private ShopifyFulfillmentService $fulfillment,
+        private ShopifyMerchantMailer $merchantMailer,
     ) {}
 
     /**
@@ -195,6 +197,8 @@ class ShopifyController extends Controller
             'client_id' => $client->id,
         ]);
 
+        $this->merchantMailer->storeConnected($client, $shop);
+
         return response()->json([
             'message'     => 'Shopify store connected. Recent orders are syncing in the background.',
             'shop_domain' => $shop,
@@ -206,6 +210,11 @@ class ShopifyController extends Controller
      */
     private function attachConnectionToClient(string $shop, array $token, Client $client)
     {
+        // A re-grant of the client's own store is not a new connection.
+        $alreadyLinked = ClientShopifyConnection::where('shop_domain', $shop)
+            ->where('client_id', $client->id)
+            ->exists();
+
         // The store may still be linked to a different client. Reaching this point
         // means the user approved the install while logged in as this client, which
         // proves they control it — so the store moves to them and the stale link is
@@ -248,6 +257,10 @@ class ShopifyController extends Controller
         $this->armConnection($connection, $shop, $token['access_token']);
 
         session()->forget(['shopify_oauth_nonce', 'shopify_oauth_shop']);
+
+        if (! $alreadyLinked) {
+            $this->merchantMailer->storeConnected($client, $shop);
+        }
 
         return redirect()->route('portal.connectors')
             ->with('success', 'Shopify store connected. Recent orders are syncing in the background.');
@@ -365,6 +378,8 @@ class ShopifyController extends Controller
             'sync_mode'                => 'auto_sync',
             'sync_filters'             => null,
         ]);
+
+        $this->merchantMailer->storeDisconnected($client, $connection->shop_domain, 'portal');
 
         return response()->json(['message' => 'Shopify store disconnected.']);
     }
