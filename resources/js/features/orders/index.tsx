@@ -83,7 +83,7 @@ export function Orders() {
 
         <div>
           <div className='flex items-center justify-between mb-3'>
-            <h3 className='text-sm font-semibold'>J&T Shipment Status Distribution</h3>
+            <h3 className='text-sm font-semibold'>Shipment Status Distribution</h3>
             <button
               onClick={() => setStatusInfoModalOpen(true)}
               className='inline-flex items-center gap-1.5 rounded-md border border-muted px-2.5 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted/50 transition-colors'
