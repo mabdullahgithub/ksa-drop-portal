@@ -1308,20 +1308,33 @@ class ShopifyService
      * Shared base columns for a mapped order. The order_number is prefixed with
      * the client's short_id so Shopify's per-store numbering stays globally unique
      * in our shared orders table (mirrors the manual-order convention).
+     *
+     * This is only the first-choice number. A client's second store numbers from
+     * #1001 again, so ShopifyOrderWriter may continue the client's sequence
+     * instead; shopify_order_number keeps Shopify's own number either way.
      */
     private function baseOrderRow(Client $client, string $shopDomain, string $shopifyOrderId, string $shopifyNumber): array
     {
-        $prefix = $client->short_id ?: ('CL' . $client->id);
+        $prefix = $this->orderNumberPrefix($client);
 
         return [
-            'client_id'           => $client->id,
+            'client_id'            => $client->id,
             // Kept on the order itself so GDPR shop/redact can find a store's
             // orders even after the connection has been unlinked from a client.
-            'shopify_shop_domain' => $shopDomain,
-            'shopify_order_id'    => $shopifyOrderId,
-            'order_number'        => $prefix . $shopifyNumber,
-            'source'              => 'shopify',
+            'shopify_shop_domain'  => $shopDomain,
+            'shopify_order_id'     => $shopifyOrderId,
+            'shopify_order_number' => ctype_digit($shopifyNumber) ? (int) $shopifyNumber : null,
+            'order_number'         => $prefix . $shopifyNumber,
+            'source'               => 'shopify',
         ];
+    }
+
+    /**
+     * The client's order-number prefix: its short_id, or CL<id> without one.
+     */
+    public function orderNumberPrefix(Client $client): string
+    {
+        return $client->short_id ?: ('CL' . $client->id);
     }
 
     private function fullName(?string $first, ?string $last): string

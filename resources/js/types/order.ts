@@ -41,6 +41,7 @@ export interface Order {
   } | null
   order_number: string
   shopify_order_id: string | null
+  shopify_order_number: number | null
   customer_name: string | null
   customer_email: string | null
   customer_phone: string | null

@@ -421,34 +421,34 @@ class SendDailyOpsReport extends Command
 
         if ($report['missing_city'] > 0) {
             $alerts[] = sprintf(
-                '• *%d of %d orders have no shipping city* — the courier will route them wrong or reject them',
+                '• *%d of %d orders are missing a shipping city*',
                 $report['missing_city'],
                 $report['orders']
             );
         }
 
         if ($report['failures_open'] > 0) {
-            $alerts[] = sprintf('• *%d sync failure(s) still unresolved* — orders may be missing from the portal', $report['failures_open']);
+            $alerts[] = sprintf('• *%d sync failure(s) still unresolved* — affected orders may not appear in the portal', $report['failures_open']);
         }
 
         if ($report['failed_jobs'] > 0) {
-            $alerts[] = sprintf('• *%d job(s) in the failed queue* — `php artisan queue:retry all`', $report['failed_jobs']);
+            $alerts[] = sprintf('• *%d job(s) in the failed queue*', $report['failed_jobs']);
         }
 
         if ($report['queue_depth'] >= self::QUEUE_DEPTH_ALERT) {
-            $alerts[] = sprintf('• *Queue is %d deep* — the worker is not keeping up', $report['queue_depth']);
+            $alerts[] = sprintf('• *Queue backlog of %d job(s)* — processing is running behind', $report['queue_depth']);
         }
 
         if ($report['unclaimed'] > 0) {
-            $alerts[] = sprintf('• *%d store(s) installed the app but never connected it* — their orders are being ignored', $report['unclaimed']);
+            $alerts[] = sprintf('• *%d store(s) installed the app but have not completed setup*', $report['unclaimed']);
         }
 
         if ($report['app_errors'] > 0) {
-            $alerts[] = sprintf('• *%d application error(s) logged* — check `storage/logs`', $report['app_errors']);
+            $alerts[] = sprintf('• *%d application error(s) logged*', $report['app_errors']);
         }
 
         if ($report['webhooks']['available'] && $report['webhooks']['synced'] === 0 && $report['orders'] > 0) {
-            $alerts[] = '• *No webhooks synced all day* while orders still arrived — check the Shopify subscriptions';
+            $alerts[] = '• *No webhooks synced today* although orders were received — Shopify webhook subscriptions should be reviewed';
         }
 
         return $alerts;

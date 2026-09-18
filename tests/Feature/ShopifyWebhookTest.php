@@ -160,6 +160,91 @@ class ShopifyWebhookTest extends TestCase
         $this->assertSame('Jane Buyer', $order->customer_name);
     }
 
+    public function test_a_second_store_continues_the_clients_order_sequence(): void
+    {
+        // Every Shopify store numbers from #1001, so a client that moves to a new
+        // store (as the app-review account does each review round) used to map
+        // its first order to TST1001 again, hit the unique index and fail every
+        // webhook for it. The new store now carries on from the client's highest.
+        $connection = $this->makeConnection();
+
+        foreach ([1001, 1002, 1003] as $i => $number) {
+            ProcessShopifyWebhookJob::dispatchSync(self::SHOP, 'orders/create', ['id' => 9001 + $i, 'order_number' => $number]);
+        }
+
+        $connection->update(['shop_domain' => 'second.myshopify.com']);
+
+        ProcessShopifyWebhookJob::dispatchSync('second.myshopify.com', 'orders/create', ['id' => 9101, 'order_number' => 1001]);
+        ProcessShopifyWebhookJob::dispatchSync('second.myshopify.com', 'orders/create', ['id' => 9102, 'order_number' => 1002]);
+
+        // A later update for an order keeps the number it was given.
+        ProcessShopifyWebhookJob::dispatchSync('second.myshopify.com', 'orders/paid', [
+            'id' => 9101, 'order_number' => 1001, 'financial_status' => 'paid',
+        ]);
+
+        $this->assertSame([
+            '9001' => 'TST1001',
+            '9002' => 'TST1002',
+            '9003' => 'TST1003',
+            '9101' => 'TST1004',
+            '9102' => 'TST1005',
+        ], $this->orderNumbers());
+
+        // Shopify's own number is kept alongside, to find the order in Shopify.
+        $this->assertSame(1001, Order::withoutGlobalScope('shopify_visible')
+            ->where('shopify_order_id', '9101')->value('shopify_order_number'));
+    }
+
+    public function test_a_reconnected_store_keeps_its_offset(): void
+    {
+        $connection = $this->makeConnection();
+
+        ProcessShopifyWebhookJob::dispatchSync(self::SHOP, 'orders/create', ['id' => 9001, 'order_number' => 1001]);
+
+        $connection->update(['shop_domain' => 'second.myshopify.com']);
+        ProcessShopifyWebhookJob::dispatchSync('second.myshopify.com', 'orders/create', ['id' => 9101, 'order_number' => 1001]);
+
+        $connection->update(['shop_domain' => 'third.myshopify.com']);
+        ProcessShopifyWebhookJob::dispatchSync('third.myshopify.com', 'orders/create', ['id' => 9201, 'order_number' => 1001]);
+
+        // Back on the second store: its offset of +1 still applies, so #1002 is
+        // TST1003 — except that is the third store's, so it takes the next free.
+        $connection->update(['shop_domain' => 'second.myshopify.com']);
+        ProcessShopifyWebhookJob::dispatchSync('second.myshopify.com', 'orders/create', ['id' => 9102, 'order_number' => 1002]);
+        ProcessShopifyWebhookJob::dispatchSync('second.myshopify.com', 'orders/create', ['id' => 9103, 'order_number' => 1004]);
+
+        $this->assertSame([
+            '9001' => 'TST1001',
+            '9101' => 'TST1002',
+            '9102' => 'TST1004',
+            '9103' => 'TST1005',
+            '9201' => 'TST1003',
+        ], $this->orderNumbers());
+    }
+
+    public function test_search_finds_an_order_by_its_shopify_number(): void
+    {
+        $connection = $this->makeConnection();
+
+        ProcessShopifyWebhookJob::dispatchSync(self::SHOP, 'orders/create', ['id' => 9001, 'order_number' => 1001]);
+        $connection->update(['shop_domain' => 'second.myshopify.com']);
+        ProcessShopifyWebhookJob::dispatchSync('second.myshopify.com', 'orders/create', ['id' => 9101, 'order_number' => 1500]);
+
+        // TST1002 no longer carries 1500, but searching Shopify's number finds it.
+        foreach (['1500', '#1500'] as $search) {
+            $this->assertSame(['TST1002'], Order::withoutGlobalScope('shopify_visible')
+                ->search($search)->pluck('order_number')->all());
+        }
+    }
+
+    private function orderNumbers(): array
+    {
+        return Order::withoutGlobalScope('shopify_visible')
+            ->orderBy('shopify_order_id')
+            ->pluck('order_number', 'shopify_order_id')
+            ->all();
+    }
+
     public function test_shop_redact_still_erases_pii_after_the_store_was_unlinked(): void
     {
         // A portal disconnect releases client_id, so redaction cannot be scoped

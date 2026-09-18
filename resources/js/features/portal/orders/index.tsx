@@ -152,6 +152,16 @@ function makeColumns(tagColors: Record<string, string>, onView: (order: any) => 
     enableHiding: false,
   },
   {
+    // Shopify's own number (#1001). Differs from the portal number for a
+    // client's second store, whose orders continue the client's sequence.
+    accessorKey: 'shopify_order_number',
+    header: 'Shopify #',
+    cell: ({ row }) => {
+      const number = row.getValue('shopify_order_number') as number | null
+      return <span className='text-sm text-muted-foreground'>{number ? `#${number}` : '—'}</span>
+    },
+  },
+  {
     accessorKey: 'customer_name',
     header: 'Customer',
     cell: ({ row }) => <span>{row.getValue('customer_name') || '—'}</span>,
@@ -1122,7 +1132,9 @@ export function PortalOrders() {
   const [importDialogOpen, setImportDialogOpen] = useState(false)
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
   const [statusInfoModalOpen, setStatusInfoModalOpen] = useState(false)
-  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
+  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({
+    shopify_order_number: false,
+  })
   const [selectedOrder, setSelectedOrder] = useState<any | null>(null)
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false)
 

@@ -116,6 +116,25 @@ export const ordersColumns: ColumnDef<Order>[] = [
     enableHiding: false,
   },
   {
+    // Shopify's own number (#1001). Differs from the portal number for a
+    // client's second store, whose orders continue the client's sequence.
+    accessorKey: 'shopify_order_number',
+    header: ({ column }) => (
+      <DataTableColumnHeader column={column} title='Shopify #' />
+    ),
+    meta: { className: 'ps-1', tdClassName: 'ps-4' },
+    cell: ({ row }) => {
+      const number = row.getValue('shopify_order_number') as number | null
+      return (
+        <span className='text-sm text-muted-foreground'>
+          {number ? `#${number}` : '—'}
+        </span>
+      )
+    },
+    enableSorting: false,
+    enableHiding: true,
+  },
+  {
     id: 'client',
     accessorFn: (row) => row.client?.company_name ?? null,
     header: ({ column }) => (
