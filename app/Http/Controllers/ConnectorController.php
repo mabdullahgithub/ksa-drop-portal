@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Client;
 use App\Models\Connector;
 use App\Models\Order;
+use App\Models\ShopifySyncFailure;
 use Illuminate\Http\Request;
 
 class ConnectorController extends Controller
@@ -82,6 +83,18 @@ class ConnectorController extends Controller
             ? Order::withoutGlobalScope('shopify_visible')
                 ->where('client_id', $client->id)
                 ->where('shopify_sync_status', 'pending_review')
+                ->count()
+            : 0;
+
+        // Orders Shopify sent us that never became orders here. Counted for any
+        // sync mode — a failed sync has nothing to do with manual approval —
+        // and matched on shop domain too, so deliveries parked before the store
+        // was claimed still show up once it is.
+        $connector->failed_count = $conn
+            ? ShopifySyncFailure::query()
+                ->unresolved()
+                ->where(fn ($q) => $q->where('client_id', $client->id)
+                    ->orWhere('shop_domain', $conn->shop_domain))
                 ->count()
             : 0;
     }

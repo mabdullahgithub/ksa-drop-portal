@@ -32,7 +32,9 @@ use App\Http\Controllers\Embedded\EmbeddedDashboardController;
 use App\Http\Controllers\Embedded\EmbeddedSettingsController;
 use App\Http\Controllers\ShopifyController;
 use App\Http\Controllers\ShopifyWebhookController;
+use App\Http\Controllers\ShopifyFulfillmentCallbackController;
 use App\Http\Controllers\ShopifyPendingOrderController;
+use App\Http\Controllers\ShopifySyncFailureController;
 use App\Http\Controllers\TrackingController;
 use App\Http\Controllers\UserRoleController;
 use Illuminate\Support\Facades\Route;
@@ -344,6 +346,13 @@ Route::prefix('portal')->middleware(['auth', 'verified', 'role:client'])->group(
     Route::post('/api/shopify/pending/submit-bulk', [ShopifyPendingOrderController::class, 'submitBulk'])->name('portal.shopify.pending.submit-bulk');
     Route::post('/api/shopify/pending/{orderId}/submit', [ShopifyPendingOrderController::class, 'submit'])->name('portal.shopify.pending.submit');
     Route::delete('/api/shopify/pending/{orderId}/dismiss', [ShopifyPendingOrderController::class, 'dismiss'])->name('portal.shopify.pending.dismiss');
+
+    // Shopify — orders that failed to sync, and manual replay
+    Route::get('/api/shopify/failures', [ShopifySyncFailureController::class, 'index'])->name('portal.shopify.failures.index');
+    Route::get('/api/shopify/failures/count', [ShopifySyncFailureController::class, 'count'])->name('portal.shopify.failures.count');
+    Route::post('/api/shopify/failures/retry-all', [ShopifySyncFailureController::class, 'retryAll'])->name('portal.shopify.failures.retry-all');
+    Route::post('/api/shopify/failures/{failureId}/retry', [ShopifySyncFailureController::class, 'retry'])->name('portal.shopify.failures.retry');
+    Route::delete('/api/shopify/failures/{failureId}', [ShopifySyncFailureController::class, 'discard'])->name('portal.shopify.failures.discard');
 });
 
 // Merchant pricing & off-platform billing disclosure — public, no auth.
@@ -381,7 +390,71 @@ Route::get('/webhooks/whatsapp', [MetaWhatsAppWebhookController::class, 'verify'
 Route::post('/webhooks/whatsapp', [MetaWhatsAppWebhookController::class, 'handle'])->name('webhooks.whatsapp');
 
 // Shopify webhooks — public, HMAC-verified inside the controller (CSRF excluded via bootstrap/app.php 'webhooks/*')
-Route::post('/webhooks/shopify', [ShopifyWebhookController::class, 'handle'])->name('webhooks.shopify');
+//
+// Stripped of the session/cookie/Inertia half of the `web` group. Shopify must
+// get a response inside five seconds or it records the delivery as failed, and
+// the session middleware alone was spending two database round trips on every
+// single webhook to no purpose: Shopify sends no cookie, so StartSession opened
+// a brand-new session each time and wrote a junk row to the `sessions` table
+// that nothing would ever read.
+//
+// The row itself was not the expensive part — the table it grew was. Session
+// garbage collection fires on a [2, 100] lottery, so roughly one webhook in
+// fifty ran DELETE FROM sessions WHERE last_activity <= ? across a table these
+// same webhooks had been inflating for months. On MySQL that scan takes seconds
+// and locks, and every concurrent webhook waiting behind it blew the five-second
+// budget too — which is why the failures arrive in bursts rather than evenly.
+//
+// Nothing here needs any of it: the handler verifies an HMAC, queues a job and
+// returns a bare 200. It never reads the session, sets a cookie, or renders a
+// view.
+Route::post('/webhooks/shopify', [ShopifyWebhookController::class, 'handle'])
+    ->withoutMiddleware([
+        // Must go together with StartSession. The path is already CSRF-exempt
+        // via bootstrap/app.php, but the middleware still runs and still tries
+        // to attach an XSRF cookie on the way out — which reads the session,
+        // and with no session store on the request that throws, turning every
+        // webhook into a 500. Removing the session without removing this is
+        // strictly worse than leaving both in place.
+        \Illuminate\Foundation\Http\Middleware\PreventRequestForgery::class,
+        \Illuminate\Session\Middleware\StartSession::class,
+        \Illuminate\View\Middleware\ShareErrorsFromSession::class,
+        \Illuminate\Cookie\Middleware\EncryptCookies::class,
+        \Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse::class,
+        \App\Http\Middleware\HandleInertiaRequests::class,
+        \App\Http\Middleware\AddLinkHeadersForPreloadedAssetsUnlessInertia::class,
+    ])
+    ->name('webhooks.shopify');
+
+// Fulfillment service callbacks. Shopify is given only the prefix (at
+// fulfillmentServiceCreate) and appends these three paths itself, so the names
+// and shapes are Shopify's, not ours.
+//
+// Same middleware exclusions, for the same reasons as the webhook route above:
+// Shopify sends no cookie and reads no response body beyond the status.
+Route::prefix('webhooks/shopify/fulfillment')
+    ->withoutMiddleware([
+        \Illuminate\Foundation\Http\Middleware\PreventRequestForgery::class,
+        \Illuminate\Session\Middleware\StartSession::class,
+        \Illuminate\View\Middleware\ShareErrorsFromSession::class,
+        \Illuminate\Cookie\Middleware\EncryptCookies::class,
+        \Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse::class,
+        \App\Http\Middleware\HandleInertiaRequests::class,
+        \App\Http\Middleware\AddLinkHeadersForPreloadedAssetsUnlessInertia::class,
+    ])
+    ->group(function () {
+        Route::post('/fulfillment_order_notification', [ShopifyFulfillmentCallbackController::class, 'notification'])
+            ->name('webhooks.shopify.fulfillment.notification');
+        Route::get('/fetch_stock', [ShopifyFulfillmentCallbackController::class, 'fetchStock'])
+            ->name('webhooks.shopify.fulfillment.stock');
+        // Shopify's older fulfillment-service contract appended .json to these
+        // paths. Answering both costs nothing and removes one way for stock
+        // lookups to 404 without anyone noticing.
+        Route::get('/fetch_stock.json', [ShopifyFulfillmentCallbackController::class, 'fetchStock'])
+            ->name('webhooks.shopify.fulfillment.stock.json');
+        Route::get('/fetch_tracking_numbers', [ShopifyFulfillmentCallbackController::class, 'fetchTrackingNumbers'])
+            ->name('webhooks.shopify.fulfillment.tracking');
+    });
 
 // Embedded Shopify Admin app — rendered inside the Shopify Admin iframe.
 // No Laravel session: the shell loads publicly (App Bridge boots it), and the
@@ -399,6 +472,12 @@ Route::prefix('embedded/shopify')->middleware('shopify.csp')->group(function () 
         Route::get('/dashboard', [EmbeddedDashboardController::class, 'index'])->name('embedded.shopify.dashboard');
         Route::get('/settings', [EmbeddedSettingsController::class, 'show'])->name('embedded.shopify.settings.show');
         Route::put('/settings', [EmbeddedSettingsController::class, 'update'])->name('embedded.shopify.settings.update');
+
+        // The merchant asking us for an order, from our own app rather than
+        // from Shopify admin's Request fulfillment action. Both end at the same
+        // mutation (App Store requirement 5.5.1).
+        Route::post('/orders/{order}/request-fulfillment', [EmbeddedDashboardController::class, 'requestFulfillment'])
+            ->name('embedded.shopify.orders.request-fulfillment');
     });
 });
 

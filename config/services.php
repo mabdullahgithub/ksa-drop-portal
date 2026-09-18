@@ -33,6 +33,27 @@ return [
             'bot_user_oauth_token' => env('SLACK_BOT_USER_OAUTH_TOKEN'),
             'channel' => env('SLACK_BOT_USER_DEFAULT_CHANNEL'),
         ],
+
+        // Incoming Webhook that the daily operations report is posted to. The
+        // URL is bound to one channel and can only write to it, so it is a much
+        // narrower credential than a bot token — but it is still a credential,
+        // and anyone holding it can post as the app.
+        //
+        // Unset means the report simply does not send: report:daily fails
+        // loudly rather than reaching out to nothing.
+        'ops_webhook' => env('SLACK_OPS_WEBHOOK'),
+
+        // The channel that webhook is bound to. Purely a label: an Incoming
+        // Webhook created after 2018 ignores any channel sent in the payload, so
+        // this cannot redirect a message. It exists so the command can name the
+        // destination when it reports success or failure — otherwise a report
+        // landing in the wrong place is diagnosed by opening Slack and guessing.
+        'ops_channel' => env('SLACK_OPS_CHANNEL'),
+
+        // The report covers a business day, not a UTC one. Orders peak between
+        // 20:00 and 02:00 local, so a UTC boundary would cut the busiest part of
+        // the evening in half and spread it across two reports.
+        'ops_timezone' => env('SLACK_OPS_TIMEZONE', 'Asia/Riyadh'),
     ],
 
     /*
@@ -100,8 +121,6 @@ return [
         'webhook_username' => env('LOGESTECHS_WEBHOOK_USERNAME', 'test'),
         'webhook_password' => env('LOGESTECHS_WEBHOOK_PASSWORD', 'test'),
         'base_url' => env('LOGESTECHS_BASE_URL', 'https://apisv2.logestechs.com/api'),
-        // "Package Source" in LogesTechs' portal.
-        'integration_source' => env('LOGESTECHS_INTEGRATION_SOURCE', 'ksadrop_portal'),
     ],
 
     /*
@@ -113,7 +132,7 @@ return [
     'shopify' => [
         'key'          => env('SHOPIFY_API_KEY'),
         'secret'       => env('SHOPIFY_API_SECRET'),
-        'scopes'       => env('SHOPIFY_SCOPES', 'read_orders,read_customers'),
+        'scopes'       => env('SHOPIFY_SCOPES', 'read_customers,read_orders,write_fulfillments,read_assigned_fulfillment_orders,write_assigned_fulfillment_orders,read_third_party_fulfillment_orders,write_third_party_fulfillment_orders,read_locations'),
         // Must exactly match an "Allowed redirection URL" in the Partner
         // Dashboard. Defaults to the app's own /shopify/callback route so a
         // missing env var can't produce a broken authorize URL.
@@ -126,6 +145,30 @@ return [
         // manually-typed shop domain (App Store review requirement 2.3.1);
         // installation must start on a Shopify-owned surface.
         'app_store_url' => env('SHOPIFY_APP_STORE_URL'),
+
+        // Kill switches for the two background sweeps that reach out to
+        // Shopify, both off until a store has been checked by hand. They are
+        // the only scheduled work here that cannot be undone by editing our own
+        // database: reconciliation writes orders, and the webhook check
+        // registers subscriptions on the merchant's store. Toggling them is an
+        // .env change, so a sweep behaving badly can be stopped without a
+        // deploy.
+        'reconcile_orders'  => (bool) env('SHOPIFY_RECONCILE_ORDERS', false),
+        'verify_webhooks'   => (bool) env('SHOPIFY_VERIFY_WEBHOOKS', false),
+
+        // Fulfillment service — App Store requirement 5.5.1. Every outbound
+        // fulfillment call checks this. It is the third kill switch for the
+        // same reason as the two above, and the most important of them: it
+        // creates locations, accepts fulfillment requests and marks orders
+        // fulfilled on stores we do not own. Left off until a store has been
+        // taken through the flow by hand.
+        'fulfillment'       => (bool) env('SHOPIFY_FULFILLMENT_ENABLED', false),
+
+        // Whether newly registered KSADrop services ask Shopify to take their
+        // stock from /fetch_stock. Existing services are switched with
+        // shopify:fulfillment-stock-sync. Off until a store has shown the
+        // import-time lookup actually happens.
+        'stock_sync'        => (bool) env('SHOPIFY_FULFILLMENT_STOCK_SYNC', false),
     ],
 
     /*

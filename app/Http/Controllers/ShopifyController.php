@@ -2,16 +2,19 @@
 
 namespace App\Http\Controllers;
 
-use App\Jobs\ShopifyOrderSyncJob;
 use App\Models\Client;
 use App\Models\ClientShopifyConnection;
+use App\Services\ShopifyFulfillmentService;
 use App\Services\ShopifyService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 
 class ShopifyController extends Controller
 {
-    public function __construct(private ShopifyService $shopify) {}
+    public function __construct(
+        private ShopifyService $shopify,
+        private ShopifyFulfillmentService $fulfillment,
+    ) {}
 
     /**
      * Resolve the acting client (impersonation-aware, mirrors PortalController).
@@ -185,9 +188,12 @@ class ShopifyController extends Controller
 
         $connection->update(['client_id' => $client->id]);
 
-        $this->dispatchSyncFor($connection, $shop);
-
-        Log::channel('shopify')->info('Shopify connection claimed by client', ['shop' => $shop, 'client_id' => $client->id]);
+        // Syncing starts here. Orders placed before the store was connected stay
+        // in Shopify by design — nothing was held for them.
+        Log::channel('shopify')->info('Shopify connection claimed by client', [
+            'shop'      => $shop,
+            'client_id' => $client->id,
+        ]);
 
         return response()->json([
             'message'     => 'Shopify store connected. Recent orders are syncing in the background.',
@@ -239,8 +245,7 @@ class ShopifyController extends Controller
             ]
         );
 
-        $this->registerWebhooksFor($connection, $shop, $token['access_token']);
-        $this->dispatchSyncFor($connection, $shop);
+        $this->armConnection($connection, $shop, $token['access_token']);
 
         session()->forget(['shopify_oauth_nonce', 'shopify_oauth_shop']);
 
@@ -266,8 +271,7 @@ class ShopifyController extends Controller
             'connected_at'             => now(),
         ]);
 
-        $this->registerWebhooksFor($connection, $shop, $token['access_token']);
-        $this->dispatchSyncFor($connection, $shop);
+        $this->armConnection($connection, $shop, $token['access_token']);
 
         Log::channel('shopify')->info('Shopify store relinked via admin re-grant', [
             'shop'      => $shop,
@@ -299,14 +303,24 @@ class ShopifyController extends Controller
             ]
         );
 
-        $this->registerWebhooksFor($connection, $shop, $token['access_token']);
+        $this->armConnection($connection, $shop, $token['access_token']);
 
         Log::channel('shopify')->info('Shopify install completed for unlinked store — token stored', ['shop' => $shop]);
 
         return redirect()->away($this->shopify->adminAppUrl($shop));
     }
 
-    private function registerWebhooksFor(ClientShopifyConnection $connection, string $shop, string $accessToken): void
+    /**
+     * Everything a fresh grant has to arm on the merchant's store: the webhook
+     * subscriptions that deliver orders, and the fulfillment service that makes
+     * Shopify route fulfillment orders to us.
+     *
+     * One method rather than two calls at each of the three OAuth paths, so a
+     * fourth path cannot arm half a store. Neither half can break the OAuth
+     * redirect: a merchant who has just approved the app must land back in the
+     * portal whatever the Admin API is doing.
+     */
+    private function armConnection(ClientShopifyConnection $connection, string $shop, string $accessToken): void
     {
         try {
             $results = $this->shopify->registerWebhooks($shop, $accessToken);
@@ -314,15 +328,11 @@ class ShopifyController extends Controller
         } catch (\Throwable $e) {
             Log::channel('shopify')->warning('Shopify webhook registration error', ['shop' => $shop, 'error' => $e->getMessage()]);
         }
-    }
 
-    private function dispatchSyncFor(ClientShopifyConnection $connection, string $shop): void
-    {
-        try {
-            ShopifyOrderSyncJob::dispatch($connection->id);
-        } catch (\Throwable $e) {
-            Log::channel('shopify')->warning('Shopify order sync dispatch failed', ['shop' => $shop, 'error' => $e->getMessage()]);
-        }
+        // Logs and returns false on its own failures — a store that ends up
+        // without a fulfillment service still syncs orders, it just cannot be
+        // sent fulfillment requests until the next app load retries this.
+        $this->fulfillment->ensureRegistered($connection->refresh());
     }
 
     /**

@@ -15,6 +15,7 @@ class Shipment extends Model
         'order_id',
         'courier',
         'tracking_number',
+        'shopify_fulfillment_id',
         'txlogistic_id',
         'sorting_code',
         'status',
@@ -263,6 +264,13 @@ class Shipment extends Model
             'cancel_reason' => $reason,
             'cancelled_at'  => now(),
         ]);
+
+        // Take the fulfillment back on the merchant's store too, or their
+        // order stays Fulfilled with a tracking number the customer can still
+        // follow, and their reporting is wrong from here on.
+        if ($this->shopify_fulfillment_id) {
+            \App\Jobs\CancelShopifyFulfillmentJob::dispatch($this)->onConnection('database');
+        }
 
         if ($this->order) {
             $this->order->update([

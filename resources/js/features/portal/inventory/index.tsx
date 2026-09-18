@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { toast } from 'sonner'
-import { Search as SearchIcon, CheckCircle, Clock, Plus, Lock, Pencil, Trash2, ArrowUpDown, ArrowUp, ArrowDown, PackageX } from 'lucide-react'
+import { Search as SearchIcon, CheckCircle, Clock, Plus, Lock, Pencil, Trash2, ArrowUpDown, ArrowUp, ArrowDown, PackageX, ImageOff, X, ChevronLeft, ChevronRight } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -77,6 +77,14 @@ export function PortalInventory() {
   const [formOpen, setFormOpen] = useState(false)
   const [editingProduct, setEditingProduct] = useState<PortalProduct | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<PortalProduct | null>(null)
+  const [galleryProduct, setGalleryProduct] = useState<PortalProduct | null>(null)
+  const [galleryIndex, setGalleryIndex] = useState(0)
+
+  const openGallery = (product: PortalProduct) => {
+    if (product.images.length === 0) return
+    setGalleryProduct(product)
+    setGalleryIndex(0)
+  }
 
   const handleSearch = (value: string) => {
     setSearch(value)
@@ -200,6 +208,7 @@ export function PortalInventory() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className='w-16'>Image</TableHead>
                   <TableHead>
                     <button onClick={() => handleSort('product_code')} className='flex items-center font-medium hover:text-foreground'>
                       Code<SortIcon field='product_code' />
@@ -226,7 +235,7 @@ export function PortalInventory() {
                 {loading ? (
                   Array.from({ length: 5 }).map((_, i) => (
                     <TableRow key={i}>
-                      {Array.from({ length: 8 }).map((_, j) => (
+                      {Array.from({ length: 9 }).map((_, j) => (
                         <TableCell key={j}>
                           <div className='h-4 w-full animate-pulse rounded bg-muted' />
                         </TableCell>
@@ -235,7 +244,7 @@ export function PortalInventory() {
                   ))
                 ) : (products as PortalProduct[]).length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={8} className='h-32 text-center'>
+                    <TableCell colSpan={9} className='h-32 text-center'>
                       <div className='flex flex-col items-center gap-2 text-muted-foreground'>
                         <p className='text-sm'>You haven&apos;t added any products yet.</p>
                         <p className='text-xs'>Add your first product to request warehouse intake.</p>
@@ -251,6 +260,25 @@ export function PortalInventory() {
                     const isPending = product.verification_status === 'pending'
                     return (
                       <TableRow key={product.id}>
+                        <TableCell>
+                          <button
+                            type='button'
+                            onClick={() => openGallery(product)}
+                            disabled={product.images.length === 0}
+                            className='flex h-10 w-10 items-center justify-center overflow-hidden rounded-md border bg-muted/30 disabled:cursor-default'
+                            title={product.images.length > 0 ? 'View images' : 'No images uploaded'}
+                          >
+                            {product.images.length > 0 ? (
+                              <img
+                                src={product.images[0].url}
+                                alt=''
+                                className='h-full w-full object-cover transition-opacity hover:opacity-80'
+                              />
+                            ) : (
+                              <ImageOff className='h-4 w-4 text-muted-foreground/50' />
+                            )}
+                          </button>
+                        </TableCell>
                         <TableCell>
                           <code className='rounded bg-muted px-1.5 py-0.5 text-xs font-semibold'>
                             {product.product_code}
@@ -384,6 +412,51 @@ export function PortalInventory() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {galleryProduct && galleryProduct.images.length > 0 && (
+        <div
+          className='fixed inset-0 z-50 flex items-center justify-center bg-black/80'
+          onClick={() => setGalleryProduct(null)}
+        >
+          <button
+            className='absolute top-4 right-4 text-white hover:text-white/70 p-2'
+            onClick={() => setGalleryProduct(null)}
+          >
+            <X className='h-6 w-6' />
+          </button>
+          {galleryProduct.images.length > 1 && (
+            <>
+              <button
+                className='absolute left-4 text-white hover:text-white/70 p-2'
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setGalleryIndex((galleryIndex - 1 + galleryProduct.images.length) % galleryProduct.images.length)
+                }}
+              >
+                <ChevronLeft className='h-8 w-8' />
+              </button>
+              <button
+                className='absolute right-4 text-white hover:text-white/70 p-2'
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setGalleryIndex((galleryIndex + 1) % galleryProduct.images.length)
+                }}
+              >
+                <ChevronRight className='h-8 w-8' />
+              </button>
+            </>
+          )}
+          <img
+            src={galleryProduct.images[galleryIndex].url}
+            alt=''
+            className='max-h-[85vh] max-w-[85vw] rounded-lg object-contain'
+            onClick={(e) => e.stopPropagation()}
+          />
+          <p className='absolute bottom-4 text-white/70 text-sm'>
+            {galleryProduct.name} — {galleryIndex + 1} / {galleryProduct.images.length}
+          </p>
+        </div>
+      )}
     </>
   )
 }

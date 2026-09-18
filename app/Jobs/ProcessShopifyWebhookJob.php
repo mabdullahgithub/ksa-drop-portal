@@ -4,6 +4,9 @@ namespace App\Jobs;
 
 use App\Models\ClientShopifyConnection;
 use App\Models\Order;
+use App\Models\ShopifySyncFailure;
+use App\Services\ShopifyFulfillmentService;
+use App\Services\ShopifyOrderWriter;
 use App\Services\ShopifyService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -19,13 +22,61 @@ class ProcessShopifyWebhookJob implements ShouldQueue
     public int $tries   = 3;
     public int $backoff = 60;
 
+    /**
+     * Topics worth parking in shopify_sync_failures when they don't go through.
+     * Everything else this job sees is either a no-op (an unhandled topic) or
+     * pure logging (customers/data_request) — replaying those buys nothing.
+     */
+    private const RETRYABLE_TOPICS = [
+        'orders/create',
+        'orders/updated',
+        'orders/paid',
+        'orders/cancelled',
+        'fulfillment_orders/fulfillment_request_submitted',
+        'fulfillment_orders/cancellation_request_submitted',
+        'customers/redact',
+        'shop/redact',
+        'app/uninstalled',
+    ];
+
+    /**
+     * @param  int|null  $failureId  Set when this dispatch is a replay of a
+     *                               parked failure. The retry sweep owns that
+     *                               row's attempt budget, so a replay updates
+     *                               the row instead of re-recording it.
+     */
     public function __construct(
         private string $shopDomain,
         private string $topic,
         private array  $payload,
+        private ?int   $failureId = null,
     ) {}
 
-    public function handle(ShopifyService $shopify): void
+    /** Set when this run parked the delivery instead of completing it. */
+    private bool $parked = false;
+
+    private ShopifyOrderWriter $writer;
+
+    public function handle(ShopifyService $shopify, ShopifyOrderWriter $writer): void
+    {
+        $this->writer = $writer;
+
+        $this->processTopic($shopify);
+
+        // Reaching here without parking means the delivery went through, so a
+        // replay's row is done. Handled centrally rather than in each topic
+        // handler so every path — order upsert, cancellation, GDPR redaction —
+        // clears its row the same way.
+        if ($this->failureId !== null && ! $this->parked) {
+            ShopifySyncFailure::whereKey($this->failureId)->update([
+                'status'      => ShopifySyncFailure::STATUS_RESOLVED,
+                'resolved_at' => now(),
+                'updated_at'  => now(),
+            ]);
+        }
+    }
+
+    private function processTopic(ShopifyService $shopify): void
     {
         // GDPR compliance topics must be handled even for disconnected stores —
         // shop/redact arrives 48h after uninstall, when no active connection exists.
@@ -58,7 +109,16 @@ class ProcessShopifyWebhookJob implements ShouldQueue
         // sync" cause (e.g. the store was disconnected, or claimed but the row
         // has no client), and silence made that indistinguishable from success.
         if (! $connection || ! $connection->client) {
-            Log::channel('shopify')->warning('Shopify webhook ignored — no active linked connection', [
+            // A store that has installed the app but not yet been connected to a
+            // KSA Drop account is not a failure and nothing is held for it:
+            // syncing begins at the moment the merchant connects, and orders
+            // placed before that stay in Shopify. Retrying would only churn
+            // against a state that no amount of retrying can change.
+            //
+            // Still logged, because "the merchant installed us and is wondering
+            // why nothing appears" is a real support case, and this line is what
+            // answers it.
+            Log::channel('shopify')->info('Shopify webhook ignored — store not connected to a client yet', [
                 'shop'             => $this->shopDomain,
                 'topic'            => $this->topic,
                 'connection_found' => (bool) $connection,
@@ -70,6 +130,8 @@ class ProcessShopifyWebhookJob implements ShouldQueue
         match ($this->topic) {
             'orders/create', 'orders/updated', 'orders/paid' => $this->upsertOrder($shopify, $connection),
             'orders/cancelled' => $this->cancelOrder(),
+            'fulfillment_orders/fulfillment_request_submitted' => $this->acceptFulfillmentRequest($connection),
+            'fulfillment_orders/cancellation_request_submitted' => $this->answerCancellationRequest($connection),
             default            => null,
         };
     }
@@ -199,34 +261,14 @@ class ProcessShopifyWebhookJob implements ShouldQueue
     {
         $data = $shopify->mapWebhookOrder($this->payload, $connection->client, $connection->shop_domain);
 
-        $existing = Order::withoutGlobalScope('shopify_visible')
-            ->where('shopify_order_id', $data['shopify_order_id'])
-            ->first();
-
-        // Decide visibility:
-        //  - existing order keeps its review decision (never re-queue an approved/dismissed one)
-        //  - new order is checked against the merchant's sync filters, then sync mode
-        if ($existing) {
-            $data['shopify_sync_status'] = $existing->shopify_sync_status;
-        } else {
-            $data['shopify_sync_status'] = $shopify->evaluateSyncFilters($data, $connection);
-        }
-
-        $order = Order::withoutGlobalScope('shopify_visible')->updateOrCreate(
-            ['shopify_order_id' => $data['shopify_order_id']],
-            $data
-        );
-
-        // Replace line items wholesale rather than upserting keyed on SKU:
-        // an order can have two line items sharing a SKU (or both with no
-        // SKU at all, which is common), and matching on lineitem_sku alone
-        // collapses them into one row, silently dropping the other. Nothing
-        // downstream depends on a Shopify-sourced item keeping a stable row
-        // id across syncs, so delete-and-reinsert is both correct and simpler.
-        $order->items()->delete();
-        $order->items()->createMany($shopify->mapLineItems($this->payload, 'webhook'));
+        // The write itself — review status, locally-owned fulfillment, item
+        // replacement, atomicity — lives in ShopifyOrderWriter, shared with the
+        // reconciliation poll so the two paths cannot drift apart.
+        $order = $this->writer->write($data, $shopify->mapLineItems($this->payload, 'webhook'), $connection);
 
         $connection->update(['last_synced_at' => now()]);
+
+        $this->requestFulfillmentIfAutoSync($order, $connection);
 
         Log::channel('shopify')->info('Shopify order synced from webhook', [
             'shop'         => $connection->shop_domain,
@@ -234,6 +276,159 @@ class ProcessShopifyWebhookJob implements ShouldQueue
             'order_number' => $data['order_number'] ?? null,
             'sync_status'  => $data['shopify_sync_status'] ?? 'processed',
         ]);
+    }
+
+    /**
+     * Hand an imported order straight to Shopify as a fulfillment request.
+     *
+     * Auto-sync stores only. Under manual approval the order is not ours to
+     * move — it is sitting in the portal queue precisely because the client has
+     * not accepted it yet — so the request is submitted on approval instead
+     * (ShopifyPendingOrderController).
+     *
+     * orders/paid matters as much as orders/create here, and is the reason this
+     * is not limited to creation: a card order lands unpaid, is refused by the
+     * payment gate in requestFulfillment(), and would then sit there forever.
+     * The paid webhook is what brings it back.
+     */
+    private function requestFulfillmentIfAutoSync(Order $order, ClientShopifyConnection $connection): void
+    {
+        if ($connection->sync_mode !== 'auto_sync') {
+            return;
+        }
+
+        // A queued order that never passed review, or that the filters skipped,
+        // is not one we are shipping.
+        if ($order->shopify_sync_status !== null && $order->shopify_sync_status !== 'approved') {
+            return;
+        }
+
+        RequestShopifyFulfillmentJob::dispatch($order)->onConnection('database');
+    }
+
+    /**
+     * A fulfillment request was submitted — by us on the merchant's behalf, or
+     * by the merchant pressing "Request fulfillment" in Shopify admin. Accept
+     * it, so the order shows as in progress with KSA Drop rather than sitting
+     * unanswered.
+     *
+     * Handled as a sweep of the store rather than by reading the payload, and
+     * that is deliberate. The payload names the fulfillment order under
+     * `submitted_fulfillment_order` and carries no order id at all, so it can
+     * neither tell us which of our orders to record the acceptance against nor
+     * prove the fulfillment order sits at our location. assignedFulfillmentOrders
+     * answers both: it is scoped to our own location, so another supplier's
+     * request on the same Shopify order can never be accepted by us, and it
+     * returns each fulfillment order's order id.
+     *
+     * The same sweep backs the /fulfillment_order_notification callback, so a
+     * request both paths deliver is accepted once and refused by Shopify the
+     * second time — a logged user error, nothing worse.
+     */
+    private function acceptFulfillmentRequest(ClientShopifyConnection $connection): void
+    {
+        SweepShopifyFulfillmentRequestsJob::dispatchSync($connection->shop_domain);
+    }
+
+    /**
+     * The merchant wants an accepted order back.
+     *
+     * Answered on one question: has the parcel gone. Before a waybill exists we
+     * can simply stop, and accepting is the truthful answer. Once a courier
+     * holds it we cannot unsend it, and accepting would leave the merchant
+     * believing an order was stopped while it is still on its way to their
+     * customer — so that is rejected, saying so.
+     */
+    private function answerCancellationRequest(ClientShopifyConnection $connection): void
+    {
+        $fulfillmentOrderId = $this->payload['fulfillment_order']['id'] ?? $this->payload['id'] ?? null;
+
+        if (! $fulfillmentOrderId) {
+            return;
+        }
+
+        $gid = str_contains((string) $fulfillmentOrderId, 'gid://')
+            ? (string) $fulfillmentOrderId
+            : 'gid://shopify/FulfillmentOrder/' . $fulfillmentOrderId;
+
+        $order = Order::withoutGlobalScope('shopify_visible')
+            ->where('shopify_fulfillment_order_id', $gid)
+            ->where('shopify_shop_domain', $connection->shop_domain)
+            ->first();
+
+        $shipment = $order?->latestShipment;
+        $shipped  = $shipment && $shipment->is_trackable;
+
+        app(ShopifyFulfillmentService::class)->respondToCancellation(
+            $connection,
+            $gid,
+            ! $shipped,
+            $shipped
+                ? 'Already collected by the courier and on its way — this order cannot be cancelled now.'
+                : 'Cancelled before dispatch.',
+        );
+
+        if ($order && ! $shipped) {
+            $order->update(['shopify_fulfillment_status' => 'cancelled']);
+        }
+    }
+
+    /**
+     * Last stop after the queue has burned every attempt: park the delivery
+     * with the payload that produced it so it can be replayed later, instead of
+     * letting it die into failed_jobs where nothing surfaces or drains it.
+     */
+    public function failed(?\Throwable $e): void
+    {
+        if (! in_array($this->topic, self::RETRYABLE_TOPICS, true)) {
+            return;
+        }
+
+        $this->parkFailure(
+            ShopifySyncFailure::REASON_EXCEPTION,
+            $e ? $e::class . ': ' . $e->getMessage() : 'Job failed with no exception reported.',
+        );
+
+        Log::channel('shopify')->error('Shopify webhook sync failed — parked for retry', [
+            'shop'  => $this->shopDomain,
+            'topic' => $this->topic,
+            'error' => $e?->getMessage(),
+        ]);
+    }
+
+    /**
+     * Record (or update) this delivery's dead-letter row.
+     */
+    private function parkFailure(string $reason, ?string $message): void
+    {
+        if (! in_array($this->topic, self::RETRYABLE_TOPICS, true)) {
+            return;
+        }
+
+        $this->parked = true;
+
+        // A replay already has a row, and the retry sweep owns its attempt
+        // budget. Re-recording would reopen it with a fresh budget, so a payload
+        // that can never succeed would retry forever instead of being given up
+        // on after MAX_ATTEMPTS.
+        if ($this->failureId !== null) {
+            ShopifySyncFailure::whereKey($this->failureId)->update([
+                'reason'        => $reason,
+                'error_message' => $message !== null ? mb_substr($message, 0, 2000) : null,
+                'updated_at'    => now(),
+            ]);
+
+            return;
+        }
+
+        ShopifySyncFailure::record(
+            $this->shopDomain,
+            $this->topic,
+            $this->payload,
+            $reason,
+            $message,
+            ClientShopifyConnection::where('shop_domain', $this->shopDomain)->value('client_id'),
+        );
     }
 
     private function cancelOrder(): void
@@ -244,11 +439,18 @@ class ProcessShopifyWebhookJob implements ShouldQueue
             return;
         }
 
+        // now() only as a last resort, and never over a timestamp we already
+        // have: a second delivery of this topic — Shopify's own retry, or a
+        // replay — would otherwise walk the recorded cancellation time forward
+        // to whenever the replay happened to run. Same rule the shipment side
+        // already follows (Shipment::markReturned).
         Order::withoutGlobalScope('shopify_visible')
             ->where('shopify_order_id', $shopifyOrderId)
-            ->update([
-                'fulfillment_status' => 'cancelled',
-                'cancelled_at'       => now(),
-            ]);
+            ->whereNull('cancelled_at')
+            ->update(['cancelled_at' => $this->payload['cancelled_at'] ?? now()]);
+
+        Order::withoutGlobalScope('shopify_visible')
+            ->where('shopify_order_id', $shopifyOrderId)
+            ->update(['fulfillment_status' => 'cancelled']);
     }
 }

@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Client;
 use App\Models\ClientShopifyConnection;
+use App\Models\Tag;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -21,6 +22,34 @@ class ShopifyService
     /** Latest stable Admin API version. Bump on each Shopify quarterly release.
      *  Keep in sync with `api_version` in shopify.app.toml. */
     public const API_VERSION = '2026-07';
+
+    /** The workflow tag every order starts on, whatever its source. */
+    public const PENDING_TAG = 'Pending';
+
+    /**
+     * Every topic the app subscribes to. Shared with the health check that
+     * verifies Shopify still holds a subscription for each of them.
+     */
+    public const WEBHOOK_TOPICS = [
+        'ORDERS_CREATE',
+        'ORDERS_UPDATED',
+        'ORDERS_PAID',
+        'ORDERS_CANCELLED',
+
+        // Fulfillment service topics (App Store requirement 5.5.1). The first
+        // is how a merchant pressing "Request fulfillment" in Shopify admin
+        // reaches us; the second is how they ask for an accepted request back.
+        // Both also arrive on the registered callback URL, but these come
+        // through the ordinary webhook pipeline and so inherit its HMAC check,
+        // queueing and dead-letter retries — the callback is the safety net,
+        // not the main road.
+        'FULFILLMENT_ORDERS_FULFILLMENT_REQUEST_SUBMITTED',
+        'FULFILLMENT_ORDERS_CANCELLATION_REQUEST_SUBMITTED',
+        // Marks the connection disconnected so a reinstall re-triggers OAuth
+        // (handled in ProcessShopifyWebhookJob). Not gated on
+        // protected-customer-data approval, unlike the order topics.
+        'APP_UNINSTALLED',
+    ];
 
     private string $apiKey;
     private string $apiSecret;
@@ -184,6 +213,20 @@ class ShopifyService
             && $connection->access_token
             && $connection->token_expires_at;
 
+        // A healthy token is not the same as a current grant. When the app's
+        // declared scopes grow, managed installation has the merchant approve
+        // them on this very load — but the token and the `scope` we stored were
+        // issued before that, and nothing else ever rewrites them: a refresh
+        // keeps the old grant's scope string, and returning early here skipped
+        // the exchange entirely. Every store connected before the fulfillment
+        // scopes shipped would then read as "awaiting re-approval" forever,
+        // however many times its merchant approved. So a usable connection that
+        // lacks them is re-exchanged once; the fresh token carries the grant the
+        // merchant has just given, and the check passes from then on.
+        if ($usable && ! $connection->hasFulfillmentScopes()) {
+            return $this->refreshGrant($connection, $shop, $sessionToken);
+        }
+
         if ($usable) {
             return $connection;
         }
@@ -229,6 +272,48 @@ class ShopifyService
         Log::channel('shopify')->info('Shopify install completed via token exchange', [
             'shop'      => $shop,
             'client_id' => $connection->client_id,
+        ]);
+
+        return $connection;
+    }
+
+    /**
+     * Swap a working token for one issued under the store's current grant, and
+     * record the scopes that grant covers.
+     *
+     * Deliberately narrower than a reinstall: it touches only the token fields,
+     * so connected_at, the client link and the sync settings are left as they
+     * were, and webhooks are not re-registered — the store never went anywhere.
+     *
+     * Never throws. A failed exchange leaves the existing, still-working token
+     * in place; the store simply stays off the fulfillment flow until the next
+     * app load tries again.
+     */
+    private function refreshGrant(ClientShopifyConnection $connection, string $shop, string $sessionToken): ClientShopifyConnection
+    {
+        try {
+            $token = $this->exchangeSessionToken($shop, $sessionToken);
+        } catch (\Throwable $e) {
+            Log::channel('shopify')->warning('Shopify grant refresh failed — keeping the existing token', [
+                'shop'  => $shop,
+                'error' => $e->getMessage(),
+            ]);
+
+            return $connection;
+        }
+
+        $connection->update([
+            'access_token'             => $token['access_token'],
+            'refresh_token'            => $token['refresh_token'] ?? $connection->refresh_token,
+            'token_expires_at'         => $this->expiryFromSeconds($token['expires_in']),
+            'refresh_token_expires_at' => $this->expiryFromSeconds($token['refresh_token_expires_in']),
+            'scope'                    => $token['scope'] ?: $connection->scope,
+        ]);
+
+        Log::channel('shopify')->info('Shopify grant refreshed after scope change', [
+            'shop'             => $shop,
+            'scope'            => $connection->scope,
+            'fulfillment_ready' => $connection->hasFulfillmentScopes(),
         ]);
 
         return $connection;
@@ -300,6 +385,11 @@ class ShopifyService
             'refresh_token'            => $response->json('refresh_token') ?? $connection->refresh_token,
             'token_expires_at'         => $this->expiryFromSeconds($response->json('expires_in')),
             'refresh_token_expires_at' => $this->expiryFromSeconds($response->json('refresh_token_expires_in')),
+            // The refreshed token carries the store's grant as it stands now, so
+            // the scope we hold should too. Without this, a store whose merchant
+            // approved new scopes kept reporting the old ones for as long as its
+            // refresh token lived. Kept as-is when Shopify omits the field.
+            'scope'                    => $response->json('scope') ?: $connection->scope,
             'status'                   => 'active',
         ]);
 
@@ -586,6 +676,315 @@ class ShopifyService
     }
 
     /**
+     * The endpoint Shopify is told to deliver to. Also what the health check
+     * compares against — a subscription pointing somewhere else (an old ngrok
+     * tunnel, a previous domain) is as broken as a missing one.
+     */
+    public function webhookCallbackUrl(): string
+    {
+        return rtrim((string) config('app.url'), '/') . '/webhooks/shopify';
+    }
+
+    /**
+     * One page of the shop's orders created at or after $since, newest last.
+     *
+     * This is the recovery path for orders Shopify never delivered to us at
+     * all — a webhook that exhausted Shopify's own retries (8 attempts over 4
+     * hours), or a subscription Shopify removed after repeated failures. In
+     * both cases nothing ever reaches our endpoint, so there is nothing for the
+     * dead-letter queue to park; the only way to notice is to go and look.
+     *
+     * Line items are deliberately NOT selected here. Shopify rejects any single
+     * query costing over 1,000 points *before* running it, and a connection is
+     * charged by its `first` argument multiplied through every nested one — so
+     * asking 50 orders for 100 line items each costs ~5,600 points and the
+     * query never executes at all. Line items are fetched per order, and only
+     * for the handful that turn out to be missing (fetchOrderLineItems).
+     *
+     * At 25 orders a page this costs roughly 25 x 12 = 300 points, which also
+     * leaves room under the leaky-bucket restore rate when paging a backlog.
+     *
+     * @param  string|null  $cursor  endCursor from a previous page
+     * @return array{orders: array<int,array>, cursor: string|null}
+     *                              cursor is null once the last page is read
+     */
+    public function fetchOrdersSince(string $shop, string $token, Carbon $since, ?string $cursor = null, int $pageSize = 25): array
+    {
+        $query = <<<'GQL'
+        query reconcileOrders($search: String!, $cursor: String, $pageSize: Int!) {
+          orders(first: $pageSize, after: $cursor, query: $search, sortKey: CREATED_AT) {
+            pageInfo { hasNextPage endCursor }
+            edges {
+              node {
+                id
+                name
+                email
+                phone
+                createdAt
+                processedAt
+                cancelledAt
+                note
+                tags
+                currencyCode
+                paymentGatewayNames
+                displayFinancialStatus
+                displayFulfillmentStatus
+                subtotalPriceSet { shopMoney { amount } }
+                totalPriceSet { shopMoney { amount } }
+                totalTaxSet { shopMoney { amount } }
+                totalShippingPriceSet { shopMoney { amount } }
+                discountCodes
+                customer { firstName lastName email phone }
+                billingAddress { firstName lastName address1 address2 company city zip province countryCodeV2 phone }
+                shippingAddress { firstName lastName address1 address2 company city zip province countryCodeV2 phone }
+              }
+            }
+          }
+        }
+        GQL;
+
+        $data = $this->graphql($shop, $token, $query, [
+            // Shopify's search syntax. ISO-8601 in UTC so the comparison is not
+            // interpreted against the shop's local timezone.
+            'search'   => 'created_at:>=' . $since->utc()->toIso8601ZuluString(),
+            'cursor'   => $cursor,
+            'pageSize' => $pageSize,
+        ]);
+
+        $connection = $data['orders'] ?? [];
+        $orders     = collect($connection['edges'] ?? [])->pluck('node')->all();
+
+        return [
+            'orders' => $orders,
+            'cursor' => ($connection['pageInfo']['hasNextPage'] ?? false)
+                ? ($connection['pageInfo']['endCursor'] ?? null)
+                : null,
+        ];
+    }
+
+    /**
+     * Line items for one order, in the shape mapLineItems('graphql') expects.
+     *
+     * Called only for orders reconciliation has decided to import, which keeps
+     * the expensive part of the query off the 99% of orders we already hold. A
+     * single order can safely ask for far more items than a paged listing could
+     * (250 nodes is ~250 points, well inside the 1,000-point ceiling), so unlike
+     * an inline selection this does not silently truncate a large order.
+     *
+     * @return array the node's `lineItems` sub-structure
+     */
+    public function fetchOrderLineItems(string $shop, string $token, string $orderGid): array
+    {
+        $query = <<<'GQL'
+        query orderLineItems($id: ID!) {
+          order(id: $id) {
+            lineItems(first: 250) {
+              edges {
+                node {
+                  name
+                  quantity
+                  sku
+                  requiresShipping
+                  taxable
+                  variantTitle
+                  originalUnitPriceSet { shopMoney { amount } }
+                }
+              }
+            }
+          }
+        }
+        GQL;
+
+        $data = $this->graphql($shop, $token, $query, ['id' => $orderGid]);
+
+        return $data['order']['lineItems'] ?? ['edges' => []];
+    }
+
+    /**
+     * The webhook subscriptions Shopify currently holds for this shop, as
+     * topic => callback URL.
+     *
+     * Shopify removes a subscription after repeated delivery failures in a
+     * 24-hour period, and tells us nothing when it does: our stored
+     * webhooks_registered flag stays true while the store quietly stops sending
+     * orders. Asking Shopify directly is the only way to find out.
+     *
+     * Every URL held for a topic is returned, not just one. Shopify permits
+     * several subscriptions per topic when their addresses differ, which is
+     * exactly the situation the health check exists to catch — collapsing them
+     * to a single entry hid the stale one whenever ours happened to come back
+     * last, in the one case that matters most.
+     *
+     * @return array<string,array<int,string>>  topic => callback URLs
+     */
+    public function listWebhookSubscriptions(string $shop, string $token): array
+    {
+        $query = <<<'GQL'
+        query {
+          webhookSubscriptions(first: 100) {
+            edges {
+              node {
+                topic
+                endpoint {
+                  ... on WebhookHttpEndpoint { callbackUrl }
+                }
+              }
+            }
+          }
+        }
+        GQL;
+
+        $data = $this->graphql($shop, $token, $query);
+
+        $subscriptions = [];
+
+        foreach ($data['webhookSubscriptions']['edges'] ?? [] as $edge) {
+            $node = $edge['node'] ?? [];
+
+            if (isset($node['topic'])) {
+                $subscriptions[$node['topic']][] = $node['endpoint']['callbackUrl'] ?? '';
+            }
+        }
+
+        return $subscriptions;
+    }
+
+    /**
+     * Whether the app is still installed on this shop, asked of Shopify itself.
+     *
+     * Shopify announces an uninstall with an app/uninstalled webhook, but that
+     * delivery can fail like any other — and when it does nothing tells us. The
+     * connection stays `active` with a grant Shopify has already revoked, and
+     * the store looks connected forever while receiving nothing.
+     *
+     * The check cannot simply spend the stored access token. Those are the
+     * short-lived kind: every one of ours is normally expired, and an expired
+     * token is refused with the same 401 as a revoked one — so testing it
+     * directly reports every store on the account as uninstalled, live ones
+     * included. The refresh token is the durable credential (ninety days), so
+     * the grant is renewed first and the *fresh* token is what gets tested.
+     *
+     * Deliberately three-valued, never two. A transient network failure, a 5xx
+     * or a rate limit must not read as "uninstalled" — disconnecting a live
+     * store on a blip silently stops a paying merchant's orders, which is far
+     * worse than leaving a dead row in place. Only Shopify positively refusing
+     * the grant counts as gone; everything else is null, meaning "ask again".
+     *
+     * A successful renewal is persisted, so a healthy connection is left better
+     * than it was found.
+     *
+     * @return bool|null  true installed, false uninstalled, null undetermined
+     */
+    public function determineInstallState(ClientShopifyConnection $connection): ?bool
+    {
+        $token = $connection->access_token;
+
+        if ($connection->isTokenExpired() || ! $token) {
+            $token = $this->renewForInstallCheck($connection);
+
+            // Renewal outcome is itself the answer when it is definitive.
+            if (! is_string($token)) {
+                return $token;
+            }
+        }
+
+        return $this->probeWithToken($connection->shop_domain, $token);
+    }
+
+    /**
+     * Renew the grant for an install check.
+     *
+     * @return string|bool|null  the new token, or the install state if the
+     *                           renewal settled the question by itself
+     */
+    private function renewForInstallCheck(ClientShopifyConnection $connection): string|bool|null
+    {
+        // No usable refresh credential: the store must reconnect either way, but
+        // that is not proof the app is gone, so nothing is concluded here.
+        if (! $connection->refresh_token || $connection->isRefreshTokenExpired()) {
+            return null;
+        }
+
+        try {
+            $response = Http::asForm()->timeout(20)->post("https://{$connection->shop_domain}/admin/oauth/access_token", [
+                'client_id'     => $this->apiKey,
+                'client_secret' => $this->apiSecret,
+                'grant_type'    => 'refresh_token',
+                'refresh_token' => $connection->refresh_token,
+            ]);
+        } catch (\Throwable $e) {
+            Log::channel('shopify')->warning('Shopify install check could not reach the token endpoint', [
+                'shop' => $connection->shop_domain, 'error' => $e->getMessage(),
+            ]);
+
+            return null;
+        }
+
+        // Shopify refusing an unexpired refresh token is the real signal: the
+        // grant is gone, which is what an uninstall leaves behind. 4xx only —
+        // a 5xx is Shopify having a bad moment, not a merchant leaving.
+        if ($response->status() >= 400 && $response->status() < 500) {
+            return false;
+        }
+
+        $token = $response->successful() ? $response->json('access_token') : null;
+
+        if (! is_string($token) || $token === '') {
+            Log::channel('shopify')->warning('Shopify install check renewal inconclusive', [
+                'shop' => $connection->shop_domain, 'status' => $response->status(),
+            ]);
+
+            return null;
+        }
+
+        // Healthy store: keep the renewed grant rather than discarding it.
+        $connection->update([
+            'access_token'             => $token,
+            'refresh_token'            => $response->json('refresh_token') ?? $connection->refresh_token,
+            'token_expires_at'         => $this->expiryFromSeconds($response->json('expires_in')),
+            'refresh_token_expires_at' => $this->expiryFromSeconds($response->json('refresh_token_expires_in')),
+        ]);
+
+        return $token;
+    }
+
+    /**
+     * Spend a known-live token against the Admin API.
+     */
+    private function probeWithToken(string $shop, string $token): ?bool
+    {
+        try {
+            $response = Http::withHeaders([
+                'X-Shopify-Access-Token' => $token,
+                'Content-Type'           => 'application/json',
+            ])->timeout(20)->post(
+                "https://{$shop}/admin/api/" . self::API_VERSION . '/graphql.json',
+                ['query' => '{ shop { name } }', 'variables' => (object) []]
+            );
+        } catch (\Throwable $e) {
+            Log::channel('shopify')->warning('Shopify install check failed to reach the API', [
+                'shop' => $shop, 'error' => $e->getMessage(),
+            ]);
+
+            return null;
+        }
+
+        if ($response->status() === 401) {
+            return false;
+        }
+
+        if ($response->successful() && ! empty($response->json('data.shop'))) {
+            return true;
+        }
+
+        Log::channel('shopify')->warning('Shopify install check inconclusive', [
+            'shop' => $shop, 'status' => $response->status(),
+        ]);
+
+        return null;
+    }
+
+    /**
      * Register order webhooks via the GraphQL webhookSubscriptionCreate mutation.
      * Idempotent on Shopify's side for identical topic+endpoint pairs.
      *
@@ -600,18 +999,9 @@ class ShopifyService
     {
         $errors = [];
 
-        $callbackUrl = rtrim((string) config('app.url'), '/') . '/webhooks/shopify';
+        $callbackUrl = $this->webhookCallbackUrl();
 
-        $topics = [
-            'ORDERS_CREATE',
-            'ORDERS_UPDATED',
-            'ORDERS_PAID',
-            'ORDERS_CANCELLED',
-            // Marks the connection disconnected so a reinstall re-triggers
-            // OAuth (handled in ProcessShopifyWebhookJob). Not gated on
-            // protected-customer-data approval, unlike the order topics.
-            'APP_UNINSTALLED',
-        ];
+        $topics = self::WEBHOOK_TOPICS;
 
         $mutation = <<<'GQL'
         mutation webhookSubscriptionCreate($topic: WebhookSubscriptionTopic!, $sub: WebhookSubscriptionInput!) {
@@ -671,76 +1061,6 @@ class ShopifyService
         }
 
         return $results;
-    }
-
-    /**
-     * Fetch a page of recent orders (last 60 days) via GraphQL cursor pagination.
-     *
-     * @return array{orders:array,hasNextPage:bool,endCursor:?string}
-     */
-    public function fetchRecentOrders(string $shop, string $token, ?string $cursor = null): array
-    {
-        $since = now()->subDays(60)->toIso8601String();
-
-        $query = <<<'GQL'
-        query recentOrders($cursor: String, $q: String!) {
-          orders(first: 50, after: $cursor, query: $q, sortKey: CREATED_AT) {
-            pageInfo { hasNextPage endCursor }
-            edges {
-              node {
-                id
-                name
-                createdAt
-                processedAt
-                cancelledAt
-                note
-                tags
-                currencyCode
-                displayFinancialStatus
-                displayFulfillmentStatus
-                customer { firstName lastName email phone }
-                email
-                phone
-                subtotalPriceSet { shopMoney { amount } }
-                totalPriceSet { shopMoney { amount } }
-                totalTaxSet { shopMoney { amount } }
-                totalShippingPriceSet { shopMoney { amount } }
-                discountCode
-                paymentGatewayNames
-                billingAddress { firstName lastName address1 address2 company city zip province countryCodeV2 phone }
-                shippingAddress { firstName lastName address1 address2 company city zip province countryCodeV2 phone }
-                lineItems(first: 100) {
-                  edges {
-                    node {
-                      name
-                      quantity
-                      sku
-                      requiresShipping
-                      taxable
-                      variantTitle
-                      originalUnitPriceSet { shopMoney { amount } }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-        GQL;
-
-        $data = $this->graphql($shop, $token, $query, [
-            'cursor' => $cursor,
-            'q'      => "created_at:>={$since}",
-        ]);
-
-        $ordersConn = $data['orders'] ?? [];
-        $orders     = collect($ordersConn['edges'] ?? [])->pluck('node')->all();
-
-        return [
-            'orders'      => $orders,
-            'hasNextPage' => (bool) ($ordersConn['pageInfo']['hasNextPage'] ?? false),
-            'endCursor'   => $ordersConn['pageInfo']['endCursor'] ?? null,
-        ];
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -834,7 +1154,10 @@ class ShopifyService
                 'total'              => $n['totalPriceSet']['shopMoney']['amount'] ?? 0,
                 'taxes'              => $n['totalTaxSet']['shopMoney']['amount'] ?? 0,
                 'shipping_cost'      => $n['totalShippingPriceSet']['shopMoney']['amount'] ?? 0,
-                'discount_code'      => $n['discountCode'] ?? null,
+                // discountCodes (a list) is the current field; discountCode
+                // (singular) is the legacy one. Accept either so the mapper
+                // works against whichever the API version in use returns.
+                'discount_code'      => $n['discountCodes'][0] ?? ($n['discountCode'] ?? null),
                 'notes'              => $n['note'] ?? null,
                 'tags'               => $this->filterShopifyTags($n['tags'] ?? null),
                 'shopify_raw_tags'   => $this->splitTags($n['tags'] ?? null),
@@ -1015,13 +1338,43 @@ class ShopifyService
         return $tags ? array_values(array_filter(array_map('trim', explode(',', (string) $tags)))) : [];
     }
 
+    /**
+     * The workflow tags a synced order starts life with.
+     *
+     * Every order enters the portal as Pending, however it arrived — CSV import
+     * and manual creation already do this via PortalController::
+     * defaultOrderTags(), and a Shopify order is no different once it is in the
+     * list. Only that tag and the buyease marker are carried; the merchant's own
+     * Shopify tags stay in shopify_raw_tags, which is what the sync filters read.
+     *
+     * If the order already carries its own spelling of the tag — "pending",
+     * "PENDING" — that spelling is kept rather than adding a near-duplicate the
+     * portal would then show as two separate tags.
+     */
     private function filterShopifyTags($tags): array
     {
         $all = $this->splitTags($tags);
 
-        $buyease = array_values(array_filter($all, fn($t) => stripos($t, 'buyease') !== false));
+        $buyease = array_values(array_filter($all, fn ($t) => stripos($t, 'buyease') !== false));
 
-        return $buyease ?: [];
+        $existing = array_values(array_filter($all, fn ($t) => strcasecmp(trim($t), self::PENDING_TAG) === 0));
+
+        return array_merge($buyease, [$existing[0] ?? $this->pendingTagName()]);
+    }
+
+    /**
+     * Ensure the Pending tag exists, and return the name to store on the order.
+     *
+     * Mirrors PortalController::defaultOrderTags() — the row has to exist for
+     * the portal's tag filters and colour to work, and firstOrCreate keeps the
+     * two paths from racing each other into duplicate rows.
+     */
+    private function pendingTagName(): string
+    {
+        return Tag::firstOrCreate(
+            ['name' => self::PENDING_TAG],
+            ['color' => '#f59e0b', 'description' => 'Order awaiting processing']
+        )->name;
     }
 
     /**

@@ -86,9 +86,9 @@ class OrderImportTest extends TestCase
         $this->assertStringStartsWith('TST', $order->order_number);
     }
 
-    // ─── Tags are always empty on import ─────────────────────────────────────
+    // ─── Imported orders carry the default tag ───────────────────────────────
 
-    public function test_tags_are_always_empty_on_import(): void
+    public function test_imported_orders_are_tagged_pending(): void
     {
         $user = User::factory()->create();
         $user->assignRole('client');
@@ -100,8 +100,10 @@ class OrderImportTest extends TestCase
             ->postJson(route('portal.api.orders.import'), ['file' => $file])
             ->assertStatus(200)->assertJsonPath('imported', 1);
 
+        // Every order enters the workflow as Pending (PortalController::
+        // defaultOrderTags); the CSV's own tag column is deliberately ignored.
         $order = Order::where('client_id', $user->client->id)->first();
-        $this->assertEmpty($order->tags);
+        $this->assertSame(['Pending'], $order->tags);
     }
 
     // ─── Simplified columns are parsed correctly ──────────────────────────────
@@ -268,7 +270,7 @@ class OrderImportTest extends TestCase
         $this->assertEquals('Jane Doe', $order->customer_name);
         $this->assertEquals('Handle with care – fragile item.', $order->notes);
         $this->assertEquals('pending', $order->financial_status);
-        $this->assertEmpty($order->tags);
+        $this->assertSame(['Pending'], $order->tags);
         $this->assertStringStartsWith('TST', $order->order_number);
     }
 

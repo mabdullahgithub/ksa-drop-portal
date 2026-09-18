@@ -5,75 +5,90 @@ namespace App\Http\Controllers\Embedded;
 use App\Http\Controllers\Controller;
 use App\Models\ClientShopifyConnection;
 use App\Models\Order;
+use App\Services\EmbeddedPayloadService;
+use App\Services\ShopifyFulfillmentService;
 use Illuminate\Http\Request;
 
 class EmbeddedDashboardController extends Controller
 {
+    public function __construct(
+        private EmbeddedPayloadService $payload,
+        private ShopifyFulfillmentService $fulfillment,
+    ) {}
+
+    /**
+     * Merchant-readable outcomes for a fulfillment request.
+     *
+     * The refusals matter more than the success here. A button that reports
+     * nothing when it declines to act reads as broken, and the two refusals a
+     * merchant will actually meet — an unpaid order, and a product that was
+     * never routed to us — both have a specific thing they can go and do about
+     * it.
+     */
+    private const OUTCOMES = [
+        ShopifyFulfillmentService::REQUEST_SENT =>
+            'Sent to KSA Drop for fulfillment.',
+        ShopifyFulfillmentService::REQUEST_ALREADY_SENT =>
+            'This order has already been sent to KSA Drop.',
+        ShopifyFulfillmentService::REQUEST_AWAITING_PAYMENT =>
+            'This order is still awaiting payment, so it has not been sent for fulfillment.',
+        ShopifyFulfillmentService::REQUEST_NO_FULFILLMENT_ORDER =>
+            'None of the products on this order are stocked at your KSA Drop location. Re-import the catalogue CSV to route them to us.',
+        ShopifyFulfillmentService::REQUEST_UNAVAILABLE =>
+            'Fulfillment requests are not available for this store yet.',
+        ShopifyFulfillmentService::REQUEST_FAILED =>
+            'Shopify could not be reached. Please try again.',
+    ];
+
     /**
      * Sync stats + recent orders for the embedded dashboard. The connection is
      * resolved by the shopify.session middleware from the session token.
+     *
+     * The payload itself is built by EmbeddedPayloadService, shared with the
+     * Blade shell — which inlines the same JSON on the initial load so the
+     * first paint doesn't have to wait for this request.
      */
     public function index(Request $request)
     {
         /** @var ClientShopifyConnection $connection */
         $connection = $request->attributes->get('shopify_connection');
 
-        $counts = Order::withoutGlobalScope('shopify_visible')
+        return response()->json($this->payload->dashboard($connection));
+    }
+
+    /**
+     * Ask Shopify to send one order to us — the merchant-initiated half of App
+     * Store requirement 5.5.1.
+     *
+     * Run inline rather than queued, unlike every other caller of
+     * requestFulfillment(): a merchant who has just pressed a button is owed
+     * the actual answer, and "awaiting payment" or "not routed to us" are only
+     * useful if they arrive while they are still looking at the order.
+     */
+    public function requestFulfillment(Request $request, int $order)
+    {
+        /** @var ClientShopifyConnection $connection */
+        $connection = $request->attributes->get('shopify_connection');
+
+        // Scoped to this store, not just this client: a client who has
+        // connected a different store since must not be able to move orders
+        // belonging to the old one through the new one's token.
+        $order = Order::withoutGlobalScope('shopify_visible')
             ->where('client_id', $connection->client_id)
-            ->where('source', 'shopify')
-            ->selectRaw("COALESCE(shopify_sync_status, 'processed') as status, COUNT(*) as total")
-            ->groupBy('status')
-            ->pluck('total', 'status');
+            ->where('shopify_shop_domain', $connection->shop_domain)
+            ->find($order);
 
-        // Orders per day, last 30 days, missing days filled with zero.
-        $from = now()->subDays(29)->startOfDay();
-
-        $perDay = Order::withoutGlobalScope('shopify_visible')
-            ->where('client_id', $connection->client_id)
-            ->where('source', 'shopify')
-            ->where('created_at', '>=', $from)
-            ->selectRaw('DATE(created_at) as day, COUNT(*) as total')
-            ->groupBy('day')
-            ->pluck('total', 'day');
-
-        $dailyOrders = [];
-
-        for ($day = $from->copy(); $day->lte(now()); $day->addDay()) {
-            $key = $day->toDateString();
-            $dailyOrders[] = ['date' => $key, 'orders' => (int) ($perDay[$key] ?? 0)];
+        if (! $order) {
+            return response()->json(['message' => 'Order not found.'], 404);
         }
 
-        $recentOrders = Order::withoutGlobalScope('shopify_visible')
-            ->where('client_id', $connection->client_id)
-            ->where('source', 'shopify')
-            ->orderByDesc('created_at')
-            ->limit(10)
-            ->get([
-                'id',
-                'order_number',
-                'customer_name',
-                'financial_status',
-                'fulfillment_status',
-                'payment_method',
-                'shopify_sync_status',
-                'currency',
-                'total',
-                'created_at',
-            ]);
+        $outcome = $this->fulfillment->requestFulfillment($order);
 
         return response()->json([
-            'shop_domain'    => $connection->shop_domain,
-            'last_synced_at' => $connection->last_synced_at?->toISOString(),
-            'stats'          => [
-                // 'processed' = visible orders (null status) + approved ones
-                'processed'      => (int) ($counts['processed'] ?? 0) + (int) ($counts['approved'] ?? 0),
-                'pending_review' => (int) ($counts['pending_review'] ?? 0),
-                'skipped'        => (int) ($counts['skipped_filtered'] ?? 0),
-                'dismissed'      => (int) ($counts['dismissed'] ?? 0),
-                'total'          => (int) $counts->sum(),
-            ],
-            'daily_orders'   => $dailyOrders,
-            'recent_orders'  => $recentOrders,
-        ]);
+            'outcome'   => $outcome,
+            'requested' => $outcome === ShopifyFulfillmentService::REQUEST_SENT
+                || $outcome === ShopifyFulfillmentService::REQUEST_ALREADY_SENT,
+            'message'   => self::OUTCOMES[$outcome] ?? 'Fulfillment request could not be completed.',
+        ], $outcome === ShopifyFulfillmentService::REQUEST_FAILED ? 502 : 200);
     }
 }

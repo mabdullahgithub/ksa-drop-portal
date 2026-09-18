@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { usePage } from '@inertiajs/react'
 import { Search, X, LayoutGrid, List, Package, Eye, Download, Truck, RotateCcw, Banknote, Warehouse, Phone, Receipt, Tag, Info } from 'lucide-react'
+import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert'
 import {
   type SortingState, type Updater,
   flexRender, getCoreRowModel, useReactTable, type ColumnDef,
@@ -750,6 +751,22 @@ export function PortalProducts() {
         </div>
 
         <ChargesStrip charges={charges} />
+
+        {/* The CSV stocks every variant at the KSADrop location on the connected
+            store, which is what makes Shopify send us the fulfillment order.
+            Products imported before that routing existed still say "manual" and
+            keep being fulfilled by the merchant — and nothing about the store
+            looks wrong in that state, so it has to be said out loud here. */}
+        <Alert>
+          <Info className='h-4 w-4' />
+          <AlertTitle>Imported products are fulfilled by KSA Drop</AlertTitle>
+          <AlertDescription>
+            The CSV assigns each product to your KSA Drop location in Shopify, so new
+            orders reach us for fulfillment automatically. If you imported this catalogue
+            before connecting your store, download and import it again to update the
+            existing products — otherwise Shopify keeps them set to manual fulfillment.
+          </AlertDescription>
+        </Alert>
 
         <ProductFilters
           filters={filters}
