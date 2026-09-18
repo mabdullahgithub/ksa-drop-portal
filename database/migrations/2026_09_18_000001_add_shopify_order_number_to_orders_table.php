@@ -30,8 +30,9 @@ return new class extends Migration
             ->where('orders.source', 'shopify')
             ->whereNull('orders.shopify_order_number')
             ->select('orders.id', 'orders.order_number', 'clients.id as client_id', 'clients.short_id')
-            ->orderBy('orders.id')
-            ->chunk(500, function ($rows) {
+            // By id, not offset: the rows filled in drop out of the whereNull
+            // above, so offset paging skips the next page's worth each time.
+            ->chunkById(500, function ($rows) {
                 foreach ($rows as $row) {
                     $prefix = $row->short_id ?: 'CL' . $row->client_id;
 
@@ -39,7 +40,7 @@ return new class extends Migration
                         DB::table('orders')->where('id', $row->id)->update(['shopify_order_number' => (int) $m[1]]);
                     }
                 }
-            });
+            }, 'orders.id', 'id');
     }
 
     public function down(): void
