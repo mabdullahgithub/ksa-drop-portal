@@ -176,11 +176,11 @@ function ResultsPanel({ shipment }: { shipment: ShipmentData }) {
   }
 
   return (
-    <div className="h-full overflow-y-auto bg-slate-50 dark:bg-slate-900">
-      <div className="space-y-4 p-5 lg:p-6">
+    <div className="h-full overflow-y-auto overscroll-contain bg-slate-50 dark:bg-slate-900">
+      <div className="flex min-h-full flex-col gap-4 p-5 lg:p-6 xl:h-full">
 
         {/* Order header */}
-        <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm dark:border-slate-700/50 dark:bg-slate-800">
+        <div className="shrink-0 rounded-2xl border border-slate-100 bg-white p-5 shadow-sm dark:border-slate-700/50 dark:bg-slate-800">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-slate-400 dark:text-slate-500">Order</p>
@@ -210,7 +210,7 @@ function ResultsPanel({ shipment }: { shipment: ShipmentData }) {
 
         {/* Problem banner */}
         {isProblem && (
-          <div className={cn('flex items-start gap-3 rounded-2xl border p-4',
+          <div className={cn('flex shrink-0 items-start gap-3 rounded-2xl border p-4',
             halted ? 'border-red-200 bg-red-50 dark:border-red-800/50 dark:bg-red-900/20'
                    : 'border-amber-200 bg-amber-50 dark:border-amber-800/50 dark:bg-amber-900/20')}>
             <AlertTriangle className={cn('mt-0.5 h-5 w-5 shrink-0', halted ? 'text-red-500' : 'text-amber-500')} />
@@ -224,14 +224,14 @@ function ResultsPanel({ shipment }: { shipment: ShipmentData }) {
         )}
 
         {/* Progress */}
-        <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm dark:border-slate-700/50 dark:bg-slate-800">
+        <div className="shrink-0 rounded-2xl border border-slate-100 bg-white p-5 shadow-sm dark:border-slate-700/50 dark:bg-slate-800">
           <p className="mb-4 text-[10px] font-semibold uppercase tracking-widest text-slate-400 dark:text-slate-500">Delivery Progress</p>
           <ProgressStepper status={shipment.status} />
         </div>
 
         {/* Details + Timeline grid */}
-        <div className="grid gap-4 xl:grid-cols-2">
-          <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm dark:border-slate-700/50 dark:bg-slate-800">
+        <div className="grid gap-4 xl:min-h-[320px] xl:flex-1 xl:grid-cols-2">
+          <div className="overflow-y-auto overscroll-contain rounded-2xl border border-slate-100 bg-white p-5 shadow-sm dark:border-slate-700/50 dark:bg-slate-800">
             <p className="mb-3 text-[10px] font-semibold uppercase tracking-widest text-slate-400 dark:text-slate-500">Shipment Details</p>
             <DetailRow label="Order #"    value={shipment.order_number} />
             {shipment.customer_name && <DetailRow label="Customer" value={shipment.customer_name} />}
@@ -241,15 +241,15 @@ function ResultsPanel({ shipment }: { shipment: ShipmentData }) {
             <DetailRow label="Delivered"  value={fmtDate(shipment.delivered_at)} />
           </div>
 
-          <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm dark:border-slate-700/50 dark:bg-slate-800">
-            <p className="mb-4 text-[10px] font-semibold uppercase tracking-widest text-slate-400 dark:text-slate-500">Tracking History</p>
+          <div className="flex min-h-0 flex-col rounded-2xl border border-slate-100 bg-white p-5 shadow-sm dark:border-slate-700/50 dark:bg-slate-800">
+            <p className="mb-4 shrink-0 text-[10px] font-semibold uppercase tracking-widest text-slate-400 dark:text-slate-500">Tracking History</p>
             {history.length === 0 ? (
               <div className="flex flex-col items-center py-6 text-center">
                 <Clock className="h-8 w-8 text-slate-300 dark:text-slate-600" />
                 <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">No updates yet.</p>
               </div>
             ) : (
-              <ol className="relative">
+              <ol className="relative -mr-2 max-h-96 overflow-y-auto overscroll-contain pr-2 pt-1 xl:max-h-none xl:flex-1">
                 {history.map((event, index) => {
                   const Icon     = tlIcon(event.status)
                   const isLatest = index === 0
@@ -280,7 +280,7 @@ function ResultsPanel({ shipment }: { shipment: ShipmentData }) {
           </div>
         </div>
 
-        <p className="pb-4 pt-2 text-center text-xs text-slate-400 dark:text-slate-600">
+        <p className="shrink-0 pb-2 text-center text-xs text-slate-400 dark:text-slate-600">
           Powered by KSA Drop · Updates provided by {courierLabel(shipment.courier)}
         </p>
       </div>
@@ -293,7 +293,11 @@ function ResultsPanel({ shipment }: { shipment: ShipmentData }) {
 export default function TrackingSearch() {
   const [isDark, setIsDark] = useState(() => {
     if (typeof window === 'undefined') return false
-    return localStorage.getItem('trackingTheme') === 'dark'
+    try {
+      const saved = localStorage.getItem('trackingTheme')
+      if (saved) return saved === 'dark'
+    } catch { /* storage blocked */ }
+    return document.documentElement.classList.contains('dark')
   })
   const [phase,      setPhase]      = useState<Phase>('idle')
   const [shipment,   setShipment]   = useState<ShipmentData | null>(null)
@@ -319,10 +323,20 @@ export default function TrackingSearch() {
     }
   }, [])
 
+  // app.blade.php puts the portal theme class on <html>, and `dark:` variants match
+  // any `.dark` ancestor — so this page has to drive that class itself.
+  useEffect(() => {
+    const root = document.documentElement
+    root.classList.remove('light', 'dark')
+    root.classList.add(isDark ? 'dark' : 'light')
+    root.style.backgroundColor = isDark ? 'oklch(0.129 0.042 264.695)' : 'oklch(1 0 0)'
+    root.style.colorScheme = isDark ? 'dark' : 'light'
+  }, [isDark])
+
   const toggleDark = () => {
     const next = !isDark
     setIsDark(next)
-    localStorage.setItem('trackingTheme', next ? 'dark' : 'light')
+    try { localStorage.setItem('trackingTheme', next ? 'dark' : 'light') } catch { /* storage blocked */ }
   }
 
   const found    = phase === 'found'
@@ -350,11 +364,11 @@ export default function TrackingSearch() {
 
   // Panel dimension transitions
   const leftStyle: React.CSSProperties = isDesktop
-    ? { width: found ? '44%' : '100%', transition: 'width 0.75s cubic-bezier(0.4,0,0.2,1)', flexShrink: 0, minHeight: '100vh' }
+    ? { width: found ? '44%' : '100%', transition: 'width 0.75s cubic-bezier(0.4,0,0.2,1)', flexShrink: 0, height: '100%', overflowY: 'auto' }
     : { width: '100%' }
 
   const rightWrapStyle: React.CSSProperties = isDesktop
-    ? { flex: 1, overflow: 'hidden', minHeight: '100vh' }
+    ? { flex: 1, minWidth: 0, height: '100%', overflow: 'hidden' }
     : { width: '100%', overflow: 'hidden' }
 
   const rightInnerStyle: React.CSSProperties = isDesktop
@@ -367,9 +381,8 @@ export default function TrackingSearch() {
     <>
       <Head title="Track Shipment — KSA Drop" />
 
-      {/* Dark mode root — all dark: variants activate when isDark is true */}
-      <div className={isDark ? 'dark' : ''}>
-        <div className="relative flex min-h-screen flex-col overflow-hidden bg-gradient-to-br from-orange-50/60 via-white to-slate-50 dark:bg-none md:flex-row dark:bg-slate-950">
+      <div>
+        <div className="relative flex min-h-screen flex-col overflow-hidden bg-gradient-to-br md:h-dvh md:min-h-0 from-orange-50/60 via-white to-slate-50 dark:bg-none md:flex-row dark:bg-slate-950">
 
           {/* Dark/light toggle — fixed top-right */}
           <button
@@ -382,7 +395,7 @@ export default function TrackingSearch() {
 
           {/* ── Left / Search panel ─────────────────────────────── */}
           <div
-            className="relative flex flex-col items-center justify-center border-r border-slate-100 dark:border-slate-800"
+            className="relative flex flex-col items-center overscroll-contain border-r border-slate-100 dark:border-slate-800"
             style={leftStyle}
           >
             {/* Light-mode decorative gradient blobs */}
@@ -391,7 +404,7 @@ export default function TrackingSearch() {
               <div className="absolute -bottom-20 -left-20 h-64 w-64 rounded-full bg-orange-300/8 blur-3xl dark:bg-orange-600/8" />
             </div>
 
-            <div className="relative z-10 flex w-full max-w-sm flex-col items-center px-6 py-14 md:py-16">
+            <div className="relative z-10 my-auto flex w-full max-w-sm flex-col items-center px-6 py-14 md:py-16">
 
               {/* Logo */}
               <div className="mb-8 flex items-center">
