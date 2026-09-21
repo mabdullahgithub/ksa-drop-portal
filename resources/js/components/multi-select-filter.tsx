@@ -22,6 +22,8 @@ export interface MultiSelectOption {
   label: string
   /** Optional secondary line shown beneath the label (e.g. a code or id). */
   sublabel?: string
+  /** Extra terms the search box matches on without displaying them (e.g. alternate spellings). */
+  keywords?: string[]
 }
 
 interface MultiSelectFilterProps {
@@ -116,6 +118,7 @@ export function MultiSelectFilter({
                   <CommandItem
                     key={option.value}
                     value={`${option.label} ${option.sublabel ?? ''}`}
+                    keywords={option.keywords}
                     onSelect={() => toggle(option.value)}
                     className='gap-2'
                   >

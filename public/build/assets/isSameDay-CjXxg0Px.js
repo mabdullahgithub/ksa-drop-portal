@@ -1,0 +1,1 @@
+import{b as e,m as t,p as n,y as r}from"./format-COUPee0n.js";function i(t,n,i){let a=r(t,i?.in);return isNaN(n)?e(i?.in||t,NaN):(n&&a.setDate(a.getDate()+n),a)}function a(e,r,i){let[a,o]=t(i?.in,e,r);return+n(a)==+n(o)}export{i as n,a as t};

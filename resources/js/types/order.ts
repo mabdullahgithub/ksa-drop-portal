@@ -199,10 +199,14 @@ export interface OrderFilters {
   payment_method?: string[]
   start_date?: string
   end_date?: string
+  /** IANA timezone used to interpret start_date / end_date day boundaries. */
+  tz?: string
   utm_source?: string[]
   utm_campaign?: string
   risk_level?: string
   country?: string
+  /** City group ids from filter options; each matches every spelling (EN/AR) of that city. */
+  cities?: string[]
   tags?: string[]
   min_total?: number
   max_total?: number
@@ -246,6 +250,15 @@ export interface FilterOption {
   label: string
 }
 
+export interface CityFilterOption extends FilterOption {
+  /** Arabic name, when the city is a known Saudi city. */
+  ar: string | null
+  /** Number of orders shipping to this city. */
+  count: number
+  /** Every spelling of the city stored on orders, for search. */
+  keywords: string[]
+}
+
 export interface OrderFilterOptions {
   fulfillment_statuses: FilterOption[]
   financial_statuses: FilterOption[]
@@ -253,6 +266,7 @@ export interface OrderFilterOptions {
   payment_methods: FilterOption[]
   utm_sources: FilterOption[]
   countries: FilterOption[]
+  cities: CityFilterOption[]
   risk_levels: FilterOption[]
   tags: FilterOption[]
   clients: ClientFilterOption[]
