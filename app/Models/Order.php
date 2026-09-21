@@ -163,9 +163,32 @@ class Order extends Model
     /**
      * Scope a query to filter by date range.
      */
-    public function scopeDateRange($query, $startDate, $endDate)
+    public function scopeDateRange($query, $startDate = null, $endDate = null, $timezone = null)
     {
-        return $query->whereBetween('created_at', [$startDate, $endDate]);
+        // Dates are whole days (Y-m-d) in the viewer's timezone; the end day is inclusive.
+        $timezone = in_array($timezone, \DateTimeZone::listIdentifiers(), true)
+            ? $timezone
+            : config('app.timezone');
+
+        $toCarbon = function ($value) use ($timezone) {
+            if (!is_string($value) || !preg_match('/^\d{4}-\d{2}-\d{2}/', $value)) {
+                return null;
+            }
+            try {
+                return \Illuminate\Support\Carbon::parse(substr($value, 0, 10), $timezone);
+            } catch (\Throwable $e) {
+                return null;
+            }
+        };
+
+        if ($start = $toCarbon($startDate)) {
+            $query->where('created_at', '>=', $start->startOfDay()->utc());
+        }
+        if ($end = $toCarbon($endDate)) {
+            $query->where('created_at', '<=', $end->endOfDay()->utc());
+        }
+
+        return $query;
     }
 
     /**

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Search, X, SlidersHorizontal, CreditCard, Tag, Truck, Users } from 'lucide-react'
+import { Search, X, SlidersHorizontal, Tag, Truck, Users, MapPin } from 'lucide-react'
 import { type Table } from '@tanstack/react-table'
 import { Input } from '@/components/ui/input'
 import { SearchBeam } from '@/components/search-beam'
@@ -20,6 +20,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { MultiSelectFilter } from '@/components/multi-select-filter'
+import { DateRangeFilter } from '@/components/date-range-filter'
 import { useFilterOptions } from '@/hooks/useOrders'
 import type { OrderFilters, Order } from '@/types/order'
 import { OrdersFiltersSkeleton } from './orders-skeleton'
@@ -50,11 +51,12 @@ export function OrdersFilters({ filters, onFiltersChange, table }: OrdersFilters
     setSearchInput('')
     onFiltersChange({
       search: '',
-      financial_status: [],
       tags: [],
       country: undefined,
+      cities: [],
       start_date: undefined,
       end_date: undefined,
+      tz: undefined,
       client_ids: [],
       client_type: '',
       has_shipment: false,
@@ -65,9 +67,11 @@ export function OrdersFilters({ filters, onFiltersChange, table }: OrdersFilters
 
   const hasActiveFilters =
     filters.search ||
-    (filters.financial_status && filters.financial_status.length > 0) ||
     (filters.tags && filters.tags.length > 0) ||
     filters.country ||
+    (filters.cities && filters.cities.length > 0) ||
+    filters.start_date ||
+    filters.end_date ||
     (filters.client_ids && filters.client_ids.length > 0) ||
     filters.client_type ||
     (filters.shipment_status && filters.shipment_status.length > 0)
@@ -91,15 +95,6 @@ export function OrdersFilters({ filters, onFiltersChange, table }: OrdersFilters
         </SearchBeam>
       </div>
 
-      {/* Financial Status */}
-      <MultiSelectFilter
-        label='Payment'
-        icon={CreditCard}
-        options={options?.financial_statuses ?? []}
-        selected={filters.financial_status ?? []}
-        onChange={(values) => onFiltersChange({ financial_status: values, page: 1 })}
-      />
-
       {/* Shipment Status */}
       <MultiSelectFilter
         label='Shipment Status'
@@ -107,6 +102,38 @@ export function OrdersFilters({ filters, onFiltersChange, table }: OrdersFilters
         options={options?.shipment_statuses ?? []}
         selected={filters.shipment_status ?? []}
         onChange={(values) => onFiltersChange({ shipment_status: values, page: 1 })}
+      />
+
+      {/* Order Date (From / To) */}
+      <DateRangeFilter
+        from={filters.start_date}
+        to={filters.end_date}
+        onChange={({ from, to }) =>
+          onFiltersChange({
+            start_date: from,
+            end_date: to,
+            tz: from || to ? Intl.DateTimeFormat().resolvedOptions().timeZone : undefined,
+            page: 1,
+          })
+        }
+      />
+
+      {/* City — searchable by English or Arabic name, or any stored spelling */}
+      <MultiSelectFilter
+        label='City'
+        icon={MapPin}
+        options={(options?.cities ?? []).map((city) => ({
+          value: city.value,
+          label: city.label,
+          sublabel: [city.ar, `${city.count.toLocaleString()} ${city.count === 1 ? 'order' : 'orders'}`]
+            .filter(Boolean)
+            .join(' · '),
+          keywords: city.keywords,
+        }))}
+        selected={filters.cities ?? []}
+        onChange={(values) => onFiltersChange({ cities: values, page: 1 })}
+        searchPlaceholder='Search city (English or العربية)...'
+        contentClassName='w-[280px]'
       />
 
       {/* Tags */}

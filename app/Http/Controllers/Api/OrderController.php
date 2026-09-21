@@ -6,13 +6,17 @@ use App\Http\Controllers\Controller;
 use App\Models\Client;
 use App\Models\Order;
 use App\Models\Tag;
+use App\Services\CityDirectory;
 use App\Services\OrderExportService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 class OrderController extends Controller
 {
-    public function __construct(protected OrderExportService $orderExport) {}
+    public function __construct(
+        protected OrderExportService $orderExport,
+        protected CityDirectory $cities,
+    ) {}
 
     /**
      * Display a listing of orders with filters.
@@ -50,9 +54,9 @@ class OrderController extends Controller
             }
         }
 
-        // Filter by date range
-        if ($request->has('start_date') && $request->has('end_date')) {
-            $query->dateRange($request->start_date, $request->end_date);
+        // Filter by date range (either bound may be omitted)
+        if ($request->filled('start_date') || $request->filled('end_date')) {
+            $query->dateRange($request->start_date, $request->end_date, $request->tz);
         }
 
         // Filter by UTM source (multi-select)
@@ -89,6 +93,9 @@ class OrderController extends Controller
         if ($request->has('country')) {
             $query->where('shipping_country', $request->country);
         }
+
+        // Filter by city (multi-select; each city matches all its spellings, EN + AR)
+        $this->applyCityFilter($query, $request);
 
         // Filter by total amount range
         if ($request->has('min_total')) {
@@ -147,6 +154,24 @@ class OrderController extends Controller
         $orders = $query->paginate($perPage);
 
         return response()->json($orders);
+    }
+
+    /**
+     * Restrict to orders shipping to any of the selected cities. Each selected
+     * city expands to every stored spelling of it ("riyadh", "RIYADH", "الرياض"...).
+     */
+    private function applyCityFilter($query, Request $request): void
+    {
+        if (! $request->has('cities')) {
+            return;
+        }
+
+        $cities = $this->multiValue($request->cities);
+        if (empty($cities)) {
+            return;
+        }
+
+        $query->whereIn('shipping_city', $this->cities->rawValuesFor($cities));
     }
 
     /**
@@ -435,6 +460,7 @@ class OrderController extends Controller
                 ->pluck('shipping_country')
                 ->map(fn($country) => ['value' => $country, 'label' => $country])
                 ->values(),
+            'cities' => $this->cities->options(),
             'risk_levels' => [
                 ['value' => 'Low', 'label' => 'Low'],
                 ['value' => 'Medium', 'label' => 'Medium'],
@@ -551,6 +577,10 @@ class OrderController extends Controller
                 $query->whereIn('payment_method', $values);
             }
         }
+        if ($request->filled('start_date') || $request->filled('end_date')) {
+            $query->dateRange($request->start_date, $request->end_date, $request->tz);
+        }
+        $this->applyCityFilter($query, $request);
         if ($request->has('utm_source')) {
             $values = $this->multiValue($request->utm_source);
             if (!empty($values)) {
