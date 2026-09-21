@@ -102,6 +102,7 @@ Route::middleware(['auth', 'verified', 'role:!client'])->group(function () {
         Route::get('/', [ShipmentController::class, 'index'])->middleware('permission:view orders')->name('api.shipments.index');
         Route::post('/', [ShipmentController::class, 'store'])->middleware('permission:edit orders')->name('api.shipments.store');
         Route::post('/bulk', [ShipmentController::class, 'bulkStore'])->middleware('permission:edit orders')->name('api.shipments.bulk');
+        Route::post('/waybills/bulk', [InvoiceController::class, 'bulkKsaExpressWaybills'])->middleware('permission:edit orders')->name('api.shipments.waybills.bulk');
         Route::get('/{shipment}', [ShipmentController::class, 'show'])->middleware('permission:view orders')->name('api.shipments.show');
         Route::put('/{shipment}', [ShipmentController::class, 'update'])->middleware('permission:edit orders')->name('api.shipments.update');
         Route::post('/{shipment}/track', [ShipmentController::class, 'track'])->middleware('permission:view orders')->name('api.shipments.track');

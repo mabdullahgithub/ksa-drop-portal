@@ -60,6 +60,8 @@ interface ShipmentPanelProps {
 const courierLabels: Record<string, string> = {
   jnt_express: 'J&T Express',
   imile: 'iMile',
+  logestechs: 'LogesTechs',
+  ksadrop_express: 'KSA Express',
 }
 
 const courierLabel = (courier: string) => courierLabels[courier] || courier

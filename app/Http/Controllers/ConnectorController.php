@@ -27,7 +27,7 @@ class ConnectorController extends Controller
         $comingSoon = Connector::where('key', 'coming_soon')->where('enabled', true)->exists();
 
         $connectors = $connectors
-            ->filter(fn ($c) => !in_array($c->key, ['coming_soon', 'jnt_express', 'imile', 'logestechs', 'buyease']))
+            ->filter(fn ($c) => !in_array($c->key, ['coming_soon', 'jnt_express', 'imile', 'logestechs', 'ksadrop_express', 'buyease']))
             ->values();
 
         // Attach the acting client's Shopify connection state to the shopify card.

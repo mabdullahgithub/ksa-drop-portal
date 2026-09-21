@@ -58,6 +58,7 @@ const COURIER_NAMES: Record<string, string> = {
     jnt_express: "J&T Express",
     imile: "iMile",
     logestechs: "Navix",
+    ksadrop_express: "KSA Express",
 };
 
 /**
@@ -192,7 +193,7 @@ export function DashboardPage() {
                             New Shopify orders are sent to KSA Drop
                             automatically, so there's nothing to set up or
                             click. Our team prepares each order and books the
-                            courier (J&T Express, iMile or Navix). The shipment
+                            courier (J&T Express, iMile, Navix or KSA Express). The shipment
                             status and tracking number appear under Recent
                             orders as the parcel moves.
                         </s-paragraph>

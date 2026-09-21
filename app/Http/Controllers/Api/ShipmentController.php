@@ -63,7 +63,7 @@ class ShipmentController extends Controller
         $validated = $request->validate([
             'order_id'               => 'required|exists:orders,id',
             'warehouse_id'           => 'required|exists:warehouses,id',
-            'courier'                => 'nullable|in:jnt_express,imile,logestechs',
+            'courier'                => 'nullable|in:jnt_express,imile,logestechs,ksadrop_express',
             'weight'                 => 'nullable|numeric|min:0.1',
             'length'                 => 'nullable|numeric|min:0',
             'width'                  => 'nullable|numeric|min:0',
@@ -153,7 +153,7 @@ class ShipmentController extends Controller
             'order_ids'    => 'required|array|min:1',
             'order_ids.*'  => 'exists:orders,id',
             'warehouse_id' => 'required|exists:warehouses,id',
-            'courier'      => 'nullable|in:jnt_express,imile,logestechs',
+            'courier'      => 'nullable|in:jnt_express,imile,logestechs,ksadrop_express',
             'weight'       => 'nullable|numeric|min:0.1',
             'service_type' => 'nullable|in:01,02,STANDARD,EXPRESS',
             'goods_type'   => 'nullable|in:ITN1,ITN2,ITN3,ITN4,ITN5,ITN6,ITN7',
@@ -480,6 +480,7 @@ class ShipmentController extends Controller
             'jnt_express' => 'J&T Express',
             'imile' => 'iMile',
             'logestechs' => 'LogesTechs',
+            'ksadrop_express' => 'KSA Express',
             default => $courier,
         };
     }

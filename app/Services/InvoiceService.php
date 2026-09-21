@@ -6,8 +6,14 @@ use App\Models\Invoice;
 use App\Models\Order;
 use App\Models\Shipment;
 use App\Models\Warehouse;
+use App\Services\Shipping\Drivers\KsaDropExpressDriver;
+use BaconQrCode\Renderer\Image\SvgImageBackEnd;
+use BaconQrCode\Renderer\ImageRenderer;
+use BaconQrCode\Renderer\RendererStyle\RendererStyle;
+use BaconQrCode\Writer;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Support\Facades\Storage;
+use Picqer\Barcode\BarcodeGeneratorSVG;
 
 class InvoiceService
 {
@@ -54,6 +60,55 @@ class InvoiceService
      */
     public function generateShippingInvoice(Shipment $shipment): Invoice
     {
+        $invoice = $this->issueShippingInvoice($shipment);
+
+        // Our own courier has no carrier-issued label, so its waybill is a
+        // 4x6 thermal label carrying a scannable barcode of the tracking number.
+        $pdf = $this->isKsaExpressLabel($shipment)
+            ? Pdf::loadView('invoices.ksadrop-express-label', $this->ksaExpressLabelData($shipment, $invoice))
+                ->setPaper([0, 0, 288, 432])
+            : Pdf::loadView('invoices.shipping', [
+                'invoice' => $invoice,
+                'order' => $shipment->order,
+                'shipment' => $shipment,
+                'seller' => $this->seller(),
+            ])->setPaper('a4', 'portrait');
+
+        $path = "invoices/shipping/{$invoice->invoice_number}.pdf";
+        Storage::disk('local')->put($path, $pdf->output());
+
+        $invoice->file_path = $path;
+        $invoice->save();
+
+        return $invoice;
+    }
+
+    /**
+     * Render the KSA Express labels of many shipments into one PDF, one 4x6
+     * page each, and return its bytes. Each shipment gets its shipping
+     * invoice record (so the label carries the same invoice number as its
+     * single waybill); the per-shipment PDF is left to be rendered on demand.
+     *
+     * @param  iterable<Shipment>  $shipments  KSA Express shipments with a tracking number
+     */
+    public function bulkKsaExpressLabels(iterable $shipments): string
+    {
+        $labels = [];
+
+        foreach ($shipments as $shipment) {
+            $labels[] = $this->ksaExpressLabelData($shipment, $this->issueShippingInvoice($shipment));
+        }
+
+        return Pdf::loadView('invoices.ksadrop-express-labels-bulk', ['labels' => $labels])
+            ->setPaper([0, 0, 288, 432])
+            ->output();
+    }
+
+    /**
+     * Create or refresh the shipping invoice record for a shipment.
+     */
+    protected function issueShippingInvoice(Shipment $shipment): Invoice
+    {
         $shipment->loadMissing('order.items', 'order.client');
         $order = $shipment->order;
 
@@ -75,20 +130,51 @@ class InvoiceService
         $invoice->total = $order->total;
         $invoice->save();
 
-        $pdf = Pdf::loadView('invoices.shipping', [
+        return $invoice;
+    }
+
+    protected function isKsaExpressLabel(Shipment $shipment): bool
+    {
+        return $shipment->courier === KsaDropExpressDriver::KEY && $shipment->tracking_number;
+    }
+
+    /**
+     * View data for one KSA Express label (invoices.partials.ksadrop-express-label-body).
+     */
+    protected function ksaExpressLabelData(Shipment $shipment, Invoice $invoice): array
+    {
+        $shipment->loadMissing('order.items', 'order.client');
+        $order = $shipment->order;
+
+        return [
             'invoice' => $invoice,
             'order' => $order,
             'shipment' => $shipment,
             'seller' => $this->seller(),
-        ])->setPaper('a4', 'portrait');
+            'barcode' => $this->barcodeDataUri($shipment->tracking_number),
+            'orderBarcode' => $this->barcodeDataUri((string) $order->order_number, 1, 30),
+            'qr' => $this->qrDataUri(rtrim(config('app.url'), '/') . '/track?q=' . urlencode($shipment->tracking_number)),
+        ];
+    }
 
-        $path = "invoices/shipping/{$invoice->invoice_number}.pdf";
-        Storage::disk('local')->put($path, $pdf->output());
+    /**
+     * Code 128 barcode as an SVG data URI for embedding in PDFs.
+     */
+    protected function barcodeDataUri(string $value, int $widthFactor = 2, int $height = 60): string
+    {
+        $svg = (new BarcodeGeneratorSVG())->getBarcode($value, BarcodeGeneratorSVG::TYPE_CODE_128, $widthFactor, $height);
 
-        $invoice->file_path = $path;
-        $invoice->save();
+        return 'data:image/svg+xml;base64,' . base64_encode($svg);
+    }
 
-        return $invoice;
+    /**
+     * QR code as an SVG data URI for embedding in PDFs.
+     */
+    protected function qrDataUri(string $value): string
+    {
+        $writer = new Writer(new ImageRenderer(new RendererStyle(200, 0), new SvgImageBackEnd()));
+
+        return 'data:image/svg+xml;base64,' . base64_encode($writer->writeString($value));
     }
 
     /**

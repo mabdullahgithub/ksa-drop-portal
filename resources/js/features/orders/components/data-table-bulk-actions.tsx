@@ -1,15 +1,9 @@
 import { useState, useEffect } from 'react'
 import { type Table } from '@tanstack/react-table'
-import { Package, DollarSign, Tag, Trash2, Truck, CheckCircle2, XCircle, AlertTriangle } from 'lucide-react'
+import { Tag, Trash2, Truck, FileText, Loader2, CheckCircle2, XCircle, AlertTriangle } from 'lucide-react'
 import { toast } from 'sonner'
 import axios from 'axios'
 import { Button } from '@/components/ui/button'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
 import {
   Dialog,
   DialogContent,
@@ -32,12 +26,13 @@ import { usePermissions } from '@/hooks/use-permissions'
 import { useOrdersContext } from './orders-provider'
 import { OrderTagsDialog } from './order-tags-dialog'
 
-type Courier = 'jnt_express' | 'imile' | 'logestechs'
+type Courier = 'jnt_express' | 'imile' | 'logestechs' | 'ksadrop_express'
 
 const COURIER_LABELS: Record<Courier, string> = {
   jnt_express: 'J&T Express',
   imile: 'iMile',
   logestechs: 'LogesTechs',
+  ksadrop_express: 'KSA Express',
 }
 
 interface Warehouse {
@@ -45,6 +40,12 @@ interface Warehouse {
   name: string
   city: string
   is_default: boolean
+}
+
+interface WaybillError {
+  order_id: number
+  order_number: string | null
+  error: string
 }
 
 interface BulkShipmentResult {
@@ -79,6 +80,10 @@ export function DataTableBulkActions<TData>({
   const [shipmentRemark, setShipmentRemark] = useState('')
   const [creatingShipments, setCreatingShipments] = useState(false)
   const [shipmentResult, setShipmentResult] = useState<BulkShipmentResult | null>(null)
+
+  // Bulk waybill state
+  const [generatingWaybills, setGeneratingWaybills] = useState(false)
+  const [waybillErrors, setWaybillErrors] = useState<WaybillError[] | null>(null)
 
   const isLogesTechs = shipmentCourier === 'logestechs'
 
@@ -139,46 +144,41 @@ export function DataTableBulkActions<TData>({
     setShipmentRemark('')
   }
 
-  const handleBulkFulfillmentChange = async (status: string) => {
-    const selectedOrders = selectedRows.map((row) => (row.original as Order).id)
-
-    toast.promise(
-      bulkUpdate({
-        order_ids: selectedOrders,
-        action: 'update_fulfillment',
-        fulfillment_status: status,
-      }),
-      {
-        loading: 'Updating fulfillment status...',
-        success: () => {
-          table.resetRowSelection()
-          refresh()
-          return `Updated ${selectedOrders.length} order${selectedOrders.length > 1 ? 's' : ''}`
-        },
-        error: 'Failed to update orders',
+  const handleGenerateWaybills = async () => {
+    const orderIds = selectedRows.map((row) => (row.original as Order).id)
+    setGeneratingWaybills(true)
+    try {
+      const res = await axios.post(
+        '/api/shipments/waybills/bulk',
+        { order_ids: orderIds },
+        { responseType: 'blob' }
+      )
+      const url = URL.createObjectURL(res.data)
+      const link = document.createElement('a')
+      link.href = url
+      link.download =
+        res.headers['content-disposition']?.match(/filename="?([^"]+)"?/)?.[1] ?? 'ksa-express-waybills.pdf'
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      URL.revokeObjectURL(url)
+      toast.success(`Generated ${orderIds.length} waybill${orderIds.length > 1 ? 's' : ''}`)
+    } catch (err: any) {
+      // With responseType 'blob' the JSON error body arrives as a Blob too.
+      let body: { message?: string; errors?: WaybillError[] } = {}
+      try {
+        body = JSON.parse(await err.response?.data?.text())
+      } catch {
+        // not JSON — fall through to the generic message
       }
-    )
-  }
-
-  const handleBulkFinancialChange = async (status: string) => {
-    const selectedOrders = selectedRows.map((row) => (row.original as Order).id)
-
-    toast.promise(
-      bulkUpdate({
-        order_ids: selectedOrders,
-        action: 'update_financial',
-        financial_status: status,
-      }),
-      {
-        loading: 'Updating payment status...',
-        success: () => {
-          table.resetRowSelection()
-          refresh()
-          return `Updated ${selectedOrders.length} order${selectedOrders.length > 1 ? 's' : ''}`
-        },
-        error: 'Failed to update orders',
+      if (body.errors?.length) {
+        setWaybillErrors(body.errors)
+      } else {
+        toast.error(body.message || 'Failed to generate waybills')
       }
-    )
+    } finally {
+      setGeneratingWaybills(false)
+    }
   }
 
   const handleAddTags = async (tags: string[]) => {
@@ -231,72 +231,6 @@ export function DataTableBulkActions<TData>({
   return (
     <>
       <BulkActionsToolbar table={table} entityName='order'>
-        <DropdownMenu>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant='outline'
-                  size='icon'
-                  className='size-8'
-                  aria-label='Update fulfillment'
-                  title='Update fulfillment'
-                >
-                  <Package className='h-4 w-4' />
-                  <span className='sr-only'>Update fulfillment</span>
-                </Button>
-              </DropdownMenuTrigger>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>Update fulfillment</p>
-            </TooltipContent>
-          </Tooltip>
-          <DropdownMenuContent sideOffset={14}>
-            <DropdownMenuItem onClick={() => handleBulkFulfillmentChange('pending')}>
-              Pending
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => handleBulkFulfillmentChange('unfulfilled')}>
-              Unfulfilled
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => handleBulkFulfillmentChange('fulfilled')}>
-              Fulfilled
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-
-        <DropdownMenu>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant='outline'
-                  size='icon'
-                  className='size-8'
-                  aria-label='Update payment'
-                  title='Update payment'
-                >
-                  <DollarSign className='h-4 w-4' />
-                  <span className='sr-only'>Update payment</span>
-                </Button>
-              </DropdownMenuTrigger>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>Update payment</p>
-            </TooltipContent>
-          </Tooltip>
-          <DropdownMenuContent sideOffset={14}>
-            <DropdownMenuItem onClick={() => handleBulkFinancialChange('pending')}>
-              Pending
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => handleBulkFinancialChange('paid')}>
-              Paid
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => handleBulkFinancialChange('refunded')}>
-              Refunded
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
@@ -337,6 +271,32 @@ export function DataTableBulkActions<TData>({
           </Tooltip>
         )}
 
+        {can('edit orders') && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant='outline'
+                size='icon'
+                onClick={handleGenerateWaybills}
+                disabled={generatingWaybills}
+                className='size-8'
+                aria-label='Generate waybill'
+                title='Generate waybill'
+              >
+                {generatingWaybills ? (
+                  <Loader2 className='h-4 w-4 animate-spin' />
+                ) : (
+                  <FileText className='h-4 w-4' />
+                )}
+                <span className='sr-only'>Generate waybill</span>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Generate waybill (KSA Express)</p>
+            </TooltipContent>
+          </Tooltip>
+        )}
+
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
@@ -365,6 +325,35 @@ export function DataTableBulkActions<TData>({
         onSave={handleAddTags}
         isSaving={isSavingTags}
       />
+
+      {/* Waybill errors: orders that block the bulk waybill */}
+      <Dialog open={waybillErrors !== null} onOpenChange={(open) => !open && setWaybillErrors(null)}>
+        <DialogContent className='max-w-lg'>
+          <DialogHeader>
+            <DialogTitle>Cannot generate waybills</DialogTitle>
+            <DialogDescription>
+              Waybills are generated only when every selected order has a shipment created with KSA Express.
+              Fix or deselect these orders and try again.
+            </DialogDescription>
+          </DialogHeader>
+          <div className='max-h-72 space-y-2 overflow-y-auto'>
+            {waybillErrors?.map((e) => (
+              <div key={e.order_id} className='flex items-start gap-2 rounded-md border p-2 text-sm'>
+                <XCircle className='mt-0.5 h-4 w-4 shrink-0 text-destructive' />
+                <div>
+                  <p className='font-medium'>Order {e.order_number ?? e.order_id}</p>
+                  <p className='text-muted-foreground'>{e.error}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+          <DialogFooter>
+            <Button variant='outline' onClick={() => setWaybillErrors(null)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Delete Confirmation Dialog */}
       <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
@@ -412,6 +401,7 @@ export function DataTableBulkActions<TData>({
                   <option value='jnt_express'>J&amp;T Express</option>
                   <option value='imile'>iMile</option>
                   <option value='logestechs'>LogesTechs</option>
+                  <option value='ksadrop_express'>KSA Express</option>
                 </select>
               </div>
 
