@@ -25,8 +25,31 @@ class OrderController extends Controller
     {
         $query = Order::with(['items', 'client', 'latestShipment']);
 
+        $this->applyFilters($query, $request);
+
+        // Sorting
+        $sortBy = $request->get('sort_by', 'created_at');
+        $sortOrder = $request->get('sort_order', 'desc');
+        $query->orderBy($sortBy, $sortOrder);
+
+        // Pagination
+        $perPage = $request->get('per_page', 15);
+        $orders = $query->paginate($perPage);
+
+        return response()->json($orders);
+    }
+
+    /**
+     * Apply the orders filter bar to a query. Shared by the list, export and
+     * statistics so every view of "the filtered orders" agrees. `$except`
+     * skips named filters, letting a stat card ignore the filter it drives.
+     *
+     * @param  array<int, string>  $except  any of 'tags', 'has_shipment', 'shipment_status'
+     */
+    private function applyFilters($query, Request $request, array $except = []): void
+    {
         // Search
-        if ($request->has('search')) {
+        if ($request->filled('search')) {
             $query->search($request->search);
         }
 
@@ -68,7 +91,7 @@ class OrderController extends Controller
         }
 
         // Filter by tags (match orders carrying any of the selected tags)
-        if ($request->has('tags')) {
+        if ($request->has('tags') && ! in_array('tags', $except, true)) {
             $tags = $this->multiValue($request->tags);
             if (!empty($tags)) {
                 $query->where(function ($q) use ($tags) {
@@ -124,8 +147,8 @@ class OrderController extends Controller
             });
         }
 
-        // Filter by shipment status
-        if ($request->has('has_shipment')) {
+        // Filter by assigned / unassigned to a courier
+        if ($request->has('has_shipment') && ! in_array('has_shipment', $except, true)) {
             $hasShipment = filter_var($request->has_shipment, FILTER_VALIDATE_BOOLEAN);
             if ($hasShipment) {
                 $query->withShipment();
@@ -135,7 +158,7 @@ class OrderController extends Controller
         }
 
         // Filter by shipment status values
-        if ($request->has('shipment_status')) {
+        if ($request->has('shipment_status') && ! in_array('shipment_status', $except, true)) {
             $statuses = $this->multiValue($request->shipment_status);
             if (!empty($statuses)) {
                 $query->whereHas('shipments', function ($q) use ($statuses) {
@@ -143,17 +166,6 @@ class OrderController extends Controller
                 });
             }
         }
-
-        // Sorting
-        $sortBy = $request->get('sort_by', 'created_at');
-        $sortOrder = $request->get('sort_order', 'desc');
-        $query->orderBy($sortBy, $sortOrder);
-
-        // Pagination
-        $perPage = $request->get('per_page', 15);
-        $orders = $query->paginate($perPage);
-
-        return response()->json($orders);
     }
 
     /**
@@ -349,64 +361,77 @@ class OrderController extends Controller
      */
     public function statistics(Request $request)
     {
-        $query = Order::query();
+        // Stats follow the filter bar. Each card group ignores the filter it
+        // drives (clicking "Delivered" must not zero every other status card),
+        // and none follow the All / Assigned tab — the tab counts are the split.
+        $filtered = function (array $except = []) use ($request) {
+            $query = Order::query();
+            $this->applyFilters($query, $request, ['has_shipment', ...$except]);
 
-        // Apply date range if provided
-        if ($request->has('start_date') && $request->has('end_date')) {
-            $query->dateRange($request->start_date, $request->end_date);
-        }
+            return $query;
+        };
 
-        $stats = [
-            'total_orders' => $query->count(),
-            'unassigned_orders' => $query->clone()->withoutShipment()->count(),
-            'assigned_orders' => $query->clone()->withShipment()->count(),
-            'total_revenue' => round((float) $query->sum('total'), 2),
-            'average_order_value' => round((float) $query->avg('total'), 2),
-            'by_fulfillment_status' => DB::table('orders')
-                ->select('fulfillment_status', DB::raw('count(*) as count'))
-                ->groupBy('fulfillment_status')
-                ->get(),
-            'by_financial_status' => DB::table('orders')
-                ->select('financial_status', DB::raw('count(*) as count'))
-                ->groupBy('financial_status')
-                ->get(),
+        // Totals and the tab split in a single pass over the filtered orders.
+        $totals = $filtered()->toBase()->selectRaw(
+            'count(*) as total_orders,
+             coalesce(sum(total), 0) as total_revenue,
+             coalesce(avg(total), 0) as average_order_value,
+             coalesce(sum(case when exists (select 1 from shipments where shipments.order_id = orders.id) then 1 else 0 end), 0) as assigned_orders'
+        )->first();
+
+        $totalOrders = (int) $totals->total_orders;
+        $assigned = (int) $totals->assigned_orders;
+
+        return response()->json([
+            'total_orders' => $totalOrders,
+            'unassigned_orders' => $totalOrders - $assigned,
+            'assigned_orders' => $assigned,
+            'total_revenue' => round((float) $totals->total_revenue, 2),
+            'average_order_value' => round((float) $totals->average_order_value, 2),
+            // Orders (not shipments) per status, matching what the shipment_status filter lists.
+            // Served by the shipments (order_id, status) index.
             'by_shipment_status' => DB::table('shipments')
-                ->select('status', DB::raw('count(*) as count'))
+                ->whereIn('order_id', $filtered(['shipment_status'])->select('orders.id'))
+                ->select('status', DB::raw('count(distinct order_id) as count'))
                 ->groupBy('status')
                 ->orderByDesc('count')
                 ->get(),
-            'by_payment_method' => DB::table('orders')
-                ->select('payment_method', DB::raw('count(*) as count'))
-                ->groupBy('payment_method')
-                ->get(),
-            'by_tag' => Tag::orderBy('created_at')->get(['id', 'name', 'color'])->map(fn ($tag) => [
-                'id'    => $tag->id,
-                'name'  => $tag->name,
-                'color' => $tag->color,
-                'count' => Order::whereJsonContains('tags', $tag->name)->count(),
-            ]),
-            'by_utm_source' => DB::table('orders')
-                ->select('utm_source', DB::raw('count(*) as count'))
-                ->whereNotNull('utm_source')
-                ->groupBy('utm_source')
-                ->orderByDesc('count')
-                ->limit(10)
-                ->get(),
-            'by_country' => DB::table('orders')
-                ->select('shipping_country', DB::raw('count(*) as count'))
-                ->whereNotNull('shipping_country')
-                ->groupBy('shipping_country')
-                ->orderByDesc('count')
-                ->get(),
-            'top_products' => DB::table('order_items')
-                ->select('lineitem_name', DB::raw('sum(lineitem_quantity) as total_quantity'), DB::raw('sum(lineitem_price * lineitem_quantity) as total_revenue'))
-                ->groupBy('lineitem_name')
-                ->orderByDesc('total_quantity')
-                ->limit(10)
-                ->get(),
-        ];
+            'by_tag' => $this->tagCounts($filtered(['tags'])),
+        ]);
+    }
 
-        return response()->json($stats);
+    /**
+     * Order count per tag for the given query, in one query for all tags.
+     */
+    private function tagCounts($query): array
+    {
+        $tags = Tag::orderBy('created_at')->get(['id', 'name', 'color']);
+
+        if ($tags->isEmpty()) {
+            return [];
+        }
+
+        // Same test as whereJsonContains('tags', $name), as a column expression.
+        $sqlite = DB::connection()->getDriverName() === 'sqlite';
+        $contains = $sqlite
+            ? 'exists (select 1 from json_each(orders.tags) where json_each.value = ?)'
+            : 'json_contains(orders.tags, ?)';
+
+        $columns = [];
+        $bindings = [];
+        foreach ($tags as $i => $tag) {
+            $columns[] = "coalesce(sum(case when {$contains} then 1 else 0 end), 0) as t{$i}";
+            $bindings[] = $sqlite ? $tag->name : json_encode($tag->name);
+        }
+
+        $counts = (array) $query->toBase()->selectRaw(implode(', ', $columns), $bindings)->first();
+
+        return $tags->values()->map(fn ($tag, $i) => [
+            'id'    => $tag->id,
+            'name'  => $tag->name,
+            'color' => $tag->color,
+            'count' => (int) $counts["t{$i}"],
+        ])->all();
     }
 
     /**
@@ -555,79 +580,7 @@ class OrderController extends Controller
             return $this->orderExport->stream($orders);
         }
 
-        // Apply same filters as index
-        if ($request->has('search')) {
-            $query->search($request->search);
-        }
-        if ($request->has('fulfillment_status')) {
-            $values = $this->multiValue($request->fulfillment_status);
-            if (!empty($values)) {
-                $query->whereIn('fulfillment_status', $values);
-            }
-        }
-        if ($request->has('financial_status')) {
-            $values = $this->multiValue($request->financial_status);
-            if (!empty($values)) {
-                $query->whereIn('financial_status', $values);
-            }
-        }
-        if ($request->has('payment_method')) {
-            $values = $this->multiValue($request->payment_method);
-            if (!empty($values)) {
-                $query->whereIn('payment_method', $values);
-            }
-        }
-        if ($request->filled('start_date') || $request->filled('end_date')) {
-            $query->dateRange($request->start_date, $request->end_date, $request->tz);
-        }
-        $this->applyCityFilter($query, $request);
-        if ($request->has('utm_source')) {
-            $values = $this->multiValue($request->utm_source);
-            if (!empty($values)) {
-                $query->whereIn('utm_source', $values);
-            }
-        }
-        if ($request->has('tags')) {
-            $tags = $this->multiValue($request->tags);
-            if (!empty($tags)) {
-                $query->where(function ($q) use ($tags) {
-                    foreach ($tags as $tag) {
-                        $q->orWhereJsonContains('tags', $tag);
-                    }
-                });
-            }
-        }
-        if ($request->has('client_ids')) {
-            $clientIds = is_array($request->client_ids)
-                ? $request->client_ids
-                : explode(',', $request->client_ids);
-            $clientIds = array_filter(array_map('intval', $clientIds));
-            if (!empty($clientIds)) {
-                $query->whereIn('client_id', $clientIds);
-            }
-        }
-        if ($request->filled('client_type') && in_array($request->client_type, ['fulfilment', 'dropshipper'])) {
-            $clientType = $request->client_type;
-            $query->whereHas('client', function ($q) use ($clientType) {
-                $q->whereJsonContains('client_types', $clientType);
-            });
-        }
-        if ($request->has('has_shipment')) {
-            $hasShipment = filter_var($request->has_shipment, FILTER_VALIDATE_BOOLEAN);
-            if ($hasShipment) {
-                $query->withShipment();
-            } else {
-                $query->withoutShipment();
-            }
-        }
-        if ($request->has('shipment_status')) {
-            $statuses = $this->multiValue($request->shipment_status);
-            if (!empty($statuses)) {
-                $query->whereHas('shipments', function ($q) use ($statuses) {
-                    $q->whereIn('status', $statuses);
-                });
-            }
-        }
+        $this->applyFilters($query, $request);
 
         $orders = $query->get();
 

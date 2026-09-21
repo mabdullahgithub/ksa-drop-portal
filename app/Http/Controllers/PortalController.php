@@ -8,6 +8,7 @@ use App\Models\ClientProductImage;
 use App\Models\Tag;
 use App\Models\User;
 use App\Notifications\ProductSubmittedNotification;
+use App\Services\CityDirectory;
 use App\Services\OrderExportService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -15,7 +16,10 @@ use Illuminate\Support\Facades\Storage;
 
 class PortalController extends Controller
 {
-    public function __construct(protected OrderExportService $orderExport) {}
+    public function __construct(
+        protected OrderExportService $orderExport,
+        protected CityDirectory $cities,
+    ) {}
 
     /**
      * Strip a leading UTF-8 BOM and trim whitespace from CSV header cells so
@@ -106,6 +110,19 @@ class PortalController extends Controller
             $values = $this->parseMultiValue($request->financial_status);
             if (!empty($values)) {
                 $query->whereIn('financial_status', $values);
+            }
+        }
+
+        // Order date range (either bound may be omitted), in the viewer's timezone
+        if ($request->filled('start_date') || $request->filled('end_date')) {
+            $query->dateRange($request->start_date, $request->end_date, $request->tz);
+        }
+
+        // City (multi-select); each city matches every stored spelling of it, EN + AR
+        if ($request->has('cities')) {
+            $cities = $this->parseMultiValue($request->cities);
+            if (!empty($cities)) {
+                $query->whereIn('shipping_city', $this->cities->rawValuesFor($cities));
             }
         }
 
@@ -221,6 +238,22 @@ class PortalController extends Controller
         $perPage = $request->get('per_page', 15);
 
         return response()->json($query->paginate($perPage));
+    }
+
+    /**
+     * Filter options for the portal orders page, scoped to the client's own orders.
+     */
+    public function orderFilterOptions()
+    {
+        $client = $this->resolveClient();
+
+        if (!$client || !in_array('orders', $client->portal_features ?? [])) {
+            abort(403);
+        }
+
+        return response()->json([
+            'cities' => $this->cities->options($client->id),
+        ]);
     }
 
     public function showOrder(int $orderId)

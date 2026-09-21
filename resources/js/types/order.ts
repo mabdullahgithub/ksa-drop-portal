@@ -181,22 +181,17 @@ export interface ClientFilterOption {
   client_id: string
 }
 
+/** Stats for the orders matching the current filters (see OrderController::statistics). */
 export interface OrderStatistics {
   total_orders: number
+  unassigned_orders: number
+  assigned_orders: number
   total_revenue: number
   average_order_value: number
-  by_fulfillment_status: Array<{ fulfillment_status: string; count: number }>
-  by_financial_status: Array<{ financial_status: string; count: number }>
+  /** Orders per shipment status; ignores the shipment status filter itself. */
   by_shipment_status: Array<{ status: string; count: number }>
-  by_payment_method: Array<{ payment_method: string; count: number }>
-  by_utm_source: Array<{ utm_source: string; count: number }>
-  by_country: Array<{ shipping_country: string; count: number }>
+  /** Orders per tag; ignores the tag filter itself. */
   by_tag: Array<{ id: number; name: string; color: string; count: number }>
-  top_products: Array<{
-    lineitem_name: string
-    total_quantity: number
-    total_revenue: number
-  }>
 }
 
 export interface FilterOption {

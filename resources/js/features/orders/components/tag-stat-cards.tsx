@@ -1,4 +1,4 @@
-import { useOrderStatistics } from '@/hooks/useOrders'
+import type { OrderStatistics } from '@/types/order'
 import { Tag as TagIcon } from 'lucide-react'
 
 function hexToRgba(hex: string | null | undefined, alpha: number) {
@@ -19,16 +19,18 @@ function TagCardSkeleton() {
 }
 
 interface TagStatCardsProps {
+  statistics: OrderStatistics | null
+  loading: boolean
   activeTag?: string | null
   onTagClick?: (tagName: string) => void
 }
 
-export function TagStatCards({ activeTag, onTagClick }: TagStatCardsProps) {
-  const { statistics, loading } = useOrderStatistics()
+export function TagStatCards({ statistics, loading, activeTag, onTagClick }: TagStatCardsProps) {
+  const initialLoad = loading && !statistics
 
   const tags = statistics?.by_tag ?? []
 
-  if (!loading && tags.length === 0) return null
+  if (!initialLoad && tags.length === 0) return null
 
   return (
     <div>
@@ -37,7 +39,7 @@ export function TagStatCards({ activeTag, onTagClick }: TagStatCardsProps) {
         <h3 className='text-sm font-semibold'>Tags</h3>
       </div>
 
-      {loading ? (
+      {initialLoad ? (
         <div className='grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-6'>
           {[...Array(6)].map((_, i) => (
             <TagCardSkeleton key={i} />

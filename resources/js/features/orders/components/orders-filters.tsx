@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Search, X, SlidersHorizontal, Tag, Truck, Users, MapPin } from 'lucide-react'
+import { Search, X, SlidersHorizontal, Tag, Truck, Users } from 'lucide-react'
 import { type Table } from '@tanstack/react-table'
 import { Input } from '@/components/ui/input'
 import { SearchBeam } from '@/components/search-beam'
@@ -21,6 +21,7 @@ import {
 } from '@/components/ui/select'
 import { MultiSelectFilter } from '@/components/multi-select-filter'
 import { DateRangeFilter } from '@/components/date-range-filter'
+import { CityFilter } from '@/components/city-filter'
 import { useFilterOptions } from '@/hooks/useOrders'
 import type { OrderFilters, Order } from '@/types/order'
 import { OrdersFiltersSkeleton } from './orders-skeleton'
@@ -119,21 +120,10 @@ export function OrdersFilters({ filters, onFiltersChange, table }: OrdersFilters
       />
 
       {/* City — searchable by English or Arabic name, or any stored spelling */}
-      <MultiSelectFilter
-        label='City'
-        icon={MapPin}
-        options={(options?.cities ?? []).map((city) => ({
-          value: city.value,
-          label: city.label,
-          sublabel: [city.ar, `${city.count.toLocaleString()} ${city.count === 1 ? 'order' : 'orders'}`]
-            .filter(Boolean)
-            .join(' · '),
-          keywords: city.keywords,
-        }))}
+      <CityFilter
+        cities={options?.cities ?? []}
         selected={filters.cities ?? []}
         onChange={(values) => onFiltersChange({ cities: values, page: 1 })}
-        searchPlaceholder='Search city (English or العربية)...'
-        contentClassName='w-[280px]'
       />
 
       {/* Tags */}

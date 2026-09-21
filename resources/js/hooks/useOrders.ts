@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { router } from '@inertiajs/react'
 import type {
   Order,
@@ -9,6 +9,27 @@ import type {
   BulkUpdatePayload,
 } from '@/types/order'
 
+/** Serialise filters to query params: arrays comma-joined, booleans as 1/0, empties dropped. */
+export function filtersToParams(filters: OrderFilters): URLSearchParams {
+  const params = new URLSearchParams()
+
+  Object.entries(filters).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== '') {
+      if (Array.isArray(value)) {
+        if (value.length > 0) {
+          params.append(key, value.join(','))
+        }
+      } else if (typeof value === 'boolean') {
+        params.append(key, value ? '1' : '0')
+      } else {
+        params.append(key, String(value))
+      }
+    }
+  })
+
+  return params
+}
+
 export function useOrders(initialFilters: OrderFilters = {}) {
   const [orders, setOrders] = useState<PaginatedOrders | null>(null)
   const [loading, setLoading] = useState(true)
@@ -16,23 +37,7 @@ export function useOrders(initialFilters: OrderFilters = {}) {
 
   const fetchOrders = useCallback(async (newFilters?: OrderFilters) => {
     setLoading(true)
-    const params = new URLSearchParams()
-
-    const activeFilters = newFilters || filters
-
-    Object.entries(activeFilters).forEach(([key, value]) => {
-      if (value !== undefined && value !== null && value !== '') {
-        if (Array.isArray(value)) {
-          if (value.length > 0) {
-            params.append(key, value.join(','))
-          }
-        } else if (typeof value === 'boolean') {
-          params.append(key, value ? '1' : '0')
-        } else {
-          params.append(key, String(value))
-        }
-      }
-    })
+    const params = filtersToParams(newFilters || filters)
 
     try {
       const response = await fetch(`/api/orders?${params}`)
@@ -102,31 +107,40 @@ export function useOrder(orderId: number) {
   return { order, loading }
 }
 
-export function useOrderStatistics(startDate?: string, endDate?: string) {
+/**
+ * Order statistics for the given filters, refetched whenever they change.
+ * Paging, sorting and the All / Assigned tab don't affect the stats, so they
+ * are left out of the request. Previous stats stay visible while refetching.
+ */
+export function useOrderStatistics(filters: OrderFilters = {}) {
   const [statistics, setStatistics] = useState<OrderStatistics | null>(null)
   const [loading, setLoading] = useState(true)
+  const latestRequest = useRef(0)
+
+  const { page, per_page, sort_by, sort_order, has_shipment, ...statFilters } = filters
+  const query = filtersToParams(statFilters).toString()
+
+  const fetchStatistics = useCallback(async () => {
+    const requestId = ++latestRequest.current
+    setLoading(true)
+
+    try {
+      const response = await fetch(`/api/orders/statistics?${query}`)
+      const data = await response.json()
+      // Ignore responses that arrive after a newer request was made.
+      if (requestId === latestRequest.current) setStatistics(data)
+    } catch (error) {
+      console.error('Error fetching statistics:', error)
+    } finally {
+      if (requestId === latestRequest.current) setLoading(false)
+    }
+  }, [query])
 
   useEffect(() => {
-    const fetchStatistics = async () => {
-      const params = new URLSearchParams()
-      if (startDate) params.append('start_date', startDate)
-      if (endDate) params.append('end_date', endDate)
-
-      try {
-        const response = await fetch(`/api/orders/statistics?${params}`)
-        const data = await response.json()
-        setStatistics(data)
-      } catch (error) {
-        console.error('Error fetching statistics:', error)
-      } finally {
-        setLoading(false)
-      }
-    }
-
     fetchStatistics()
-  }, [startDate, endDate])
+  }, [fetchStatistics])
 
-  return { statistics, loading }
+  return { statistics, loading, refresh: fetchStatistics }
 }
 
 export function useFilterOptions() {

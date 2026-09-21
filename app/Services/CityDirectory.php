@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Order;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -73,6 +74,9 @@ class CityDirectory
     /** @var array<string, array{name: string, ar: ?string}>|null normalised key => group */
     protected ?array $index = null;
 
+    /** @var array<int, string>|null */
+    protected ?array $distinctCities = null;
+
     /**
      * Normalise a raw city string to a comparison key.
      */
@@ -128,23 +132,31 @@ class CityDirectory
     /**
      * Filter options built from the cities actually present on orders, most
      * orders first. `keywords` carries every stored spelling so the UI search
-     * finds a city by any of them.
+     * finds a city by any of them. Pass a client id to list only that client's cities.
      *
      * @return array<int, array{value: string, label: string, ar: ?string, count: int, keywords: array<int, string>}>
      */
-    public function options(): array
+    public function options(?int $clientId = null): array
     {
+        $counts = Order::query()
+            ->when($clientId !== null, fn ($q) => $q->where('client_id', $clientId))
+            ->whereNotNull('shipping_city')
+            ->toBase()
+            ->select('shipping_city', DB::raw('count(*) as count'))
+            ->groupBy('shipping_city')
+            ->pluck('count', 'shipping_city');
+
         $groups = [];
 
-        foreach ($this->distinctCities() as $raw => $count) {
+        foreach ($counts as $raw => $count) {
             $id = $this->groupId($raw);
             if ($id === '') {
                 continue;
             }
 
             $group = &$groups[$id];
-            $group['count'] = ($group['count'] ?? 0) + $count;
-            $group['variants'][trim($raw)] = ($group['variants'][trim($raw)] ?? 0) + $count;
+            $group['count'] = ($group['count'] ?? 0) + (int) $count;
+            $group['variants'][trim($raw)] = ($group['variants'][trim($raw)] ?? 0) + (int) $count;
             unset($group);
         }
 
@@ -172,6 +184,7 @@ class CityDirectory
 
     /**
      * Every stored shipping_city spelling that belongs to one of the given groups.
+     * Callers combine this with their own scoping (client, filters) via whereIn.
      *
      * @param  array<int, string>  $selected  group ids (or any spelling of the city)
      * @return array<int, string>
@@ -185,22 +198,22 @@ class CityDirectory
         }
 
         return array_values(array_filter(
-            array_keys($this->distinctCities()),
+            $this->distinctCities(),
             fn ($raw) => isset($wanted[$this->groupId($raw)])
         ));
     }
 
     /**
-     * @return array<string, int> raw shipping_city => order count
+     * @return array<int, string> every distinct raw shipping_city
      */
     protected function distinctCities(): array
     {
-        return DB::table('orders')
-            ->select('shipping_city', DB::raw('count(*) as count'))
+        // One read per request: a stats call filters several queries by city.
+        // An index-only scan thanks to the orders.shipping_city index.
+        return $this->distinctCities ??= DB::table('orders')
             ->whereNotNull('shipping_city')
-            ->groupBy('shipping_city')
-            ->pluck('count', 'shipping_city')
-            ->map(fn ($c) => (int) $c)
+            ->distinct()
+            ->pluck('shipping_city')
             ->all();
     }
 

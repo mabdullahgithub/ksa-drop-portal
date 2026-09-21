@@ -13,6 +13,9 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { MultiSelectFilter } from '@/components/multi-select-filter'
+import { DateRangeFilter } from '@/components/date-range-filter'
+import { CityFilter } from '@/components/city-filter'
+import type { CityFilterOption } from '@/types/order'
 
 interface PortalOrdersFiltersProps {
   filters: Record<string, any>
@@ -21,6 +24,7 @@ interface PortalOrdersFiltersProps {
     financial_statuses?: Array<{ value: string; label: string }>
     shipment_statuses?: Array<{ value: string; label: string }>
     tags?: Array<{ value: string; label: string }>
+    cities?: CityFilterOption[]
   }
   table?: Table<any>
 }
@@ -54,6 +58,10 @@ export function PortalOrdersFilters({
       financial_status: [],
       shipment_status: [],
       tags: [],
+      start_date: undefined,
+      end_date: undefined,
+      tz: undefined,
+      cities: [],
       page: 1,
     })
   }
@@ -62,7 +70,10 @@ export function PortalOrdersFilters({
     filters.search ||
     (filters.financial_status && filters.financial_status.length > 0) ||
     (filters.shipment_status && filters.shipment_status.length > 0) ||
-    (filters.tags && filters.tags.length > 0)
+    (filters.tags && filters.tags.length > 0) ||
+    filters.start_date ||
+    filters.end_date ||
+    (filters.cities && filters.cities.length > 0)
 
   return (
     <div className='flex items-center gap-2 flex-wrap'>
@@ -98,6 +109,27 @@ export function PortalOrdersFilters({
           onChange={(values) => onFiltersChange({ shipment_status: values, page: 1 })}
         />
       )}
+
+      {/* Order Date (From / To) */}
+      <DateRangeFilter
+        from={filters.start_date}
+        to={filters.end_date}
+        onChange={({ from, to }) =>
+          onFiltersChange({
+            start_date: from,
+            end_date: to,
+            tz: from || to ? Intl.DateTimeFormat().resolvedOptions().timeZone : undefined,
+            page: 1,
+          })
+        }
+      />
+
+      {/* City — searchable by English or Arabic name, or any stored spelling */}
+      <CityFilter
+        cities={options.cities ?? []}
+        selected={filters.cities ?? []}
+        onChange={(values) => onFiltersChange({ cities: values, page: 1 })}
+      />
 
       {/* Tags */}
       {options.tags && options.tags.length > 0 && (

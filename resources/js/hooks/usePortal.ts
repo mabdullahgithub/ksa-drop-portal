@@ -413,10 +413,13 @@ export function usePortalOrderFilterOptions() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    fetch('/api/orders/filter-options')
-      .then((r) => r.json())
-      .then(setOptions)
-      .catch(() => {})
+    // Cities come from the portal endpoint, scoped to this client's own orders.
+    // The shared options only load for staff (e.g. impersonating a client).
+    const json = (url: string) =>
+      fetch(url).then((r) => (r.ok ? r.json() : null)).catch(() => null)
+
+    Promise.all([json('/api/orders/filter-options'), json('/portal/api/orders/filter-options')])
+      .then(([shared, portal]) => setOptions({ ...(shared ?? {}), ...(portal ?? {}) }))
       .finally(() => setLoading(false))
   }, [])
 

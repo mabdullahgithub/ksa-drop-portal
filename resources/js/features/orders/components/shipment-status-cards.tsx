@@ -1,4 +1,4 @@
-import { useOrderStatistics } from '@/hooks/useOrders'
+import type { OrderStatistics } from '@/types/order'
 import {
   Package,
   Truck,
@@ -33,13 +33,13 @@ function ShipmentStatusCardSkeleton() {
 }
 
 interface ShipmentStatusCardsProps {
+  statistics: OrderStatistics | null
+  loading: boolean
   onStatusClick?: (status: string) => void
 }
 
-export function ShipmentStatusCards({ onStatusClick }: ShipmentStatusCardsProps) {
-  const { statistics, loading } = useOrderStatistics()
-
-  if (loading) {
+export function ShipmentStatusCards({ statistics, loading, onStatusClick }: ShipmentStatusCardsProps) {
+  if (loading && !statistics) {
     return (
       <div className='grid gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5'>
         {[...Array(5)].map((_, i) => (

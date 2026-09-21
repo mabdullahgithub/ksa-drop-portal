@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useCallback } from 'react'
 import { HelpCircle } from 'lucide-react'
 import { Header } from '@/components/layout/header'
 import { NotificationsDropdown } from '@/components/layout/notifications-dropdown'
@@ -14,7 +14,7 @@ import { OrdersFilters } from './components/orders-filters'
 import { ShipmentStatusCards } from './components/shipment-status-cards'
 import { TagStatCards } from './components/tag-stat-cards'
 import { ShipmentStatusInfoModal } from './components/shipment-status-info-modal'
-import { useOrders } from '@/hooks/useOrders'
+import { useOrders, useOrderStatistics } from '@/hooks/useOrders'
 
 export function Orders() {
   const { orders, meta, loading, filters, updateFilters, refresh } = useOrders({
@@ -25,20 +25,13 @@ export function Orders() {
   })
   const [tableInstance, setTableInstance] = useState<any>(null)
   const [statusInfoModalOpen, setStatusInfoModalOpen] = useState(false)
-  const [stats, setStats] = useState<any>(null)
+  // Every stat card and tab count on the page follows the current filters.
+  const { statistics: stats, loading: statsLoading, refresh: refreshStats } = useOrderStatistics(filters)
 
-  useEffect(() => {
-    const fetchStats = async () => {
-      try {
-        const response = await fetch('/api/orders/statistics')
-        const data = await response.json()
-        setStats(data)
-      } catch (error) {
-        console.error('Error fetching statistics:', error)
-      }
-    }
-    fetchStats()
-  }, [])
+  // Order changes (bulk actions, edits, shipments) move the numbers too.
+  const refreshAll = useCallback(async () => {
+    await Promise.all([refresh(), refreshStats()])
+  }, [refresh, refreshStats])
 
   const activeTab = filters.has_shipment === true ? 'assigned' : filters.has_shipment === false ? 'unassigned' : 'unassigned'
 
@@ -50,7 +43,7 @@ export function Orders() {
   }
 
   return (
-    <OrdersProvider refresh={refresh}>
+    <OrdersProvider refresh={refreshAll}>
       <Header fixed>
         <Search className='me-auto' />
         <ThemeSwitch />
@@ -70,6 +63,8 @@ export function Orders() {
         </div>
 
         <TagStatCards
+          statistics={stats}
+          loading={statsLoading}
           activeTag={filters.tags?.[0] ?? null}
           onTagClick={(tagName) => {
             const isActive = filters.tags?.[0] === tagName
@@ -89,6 +84,8 @@ export function Orders() {
             </button>
           </div>
           <ShipmentStatusCards
+            statistics={stats}
+            loading={statsLoading}
             onStatusClick={(status) => {
               updateFilters({ shipment_status: [status], has_shipment: true, page: 1 })
             }}
@@ -139,7 +136,7 @@ export function Orders() {
           data={orders}
           meta={meta}
           loading={loading}
-          onRefresh={refresh}
+          onRefresh={refreshAll}
           onPageChange={(page) => updateFilters({ page })}
           onPageSizeChange={(pageSize) => updateFilters({ per_page: pageSize, page: 1 })}
           onSortChange={(sortBy, sortOrder) => updateFilters({ sort_by: sortBy, sort_order: sortOrder, page: 1 })}
@@ -147,7 +144,7 @@ export function Orders() {
         />
       </Main>
 
-      <OrdersDialogs onSuccess={refresh} />
+      <OrdersDialogs onSuccess={refreshAll} />
       <ShipmentStatusInfoModal open={statusInfoModalOpen} onOpenChange={setStatusInfoModalOpen} />
     </OrdersProvider>
   )
