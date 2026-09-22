@@ -53,6 +53,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
+import { BUSINESS_TIMEZONE } from '@/lib/business-time'
 
 const MAX_FILE_SIZE_MB = 10
 const ALLOWED_MIME = ['text/csv', 'application/vnd.ms-excel', 'application/csv']
@@ -295,7 +296,7 @@ function makeColumns(tagColors: Record<string, string>, onView: (order: any) => 
       const val = row.getValue('created_at') as string
       if (!val) return <span>—</span>
       try {
-        return <span>{new Date(val).toLocaleDateString()}</span>
+        return <span>{new Date(val).toLocaleDateString(undefined, { timeZone: BUSINESS_TIMEZONE })}</span>
       } catch {
         return <span>—</span>
       }

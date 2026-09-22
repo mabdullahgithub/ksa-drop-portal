@@ -113,9 +113,9 @@ class PortalController extends Controller
             }
         }
 
-        // Order date range (either bound may be omitted), in the viewer's timezone
+        // Order date range (either bound may be omitted), in the business timezone
         if ($request->filled('start_date') || $request->filled('end_date')) {
-            $query->dateRange($request->start_date, $request->end_date, $request->tz);
+            $query->dateRange($request->start_date, $request->end_date);
         }
 
         // City (multi-select); each city matches every stored spelling of it, EN + AR

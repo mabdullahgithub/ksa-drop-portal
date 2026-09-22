@@ -79,7 +79,7 @@ class OrderController extends Controller
 
         // Filter by date range (either bound may be omitted)
         if ($request->filled('start_date') || $request->filled('end_date')) {
-            $query->dateRange($request->start_date, $request->end_date, $request->tz);
+            $query->dateRange($request->start_date, $request->end_date);
         }
 
         // Filter by UTM source (multi-select)

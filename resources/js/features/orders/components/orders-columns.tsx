@@ -7,6 +7,7 @@ import { DataTableRowActions } from './data-table-row-actions'
 import { format } from 'date-fns'
 import { useAvailableTags } from '@/hooks/useTags'
 import { useOrdersContext } from './orders-provider'
+import { toBusinessTime } from '@/lib/business-time'
 
 function hexToRgba(hex: string | null | undefined, alpha: number) {
   if (!hex || hex.length < 4) return `rgba(128, 128, 128, ${alpha})`
@@ -321,7 +322,7 @@ export const ordersColumns: ColumnDef<Order>[] = [
       const date = row.getValue('created_at') as string
       return (
         <span className='text-sm text-muted-foreground'>
-          {format(new Date(date), 'MMM dd, yyyy')}
+          {format(toBusinessTime(date), 'MMM dd, yyyy')}
         </span>
       )
     },

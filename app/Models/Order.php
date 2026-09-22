@@ -162,13 +162,13 @@ class Order extends Model
 
     /**
      * Scope a query to filter by date range.
+     *
+     * Dates are whole days (Y-m-d) in the business timezone, so every viewer
+     * gets the same orders for the same dates. The end day is inclusive.
      */
-    public function scopeDateRange($query, $startDate = null, $endDate = null, $timezone = null)
+    public function scopeDateRange($query, $startDate = null, $endDate = null)
     {
-        // Dates are whole days (Y-m-d) in the viewer's timezone; the end day is inclusive.
-        $timezone = in_array($timezone, \DateTimeZone::listIdentifiers(), true)
-            ? $timezone
-            : config('app.timezone');
+        $timezone = config('app.business_timezone', 'Asia/Riyadh');
 
         $toCarbon = function ($value) use ($timezone) {
             if (!is_string($value) || !preg_match('/^\d{4}-\d{2}-\d{2}/', $value)) {

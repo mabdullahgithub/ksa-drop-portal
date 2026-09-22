@@ -60,7 +60,6 @@ export function PortalOrdersFilters({
       tags: [],
       start_date: undefined,
       end_date: undefined,
-      tz: undefined,
       cities: [],
       page: 1,
     })
@@ -118,7 +117,6 @@ export function PortalOrdersFilters({
           onFiltersChange({
             start_date: from,
             end_date: to,
-            tz: from || to ? Intl.DateTimeFormat().resolvedOptions().timeZone : undefined,
             page: 1,
           })
         }

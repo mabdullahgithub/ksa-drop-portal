@@ -10,6 +10,7 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover'
 import { cn } from '@/lib/utils'
+import { BUSINESS_TIMEZONE_LABEL, businessToday } from '@/lib/business-time'
 
 const VALUE_FORMAT = 'yyyy-MM-dd'
 
@@ -31,7 +32,8 @@ const toValue = (date?: Date) => (date ? format(date, VALUE_FORMAT) : undefined)
 
 /**
  * Date range (From / To) filter matching the MultiSelectFilter trigger style.
- * Either end can be left open. Values are plain `yyyy-MM-dd` strings.
+ * Either end can be left open. Values are plain `yyyy-MM-dd` strings, read as
+ * whole days in the business timezone (KSA) by the server.
  */
 export function DateRangeFilter({
   label = 'Date',
@@ -104,15 +106,17 @@ export function DateRangeFilter({
           selected={range}
           onSelect={handleSelect}
           numberOfMonths={1}
-          disabled={{ after: new Date() }}
+          today={businessToday()}
+          disabled={{ after: businessToday() }}
         />
-        {hasValue && (
-          <div className='flex justify-end border-t px-3 py-2'>
+        <div className='flex items-center justify-between gap-2 border-t px-3 py-2'>
+          <span className='text-xs text-muted-foreground'>Dates in {BUSINESS_TIMEZONE_LABEL}</span>
+          {hasValue && (
             <Button variant='ghost' size='sm' className='h-7 text-xs' onClick={clear}>
               Clear dates
             </Button>
-          </div>
-        )}
+          )}
+        </div>
       </PopoverContent>
     </Popover>
   )

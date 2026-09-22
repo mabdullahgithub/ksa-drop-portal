@@ -57,7 +57,6 @@ export function OrdersFilters({ filters, onFiltersChange, table }: OrdersFilters
       cities: [],
       start_date: undefined,
       end_date: undefined,
-      tz: undefined,
       client_ids: [],
       client_type: '',
       has_shipment: false,
@@ -113,7 +112,6 @@ export function OrdersFilters({ filters, onFiltersChange, table }: OrdersFilters
           onFiltersChange({
             start_date: from,
             end_date: to,
-            tz: from || to ? Intl.DateTimeFormat().resolvedOptions().timeZone : undefined,
             page: 1,
           })
         }

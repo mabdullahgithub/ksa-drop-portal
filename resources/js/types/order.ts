@@ -153,8 +153,6 @@ export interface OrderFilters {
   payment_method?: string[]
   start_date?: string
   end_date?: string
-  /** IANA timezone used to interpret start_date / end_date day boundaries. */
-  tz?: string
   utm_source?: string[]
   utm_campaign?: string
   risk_level?: string

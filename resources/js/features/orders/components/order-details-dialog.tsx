@@ -24,6 +24,7 @@ import axios from 'axios'
 import { usePermissions } from '@/hooks/use-permissions'
 import { useOrderMutations } from '@/hooks/useOrders'
 import { toast } from 'sonner'
+import { toBusinessTime } from '@/lib/business-time'
 
 interface OrderDetailsDialogProps {
   order: Order | null
@@ -537,24 +538,24 @@ export function OrderDetailsDialog({ order, open, onOpenChange, onSaved, startIn
             <div className='space-y-2 text-sm'>
               <div className='flex justify-between'>
                 <span className='text-muted-foreground'>Created</span>
-                <span>{format(new Date(order.created_at), 'PPpp')}</span>
+                <span>{format(toBusinessTime(order.created_at), 'PPpp')}</span>
               </div>
               {order.paid_at && (
                 <div className='flex justify-between'>
                   <span className='text-muted-foreground'>Paid</span>
-                  <span>{format(new Date(order.paid_at), 'PPpp')}</span>
+                  <span>{format(toBusinessTime(order.paid_at), 'PPpp')}</span>
                 </div>
               )}
               {order.fulfilled_at && (
                 <div className='flex justify-between'>
                   <span className='text-muted-foreground'>Fulfilled</span>
-                  <span>{format(new Date(order.fulfilled_at), 'PPpp')}</span>
+                  <span>{format(toBusinessTime(order.fulfilled_at), 'PPpp')}</span>
                 </div>
               )}
               {order.cancelled_at && (
                 <div className='flex justify-between'>
                   <span className='text-muted-foreground'>Cancelled</span>
-                  <span>{format(new Date(order.cancelled_at), 'PPpp')}</span>
+                  <span>{format(toBusinessTime(order.cancelled_at), 'PPpp')}</span>
                 </div>
               )}
             </div>
