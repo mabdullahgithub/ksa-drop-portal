@@ -60,6 +60,7 @@ export function OrdersFilters({ filters, onFiltersChange, table }: OrdersFilters
       client_ids: [],
       client_type: '',
       has_shipment: false,
+      assigned_to: undefined,
       shipment_status: [],
       page: 1,
     })

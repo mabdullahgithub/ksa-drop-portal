@@ -169,6 +169,8 @@ export interface OrderFilters {
   client_ids?: number[]
   client_type?: 'fulfilment' | 'dropshipper' | ''
   has_shipment?: boolean
+  /** With has_shipment: narrow shipped orders to external couriers or KSA Express. */
+  assigned_to?: 'courier' | 'ksa_express'
   shipment_status?: string[]
   order_ids?: number[]
 }
@@ -183,7 +185,10 @@ export interface ClientFilterOption {
 export interface OrderStatistics {
   total_orders: number
   unassigned_orders: number
+  /** Orders shipped with an external courier. */
   assigned_orders: number
+  /** Orders shipped with our in-house KSA Express. */
+  ksa_express_orders: number
   total_revenue: number
   average_order_value: number
   /** Orders per shipment status; ignores the shipment status filter itself. */

@@ -38,7 +38,7 @@ class OrderStatisticsFilterTest extends TestCase
         $this->order('Jeddah', 20, ['VIP'], ['in_transit']);
     }
 
-    private function order(string $city, float $total, array $tags = [], array $shipmentStatuses = []): Order
+    private function order(string $city, float $total, array $tags = [], array $shipmentStatuses = [], string $courier = 'jnt'): Order
     {
         $order = Order::create([
             'order_number'     => (string) random_int(100000, 999999),
@@ -52,7 +52,7 @@ class OrderStatisticsFilterTest extends TestCase
         ]);
 
         foreach ($shipmentStatuses as $status) {
-            $order->shipments()->create(['courier' => 'jnt', 'status' => $status, 'txlogistic_id' => uniqid('TX')]);
+            $order->shipments()->create(['courier' => $courier, 'status' => $status, 'txlogistic_id' => uniqid('TX')]);
         }
 
         return $order;
@@ -115,5 +115,28 @@ class OrderStatisticsFilterTest extends TestCase
 
         // Tag cards drop the tag filter but keep the status filter.
         $this->assertSame(['VIP' => 1, 'عاجل' => 0], $this->tagCounts($stats));
+    }
+
+    public function test_ksa_express_orders_get_their_own_tab(): void
+    {
+        $this->order('Dammam', 40, [], ['delivered'], 'ksadrop_express');
+
+        $stats = $this->stats();
+
+        $this->assertSame(5, $stats['total_orders']);
+        $this->assertSame(1, $stats['unassigned_orders']);
+        $this->assertSame(3, $stats['assigned_orders']);
+        $this->assertSame(1, $stats['ksa_express_orders']);
+
+        $admin = User::factory()->create();
+        $admin->assignRole('admin');
+
+        $cities = fn (string $query) => collect(
+            $this->actingAs($admin)->getJson("/api/orders?{$query}")->assertOk()->json('data')
+        )->pluck('shipping_city')->all();
+
+        $this->assertSame(['Dammam'], $cities('has_shipment=1&assigned_to=ksa_express'));
+        $this->assertNotContains('Dammam', $cities('has_shipment=1&assigned_to=courier'));
+        $this->assertCount(3, $cities('has_shipment=1&assigned_to=courier'));
     }
 }

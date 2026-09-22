@@ -117,7 +117,7 @@ export function useOrderStatistics(filters: OrderFilters = {}) {
   const [loading, setLoading] = useState(true)
   const latestRequest = useRef(0)
 
-  const { page, per_page, sort_by, sort_order, has_shipment, ...statFilters } = filters
+  const { page, per_page, sort_by, sort_order, has_shipment, assigned_to, ...statFilters } = filters
   const query = filtersToParams(statFilters).toString()
 
   const fetchStatistics = useCallback(async () => {

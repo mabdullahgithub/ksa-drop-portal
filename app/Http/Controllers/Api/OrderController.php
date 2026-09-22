@@ -8,6 +8,7 @@ use App\Models\Order;
 use App\Models\Tag;
 use App\Services\CityDirectory;
 use App\Services\OrderExportService;
+use App\Services\Shipping\Drivers\KsaDropExpressDriver;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -151,7 +152,13 @@ class OrderController extends Controller
         if ($request->has('has_shipment') && ! in_array('has_shipment', $except, true)) {
             $hasShipment = filter_var($request->has_shipment, FILTER_VALIDATE_BOOLEAN);
             if ($hasShipment) {
-                $query->withShipment();
+                // The Assigned tabs split shipped orders by who carries them:
+                // an external courier, or our in-house KSA Express.
+                match ($request->input('assigned_to')) {
+                    'ksa_express' => $query->whereHas('shipments', fn ($q) => $q->where('courier', KsaDropExpressDriver::KEY)),
+                    'courier' => $query->whereHas('shipments', fn ($q) => $q->where('courier', '!=', KsaDropExpressDriver::KEY)),
+                    default => $query->withShipment(),
+                };
             } else {
                 $query->withoutShipment();
             }
@@ -376,16 +383,20 @@ class OrderController extends Controller
             'count(*) as total_orders,
              coalesce(sum(total), 0) as total_revenue,
              coalesce(avg(total), 0) as average_order_value,
-             coalesce(sum(case when exists (select 1 from shipments where shipments.order_id = orders.id) then 1 else 0 end), 0) as assigned_orders'
+             coalesce(sum(case when exists (select 1 from shipments where shipments.order_id = orders.id) then 1 else 0 end), 0) as shipped_orders,
+             coalesce(sum(case when exists (select 1 from shipments where shipments.order_id = orders.id and shipments.courier <> ?) then 1 else 0 end), 0) as courier_orders,
+             coalesce(sum(case when exists (select 1 from shipments where shipments.order_id = orders.id and shipments.courier = ?) then 1 else 0 end), 0) as ksa_express_orders',
+            [KsaDropExpressDriver::KEY, KsaDropExpressDriver::KEY]
         )->first();
 
         $totalOrders = (int) $totals->total_orders;
-        $assigned = (int) $totals->assigned_orders;
 
         return response()->json([
             'total_orders' => $totalOrders,
-            'unassigned_orders' => $totalOrders - $assigned,
-            'assigned_orders' => $assigned,
+            'unassigned_orders' => $totalOrders - (int) $totals->shipped_orders,
+            // Matches the "Assigned to Courier" tab: external couriers only.
+            'assigned_orders' => (int) $totals->courier_orders,
+            'ksa_express_orders' => (int) $totals->ksa_express_orders,
             'total_revenue' => round((float) $totals->total_revenue, 2),
             'average_order_value' => round((float) $totals->average_order_value, 2),
             // Orders (not shipments) per status, matching what the shipment_status filter lists.

@@ -33,11 +33,18 @@ export function Orders() {
     await Promise.all([refresh(), refreshStats()])
   }, [refresh, refreshStats])
 
-  const activeTab = filters.has_shipment === true ? 'assigned' : filters.has_shipment === false ? 'unassigned' : 'unassigned'
+  type OrdersTab = 'unassigned' | 'assigned' | 'ksa_express'
 
-  const handleTabChange = (tab: 'unassigned' | 'assigned') => {
+  const activeTab: OrdersTab = !filters.has_shipment
+    ? 'unassigned'
+    : filters.assigned_to === 'ksa_express'
+      ? 'ksa_express'
+      : 'assigned'
+
+  const handleTabChange = (tab: OrdersTab) => {
     updateFilters({
-      has_shipment: tab === 'assigned',
+      has_shipment: tab !== 'unassigned',
+      assigned_to: tab === 'assigned' ? 'courier' : tab === 'ksa_express' ? 'ksa_express' : undefined,
       page: 1,
     })
   }
@@ -92,7 +99,7 @@ export function Orders() {
           />
         </div>
 
-        {/* Tabs for Unassigned / Assigned to Courier */}
+        {/* Tabs for Unassigned / Assigned to Courier / Assigned to KSA Express */}
         <div className='flex gap-2 border-b border-muted/50'>
           <button
             onClick={() => handleTabChange('unassigned')}
@@ -121,6 +128,21 @@ export function Orders() {
             {stats?.assigned_orders != null && (
               <span className='ml-1.5 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium tabular-nums'>
                 {stats.assigned_orders}
+              </span>
+            )}
+          </button>
+          <button
+            onClick={() => handleTabChange('ksa_express')}
+            className={`px-4 py-2 text-sm font-medium transition-colors ${
+              activeTab === 'ksa_express'
+                ? 'border-b-2 border-primary text-primary -mb-px'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            Assigned to KSA Express
+            {stats?.ksa_express_orders != null && (
+              <span className='ml-1.5 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium tabular-nums'>
+                {stats.ksa_express_orders}
               </span>
             )}
           </button>
