@@ -216,7 +216,7 @@ class Order extends Model
      */
     public function scopeWithShipment($query)
     {
-        return $query->whereHas('shipments');
+        return $query->whereHas('shipments', fn ($q) => $q->notCancelled());
     }
 
     /**
@@ -224,7 +224,7 @@ class Order extends Model
      */
     public function scopeWithoutShipment($query)
     {
-        return $query->whereDoesntHave('shipments');
+        return $query->whereDoesntHave('shipments', fn ($q) => $q->notCancelled());
     }
 
     /**

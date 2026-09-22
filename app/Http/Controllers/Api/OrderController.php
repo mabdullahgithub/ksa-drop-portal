@@ -9,6 +9,7 @@ use App\Models\Tag;
 use App\Services\CityDirectory;
 use App\Services\OrderExportService;
 use App\Services\Shipping\Drivers\KsaDropExpressDriver;
+use App\Services\Shipping\Enums\ShipmentStatus;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -154,9 +155,12 @@ class OrderController extends Controller
             if ($hasShipment) {
                 // The Assigned tabs split shipped orders by who carries them:
                 // an external courier, or our in-house KSA Express.
+                // Cancelled shipments are skipped throughout: an order whose
+                // booking was cancelled belongs back in Unassigned, not on the
+                // tab of the courier that no longer carries it.
                 match ($request->input('assigned_to')) {
-                    'ksa_express' => $query->whereHas('shipments', fn ($q) => $q->where('courier', KsaDropExpressDriver::KEY)),
-                    'courier' => $query->whereHas('shipments', fn ($q) => $q->where('courier', '!=', KsaDropExpressDriver::KEY)),
+                    'ksa_express' => $query->whereHas('shipments', fn ($q) => $q->notCancelled()->where('courier', KsaDropExpressDriver::KEY)),
+                    'courier' => $query->whereHas('shipments', fn ($q) => $q->notCancelled()->where('courier', '!=', KsaDropExpressDriver::KEY)),
                     default => $query->withShipment(),
                 };
             } else {
@@ -383,10 +387,14 @@ class OrderController extends Controller
             'count(*) as total_orders,
              coalesce(sum(total), 0) as total_revenue,
              coalesce(avg(total), 0) as average_order_value,
-             coalesce(sum(case when exists (select 1 from shipments where shipments.order_id = orders.id) then 1 else 0 end), 0) as shipped_orders,
-             coalesce(sum(case when exists (select 1 from shipments where shipments.order_id = orders.id and shipments.courier <> ?) then 1 else 0 end), 0) as courier_orders,
-             coalesce(sum(case when exists (select 1 from shipments where shipments.order_id = orders.id and shipments.courier = ?) then 1 else 0 end), 0) as ksa_express_orders',
-            [KsaDropExpressDriver::KEY, KsaDropExpressDriver::KEY]
+             coalesce(sum(case when exists (select 1 from shipments where shipments.order_id = orders.id and shipments.status <> ?) then 1 else 0 end), 0) as shipped_orders,
+             coalesce(sum(case when exists (select 1 from shipments where shipments.order_id = orders.id and shipments.status <> ? and shipments.courier <> ?) then 1 else 0 end), 0) as courier_orders,
+             coalesce(sum(case when exists (select 1 from shipments where shipments.order_id = orders.id and shipments.status <> ? and shipments.courier = ?) then 1 else 0 end), 0) as ksa_express_orders',
+            [
+                ShipmentStatus::CANCELLED->value,
+                ShipmentStatus::CANCELLED->value, KsaDropExpressDriver::KEY,
+                ShipmentStatus::CANCELLED->value, KsaDropExpressDriver::KEY,
+            ]
         )->first();
 
         $totalOrders = (int) $totals->total_orders;

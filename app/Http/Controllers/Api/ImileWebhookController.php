@@ -205,17 +205,31 @@ class ImileWebhookController extends Controller
         return $latest;
     }
 
+    /**
+     * Both lookups are scoped to iMile: tracking numbers are only unique per
+     * courier, and an order number is reused by whichever courier carries the
+     * order next — an unscoped match wrote iMile's scans onto a cancelled
+     * in-house shipment that happened to share the order number.
+     */
     private function resolveShipment(?string $trackingNumber, ?string $txlogisticId): ?Shipment
     {
         if ($trackingNumber) {
-            $shipment = Shipment::where('tracking_number', $trackingNumber)->first();
+            $shipment = Shipment::where('courier', 'imile')
+                ->where('tracking_number', $trackingNumber)
+                ->first();
+
             if ($shipment) {
                 return $shipment;
             }
         }
 
         if ($txlogisticId) {
-            return Shipment::where('txlogistic_id', $txlogisticId)->first();
+            // A cancelled booking keeps its order number, so prefer a live one.
+            return Shipment::where('courier', 'imile')
+                ->where('txlogistic_id', $txlogisticId)
+                ->orderByRaw("status = '" . ShipmentStatus::CANCELLED->value . "'")
+                ->orderByDesc('id')
+                ->first();
         }
 
         return null;

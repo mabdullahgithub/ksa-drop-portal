@@ -99,7 +99,7 @@ export function Orders() {
           />
         </div>
 
-        {/* Tabs for Unassigned / Assigned to Courier / Assigned to KSA Express */}
+        {/* Tabs for All Orders / Other Couriers / KSA Express */}
         <div className='flex gap-2 border-b border-muted/50'>
           <button
             onClick={() => handleTabChange('unassigned')}
@@ -124,7 +124,7 @@ export function Orders() {
                 : 'text-muted-foreground hover:text-foreground'
             }`}
           >
-            Assigned to Courier
+            Other Couriers
             {stats?.assigned_orders != null && (
               <span className='ml-1.5 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium tabular-nums'>
                 {stats.assigned_orders}
@@ -139,7 +139,7 @@ export function Orders() {
                 : 'text-muted-foreground hover:text-foreground'
             }`}
           >
-            Assigned to KSA Express
+            KSA Express
             {stats?.ksa_express_orders != null && (
               <span className='ml-1.5 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium tabular-nums'>
                 {stats.ksa_express_orders}
