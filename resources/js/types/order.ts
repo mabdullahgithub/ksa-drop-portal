@@ -171,6 +171,8 @@ export interface OrderFilters {
   has_shipment?: boolean
   /** With has_shipment: narrow shipped orders to external couriers or KSA Express. */
   assigned_to?: 'courier' | 'ksa_express'
+  /** Driver keys ('jnt_express', 'imile', …); matches orders with a live booking on any of them. */
+  couriers?: string[]
   shipment_status?: string[]
   order_ids?: number[]
 }
@@ -220,6 +222,7 @@ export interface OrderFilterOptions {
   countries: FilterOption[]
   cities: CityFilterOption[]
   risk_levels: FilterOption[]
+  couriers: FilterOption[]
   tags: FilterOption[]
   clients: ClientFilterOption[]
 }

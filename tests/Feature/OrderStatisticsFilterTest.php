@@ -117,6 +117,55 @@ class OrderStatisticsFilterTest extends TestCase
         $this->assertSame(['VIP' => 1, 'عاجل' => 0], $this->tagCounts($stats));
     }
 
+    public function test_courier_filter_narrows_the_list_and_the_cards(): void
+    {
+        $this->order('Dammam', 40, ['VIP'], ['delivered'], 'imile');
+
+        $stats = $this->stats('couriers=imile');
+
+        $this->assertSame(1, $stats['total_orders']);
+        $this->assertSame(1, $stats['assigned_orders']);
+        $this->assertEqualsCanonicalizing(['delivered' => 1], $this->statusCounts($stats));
+        $this->assertSame(['VIP' => 1, 'عاجل' => 0], $this->tagCounts($stats));
+
+        $admin = User::factory()->create();
+        $admin->assignRole('admin');
+
+        $cities = collect(
+            $this->actingAs($admin)->getJson('/api/orders?couriers=imile')->assertOk()->json('data')
+        )->pluck('shipping_city')->all();
+
+        $this->assertSame(['Dammam'], $cities);
+    }
+
+    public function test_courier_filter_accepts_several_couriers_and_skips_cancelled_bookings(): void
+    {
+        $this->order('Dammam', 40, [], ['delivered'], 'imile');
+        $this->order('Khobar', 40, [], ['cancelled'], 'logestechs');
+
+        $stats = $this->stats('couriers=imile,logestechs');
+
+        // Khobar's only booking was cancelled, so logestechs no longer carries it.
+        $this->assertSame(1, $stats['total_orders']);
+    }
+
+    public function test_filter_options_list_the_couriers(): void
+    {
+        $admin = User::factory()->create();
+        $admin->assignRole('admin');
+
+        $couriers = $this->actingAs($admin)
+            ->getJson('/api/orders/filter-options')
+            ->assertOk()
+            ->json('couriers');
+
+        $this->assertSame(
+            ['jnt_express', 'imile', 'logestechs', 'ksadrop_express'],
+            collect($couriers)->pluck('value')->all()
+        );
+        $this->assertSame('KSA Express', collect($couriers)->firstWhere('value', 'ksadrop_express')['label']);
+    }
+
     public function test_ksa_express_orders_get_their_own_tab(): void
     {
         $this->order('Dammam', 40, [], ['delivered'], 'ksadrop_express');

@@ -1,5 +1,5 @@
-import { usePortalDashboard } from '@/hooks/usePortal'
 import { Tag as TagIcon } from 'lucide-react'
+import type { PortalOrderStatistics } from '@/hooks/usePortal'
 
 function hexToRgba(hex: string | null | undefined, alpha: number) {
   if (!hex || hex.length < 4) return `rgba(128, 128, 128, ${alpha})`
@@ -19,17 +19,20 @@ function TagCardSkeleton() {
 }
 
 interface PortalTagStatCardsProps {
+  /** Tag counts for the current filters; each card ignores only the tag filter it drives. */
+  statistics?: PortalOrderStatistics | null
+  loading?: boolean
   activeTag?: string | null
   onTagClick?: (tagName: string) => void
 }
 
-export function PortalTagStatCards({ activeTag, onTagClick }: PortalTagStatCardsProps) {
-  const { data, loading } = usePortalDashboard()
+export function PortalTagStatCards({ statistics, loading = false, activeTag, onTagClick }: PortalTagStatCardsProps) {
+  // Keep the last numbers on screen while a filter change is in flight.
+  const initialLoad = loading && !statistics
 
-  const tags: Array<{ id: number; name: string; color: string; count: number }> =
-    data?.stats?.by_tag ?? []
+  const tags = statistics?.by_tag ?? []
 
-  if (!loading && tags.length === 0) return null
+  if (!initialLoad && tags.length === 0) return null
 
   return (
     <div className='mb-8'>
@@ -38,7 +41,7 @@ export function PortalTagStatCards({ activeTag, onTagClick }: PortalTagStatCards
         <h3 className='text-sm font-semibold'>Tags</h3>
       </div>
 
-      {loading ? (
+      {initialLoad ? (
         <div className='grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-6'>
           {[...Array(6)].map((_, i) => (
             <TagCardSkeleton key={i} />

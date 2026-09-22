@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Search, X, SlidersHorizontal, Tag, Truck, Users } from 'lucide-react'
+import { Search, X, SlidersHorizontal, Package, Tag, Truck, Users } from 'lucide-react'
 import { type Table } from '@tanstack/react-table'
 import { Input } from '@/components/ui/input'
 import { SearchBeam } from '@/components/search-beam'
@@ -62,6 +62,7 @@ export function OrdersFilters({ filters, onFiltersChange, table }: OrdersFilters
       has_shipment: false,
       assigned_to: undefined,
       shipment_status: [],
+      couriers: [],
       page: 1,
     })
   }
@@ -75,7 +76,8 @@ export function OrdersFilters({ filters, onFiltersChange, table }: OrdersFilters
     filters.end_date ||
     (filters.client_ids && filters.client_ids.length > 0) ||
     filters.client_type ||
-    (filters.shipment_status && filters.shipment_status.length > 0)
+    (filters.shipment_status && filters.shipment_status.length > 0) ||
+    (filters.couriers && filters.couriers.length > 0)
 
   if (loading) {
     return <OrdersFiltersSkeleton />
@@ -104,6 +106,17 @@ export function OrdersFilters({ filters, onFiltersChange, table }: OrdersFilters
         selected={filters.shipment_status ?? []}
         onChange={(values) => onFiltersChange({ shipment_status: values, page: 1 })}
       />
+
+      {/* Courier — orders carrying a live booking with any of the selected couriers */}
+      {options?.couriers && options.couriers.length > 0 && (
+        <MultiSelectFilter
+          label='Courier'
+          icon={Package}
+          options={options.couriers}
+          selected={filters.couriers ?? []}
+          onChange={(values) => onFiltersChange({ couriers: values, page: 1 })}
+        />
+      )}
 
       {/* Order Date (From / To) */}
       <DateRangeFilter

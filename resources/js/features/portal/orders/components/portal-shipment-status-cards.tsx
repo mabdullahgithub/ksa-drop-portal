@@ -1,4 +1,3 @@
-import { usePortalDashboard } from '@/hooks/usePortal'
 import {
   Package,
   Truck,
@@ -8,6 +7,7 @@ import {
   RotateCcw,
   XCircle,
 } from 'lucide-react'
+import type { PortalOrderStatistics } from '@/hooks/usePortal'
 
 // Ordered by logical process flow
 const statusConfig = [
@@ -33,13 +33,15 @@ function ShipmentStatusCardSkeleton() {
 }
 
 interface PortalShipmentStatusCardsProps {
+  /** Status counts for the current filters; the cards ignore the status filter they drive. */
+  statistics?: PortalOrderStatistics | null
+  loading?: boolean
   onStatusClick?: (status: string) => void
 }
 
-export function PortalShipmentStatusCards({ onStatusClick }: PortalShipmentStatusCardsProps) {
-  const { data, loading } = usePortalDashboard()
-
-  if (loading) {
+export function PortalShipmentStatusCards({ statistics, loading = false, onStatusClick }: PortalShipmentStatusCardsProps) {
+  // Keep the last numbers on screen while a filter change is in flight.
+  if (loading && !statistics) {
     return (
       <div className='grid gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5'>
         {[...Array(5)].map((_, i) => (
@@ -49,11 +51,11 @@ export function PortalShipmentStatusCards({ onStatusClick }: PortalShipmentStatu
     )
   }
 
-  if (!data?.stats?.by_shipment_status) {
+  if (!statistics?.by_shipment_status) {
     return null
   }
 
-  const shipmentStats = data.stats.by_shipment_status.reduce(
+  const shipmentStats = statistics.by_shipment_status.reduce(
     (acc: any, item: any) => {
       acc[item.status] = item.count
       return acc

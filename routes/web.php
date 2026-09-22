@@ -293,6 +293,7 @@ Route::prefix('portal')->middleware(['auth', 'verified', 'role:client'])->group(
     Route::post('/api/orders/import', [PortalController::class, 'importOrders'])->name('portal.api.orders.import');
     Route::post('/api/orders', [PortalController::class, 'storeOrder'])->name('portal.api.orders.store');
     Route::get('/api/orders/import-template', [PortalController::class, 'ordersImportTemplate'])->name('portal.api.orders.import-template');
+    Route::get('/api/orders/statistics', [PortalController::class, 'orderStatistics'])->name('portal.api.orders.statistics');
     Route::get('/api/orders/filter-options', [PortalController::class, 'orderFilterOptions'])->name('portal.api.orders.filter-options');
     Route::get('/api/orders/export', [PortalController::class, 'exportOrders'])->name('portal.api.orders.export');
     Route::get('/api/orders/{order}', [PortalController::class, 'showOrder'])->name('portal.api.orders.show');

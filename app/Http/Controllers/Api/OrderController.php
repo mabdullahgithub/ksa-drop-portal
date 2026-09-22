@@ -2,12 +2,14 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Http\Concerns\CountsOrdersByTag;
 use App\Http\Controllers\Controller;
 use App\Models\Client;
 use App\Models\Order;
 use App\Models\Tag;
 use App\Services\CityDirectory;
 use App\Services\OrderExportService;
+use App\Services\Shipping\CourierManager;
 use App\Services\Shipping\Drivers\KsaDropExpressDriver;
 use App\Services\Shipping\Enums\ShipmentStatus;
 use Illuminate\Http\Request;
@@ -15,6 +17,16 @@ use Illuminate\Support\Facades\DB;
 
 class OrderController extends Controller
 {
+    use CountsOrdersByTag;
+
+    /** Display names for the courier filter, keyed by driver key. */
+    private const COURIER_LABELS = [
+        'jnt_express'     => 'J&T Express',
+        'imile'           => 'iMile',
+        'logestechs'      => 'LogesTechs',
+        'ksadrop_express' => 'KSA Express',
+    ];
+
     public function __construct(
         protected OrderExportService $orderExport,
         protected CityDirectory $cities,
@@ -46,7 +58,7 @@ class OrderController extends Controller
      * statistics so every view of "the filtered orders" agrees. `$except`
      * skips named filters, letting a stat card ignore the filter it drives.
      *
-     * @param  array<int, string>  $except  any of 'tags', 'has_shipment', 'shipment_status'
+     * @param  array<int, string>  $except  any of 'tags', 'has_shipment', 'shipment_status', 'couriers'
      */
     private function applyFilters($query, Request $request, array $except = []): void
     {
@@ -165,6 +177,18 @@ class OrderController extends Controller
                 };
             } else {
                 $query->withoutShipment();
+            }
+        }
+
+        // Filter by courier (multi-select). Matches orders carrying a live
+        // booking with any of the selected couriers; a cancelled booking no
+        // longer counts as that courier's, same as the Assigned tabs.
+        if ($request->has('couriers') && ! in_array('couriers', $except, true)) {
+            $couriers = $this->multiValue($request->couriers);
+            if (!empty($couriers)) {
+                $query->whereHas('shipments', function ($q) use ($couriers) {
+                    $q->notCancelled()->whereIn('courier', $couriers);
+                });
             }
         }
 
@@ -420,40 +444,6 @@ class OrderController extends Controller
     }
 
     /**
-     * Order count per tag for the given query, in one query for all tags.
-     */
-    private function tagCounts($query): array
-    {
-        $tags = Tag::orderBy('created_at')->get(['id', 'name', 'color']);
-
-        if ($tags->isEmpty()) {
-            return [];
-        }
-
-        // Same test as whereJsonContains('tags', $name), as a column expression.
-        $sqlite = DB::connection()->getDriverName() === 'sqlite';
-        $contains = $sqlite
-            ? 'exists (select 1 from json_each(orders.tags) where json_each.value = ?)'
-            : 'json_contains(orders.tags, ?)';
-
-        $columns = [];
-        $bindings = [];
-        foreach ($tags as $i => $tag) {
-            $columns[] = "coalesce(sum(case when {$contains} then 1 else 0 end), 0) as t{$i}";
-            $bindings[] = $sqlite ? $tag->name : json_encode($tag->name);
-        }
-
-        $counts = (array) $query->toBase()->selectRaw(implode(', ', $columns), $bindings)->first();
-
-        return $tags->values()->map(fn ($tag, $i) => [
-            'id'    => $tag->id,
-            'name'  => $tag->name,
-            'color' => $tag->color,
-            'count' => (int) $counts["t{$i}"],
-        ])->all();
-    }
-
-    /**
      * Get filter options for dropdowns.
      */
     public function filterOptions()
@@ -510,6 +500,9 @@ class OrderController extends Controller
                 ['value' => 'Medium', 'label' => 'Medium'],
                 ['value' => 'High', 'label' => 'High'],
             ],
+            'couriers' => collect(app(CourierManager::class)->getAvailableDrivers())
+                ->map(fn ($key) => ['value' => $key, 'label' => self::COURIER_LABELS[$key] ?? $key])
+                ->values(),
             'tags' => Tag::orderBy('name')
                 ->pluck('name')
                 ->map(fn($name) => ['value' => $name, 'label' => $name])

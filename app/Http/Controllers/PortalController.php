@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Concerns\CountsOrdersByTag;
 use App\Models\Client;
 use App\Models\ClientProduct;
 use App\Models\ClientProductImage;
@@ -10,12 +11,15 @@ use App\Models\User;
 use App\Notifications\ProductSubmittedNotification;
 use App\Services\CityDirectory;
 use App\Services\OrderExportService;
+use App\Services\Shipping\Enums\ShipmentStatus;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 
 class PortalController extends Controller
 {
+    use CountsOrdersByTag;
+
     public function __construct(
         protected OrderExportService $orderExport,
         protected CityDirectory $cities,
@@ -90,10 +94,14 @@ class PortalController extends Controller
     }
 
     /**
-     * Apply the orders-list filters to a query. Shared by the paginated list and
-     * the CSV export so an export always covers exactly what the table shows.
+     * Apply the orders-list filters to a query. Shared by the paginated list,
+     * the CSV export and the stat cards so an export always covers exactly what
+     * the table shows and the numbers above it agree. `$except` skips named
+     * filters, letting a stat card ignore the filter it drives.
+     *
+     * @param  array<int, string>  $except  any of 'tags', 'has_shipment', 'shipment_status'
      */
-    private function applyOrderFilters($query, Request $request): void
+    private function applyOrderFilters($query, Request $request, array $except = []): void
     {
         if ($request->has('search') && $request->search) {
             $query->search($request->search);
@@ -126,14 +134,14 @@ class PortalController extends Controller
             }
         }
 
-        // Filter by a single tag (used by the "Confirmed Orders" tab)
-        if ($request->has('tag') && $request->tag) {
+        // Filter by a single tag (used by the tag stat cards)
+        if ($request->has('tag') && $request->tag && ! in_array('tags', $except, true)) {
             $query->whereJsonContains('tags', $request->tag);
         }
 
         // Filter by multiple tags (multi-select "Tags" filter). An order matches
         // when it carries any of the selected tags.
-        if ($request->has('tags')) {
+        if ($request->has('tags') && ! in_array('tags', $except, true)) {
             $tags = $this->parseMultiValue($request->tags);
             if (!empty($tags)) {
                 $query->where(function ($q) use ($tags) {
@@ -145,7 +153,7 @@ class PortalController extends Controller
         }
 
         // Filter by shipment status (has shipment or not)
-        if ($request->has('has_shipment')) {
+        if ($request->has('has_shipment') && ! in_array('has_shipment', $except, true)) {
             $hasShipment = filter_var($request->has_shipment, FILTER_VALIDATE_BOOLEAN);
             if ($hasShipment) {
                 $query->withShipment();
@@ -155,7 +163,7 @@ class PortalController extends Controller
         }
 
         // Filter by shipment status values
-        if ($request->has('shipment_status')) {
+        if ($request->has('shipment_status') && ! in_array('shipment_status', $except, true)) {
             $statuses = $this->parseMultiValue($request->shipment_status);
             if (!empty($statuses)) {
                 $query->whereHas('shipments', function ($q) use ($statuses) {
@@ -238,6 +246,58 @@ class PortalController extends Controller
         $perPage = $request->get('per_page', 15);
 
         return response()->json($query->paginate($perPage));
+    }
+
+    /**
+     * Stat-card numbers for the portal orders page, following the filter bar so
+     * the cards above the table always describe the rows inside it.
+     *
+     * Each card group ignores the filter it drives — clicking "Delivered" must
+     * not zero every other status card — and none of them follow the
+     * All / Assigned tab, since the tab counts are that split.
+     */
+    public function orderStatistics(Request $request)
+    {
+        $client = $this->resolveClient();
+
+        if (!$client || !in_array('orders', $client->portal_features ?? [])) {
+            abort(403);
+        }
+
+        $filtered = function (array $except = []) use ($client, $request) {
+            $query = $client->orders();
+            $this->applyOrderFilters($query, $request, ['has_shipment', ...$except]);
+
+            return $query;
+        };
+
+        // Totals and the tab split in a single pass over the filtered orders.
+        $totals = $filtered()->toBase()->selectRaw(
+            'count(*) as total_orders,
+             coalesce(sum(total), 0) as total_revenue,
+             coalesce(avg(total), 0) as average_order_value,
+             coalesce(sum(case when exists (select 1 from shipments where shipments.order_id = orders.id and shipments.status <> ?) then 1 else 0 end), 0) as assigned_orders',
+            [ShipmentStatus::CANCELLED->value]
+        )->first();
+
+        $totalOrders = (int) $totals->total_orders;
+        $assignedOrders = (int) $totals->assigned_orders;
+
+        return response()->json([
+            'total_orders'      => $totalOrders,
+            'assigned_orders'   => $assignedOrders,
+            'unassigned_orders' => $totalOrders - $assignedOrders,
+            'total_revenue'     => round((float) $totals->total_revenue, 2),
+            'average_order_value' => round((float) $totals->average_order_value, 2),
+            // Orders (not shipments) per status, matching what the shipment_status filter lists.
+            'by_shipment_status' => DB::table('shipments')
+                ->whereIn('order_id', $filtered(['shipment_status'])->select('orders.id'))
+                ->select('status', DB::raw('count(distinct order_id) as count'))
+                ->groupBy('status')
+                ->orderByDesc('count')
+                ->get(),
+            'by_tag' => $this->tagCounts($filtered(['tags'])),
+        ]);
     }
 
     /**

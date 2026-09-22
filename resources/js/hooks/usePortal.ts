@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 
 export function usePortalInventoryMutations() {
   const [loading, setLoading] = useState(false)
@@ -119,6 +119,63 @@ export function usePortalDashboard() {
   useEffect(() => { fetch_() }, [])
 
   return { data, loading, refresh: fetch_ }
+}
+
+export interface PortalOrderStatistics {
+  total_orders: number
+  assigned_orders: number
+  unassigned_orders: number
+  total_revenue: number
+  average_order_value: number
+  by_shipment_status: Array<{ status: string; count: number }>
+  by_tag: Array<{ id: number; name: string; color: string; count: number }>
+}
+
+/**
+ * Stat-card numbers for the portal orders page, refetched whenever the filters
+ * change so the cards always describe the rows in the table. Paging, sorting
+ * and the All / Assigned tab don't affect them, so they are left out of the
+ * request. Previous stats stay visible while refetching.
+ */
+export function usePortalOrderStatistics(filters: Record<string, any> = {}) {
+  const [statistics, setStatistics] = useState<PortalOrderStatistics | null>(null)
+  const [loading, setLoading] = useState(true)
+  const latestRequest = useRef(0)
+
+  const { page, per_page, sort_by, sort_order, has_shipment, ...statFilters } = filters
+
+  const params = new URLSearchParams()
+  Object.entries(statFilters).forEach(([key, value]) => {
+    if (value === undefined || value === null || value === '') return
+    if (Array.isArray(value)) {
+      if (value.length > 0) params.append(key, value.join(','))
+    } else if (typeof value === 'boolean') {
+      params.append(key, value ? '1' : '0')
+    } else {
+      params.append(key, String(value))
+    }
+  })
+  const query = params.toString()
+
+  const fetchStatistics = useCallback(async () => {
+    const requestId = ++latestRequest.current
+    setLoading(true)
+
+    try {
+      const response = await fetch(`/portal/api/orders/statistics?${query}`)
+      const data = await response.json()
+      // Ignore responses that arrive after a newer request was made.
+      if (requestId === latestRequest.current) setStatistics(data)
+    } catch (error) {
+      console.error('Error fetching portal order statistics:', error)
+    } finally {
+      if (requestId === latestRequest.current) setLoading(false)
+    }
+  }, [query])
+
+  useEffect(() => { fetchStatistics() }, [fetchStatistics])
+
+  return { statistics, loading, refresh: fetchStatistics }
 }
 
 export function usePortalOrderMutations() {
