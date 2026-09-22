@@ -80,6 +80,49 @@ class ProductController extends Controller
         return response()->json($product);
     }
 
+    /**
+     * Soft-delete a catalog product into the recycle bin.
+     *
+     * Note the CSV importer resurrects trashed products by handle
+     * (see import()), so re-importing a sheet containing this handle will
+     * restore it. Permanently deleting from the recycle bin is the only way
+     * to remove one for good.
+     */
+    public function destroy(Product $product)
+    {
+        $product->delete();
+
+        return response()->json(['message' => 'Product moved to recycle bin']);
+    }
+
+    /**
+     * Soft-delete many catalog products into the recycle bin.
+     */
+    public function bulkDestroy(Request $request)
+    {
+        $validated = $request->validate([
+            'product_ids' => 'required|array',
+            'product_ids.*' => 'integer',
+        ]);
+
+        $deleted = 0;
+
+        DB::transaction(function () use ($validated, &$deleted) {
+            Product::whereIn('id', $validated['product_ids'])
+                ->get()
+                ->each(function (Product $product) use (&$deleted) {
+                    $product->delete();
+                    $deleted++;
+                });
+        });
+
+        return response()->json([
+            'message' => 'Products moved to recycle bin',
+            'deleted_count' => $deleted,
+            'requested_count' => count($validated['product_ids']),
+        ]);
+    }
+
     public function statistics()
     {
         $total = Product::count();

@@ -18,6 +18,7 @@ import {
 import type { Client } from '@/types/client'
 import { clientColumns } from './client-columns'
 import { ClientPagination } from './client-pagination'
+import { ClientBulkActions } from './client-bulk-actions'
 
 interface ClientTableProps {
   data: Client[]
@@ -33,6 +34,8 @@ interface ClientTableProps {
   onPageChange: (page: number) => void
   onPageSizeChange: (size: number) => void
   onSortChange: (sortBy: string, sortOrder: 'asc' | 'desc') => void
+  /** Refetch after a bulk action; the toolbar lives here because it needs the table instance. */
+  onRefresh: () => void
 }
 
 export function ClientTable({
@@ -42,6 +45,7 @@ export function ClientTable({
   onPageChange,
   onPageSizeChange,
   onSortChange,
+  onRefresh,
 }: ClientTableProps) {
   const [rowSelection, setRowSelection] = useState({})
   const [sorting, setSorting] = useState<SortingState>([])
@@ -126,6 +130,8 @@ export function ClientTable({
           onPageSizeChange={onPageSizeChange}
         />
       )}
+
+      <ClientBulkActions table={table} onSuccess={onRefresh} />
     </div>
   )
 }

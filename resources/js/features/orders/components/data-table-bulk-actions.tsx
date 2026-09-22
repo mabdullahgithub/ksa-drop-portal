@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { type Table } from '@tanstack/react-table'
-import { Tag, Trash2, Truck, FileText, Loader2, CheckCircle2, XCircle, AlertTriangle } from 'lucide-react'
+import { Tag, Trash2, Truck, FileText, Loader2, CheckCircle2, XCircle, AlertTriangle, Ban } from 'lucide-react'
 import { toast } from 'sonner'
 import axios from 'axios'
 import { Button } from '@/components/ui/button'
@@ -61,12 +61,14 @@ export function DataTableBulkActions<TData>({
   table,
 }: DataTableBulkActionsProps<TData>) {
   const selectedRows = table.getFilteredSelectedRowModel().rows
-  const { bulkUpdate } = useOrderMutations()
+  const { bulkUpdate, bulkDelete } = useOrderMutations()
   const { can } = usePermissions()
   const { refresh } = useOrdersContext()
   const [showTagDialog, setShowTagDialog] = useState(false)
   const [isSavingTags, setIsSavingTags] = useState(false)
+  const [showCancelDialog, setShowCancelDialog] = useState(false)
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   // Bulk shipment state
   const [showShipmentDialog, setShowShipmentDialog] = useState(false)
@@ -207,7 +209,7 @@ export function DataTableBulkActions<TData>({
     }
   }
 
-  const handleBulkDelete = async () => {
+  const handleBulkCancel = async () => {
     const selectedOrders = selectedRows.map((row) => (row.original as Order).id)
 
     toast.promise(
@@ -219,13 +221,50 @@ export function DataTableBulkActions<TData>({
         loading: 'Cancelling orders...',
         success: () => {
           table.resetRowSelection()
-          setShowDeleteDialog(false)
+          setShowCancelDialog(false)
           refresh()
           return `Cancelled ${selectedOrders.length} order${selectedOrders.length > 1 ? 's' : ''}`
         },
         error: 'Failed to cancel orders',
       }
     )
+  }
+
+  /**
+   * A real delete: the orders move to the recycle bin. Distinct from Cancel
+   * above, which only sets the fulfillment status.
+   */
+  const handleBulkDelete = async () => {
+    const selectedOrders = selectedRows.map((row) => (row.original as Order).id)
+
+    setDeleting(true)
+    try {
+      const result = await bulkDelete(selectedOrders)
+
+      if (result.deleted_count > 0) {
+        toast.success(
+          `Moved ${result.deleted_count} order${result.deleted_count > 1 ? 's' : ''} to the recycle bin`
+        )
+      }
+
+      // Orders with an active shipment are refused server-side; name them
+      // rather than reporting a clean success for a partial batch.
+      result.blocked?.forEach((item) => {
+        toast.warning(`${item.order_number} was not deleted. ${item.reason}`)
+      })
+
+      if (result.deleted_count === 0 && !result.blocked?.length) {
+        toast.error('No orders were deleted')
+      }
+
+      table.resetRowSelection()
+      setShowDeleteDialog(false)
+      refresh()
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to delete orders')
+    } finally {
+      setDeleting(false)
+    }
   }
 
   return (
@@ -297,24 +336,47 @@ export function DataTableBulkActions<TData>({
           </Tooltip>
         )}
 
+        {/* Cancel only sets the order status -- deliberately not a trash icon,
+            so it cannot be mistaken for the delete button beside it. */}
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
-              variant='destructive'
+              variant='outline'
               size='icon'
-              onClick={() => setShowDeleteDialog(true)}
+              onClick={() => setShowCancelDialog(true)}
               className='size-8'
               aria-label='Cancel orders'
               title='Cancel orders'
             >
-              <Trash2 className='h-4 w-4' />
+              <Ban className='h-4 w-4' />
               <span className='sr-only'>Cancel orders</span>
             </Button>
           </TooltipTrigger>
           <TooltipContent>
-            <p>Cancel orders</p>
+            <p>Cancel orders (keeps them in the list)</p>
           </TooltipContent>
         </Tooltip>
+
+        {can('delete orders') && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant='destructive'
+                size='icon'
+                onClick={() => setShowDeleteDialog(true)}
+                className='size-8'
+                aria-label='Delete orders'
+                title='Delete orders'
+              >
+                <Trash2 className='h-4 w-4' />
+                <span className='sr-only'>Delete orders</span>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Delete orders (moves to recycle bin)</p>
+            </TooltipContent>
+          </Tooltip>
+        )}
       </BulkActionsToolbar>
 
       <OrderTagsDialog
@@ -355,21 +417,44 @@ export function DataTableBulkActions<TData>({
         </DialogContent>
       </Dialog>
 
-      {/* Delete Confirmation Dialog */}
-      <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+      {/* Cancel Confirmation Dialog */}
+      <Dialog open={showCancelDialog} onOpenChange={setShowCancelDialog}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Cancel Orders</DialogTitle>
             <DialogDescription>
-              Are you sure you want to cancel {selectedRows.length} selected order{selectedRows.length > 1 ? 's' : ''}? This action cannot be undone.
+              Mark {selectedRows.length} selected order{selectedRows.length > 1 ? 's' : ''} as
+              cancelled. They stay in the orders list.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant='outline' onClick={() => setShowDeleteDialog(false)}>
+            <Button variant='outline' onClick={() => setShowCancelDialog(false)}>
+              Keep as is
+            </Button>
+            <Button variant='destructive' onClick={handleBulkCancel}>
+              Cancel Orders
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Orders</DialogTitle>
+            <DialogDescription>
+              Move {selectedRows.length} selected order{selectedRows.length > 1 ? 's' : ''} to the
+              recycle bin. You can restore {selectedRows.length > 1 ? 'them' : 'it'} from there.
+              Orders with an active shipment will be skipped.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant='outline' onClick={() => setShowDeleteDialog(false)} disabled={deleting}>
               Cancel
             </Button>
-            <Button variant='destructive' onClick={handleBulkDelete}>
-              Cancel Orders
+            <Button variant='destructive' onClick={handleBulkDelete} disabled={deleting}>
+              {deleting ? 'Deleting…' : 'Delete Orders'}
             </Button>
           </DialogFooter>
         </DialogContent>

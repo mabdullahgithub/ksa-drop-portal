@@ -572,6 +572,101 @@ class OrderController extends Controller
     }
 
     /**
+     * Soft-delete a single order into the recycle bin.
+     */
+    public function destroy(Request $request, int $order)
+    {
+        $result = $this->softDeleteOrders([$order]);
+
+        if ($result['deleted_count'] === 0) {
+            return response()->json([
+                'message' => $result['blocked'][0]['reason'] ?? 'Order not found.',
+            ], $result['blocked'] === [] ? 404 : 422);
+        }
+
+        return response()->json(['message' => 'Order moved to recycle bin']);
+    }
+
+    /**
+     * Soft-delete many orders into the recycle bin.
+     */
+    public function bulkDestroy(Request $request)
+    {
+        $request->validate([
+            'order_ids' => 'required|array',
+            'order_ids.*' => 'integer',
+        ]);
+
+        $result = $this->softDeleteOrders($request->input('order_ids'));
+
+        return response()->json([
+            'message' => $result['deleted_count'] > 0
+                ? 'Orders moved to recycle bin'
+                : 'No orders could be deleted',
+            'deleted_count' => $result['deleted_count'],
+            'requested_count' => count($request->input('order_ids')),
+            'blocked' => $result['blocked'],
+        ]);
+    }
+
+    /**
+     * Shared delete path for both destroy() and bulkDestroy().
+     *
+     * Resolves ids with anyShopifyStatus() because the default shopify_visible
+     * global scope would silently skip pending-review / dismissed / filtered
+     * orders -- the caller would get a success response for rows that were
+     * never touched. Route-model binding is avoided for the same reason.
+     *
+     * Orders carrying a shipment the courier still considers active are
+     * refused: nothing that reads shipments joins orders, so SyncShipmentTracking
+     * would keep polling the courier for a binned order forever and inbound
+     * webhooks would keep mutating it. Mirrors the existing refusal for
+     * verified products in PortalController::destroyInventory().
+     *
+     * @param  array<int|string>  $ids
+     * @return array{deleted_count:int, blocked:array<int, array{id:int, order_number:string, reason:string}>}
+     */
+    private function softDeleteOrders(array $ids): array
+    {
+        $ids = array_values(array_unique(array_filter(array_map('intval', $ids))));
+
+        if ($ids === []) {
+            return ['deleted_count' => 0, 'blocked' => []];
+        }
+
+        $activeStatuses = array_map(
+            fn (ShipmentStatus $status) => $status->value,
+            array_filter(ShipmentStatus::cases(), fn (ShipmentStatus $status) => $status->isActive())
+        );
+
+        $orders = Order::anyShopifyStatus()
+            ->whereIn('id', $ids)
+            ->withCount(['shipments as active_shipments_count' => fn ($query) => $query->whereIn('status', $activeStatuses)])
+            ->get();
+
+        $blocked = [];
+        $deleted = 0;
+
+        DB::transaction(function () use ($orders, &$blocked, &$deleted) {
+            foreach ($orders as $order) {
+                if ($order->active_shipments_count > 0) {
+                    $blocked[] = [
+                        'id' => $order->id,
+                        'order_number' => $order->order_number,
+                        'reason' => 'Order has an active shipment. Cancel the shipment first.',
+                    ];
+                    continue;
+                }
+
+                $order->delete();
+                $deleted++;
+            }
+        });
+
+        return ['deleted_count' => $deleted, 'blocked' => $blocked];
+    }
+
+    /**
      * Export orders to CSV.
      */
     public function export(Request $request)

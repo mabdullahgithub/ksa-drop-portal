@@ -190,4 +190,13 @@ class Client extends Model
 
         return $base4 . strtoupper(substr(md5($companyName . microtime()), 0, 1));
     }
+
+    /**
+     * Who deleted this row. Null once restored, or for rows deleted before the
+     * audit columns existed.
+     */
+    public function deletedBy()
+    {
+        return $this->belongsTo(User::class, 'deleted_by');
+    }
 }

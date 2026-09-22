@@ -10,6 +10,7 @@ import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
 import { usePermissions } from '@/hooks/use-permissions'
+import { SearchBeam } from '@/components/search-beam'
 import { useConnectors, type Connector } from '@/hooks/useConnectors'
 import { IconShopify, IconJnt, IconImile, IconLogesTechs, IconKsaExpress } from '@/assets/brand-icons'
 
@@ -65,12 +66,14 @@ export function Apps() {
         </div>
         <div className='my-4 flex items-end justify-between sm:my-0 sm:items-center'>
           <div className='flex flex-col gap-4 sm:my-4 sm:flex-row'>
-            <Input
-              placeholder='Filter apps...'
-              className='h-9 w-40 lg:w-62.5'
-              value={searchTerm}
-              onChange={(e: ChangeEvent<HTMLInputElement>) => setSearchTerm(e.target.value)}
-            />
+            <SearchBeam>
+              <Input
+                placeholder='Filter apps...'
+                className='h-9 w-40 lg:w-62.5'
+                value={searchTerm}
+                onChange={(e: ChangeEvent<HTMLInputElement>) => setSearchTerm(e.target.value)}
+              />
+            </SearchBeam>
           </div>
         </div>
         <Separator className='shadow-sm' />

@@ -26,6 +26,31 @@ class Order extends Model
         });
     }
 
+    /**
+     * Trashed orders as the recycle bin must see them.
+     *
+     * The shopify_visible scope hides orders awaiting client review, dismissed
+     * ones and filtered ones -- so a plain onlyTrashed() would strand those in
+     * the bin with no way to restore or purge them.
+     *
+     * Must be withoutGlobalScope('shopify_visible') (singular, named), never
+     * withoutGlobalScopes() (plural), which also strips SoftDeletingScope and
+     * would list live orders in the bin. Both spellings exist in this codebase.
+     */
+    public function scopeTrashedForBin($query)
+    {
+        return $query->withoutGlobalScope('shopify_visible')->onlyTrashed();
+    }
+
+    /**
+     * All orders regardless of the shopify_visible scope, trashed or not. Used
+     * by the delete paths so ids the UI can see are never silently skipped.
+     */
+    public function scopeAnyShopifyStatus($query)
+    {
+        return $query->withoutGlobalScope('shopify_visible');
+    }
+
     protected $fillable = [
         'client_id',
         'order_number',
@@ -123,10 +148,15 @@ class Order extends Model
 
     /**
      * Get the client that owns the order.
+     *
+     * withTrashed() because client_id is an immutable historical FK: an order
+     * placed by a client that has since been deleted still belongs to that
+     * client. Without it the order list renders a blank client name and
+     * whereHas('client') silently drops those orders from client filters.
      */
     public function client()
     {
-        return $this->belongsTo(Client::class);
+        return $this->belongsTo(Client::class)->withTrashed();
     }
 
     public function shipments()
@@ -293,5 +323,14 @@ class Order extends Model
             'partially_refunded' => 'warning',
             default => 'default',
         };
+    }
+
+    /**
+     * Who deleted this row. Null once restored, or for rows deleted before the
+     * audit columns existed.
+     */
+    public function deletedBy()
+    {
+        return $this->belongsTo(User::class, 'deleted_by');
     }
 }

@@ -146,6 +146,42 @@ export function useProductMutations() {
     }
   }
 
+  /** Move a catalog product to the recycle bin (a soft delete). */
+  const deleteProduct = async (productId: number): Promise<boolean> => {
+    setLoading(true)
+    try {
+      const res = await fetch(`/api/products/${productId}`, {
+        method: 'DELETE',
+        headers: { Accept: 'application/json', 'X-CSRF-TOKEN': getCsrfToken() },
+      })
+      return res.ok
+    } catch {
+      return false
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const bulkDeleteProducts = async (productIds: number[]): Promise<boolean> => {
+    setLoading(true)
+    try {
+      const res = await fetch('/api/products/bulk-delete', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+          'X-CSRF-TOKEN': getCsrfToken(),
+        },
+        body: JSON.stringify({ product_ids: productIds }),
+      })
+      return res.ok
+    } catch {
+      return false
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const exportProducts = (filters: ProductFilters = {}) => {
     const params = new URLSearchParams()
     Object.entries(filters).forEach(([key, value]) => {
@@ -156,5 +192,5 @@ export function useProductMutations() {
     window.location.href = `/api/products/export?${params}`
   }
 
-  return { loading, updateProduct, exportProducts }
+  return { loading, updateProduct, deleteProduct, bulkDeleteProducts, exportProducts }
 }

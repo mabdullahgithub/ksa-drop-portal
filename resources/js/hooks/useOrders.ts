@@ -166,6 +166,13 @@ export function useFilterOptions() {
   return { options, loading }
 }
 
+export type BulkDeleteResult = {
+  message: string
+  deleted_count: number
+  requested_count: number
+  blocked: { id: number; order_number: string; reason: string }[]
+}
+
 export function useOrderMutations() {
   const [loading, setLoading] = useState(false)
 
@@ -286,6 +293,64 @@ export function useOrderMutations() {
     }
   }
 
+  /**
+   * Move orders to the recycle bin (a soft delete).
+   *
+   * Orders carrying an active shipment are refused by the server, so the
+   * response reports deleted_count against requested_count and names what was
+   * skipped rather than failing the whole batch.
+   */
+  const bulkDelete = async (orderIds: number[]): Promise<BulkDeleteResult> => {
+    setLoading(true)
+    try {
+      const response = await fetch('/api/orders/bulk-delete', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+          'X-CSRF-TOKEN':
+            document
+              .querySelector('meta[name="csrf-token"]')
+              ?.getAttribute('content') || '',
+        },
+        body: JSON.stringify({ order_ids: orderIds }),
+      })
+
+      const payload = await response.json().catch(() => null)
+
+      if (!response.ok) throw new Error(payload?.message || 'Failed to delete orders')
+
+      return payload as BulkDeleteResult
+    } catch (error) {
+      console.error('Error deleting orders:', error)
+      throw error
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const deleteOrder = async (orderId: number): Promise<void> => {
+    setLoading(true)
+    try {
+      const response = await fetch(`/api/orders/${orderId}`, {
+        method: 'DELETE',
+        headers: {
+          Accept: 'application/json',
+          'X-CSRF-TOKEN':
+            document
+              .querySelector('meta[name="csrf-token"]')
+              ?.getAttribute('content') || '',
+        },
+      })
+
+      const payload = await response.json().catch(() => null)
+
+      if (!response.ok) throw new Error(payload?.message || 'Failed to delete order')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const exportOrders = (filters: OrderFilters = {}) => {
     const params = new URLSearchParams()
     Object.entries(filters).forEach(([key, value]) => {
@@ -311,6 +376,8 @@ export function useOrderMutations() {
     updateFinancialStatus,
     updateOrder,
     bulkUpdate,
+    bulkDelete,
+    deleteOrder,
     exportOrders,
   }
 }
