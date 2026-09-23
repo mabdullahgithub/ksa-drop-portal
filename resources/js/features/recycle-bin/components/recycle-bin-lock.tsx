@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { router } from '@inertiajs/react'
-import { Lock, Loader2 } from 'lucide-react'
+import { BotAvatar } from 'bot-avatars'
+import { Loader2 } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import {
@@ -105,8 +106,8 @@ export function RecycleBinLock({ open, onUnlocked, notice }: RecycleBinLockProps
         className='sm:max-w-sm'
       >
         <DialogHeader className='items-center text-center'>
-          <div className='bg-muted mb-2 flex size-11 items-center justify-center rounded-full'>
-            <Lock className='text-muted-foreground h-5 w-5' />
+          <div className='mb-2'>
+            <BotAvatar type='ghost' size={56} state={submitting ? 'working' : 'default'} />
           </div>
           <DialogTitle>Recycle Bin is locked</DialogTitle>
           <DialogDescription className='sr-only'>
