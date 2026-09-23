@@ -199,8 +199,6 @@ export interface OrderFilters {
   payment_method?: string[]
   start_date?: string
   end_date?: string
-  /** IANA timezone used to interpret start_date / end_date day boundaries. */
-  tz?: string
   utm_source?: string[]
   utm_campaign?: string
   risk_level?: string
@@ -217,6 +215,10 @@ export interface OrderFilters {
   client_ids?: number[]
   client_type?: 'fulfilment' | 'dropshipper' | ''
   has_shipment?: boolean
+  /** With has_shipment: narrow shipped orders to external couriers or KSA Express. */
+  assigned_to?: 'courier' | 'ksa_express'
+  /** Driver keys ('jnt_express', 'imile', …); matches orders with a live booking on any of them. */
+  couriers?: string[]
   shipment_status?: string[]
   order_ids?: number[]
 }
@@ -227,22 +229,20 @@ export interface ClientFilterOption {
   client_id: string
 }
 
+/** Stats for the orders matching the current filters (see OrderController::statistics). */
 export interface OrderStatistics {
   total_orders: number
+  unassigned_orders: number
+  /** Orders shipped with an external courier. */
+  assigned_orders: number
+  /** Orders shipped with our in-house KSA Express. */
+  ksa_express_orders: number
   total_revenue: number
   average_order_value: number
-  by_fulfillment_status: Array<{ fulfillment_status: string; count: number }>
-  by_financial_status: Array<{ financial_status: string; count: number }>
+  /** Orders per shipment status; ignores the shipment status filter itself. */
   by_shipment_status: Array<{ status: string; count: number }>
-  by_payment_method: Array<{ payment_method: string; count: number }>
-  by_utm_source: Array<{ utm_source: string; count: number }>
-  by_country: Array<{ shipping_country: string; count: number }>
+  /** Orders per tag; ignores the tag filter itself. */
   by_tag: Array<{ id: number; name: string; color: string; count: number }>
-  top_products: Array<{
-    lineitem_name: string
-    total_quantity: number
-    total_revenue: number
-  }>
 }
 
 export interface FilterOption {
@@ -268,6 +268,7 @@ export interface OrderFilterOptions {
   countries: FilterOption[]
   cities: CityFilterOption[]
   risk_levels: FilterOption[]
+  couriers: FilterOption[]
   tags: FilterOption[]
   clients: ClientFilterOption[]
 }

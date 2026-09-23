@@ -10,25 +10,28 @@ import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
 import { usePermissions } from '@/hooks/use-permissions'
+import { SearchBeam } from '@/components/search-beam'
 import { useConnectors, type Connector } from '@/hooks/useConnectors'
-import { IconShopify, IconJnt, IconImile, IconLogesTechs, IconWhatsapp } from '@/assets/brand-icons'
+import { IconShopify, IconJnt, IconImile, IconLogesTechs, IconKsaExpress, IconWhatsapp } from '@/assets/brand-icons'
 
 const logoMap: Record<string, React.ReactNode> = {
   shopify: <IconShopify />,
   jnt_express: <IconJnt />,
   imile: <IconImile />,
   logestechs: <IconLogesTechs />,
+  ksadrop_express: <IconKsaExpress />,
   whatsapp: <IconWhatsapp />,
 }
 
-// Fixed display order: couriers first (J&T, iMile, LogesTechs), then Shopify,
-// then messaging.
+// Fixed display order: couriers first (J&T, iMile, LogesTechs, KSA Express),
+// then Shopify, then messaging.
 const displayOrder: Record<string, number> = {
   jnt_express: 0,
   imile: 1,
   logestechs: 2,
-  shopify: 3,
-  whatsapp: 4,
+  ksadrop_express: 3,
+  shopify: 4,
+  whatsapp: 5,
 }
 
 // Connectors that have a dedicated settings page
@@ -67,12 +70,14 @@ export function Apps() {
         </div>
         <div className='my-4 flex items-end justify-between sm:my-0 sm:items-center'>
           <div className='flex flex-col gap-4 sm:my-4 sm:flex-row'>
-            <Input
-              placeholder='Filter apps...'
-              className='h-9 w-40 lg:w-62.5'
-              value={searchTerm}
-              onChange={(e: ChangeEvent<HTMLInputElement>) => setSearchTerm(e.target.value)}
-            />
+            <SearchBeam>
+              <Input
+                placeholder='Filter apps...'
+                className='h-9 w-40 lg:w-62.5'
+                value={searchTerm}
+                onChange={(e: ChangeEvent<HTMLInputElement>) => setSearchTerm(e.target.value)}
+              />
+            </SearchBeam>
           </div>
         </div>
         <Separator className='shadow-sm' />

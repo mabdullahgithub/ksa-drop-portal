@@ -2,18 +2,32 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Http\Concerns\CountsOrdersByTag;
 use App\Http\Controllers\Controller;
 use App\Models\Client;
 use App\Models\Order;
 use App\Models\Tag;
 use App\Services\CityDirectory;
 use App\Services\OrderExportService;
+use App\Services\Shipping\CourierManager;
+use App\Services\Shipping\Drivers\KsaDropExpressDriver;
+use App\Services\Shipping\Enums\ShipmentStatus;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 
 class OrderController extends Controller
 {
+    use CountsOrdersByTag;
+
+    /** Display names for the courier filter, keyed by driver key. */
+    private const COURIER_LABELS = [
+        'jnt_express'     => 'J&T Express',
+        'imile'           => 'iMile',
+        'logestechs'      => 'LogesTechs',
+        'ksadrop_express' => 'KSA Express',
+    ];
+
     public function __construct(
         protected OrderExportService $orderExport,
         protected CityDirectory $cities,
@@ -26,8 +40,31 @@ class OrderController extends Controller
     {
         $query = Order::with(['items', 'client', 'latestShipment']);
 
+        $this->applyFilters($query, $request);
+
+        // Sorting
+        $sortBy = $request->get('sort_by', 'created_at');
+        $sortOrder = $request->get('sort_order', 'desc');
+        $query->orderBy($sortBy, $sortOrder);
+
+        // Pagination
+        $perPage = $request->get('per_page', 15);
+        $orders = $query->paginate($perPage);
+
+        return response()->json($orders);
+    }
+
+    /**
+     * Apply the orders filter bar to a query. Shared by the list, export and
+     * statistics so every view of "the filtered orders" agrees. `$except`
+     * skips named filters, letting a stat card ignore the filter it drives.
+     *
+     * @param  array<int, string>  $except  any of 'tags', 'has_shipment', 'shipment_status', 'couriers'
+     */
+    private function applyFilters($query, Request $request, array $except = []): void
+    {
         // Search
-        if ($request->has('search')) {
+        if ($request->filled('search')) {
             $query->search($request->search);
         }
 
@@ -57,7 +94,7 @@ class OrderController extends Controller
 
         // Filter by date range (either bound may be omitted)
         if ($request->filled('start_date') || $request->filled('end_date')) {
-            $query->dateRange($request->start_date, $request->end_date, $request->tz);
+            $query->dateRange($request->start_date, $request->end_date);
         }
 
         // Filter by UTM source (multi-select)
@@ -69,7 +106,7 @@ class OrderController extends Controller
         }
 
         // Filter by tags (match orders carrying any of the selected tags)
-        if ($request->has('tags')) {
+        if ($request->has('tags') && ! in_array('tags', $except, true)) {
             $tags = $this->multiValue($request->tags);
             if (!empty($tags)) {
                 $query->where(function ($q) use ($tags) {
@@ -125,18 +162,39 @@ class OrderController extends Controller
             });
         }
 
-        // Filter by shipment status
-        if ($request->has('has_shipment')) {
+        // Filter by assigned / unassigned to a courier
+        if ($request->has('has_shipment') && ! in_array('has_shipment', $except, true)) {
             $hasShipment = filter_var($request->has_shipment, FILTER_VALIDATE_BOOLEAN);
             if ($hasShipment) {
-                $query->withShipment();
+                // The Assigned tabs split shipped orders by who carries them:
+                // an external courier, or our in-house KSA Express.
+                // Cancelled shipments are skipped throughout: an order whose
+                // booking was cancelled belongs back in Unassigned, not on the
+                // tab of the courier that no longer carries it.
+                match ($request->input('assigned_to')) {
+                    'ksa_express' => $query->whereHas('shipments', fn ($q) => $q->notCancelled()->where('courier', KsaDropExpressDriver::KEY)),
+                    'courier' => $query->whereHas('shipments', fn ($q) => $q->notCancelled()->where('courier', '!=', KsaDropExpressDriver::KEY)),
+                    default => $query->withShipment(),
+                };
             } else {
                 $query->withoutShipment();
             }
         }
 
+        // Filter by courier (multi-select). Matches orders carrying a live
+        // booking with any of the selected couriers; a cancelled booking no
+        // longer counts as that courier's, same as the Assigned tabs.
+        if ($request->has('couriers') && ! in_array('couriers', $except, true)) {
+            $couriers = $this->multiValue($request->couriers);
+            if (!empty($couriers)) {
+                $query->whereHas('shipments', function ($q) use ($couriers) {
+                    $q->notCancelled()->whereIn('courier', $couriers);
+                });
+            }
+        }
+
         // Filter by shipment status values
-        if ($request->has('shipment_status')) {
+        if ($request->has('shipment_status') && ! in_array('shipment_status', $except, true)) {
             $statuses = $this->multiValue($request->shipment_status);
             if (!empty($statuses)) {
                 $query->whereHas('shipments', function ($q) use ($statuses) {
@@ -144,17 +202,6 @@ class OrderController extends Controller
                 });
             }
         }
-
-        // Sorting
-        $sortBy = $request->get('sort_by', 'created_at');
-        $sortOrder = $request->get('sort_order', 'desc');
-        $query->orderBy($sortBy, $sortOrder);
-
-        // Pagination
-        $perPage = $request->get('per_page', 15);
-        $orders = $query->paginate($perPage);
-
-        return response()->json($orders);
     }
 
     /**
@@ -350,64 +397,51 @@ class OrderController extends Controller
      */
     public function statistics(Request $request)
     {
-        $query = Order::query();
+        // Stats follow the filter bar. Each card group ignores the filter it
+        // drives (clicking "Delivered" must not zero every other status card),
+        // and none follow the All / Assigned tab — the tab counts are the split.
+        $filtered = function (array $except = []) use ($request) {
+            $query = Order::query();
+            $this->applyFilters($query, $request, ['has_shipment', ...$except]);
 
-        // Apply date range if provided
-        if ($request->has('start_date') && $request->has('end_date')) {
-            $query->dateRange($request->start_date, $request->end_date);
-        }
+            return $query;
+        };
 
-        $stats = [
-            'total_orders' => $query->count(),
-            'unassigned_orders' => $query->clone()->withoutShipment()->count(),
-            'assigned_orders' => $query->clone()->withShipment()->count(),
-            'total_revenue' => round((float) $query->sum('total'), 2),
-            'average_order_value' => round((float) $query->avg('total'), 2),
-            'by_fulfillment_status' => DB::table('orders')
-                ->select('fulfillment_status', DB::raw('count(*) as count'))
-                ->groupBy('fulfillment_status')
-                ->get(),
-            'by_financial_status' => DB::table('orders')
-                ->select('financial_status', DB::raw('count(*) as count'))
-                ->groupBy('financial_status')
-                ->get(),
+        // Totals and the tab split in a single pass over the filtered orders.
+        $totals = $filtered()->toBase()->selectRaw(
+            'count(*) as total_orders,
+             coalesce(sum(total), 0) as total_revenue,
+             coalesce(avg(total), 0) as average_order_value,
+             coalesce(sum(case when exists (select 1 from shipments where shipments.order_id = orders.id and shipments.status <> ?) then 1 else 0 end), 0) as shipped_orders,
+             coalesce(sum(case when exists (select 1 from shipments where shipments.order_id = orders.id and shipments.status <> ? and shipments.courier <> ?) then 1 else 0 end), 0) as courier_orders,
+             coalesce(sum(case when exists (select 1 from shipments where shipments.order_id = orders.id and shipments.status <> ? and shipments.courier = ?) then 1 else 0 end), 0) as ksa_express_orders',
+            [
+                ShipmentStatus::CANCELLED->value,
+                ShipmentStatus::CANCELLED->value, KsaDropExpressDriver::KEY,
+                ShipmentStatus::CANCELLED->value, KsaDropExpressDriver::KEY,
+            ]
+        )->first();
+
+        $totalOrders = (int) $totals->total_orders;
+
+        return response()->json([
+            'total_orders' => $totalOrders,
+            'unassigned_orders' => $totalOrders - (int) $totals->shipped_orders,
+            // Matches the "Assigned to Courier" tab: external couriers only.
+            'assigned_orders' => (int) $totals->courier_orders,
+            'ksa_express_orders' => (int) $totals->ksa_express_orders,
+            'total_revenue' => round((float) $totals->total_revenue, 2),
+            'average_order_value' => round((float) $totals->average_order_value, 2),
+            // Orders (not shipments) per status, matching what the shipment_status filter lists.
+            // Served by the shipments (order_id, status) index.
             'by_shipment_status' => DB::table('shipments')
-                ->select('status', DB::raw('count(*) as count'))
+                ->whereIn('order_id', $filtered(['shipment_status'])->select('orders.id'))
+                ->select('status', DB::raw('count(distinct order_id) as count'))
                 ->groupBy('status')
                 ->orderByDesc('count')
                 ->get(),
-            'by_payment_method' => DB::table('orders')
-                ->select('payment_method', DB::raw('count(*) as count'))
-                ->groupBy('payment_method')
-                ->get(),
-            'by_tag' => Tag::orderBy('created_at')->get(['id', 'name', 'color'])->map(fn ($tag) => [
-                'id'    => $tag->id,
-                'name'  => $tag->name,
-                'color' => $tag->color,
-                'count' => Order::whereJsonContains('tags', $tag->name)->count(),
-            ]),
-            'by_utm_source' => DB::table('orders')
-                ->select('utm_source', DB::raw('count(*) as count'))
-                ->whereNotNull('utm_source')
-                ->groupBy('utm_source')
-                ->orderByDesc('count')
-                ->limit(10)
-                ->get(),
-            'by_country' => DB::table('orders')
-                ->select('shipping_country', DB::raw('count(*) as count'))
-                ->whereNotNull('shipping_country')
-                ->groupBy('shipping_country')
-                ->orderByDesc('count')
-                ->get(),
-            'top_products' => DB::table('order_items')
-                ->select('lineitem_name', DB::raw('sum(lineitem_quantity) as total_quantity'), DB::raw('sum(lineitem_price * lineitem_quantity) as total_revenue'))
-                ->groupBy('lineitem_name')
-                ->orderByDesc('total_quantity')
-                ->limit(10)
-                ->get(),
-        ];
-
-        return response()->json($stats);
+            'by_tag' => $this->tagCounts($filtered(['tags'])),
+        ]);
     }
 
     /**
@@ -467,6 +501,9 @@ class OrderController extends Controller
                 ['value' => 'Medium', 'label' => 'Medium'],
                 ['value' => 'High', 'label' => 'High'],
             ],
+            'couriers' => collect(app(CourierManager::class)->getAvailableDrivers())
+                ->map(fn ($key) => ['value' => $key, 'label' => self::COURIER_LABELS[$key] ?? $key])
+                ->values(),
             'tags' => Tag::orderBy('name')
                 ->pluck('name')
                 ->map(fn($name) => ['value' => $name, 'label' => $name])
@@ -616,6 +653,101 @@ class OrderController extends Controller
     }
 
     /**
+     * Soft-delete a single order into the recycle bin.
+     */
+    public function destroy(Request $request, int $order)
+    {
+        $result = $this->softDeleteOrders([$order]);
+
+        if ($result['deleted_count'] === 0) {
+            return response()->json([
+                'message' => $result['blocked'][0]['reason'] ?? 'Order not found.',
+            ], $result['blocked'] === [] ? 404 : 422);
+        }
+
+        return response()->json(['message' => 'Order moved to recycle bin']);
+    }
+
+    /**
+     * Soft-delete many orders into the recycle bin.
+     */
+    public function bulkDestroy(Request $request)
+    {
+        $request->validate([
+            'order_ids' => 'required|array',
+            'order_ids.*' => 'integer',
+        ]);
+
+        $result = $this->softDeleteOrders($request->input('order_ids'));
+
+        return response()->json([
+            'message' => $result['deleted_count'] > 0
+                ? 'Orders moved to recycle bin'
+                : 'No orders could be deleted',
+            'deleted_count' => $result['deleted_count'],
+            'requested_count' => count($request->input('order_ids')),
+            'blocked' => $result['blocked'],
+        ]);
+    }
+
+    /**
+     * Shared delete path for both destroy() and bulkDestroy().
+     *
+     * Resolves ids with anyShopifyStatus() because the default shopify_visible
+     * global scope would silently skip pending-review / dismissed / filtered
+     * orders -- the caller would get a success response for rows that were
+     * never touched. Route-model binding is avoided for the same reason.
+     *
+     * Orders carrying a shipment the courier still considers active are
+     * refused: nothing that reads shipments joins orders, so SyncShipmentTracking
+     * would keep polling the courier for a binned order forever and inbound
+     * webhooks would keep mutating it. Mirrors the existing refusal for
+     * verified products in PortalController::destroyInventory().
+     *
+     * @param  array<int|string>  $ids
+     * @return array{deleted_count:int, blocked:array<int, array{id:int, order_number:string, reason:string}>}
+     */
+    private function softDeleteOrders(array $ids): array
+    {
+        $ids = array_values(array_unique(array_filter(array_map('intval', $ids))));
+
+        if ($ids === []) {
+            return ['deleted_count' => 0, 'blocked' => []];
+        }
+
+        $activeStatuses = array_map(
+            fn (ShipmentStatus $status) => $status->value,
+            array_filter(ShipmentStatus::cases(), fn (ShipmentStatus $status) => $status->isActive())
+        );
+
+        $orders = Order::anyShopifyStatus()
+            ->whereIn('id', $ids)
+            ->withCount(['shipments as active_shipments_count' => fn ($query) => $query->whereIn('status', $activeStatuses)])
+            ->get();
+
+        $blocked = [];
+        $deleted = 0;
+
+        DB::transaction(function () use ($orders, &$blocked, &$deleted) {
+            foreach ($orders as $order) {
+                if ($order->active_shipments_count > 0) {
+                    $blocked[] = [
+                        'id' => $order->id,
+                        'order_number' => $order->order_number,
+                        'reason' => 'Order has an active shipment. Cancel the shipment first.',
+                    ];
+                    continue;
+                }
+
+                $order->delete();
+                $deleted++;
+            }
+        });
+
+        return ['deleted_count' => $deleted, 'blocked' => $blocked];
+    }
+
+    /**
      * Export orders to CSV.
      */
     public function export(Request $request)
@@ -636,79 +768,7 @@ class OrderController extends Controller
             return $this->orderExport->stream($orders);
         }
 
-        // Apply same filters as index
-        if ($request->has('search')) {
-            $query->search($request->search);
-        }
-        if ($request->has('fulfillment_status')) {
-            $values = $this->multiValue($request->fulfillment_status);
-            if (!empty($values)) {
-                $query->whereIn('fulfillment_status', $values);
-            }
-        }
-        if ($request->has('financial_status')) {
-            $values = $this->multiValue($request->financial_status);
-            if (!empty($values)) {
-                $query->whereIn('financial_status', $values);
-            }
-        }
-        if ($request->has('payment_method')) {
-            $values = $this->multiValue($request->payment_method);
-            if (!empty($values)) {
-                $query->whereIn('payment_method', $values);
-            }
-        }
-        if ($request->filled('start_date') || $request->filled('end_date')) {
-            $query->dateRange($request->start_date, $request->end_date, $request->tz);
-        }
-        $this->applyCityFilter($query, $request);
-        if ($request->has('utm_source')) {
-            $values = $this->multiValue($request->utm_source);
-            if (!empty($values)) {
-                $query->whereIn('utm_source', $values);
-            }
-        }
-        if ($request->has('tags')) {
-            $tags = $this->multiValue($request->tags);
-            if (!empty($tags)) {
-                $query->where(function ($q) use ($tags) {
-                    foreach ($tags as $tag) {
-                        $q->orWhereJsonContains('tags', $tag);
-                    }
-                });
-            }
-        }
-        if ($request->has('client_ids')) {
-            $clientIds = is_array($request->client_ids)
-                ? $request->client_ids
-                : explode(',', $request->client_ids);
-            $clientIds = array_filter(array_map('intval', $clientIds));
-            if (!empty($clientIds)) {
-                $query->whereIn('client_id', $clientIds);
-            }
-        }
-        if ($request->filled('client_type') && in_array($request->client_type, ['fulfilment', 'dropshipper'])) {
-            $clientType = $request->client_type;
-            $query->whereHas('client', function ($q) use ($clientType) {
-                $q->whereJsonContains('client_types', $clientType);
-            });
-        }
-        if ($request->has('has_shipment')) {
-            $hasShipment = filter_var($request->has_shipment, FILTER_VALIDATE_BOOLEAN);
-            if ($hasShipment) {
-                $query->withShipment();
-            } else {
-                $query->withoutShipment();
-            }
-        }
-        if ($request->has('shipment_status')) {
-            $statuses = $this->multiValue($request->shipment_status);
-            if (!empty($statuses)) {
-                $query->whereHas('shipments', function ($q) use ($statuses) {
-                    $q->whereIn('status', $statuses);
-                });
-            }
-        }
+        $this->applyFilters($query, $request);
 
         $orders = $query->get();
 

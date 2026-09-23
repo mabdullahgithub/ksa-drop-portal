@@ -1,15 +1,9 @@
 import { useState, useEffect } from 'react'
 import { type Table } from '@tanstack/react-table'
-import { Package, DollarSign, Tag, Trash2, Truck, CheckCircle2, XCircle, PhoneCall, AlertTriangle } from 'lucide-react'
+import { Tag, Trash2, Truck, FileText, Loader2, CheckCircle2, XCircle, AlertTriangle, Ban, PhoneCall } from 'lucide-react'
 import { toast } from 'sonner'
 import axios from 'axios'
 import { Button } from '@/components/ui/button'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
 import {
   Dialog,
   DialogContent,
@@ -18,6 +12,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
@@ -33,12 +33,13 @@ import { useOrdersContext } from './orders-provider'
 import { CALL_STATUS_OPTIONS } from '../data/call-status'
 import { OrderTagsDialog } from './order-tags-dialog'
 
-type Courier = 'jnt_express' | 'imile' | 'logestechs'
+type Courier = 'jnt_express' | 'imile' | 'logestechs' | 'ksadrop_express'
 
 const COURIER_LABELS: Record<Courier, string> = {
   jnt_express: 'J&T Express',
   imile: 'iMile',
   logestechs: 'LogesTechs',
+  ksadrop_express: 'KSA Express',
 }
 
 interface Warehouse {
@@ -46,6 +47,12 @@ interface Warehouse {
   name: string
   city: string
   is_default: boolean
+}
+
+interface WaybillError {
+  order_id: number
+  order_number: string | null
+  error: string
 }
 
 interface BulkShipmentResult {
@@ -61,12 +68,14 @@ export function DataTableBulkActions<TData>({
   table,
 }: DataTableBulkActionsProps<TData>) {
   const selectedRows = table.getFilteredSelectedRowModel().rows
-  const { bulkUpdate } = useOrderMutations()
+  const { bulkUpdate, bulkDelete } = useOrderMutations()
   const { can } = usePermissions()
   const { refresh } = useOrdersContext()
   const [showTagDialog, setShowTagDialog] = useState(false)
   const [isSavingTags, setIsSavingTags] = useState(false)
+  const [showCancelDialog, setShowCancelDialog] = useState(false)
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   // Bulk shipment state
   const [showShipmentDialog, setShowShipmentDialog] = useState(false)
@@ -80,6 +89,10 @@ export function DataTableBulkActions<TData>({
   const [shipmentRemark, setShipmentRemark] = useState('')
   const [creatingShipments, setCreatingShipments] = useState(false)
   const [shipmentResult, setShipmentResult] = useState<BulkShipmentResult | null>(null)
+
+  // Bulk waybill state
+  const [generatingWaybills, setGeneratingWaybills] = useState(false)
+  const [waybillErrors, setWaybillErrors] = useState<WaybillError[] | null>(null)
 
   const isLogesTechs = shipmentCourier === 'logestechs'
 
@@ -140,25 +153,41 @@ export function DataTableBulkActions<TData>({
     setShipmentRemark('')
   }
 
-  const handleBulkFulfillmentChange = async (status: string) => {
-    const selectedOrders = selectedRows.map((row) => (row.original as Order).id)
-
-    toast.promise(
-      bulkUpdate({
-        order_ids: selectedOrders,
-        action: 'update_fulfillment',
-        fulfillment_status: status,
-      }),
-      {
-        loading: 'Updating fulfillment status...',
-        success: () => {
-          table.resetRowSelection()
-          refresh()
-          return `Updated ${selectedOrders.length} order${selectedOrders.length > 1 ? 's' : ''}`
-        },
-        error: 'Failed to update orders',
+  const handleGenerateWaybills = async () => {
+    const orderIds = selectedRows.map((row) => (row.original as Order).id)
+    setGeneratingWaybills(true)
+    try {
+      const res = await axios.post(
+        '/api/shipments/waybills/bulk',
+        { order_ids: orderIds },
+        { responseType: 'blob' }
+      )
+      const url = URL.createObjectURL(res.data)
+      const link = document.createElement('a')
+      link.href = url
+      link.download =
+        res.headers['content-disposition']?.match(/filename="?([^"]+)"?/)?.[1] ?? 'ksa-express-waybills.pdf'
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      URL.revokeObjectURL(url)
+      toast.success(`Generated ${orderIds.length} waybill${orderIds.length > 1 ? 's' : ''}`)
+    } catch (err: any) {
+      // With responseType 'blob' the JSON error body arrives as a Blob too.
+      let body: { message?: string; errors?: WaybillError[] } = {}
+      try {
+        body = JSON.parse(await err.response?.data?.text())
+      } catch {
+        // not JSON — fall through to the generic message
       }
-    )
+      if (body.errors?.length) {
+        setWaybillErrors(body.errors)
+      } else {
+        toast.error(body.message || 'Failed to generate waybills')
+      }
+    } finally {
+      setGeneratingWaybills(false)
+    }
   }
 
   // Marking a batch "No Answer" is the main agent workflow: it records the
@@ -181,27 +210,6 @@ export function DataTableBulkActions<TData>({
           return status === 'no_answer'
             ? `Marked ${selectedOrders.length} as no answer — WhatsApp confirmation sent`
             : `Updated ${selectedOrders.length} order${selectedOrders.length > 1 ? 's' : ''}`
-        },
-        error: 'Failed to update orders',
-      }
-    )
-  }
-
-  const handleBulkFinancialChange = async (status: string) => {
-    const selectedOrders = selectedRows.map((row) => (row.original as Order).id)
-
-    toast.promise(
-      bulkUpdate({
-        order_ids: selectedOrders,
-        action: 'update_financial',
-        financial_status: status,
-      }),
-      {
-        loading: 'Updating payment status...',
-        success: () => {
-          table.resetRowSelection()
-          refresh()
-          return `Updated ${selectedOrders.length} order${selectedOrders.length > 1 ? 's' : ''}`
         },
         error: 'Failed to update orders',
       }
@@ -234,7 +242,7 @@ export function DataTableBulkActions<TData>({
     }
   }
 
-  const handleBulkDelete = async () => {
+  const handleBulkCancel = async () => {
     const selectedOrders = selectedRows.map((row) => (row.original as Order).id)
 
     toast.promise(
@@ -246,13 +254,50 @@ export function DataTableBulkActions<TData>({
         loading: 'Cancelling orders...',
         success: () => {
           table.resetRowSelection()
-          setShowDeleteDialog(false)
+          setShowCancelDialog(false)
           refresh()
           return `Cancelled ${selectedOrders.length} order${selectedOrders.length > 1 ? 's' : ''}`
         },
         error: 'Failed to cancel orders',
       }
     )
+  }
+
+  /**
+   * A real delete: the orders move to the recycle bin. Distinct from Cancel
+   * above, which only sets the fulfillment status.
+   */
+  const handleBulkDelete = async () => {
+    const selectedOrders = selectedRows.map((row) => (row.original as Order).id)
+
+    setDeleting(true)
+    try {
+      const result = await bulkDelete(selectedOrders)
+
+      if (result.deleted_count > 0) {
+        toast.success(
+          `Moved ${result.deleted_count} order${result.deleted_count > 1 ? 's' : ''} to the recycle bin`
+        )
+      }
+
+      // Orders with an active shipment are refused server-side; name them
+      // rather than reporting a clean success for a partial batch.
+      result.blocked?.forEach((item) => {
+        toast.warning(`${item.order_number} was not deleted. ${item.reason}`)
+      })
+
+      if (result.deleted_count === 0 && !result.blocked?.length) {
+        toast.error('No orders were deleted')
+      }
+
+      table.resetRowSelection()
+      setShowDeleteDialog(false)
+      refresh()
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to delete orders')
+    } finally {
+      setDeleting(false)
+    }
   }
 
   return (
@@ -284,72 +329,6 @@ export function DataTableBulkActions<TData>({
                 {option.label}
               </DropdownMenuItem>
             ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
-
-        <DropdownMenu>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant='outline'
-                  size='icon'
-                  className='size-8'
-                  aria-label='Update fulfillment'
-                  title='Update fulfillment'
-                >
-                  <Package className='h-4 w-4' />
-                  <span className='sr-only'>Update fulfillment</span>
-                </Button>
-              </DropdownMenuTrigger>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>Update fulfillment</p>
-            </TooltipContent>
-          </Tooltip>
-          <DropdownMenuContent sideOffset={14}>
-            <DropdownMenuItem onClick={() => handleBulkFulfillmentChange('pending')}>
-              Pending
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => handleBulkFulfillmentChange('unfulfilled')}>
-              Unfulfilled
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => handleBulkFulfillmentChange('fulfilled')}>
-              Fulfilled
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-
-        <DropdownMenu>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant='outline'
-                  size='icon'
-                  className='size-8'
-                  aria-label='Update payment'
-                  title='Update payment'
-                >
-                  <DollarSign className='h-4 w-4' />
-                  <span className='sr-only'>Update payment</span>
-                </Button>
-              </DropdownMenuTrigger>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>Update payment</p>
-            </TooltipContent>
-          </Tooltip>
-          <DropdownMenuContent sideOffset={14}>
-            <DropdownMenuItem onClick={() => handleBulkFinancialChange('pending')}>
-              Pending
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => handleBulkFinancialChange('paid')}>
-              Paid
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => handleBulkFinancialChange('refunded')}>
-              Refunded
-            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
 
@@ -393,24 +372,73 @@ export function DataTableBulkActions<TData>({
           </Tooltip>
         )}
 
+        {can('edit orders') && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant='outline'
+                size='icon'
+                onClick={handleGenerateWaybills}
+                disabled={generatingWaybills}
+                className='size-8'
+                aria-label='Generate waybill'
+                title='Generate waybill'
+              >
+                {generatingWaybills ? (
+                  <Loader2 className='h-4 w-4 animate-spin' />
+                ) : (
+                  <FileText className='h-4 w-4' />
+                )}
+                <span className='sr-only'>Generate waybill</span>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Generate waybill (KSA Express)</p>
+            </TooltipContent>
+          </Tooltip>
+        )}
+
+        {/* Cancel only sets the order status -- deliberately not a trash icon,
+            so it cannot be mistaken for the delete button beside it. */}
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
-              variant='destructive'
+              variant='outline'
               size='icon'
-              onClick={() => setShowDeleteDialog(true)}
+              onClick={() => setShowCancelDialog(true)}
               className='size-8'
               aria-label='Cancel orders'
               title='Cancel orders'
             >
-              <Trash2 className='h-4 w-4' />
+              <Ban className='h-4 w-4' />
               <span className='sr-only'>Cancel orders</span>
             </Button>
           </TooltipTrigger>
           <TooltipContent>
-            <p>Cancel orders</p>
+            <p>Cancel orders (keeps them in the list)</p>
           </TooltipContent>
         </Tooltip>
+
+        {can('delete orders') && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant='destructive'
+                size='icon'
+                onClick={() => setShowDeleteDialog(true)}
+                className='size-8'
+                aria-label='Delete orders'
+                title='Delete orders'
+              >
+                <Trash2 className='h-4 w-4' />
+                <span className='sr-only'>Delete orders</span>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Delete orders (moves to recycle bin)</p>
+            </TooltipContent>
+          </Tooltip>
+        )}
       </BulkActionsToolbar>
 
       <OrderTagsDialog
@@ -422,21 +450,73 @@ export function DataTableBulkActions<TData>({
         isSaving={isSavingTags}
       />
 
-      {/* Delete Confirmation Dialog */}
-      <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+      {/* Waybill errors: orders that block the bulk waybill */}
+      <Dialog open={waybillErrors !== null} onOpenChange={(open) => !open && setWaybillErrors(null)}>
+        <DialogContent className='max-w-lg'>
+          <DialogHeader>
+            <DialogTitle>Cannot generate waybills</DialogTitle>
+            <DialogDescription>
+              Waybills are generated only when every selected order has a shipment created with KSA Express.
+              Fix or deselect these orders and try again.
+            </DialogDescription>
+          </DialogHeader>
+          <div className='max-h-72 space-y-2 overflow-y-auto'>
+            {waybillErrors?.map((e) => (
+              <div key={e.order_id} className='flex items-start gap-2 rounded-md border p-2 text-sm'>
+                <XCircle className='mt-0.5 h-4 w-4 shrink-0 text-destructive' />
+                <div>
+                  <p className='font-medium'>Order {e.order_number ?? e.order_id}</p>
+                  <p className='text-muted-foreground'>{e.error}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+          <DialogFooter>
+            <Button variant='outline' onClick={() => setWaybillErrors(null)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Cancel Confirmation Dialog */}
+      <Dialog open={showCancelDialog} onOpenChange={setShowCancelDialog}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Cancel Orders</DialogTitle>
             <DialogDescription>
-              Are you sure you want to cancel {selectedRows.length} selected order{selectedRows.length > 1 ? 's' : ''}? This action cannot be undone.
+              Mark {selectedRows.length} selected order{selectedRows.length > 1 ? 's' : ''} as
+              cancelled. They stay in the orders list.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant='outline' onClick={() => setShowDeleteDialog(false)}>
+            <Button variant='outline' onClick={() => setShowCancelDialog(false)}>
+              Keep as is
+            </Button>
+            <Button variant='destructive' onClick={handleBulkCancel}>
+              Cancel Orders
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Orders</DialogTitle>
+            <DialogDescription>
+              Move {selectedRows.length} selected order{selectedRows.length > 1 ? 's' : ''} to the
+              recycle bin. You can restore {selectedRows.length > 1 ? 'them' : 'it'} from there.
+              Orders with an active shipment will be skipped.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant='outline' onClick={() => setShowDeleteDialog(false)} disabled={deleting}>
               Cancel
             </Button>
-            <Button variant='destructive' onClick={handleBulkDelete}>
-              Cancel Orders
+            <Button variant='destructive' onClick={handleBulkDelete} disabled={deleting}>
+              {deleting ? 'Deleting…' : 'Delete Orders'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -468,6 +548,7 @@ export function DataTableBulkActions<TData>({
                   <option value='jnt_express'>J&amp;T Express</option>
                   <option value='imile'>iMile</option>
                   <option value='logestechs'>LogesTechs</option>
+                  <option value='ksadrop_express'>KSA Express</option>
                 </select>
               </div>
 

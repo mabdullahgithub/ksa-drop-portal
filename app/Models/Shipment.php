@@ -85,6 +85,16 @@ class Shipment extends Model
         ]);
     }
 
+    /**
+     * Still counts as assigned to its courier — delivered, returned and failed
+     * parcels stay on the courier's books. A cancelled one does not: the order
+     * is free to be booked again, so it must not keep showing as assigned.
+     */
+    public function scopeNotCancelled($query)
+    {
+        return $query->where('status', '!=', ShipmentStatus::CANCELLED->value);
+    }
+
     public function scopeByCourier($query, string $courier)
     {
         return $query->where('courier', $courier);

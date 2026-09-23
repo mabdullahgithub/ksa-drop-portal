@@ -215,7 +215,10 @@ class LogesTechsWebhookController extends Controller
     private function resolveShipment(?string $barcode, ?string $supplierInvoice): ?Shipment
     {
         if ($barcode !== null) {
-            $shipment = Shipment::where('tracking_number', $barcode)->first();
+            // Scoped to LogesTechs: tracking numbers are only unique per courier.
+            $shipment = Shipment::where('courier', 'logestechs')
+                ->where('tracking_number', $barcode)
+                ->first();
 
             if ($shipment) {
                 return $shipment;
@@ -223,8 +226,12 @@ class LogesTechsWebhookController extends Controller
         }
 
         if ($supplierInvoice !== null) {
+            // A cancelled booking keeps the order number it was made under,
+            // so prefer a live shipment before falling back to it.
             return Shipment::where('txlogistic_id', $supplierInvoice)
                 ->where('courier', 'logestechs')
+                ->orderByRaw("status = '" . ShipmentStatus::CANCELLED->value . "'")
+                ->orderByDesc('id')
                 ->first();
         }
 

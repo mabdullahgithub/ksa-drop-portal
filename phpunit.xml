@@ -23,6 +23,12 @@
         <env name="BCRYPT_ROUNDS" value="4"/>
         <env name="BROADCAST_CONNECTION" value="null"/>
         <env name="CACHE_STORE" value="array"/>
+        <!-- config/permission.php names the "file" store explicitly, so CACHE_STORE=array
+             does NOT cover it. Without this, a test run rewrites the real permission cache
+             in storage/framework/cache with the handful of permissions its setUp() creates,
+             and every admin in the local app then 403s on tabs whose permission is missing
+             from that snapshot. -->
+        <env name="PERMISSION_CACHE_STORE" value="array"/>
         <env name="DB_CONNECTION" value="sqlite"/>
         <env name="DB_DATABASE" value=":memory:"/>
         <env name="DB_URL" value=""/>

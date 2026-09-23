@@ -1,4 +1,4 @@
-import { useOrderStatistics } from '@/hooks/useOrders'
+import type { OrderStatistics } from '@/types/order'
 import {
   Package,
   Truck,
@@ -33,17 +33,18 @@ function ShipmentStatusCardSkeleton() {
 }
 
 interface ShipmentStatusCardsProps {
+  statistics: OrderStatistics | null
+  loading: boolean
   onStatusClick?: (status: string) => void
 }
 
-/** Orders page: fetches its own copy of the statistics. */
-export function ShipmentStatusCards({ onStatusClick }: ShipmentStatusCardsProps) {
-  const { statistics, loading } = useOrderStatistics()
-
+/** Orders page: fed the filter-aware statistics the page already holds. */
+export function ShipmentStatusCards({ statistics, loading, onStatusClick }: ShipmentStatusCardsProps) {
   return (
     <ShipmentStatusCardsView
       byStatus={statistics?.by_shipment_status ?? null}
-      loading={loading}
+      // Skeletons only on the first load; a refetch keeps the old numbers up.
+      loading={loading && !statistics}
       onStatusClick={onStatusClick}
     />
   )

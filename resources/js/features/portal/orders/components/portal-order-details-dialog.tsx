@@ -7,6 +7,7 @@ import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import { usePortalOrder } from '@/hooks/usePortal'
 import { toast } from 'sonner'
+import { toBusinessTime } from '@/lib/business-time'
 
 const statusColorMap: Record<string, string> = {
   success: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
@@ -212,24 +213,24 @@ export function PortalOrderDetailsDialog({ order, open, onOpenChange }: Props) {
               <div className='space-y-2 text-sm'>
                 <div className='flex justify-between'>
                   <span className='text-muted-foreground'>Created</span>
-                  <span>{format(new Date(o.created_at), 'PPpp')}</span>
+                  <span>{format(toBusinessTime(o.created_at), 'PPpp')}</span>
                 </div>
                 {o.paid_at && (
                   <div className='flex justify-between'>
                     <span className='text-muted-foreground'>Paid</span>
-                    <span>{format(new Date(o.paid_at), 'PPpp')}</span>
+                    <span>{format(toBusinessTime(o.paid_at), 'PPpp')}</span>
                   </div>
                 )}
                 {o.fulfilled_at && (
                   <div className='flex justify-between'>
                     <span className='text-muted-foreground'>Fulfilled</span>
-                    <span>{format(new Date(o.fulfilled_at), 'PPpp')}</span>
+                    <span>{format(toBusinessTime(o.fulfilled_at), 'PPpp')}</span>
                   </div>
                 )}
                 {o.cancelled_at && (
                   <div className='flex justify-between'>
                     <span className='text-muted-foreground'>Cancelled</span>
-                    <span>{format(new Date(o.cancelled_at), 'PPpp')}</span>
+                    <span>{format(toBusinessTime(o.cancelled_at), 'PPpp')}</span>
                   </div>
                 )}
               </div>

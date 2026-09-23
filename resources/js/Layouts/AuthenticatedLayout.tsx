@@ -11,6 +11,7 @@ import { AppSidebar } from '@/components/layout/app-sidebar'
 import { GuideVideoWidget } from '@/components/guide-video-widget'
 import { ImpersonateBanner } from '@/components/layout/impersonate-banner'
 import { SkipToMain } from '@/components/skip-to-main'
+import { usePermissions } from '@/hooks/use-permissions'
 import { Toaster } from '@/components/ui/sonner'
 import type { PageProps } from '@/types'
 
@@ -25,6 +26,7 @@ function ToasterWithPosition() {
 
 function LayoutInner({ children }: AuthenticatedLayoutProps) {
   const { auth } = usePage<PageProps>().props
+  const { hasRole } = usePermissions()
   const isImpersonating = !!auth.impersonating
   const defaultOpen = getCookie('sidebar_state') !== 'false'
 
@@ -46,7 +48,7 @@ function LayoutInner({ children }: AuthenticatedLayoutProps) {
         >
           {children}
         </SidebarInset>
-        <GuideVideoWidget />
+        {hasRole('client') && <GuideVideoWidget />}
       </SidebarProvider>
     </div>
   )

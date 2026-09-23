@@ -1,0 +1,1 @@
+import{b as e,y as t}from"./format-COUPee0n.js";function n(e,n){let r=t(e)-+t(n);return r<0?-1:r>0?1:r}function r(t){return e(t,Date.now())}function i(e){return t=>{let n=(e?Math[e]:Math.trunc)(t);return n===0?0:n}}export{r as n,n as r,i as t};

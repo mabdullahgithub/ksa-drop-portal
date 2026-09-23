@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useCallback } from 'react'
 import { HelpCircle } from 'lucide-react'
 import { Header } from '@/components/layout/header'
 import { NotificationsDropdown } from '@/components/layout/notifications-dropdown'
@@ -15,7 +15,7 @@ import { OrdersFilters } from './components/orders-filters'
 import { ShipmentStatusCards } from './components/shipment-status-cards'
 import { TagStatCards } from './components/tag-stat-cards'
 import { ShipmentStatusInfoModal } from './components/shipment-status-info-modal'
-import { useOrders } from '@/hooks/useOrders'
+import { useOrders, useOrderStatistics } from '@/hooks/useOrders'
 
 export function Orders() {
   const { orders, meta, loading, filters, updateFilters, refresh } = useOrders({
@@ -26,32 +26,32 @@ export function Orders() {
   })
   const [tableInstance, setTableInstance] = useState<any>(null)
   const [statusInfoModalOpen, setStatusInfoModalOpen] = useState(false)
-  const [stats, setStats] = useState<any>(null)
+  // Every stat card and tab count on the page follows the current filters.
+  const { statistics: stats, loading: statsLoading, refresh: refreshStats } = useOrderStatistics(filters)
 
-  useEffect(() => {
-    const fetchStats = async () => {
-      try {
-        const response = await fetch('/api/orders/statistics')
-        const data = await response.json()
-        setStats(data)
-      } catch (error) {
-        console.error('Error fetching statistics:', error)
-      }
-    }
-    fetchStats()
-  }, [])
+  // Order changes (bulk actions, edits, shipments) move the numbers too.
+  const refreshAll = useCallback(async () => {
+    await Promise.all([refresh(), refreshStats()])
+  }, [refresh, refreshStats])
 
-  const activeTab = filters.has_shipment === true ? 'assigned' : filters.has_shipment === false ? 'unassigned' : 'unassigned'
+  type OrdersTab = 'unassigned' | 'assigned' | 'ksa_express'
 
-  const handleTabChange = (tab: 'unassigned' | 'assigned') => {
+  const activeTab: OrdersTab = !filters.has_shipment
+    ? 'unassigned'
+    : filters.assigned_to === 'ksa_express'
+      ? 'ksa_express'
+      : 'assigned'
+
+  const handleTabChange = (tab: OrdersTab) => {
     updateFilters({
-      has_shipment: tab === 'assigned',
+      has_shipment: tab !== 'unassigned',
+      assigned_to: tab === 'assigned' ? 'courier' : tab === 'ksa_express' ? 'ksa_express' : undefined,
       page: 1,
     })
   }
 
   return (
-    <OrdersProvider refresh={refresh}>
+    <OrdersProvider refresh={refreshAll}>
       {/* Opens ?order=<number> straight into its details dialog. */}
       <OrderDeepLink />
 
@@ -74,6 +74,8 @@ export function Orders() {
         </div>
 
         <TagStatCards
+          statistics={stats}
+          loading={statsLoading}
           activeTag={filters.tags?.[0] ?? null}
           onTagClick={(tagName) => {
             const isActive = filters.tags?.[0] === tagName
@@ -93,13 +95,15 @@ export function Orders() {
             </button>
           </div>
           <ShipmentStatusCards
+            statistics={stats}
+            loading={statsLoading}
             onStatusClick={(status) => {
               updateFilters({ shipment_status: [status], has_shipment: true, page: 1 })
             }}
           />
         </div>
 
-        {/* Tabs for Unassigned / Assigned to Courier */}
+        {/* Tabs for All Orders / Other Couriers / KSA Express */}
         <div className='flex gap-2 border-b border-muted/50'>
           <button
             onClick={() => handleTabChange('unassigned')}
@@ -124,10 +128,25 @@ export function Orders() {
                 : 'text-muted-foreground hover:text-foreground'
             }`}
           >
-            Assigned to Courier
+            Other Couriers
             {stats?.assigned_orders != null && (
               <span className='ml-1.5 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium tabular-nums'>
                 {stats.assigned_orders}
+              </span>
+            )}
+          </button>
+          <button
+            onClick={() => handleTabChange('ksa_express')}
+            className={`px-4 py-2 text-sm font-medium transition-colors ${
+              activeTab === 'ksa_express'
+                ? 'border-b-2 border-primary text-primary -mb-px'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            KSA Express
+            {stats?.ksa_express_orders != null && (
+              <span className='ml-1.5 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium tabular-nums'>
+                {stats.ksa_express_orders}
               </span>
             )}
           </button>
@@ -143,7 +162,7 @@ export function Orders() {
           data={orders}
           meta={meta}
           loading={loading}
-          onRefresh={refresh}
+          onRefresh={refreshAll}
           onPageChange={(page) => updateFilters({ page })}
           onPageSizeChange={(pageSize) => updateFilters({ per_page: pageSize, page: 1 })}
           onSortChange={(sortBy, sortOrder) => updateFilters({ sort_by: sortBy, sort_order: sortOrder, page: 1 })}
@@ -151,7 +170,7 @@ export function Orders() {
         />
       </Main>
 
-      <OrdersDialogs onSuccess={refresh} />
+      <OrdersDialogs onSuccess={refreshAll} />
       <ShipmentStatusInfoModal open={statusInfoModalOpen} onOpenChange={setStatusInfoModalOpen} />
     </OrdersProvider>
   )

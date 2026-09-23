@@ -98,7 +98,7 @@ export interface RecentOrder {
 }
 
 export interface RecentOrderShipment {
-    courier: 'jnt_express' | 'imile' | 'logestechs' | null
+    courier: 'jnt_express' | 'imile' | 'logestechs' | 'ksadrop_express' | null
     tracking_number: string | null
     /** ShipmentStatus value (app/Services/Shipping/Enums/ShipmentStatus.php). */
     status: string

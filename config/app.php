@@ -68,6 +68,14 @@ return [
     'timezone' => 'UTC',
 
     /*
+    | Business timezone: the one clock every viewer shares. Date filters and
+    | counts treat "a day" as a day in this timezone, whatever the device's
+    | own timezone is. Timestamps are still stored in UTC.
+    */
+
+    'business_timezone' => env('BUSINESS_TIMEZONE', 'Asia/Riyadh'),
+
+    /*
     |--------------------------------------------------------------------------
     | Application Locale Configuration
     |--------------------------------------------------------------------------

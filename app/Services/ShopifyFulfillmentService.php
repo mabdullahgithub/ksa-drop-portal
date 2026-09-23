@@ -760,7 +760,7 @@ class ShopifyFulfillmentService
      * Courier names as Shopify writes them in its own carrier list, where a
      * match lets Shopify build the tracking link itself.
      *
-     * None of the three are on that list, which is why trackingUrl() supplies
+     * None of them are on that list, which is why trackingUrl() supplies
      * one. The names are still sent, because this is the text the customer sees
      * next to the number in Shopify's shipping email.
      */
@@ -768,6 +768,7 @@ class ShopifyFulfillmentService
         'jnt_express' => 'J&T Express',
         'imile'       => 'iMile',
         'logestechs'  => 'Navix',
+        'ksadrop_express' => 'KSA Express',
     ];
 
     /**

@@ -1,4 +1,4 @@
-import { useOrderStatistics } from '@/hooks/useOrders'
+import type { OrderStatistics } from '@/types/order'
 import { Tag as TagIcon } from 'lucide-react'
 
 function hexToRgba(hex: string | null | undefined, alpha: number) {
@@ -19,18 +19,19 @@ function TagCardSkeleton() {
 }
 
 interface TagStatCardsProps {
+  statistics: OrderStatistics | null
+  loading: boolean
   activeTag?: string | null
   onTagClick?: (tagName: string) => void
 }
 
-/** Orders page: fetches its own copy of the statistics. */
-export function TagStatCards({ activeTag, onTagClick }: TagStatCardsProps) {
-  const { statistics, loading } = useOrderStatistics()
-
+/** Orders page: fed the filter-aware statistics the page already holds. */
+export function TagStatCards({ statistics, loading, activeTag, onTagClick }: TagStatCardsProps) {
   return (
     <TagStatCardsView
       tags={statistics?.by_tag ?? []}
-      loading={loading}
+      // Skeletons only on the first load; a refetch keeps the old numbers up.
+      loading={loading && !statistics}
       activeTag={activeTag}
       onTagClick={onTagClick}
     />

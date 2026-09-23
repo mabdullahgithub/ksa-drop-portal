@@ -49,13 +49,16 @@ function DialogContent({
   className,
   children,
   showCloseButton = true,
+  overlayClassName,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
   showCloseButton?: boolean
+  /** Extra classes for the backdrop, e.g. to blur the page behind the dialog. */
+  overlayClassName?: string
 }) {
   return (
     <DialogPortal data-slot='dialog-portal'>
-      <DialogOverlay />
+      <DialogOverlay className={overlayClassName} />
       <div className='fixed inset-0 z-50 flex items-center justify-center p-4'>
         <DialogPrimitive.Content
           data-slot='dialog-content'

@@ -56,6 +56,8 @@ const PROBLEM = ['exception', 'attempt_fail', ...HALTED]
 const COURIER_LABELS: Record<string, string> = {
   jnt_express: 'J&T Express',
   imile: 'iMile',
+  logestechs: 'Navix',
+  ksadrop_express: 'KSA Express',
 }
 
 const STATUS_BADGE: Record<string, string> = {

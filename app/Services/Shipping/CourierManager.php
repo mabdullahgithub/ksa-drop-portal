@@ -5,6 +5,7 @@ namespace App\Services\Shipping;
 use App\Services\Shipping\Contracts\CourierDriver;
 use App\Services\Shipping\Drivers\ImileDriver;
 use App\Services\Shipping\Drivers\JntExpressDriver;
+use App\Services\Shipping\Drivers\KsaDropExpressDriver;
 use App\Services\Shipping\Drivers\LogesTechsDriver;
 use InvalidArgumentException;
 
@@ -29,6 +30,7 @@ class CourierManager
             'jnt_express' => new JntExpressDriver(),
             'imile' => new ImileDriver(),
             'logestechs' => new LogesTechsDriver(),
+            'ksadrop_express' => new KsaDropExpressDriver(),
             default => throw new InvalidArgumentException("Courier driver [{$name}] is not supported."),
         };
     }
@@ -40,6 +42,6 @@ class CourierManager
 
     public function getAvailableDrivers(): array
     {
-        return ['jnt_express', 'imile', 'logestechs'];
+        return ['jnt_express', 'imile', 'logestechs', 'ksadrop_express'];
     }
 }

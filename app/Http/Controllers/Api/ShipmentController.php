@@ -12,6 +12,7 @@ use App\Services\Shipping\Drivers\LogesTechsDriver;
 use App\Services\Shipping\DTOs\ShipmentData;
 use App\Services\Shipping\Enums\ShipmentStatus;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 
 class ShipmentController extends Controller
 {
@@ -63,7 +64,7 @@ class ShipmentController extends Controller
         $validated = $request->validate([
             'order_id'               => 'required|exists:orders,id',
             'warehouse_id'           => 'required|exists:warehouses,id',
-            'courier'                => 'nullable|in:jnt_express,imile,logestechs',
+            'courier'                => 'nullable|in:jnt_express,imile,logestechs,ksadrop_express',
             'weight'                 => 'nullable|numeric|min:0.1',
             'length'                 => 'nullable|numeric|min:0',
             'width'                  => 'nullable|numeric|min:0',
@@ -106,6 +107,8 @@ class ShipmentController extends Controller
 
         $warehouse = Warehouse::findOrFail($validated['warehouse_id']);
 
+        $validated['txlogistic_id'] = $this->txlogisticIdFor($order, $courier);
+
         $shipmentData = ShipmentData::fromOrder($order, $warehouse, $validated);
 
         $driver = $this->courierManager->driver($courier);
@@ -119,21 +122,40 @@ class ShipmentController extends Controller
             ], 422);
         }
 
-        $shipment = Shipment::create([
-            'order_id' => $order->id,
-            'courier' => $courier,
-            'tracking_number' => $result->trackingNumber,
-            'txlogistic_id' => $shipmentData->txlogisticId,
-            'sorting_code' => $result->sortingCode,
-            'status' => ShipmentStatus::INFO_RECEIVED->value,
-            'api_response' => $result->rawResponse,
-            'weight' => $shipmentData->weight,
-            'length' => $shipmentData->length,
-            'width' => $shipmentData->width,
-            'height' => $shipmentData->height,
-            'service_type' => $shipmentData->serviceType,
-            'shipped_at' => now(),
-        ]);
+        try {
+            $shipment = Shipment::create([
+                'order_id' => $order->id,
+                'courier' => $courier,
+                'tracking_number' => $result->trackingNumber,
+                'txlogistic_id' => $shipmentData->txlogisticId,
+                'sorting_code' => $result->sortingCode,
+                'status' => ShipmentStatus::INFO_RECEIVED->value,
+                'api_response' => $result->rawResponse,
+                'weight' => $shipmentData->weight,
+                'length' => $shipmentData->length,
+                'width' => $shipmentData->width,
+                'height' => $shipmentData->height,
+                'service_type' => $shipmentData->serviceType,
+                'shipped_at' => now(),
+            ]);
+        } catch (\Throwable $e) {
+            // The courier has already booked and printed this waybill, so a
+            // failure here loses a real parcel unless someone is told which
+            // one. Surface the number instead of a bare 500.
+            Log::error('Shipment booked at courier but not saved', [
+                'order_id' => $order->id,
+                'courier' => $courier,
+                'tracking_number' => $result->trackingNumber,
+                'txlogistic_id' => $shipmentData->txlogisticId,
+                'error' => $e->getMessage(),
+            ]);
+
+            return response()->json([
+                'message' => "{$this->courierLabel($courier)} created waybill {$result->trackingNumber}, but it could not be saved. Record it manually before booking again.",
+                'error' => $e->getMessage(),
+                'tracking_number' => $result->trackingNumber,
+            ], 500);
+        }
 
         // Tell Shopify the parcel is moving. Queued: the courier has already
         // accepted it and charged us, so an Admin API outage must not turn a
@@ -153,7 +175,7 @@ class ShipmentController extends Controller
             'order_ids'    => 'required|array|min:1',
             'order_ids.*'  => 'exists:orders,id',
             'warehouse_id' => 'required|exists:warehouses,id',
-            'courier'      => 'nullable|in:jnt_express,imile,logestechs',
+            'courier'      => 'nullable|in:jnt_express,imile,logestechs,ksadrop_express',
             'weight'       => 'nullable|numeric|min:0.1',
             'service_type' => 'nullable|in:01,02,STANDARD,EXPRESS',
             'goods_type'   => 'nullable|in:ITN1,ITN2,ITN3,ITN4,ITN5,ITN6,ITN7',
@@ -226,6 +248,8 @@ class ShipmentController extends Controller
                 'remark'       => $validated['remark'] ?? null,
             ]);
 
+            $options['txlogistic_id'] = $this->txlogisticIdFor($order, $courier);
+
             if ($districtPool !== []) {
                 // Picked per order, not per batch, so a bulk run spreads across
                 // districts the way real orders would.
@@ -244,18 +268,36 @@ class ShipmentController extends Controller
                 continue;
             }
 
-            $shipment = Shipment::create([
-                'order_id' => $order->id,
-                'courier' => $courier,
-                'tracking_number' => $result->trackingNumber,
-                'txlogistic_id' => $shipmentData->txlogisticId,
-                'sorting_code' => $result->sortingCode,
-                'status' => ShipmentStatus::INFO_RECEIVED->value,
-                'api_response' => $result->rawResponse,
-                'weight' => $shipmentData->weight,
-                'service_type' => $shipmentData->serviceType,
-                'shipped_at' => now(),
-            ]);
+            try {
+                $shipment = Shipment::create([
+                    'order_id' => $order->id,
+                    'courier' => $courier,
+                    'tracking_number' => $result->trackingNumber,
+                    'txlogistic_id' => $shipmentData->txlogisticId,
+                    'sorting_code' => $result->sortingCode,
+                    'status' => ShipmentStatus::INFO_RECEIVED->value,
+                    'api_response' => $result->rawResponse,
+                    'weight' => $shipmentData->weight,
+                    'service_type' => $shipmentData->serviceType,
+                    'shipped_at' => now(),
+                ]);
+            } catch (\Throwable $e) {
+                // Already booked at the courier — name the waybill in the
+                // failure row so it isn't lost, and carry on with the batch.
+                Log::error('Shipment booked at courier but not saved', [
+                    'order_id' => $order->id,
+                    'courier' => $courier,
+                    'tracking_number' => $result->trackingNumber,
+                    'txlogistic_id' => $shipmentData->txlogisticId,
+                    'error' => $e->getMessage(),
+                ]);
+
+                $failed[] = [
+                    'order_id' => $orderId,
+                    'error' => "Waybill {$result->trackingNumber} was created at the courier but could not be saved: {$e->getMessage()}",
+                ];
+                continue;
+            }
 
             PushShopifyFulfillmentJob::dispatch($shipment)->onConnection('database');
 
@@ -458,6 +500,35 @@ class ShipmentController extends Controller
     }
 
     /**
+     * The order number we hand the courier. Re-booking an order — after its
+     * first shipment was cancelled — would otherwise reuse a number this
+     * courier has already seen, which they reject and which collides with the
+     * old row's (courier, txlogistic_id) key. Second attempt becomes
+     * MARK00005-R2, third MARK00005-R3.
+     */
+    protected function txlogisticIdFor(Order $order, string $courier): string
+    {
+        $base = (string) $order->order_number;
+
+        $taken = Shipment::where('courier', $courier)
+            ->where(fn ($q) => $q->where('txlogistic_id', $base)->orWhere('txlogistic_id', 'like', $base . '-R%'))
+            ->pluck('txlogistic_id')
+            ->all();
+
+        if (! in_array($base, $taken, true)) {
+            return $base;
+        }
+
+        $attempt = 2;
+
+        while (in_array($base . '-R' . $attempt, $taken, true)) {
+            $attempt++;
+        }
+
+        return $base . '-R' . $attempt;
+    }
+
+    /**
      * A Saudi National Address short code: four uppercase letters followed by
      * four digits (e.g. RDLC4305). LogesTechs enforces no format — any
      * non-empty string is accepted — so this only has to look like the real
@@ -480,6 +551,7 @@ class ShipmentController extends Controller
             'jnt_express' => 'J&T Express',
             'imile' => 'iMile',
             'logestechs' => 'LogesTechs',
+            'ksadrop_express' => 'KSA Express',
             default => $courier,
         };
     }

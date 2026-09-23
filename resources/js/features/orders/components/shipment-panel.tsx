@@ -15,6 +15,7 @@ import { Truck, RefreshCw, X, Copy, ExternalLink, MapPin, AlertTriangle, CheckCi
 import { toast } from 'sonner'
 import axios from 'axios'
 import { useState } from 'react'
+import { BUSINESS_TIMEZONE } from '@/lib/business-time'
 
 interface TrackingEvent {
   status: string
@@ -60,6 +61,8 @@ interface ShipmentPanelProps {
 const courierLabels: Record<string, string> = {
   jnt_express: 'J&T Express',
   imile: 'iMile',
+  logestechs: 'LogesTechs',
+  ksadrop_express: 'KSA Express',
 }
 
 const courierLabel = (courier: string) => courierLabels[courier] || courier
@@ -219,9 +222,9 @@ export function ShipmentPanel({ shipment, orderId, onCreateShipment, onShipmentU
             <div className='text-muted-foreground'>Delivered</div>
             <div className='font-medium flex items-center gap-1'>
               <CheckCircle2 className='h-3 w-3 text-green-600' />
-              {new Date(shipment.delivered_at).toLocaleDateString()}
+              {new Date(shipment.delivered_at).toLocaleDateString(undefined, { timeZone: BUSINESS_TIMEZONE })}
               {shipment.otp_verified && shipment.otp_verified_at && (
-                <span className='text-xs text-muted-foreground'>(OTP at {new Date(shipment.otp_verified_at).toLocaleDateString()})</span>
+                <span className='text-xs text-muted-foreground'>(OTP at {new Date(shipment.otp_verified_at).toLocaleDateString(undefined, { timeZone: BUSINESS_TIMEZONE })})</span>
               )}
             </div>
           </div>
@@ -240,7 +243,7 @@ export function ShipmentPanel({ shipment, orderId, onCreateShipment, onShipmentU
           {shipment.exception_note}
           {shipment.exception_escalated_at && (
             <div className='text-xs mt-1 opacity-70'>
-              Escalated on {new Date(shipment.exception_escalated_at).toLocaleString()}
+              Escalated on {new Date(shipment.exception_escalated_at).toLocaleString(undefined, { timeZone: BUSINESS_TIMEZONE })}
             </div>
           )}
         </div>

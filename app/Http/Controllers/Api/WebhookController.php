@@ -433,15 +433,25 @@ class WebhookController extends Controller
 
     private function resolveShipment(?string $trackingNumber, ?string $txlogisticId): ?Shipment
     {
+        // Scoped to J&T: a tracking number is only unique per courier, and an
+        // order number belongs to whichever courier currently carries the
+        // order — a cancelled booking elsewhere must not absorb these scans.
         if ($trackingNumber) {
-            $shipment = Shipment::where('tracking_number', $trackingNumber)->first();
+            $shipment = Shipment::where('courier', 'jnt_express')
+                ->where('tracking_number', $trackingNumber)
+                ->first();
+
             if ($shipment) {
                 return $shipment;
             }
         }
 
         if ($txlogisticId) {
-            return Shipment::where('txlogistic_id', $txlogisticId)->first();
+            return Shipment::where('courier', 'jnt_express')
+                ->where('txlogistic_id', $txlogisticId)
+                ->orderByRaw("status = '" . ShipmentStatus::CANCELLED->value . "'")
+                ->orderByDesc('id')
+                ->first();
         }
 
         return null;

@@ -11,7 +11,7 @@ import { type Order } from '@/types/order'
 import { JntProvinceSelect, JntCitySelect } from '@/components/jnt-location-select'
 import { LogesTechsVillageSelect } from '@/components/logestechs-village-select'
 
-type Courier = 'jnt_express' | 'imile' | 'logestechs'
+type Courier = 'jnt_express' | 'imile' | 'logestechs' | 'ksadrop_express'
 
 interface Warehouse {
   id: number
@@ -223,6 +223,7 @@ export function CreateShipmentDialog({ order, open, onOpenChange, onSuccess }: C
                 <option value='jnt_express'>J&amp;T Express</option>
                 <option value='imile'>iMile</option>
                 <option value='logestechs'>LogesTechs</option>
+                <option value='ksadrop_express'>KSA Express</option>
               </select>
             </div>
 

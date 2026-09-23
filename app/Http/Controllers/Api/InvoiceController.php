@@ -7,6 +7,9 @@ use App\Models\Invoice;
 use App\Models\Order;
 use App\Models\Shipment;
 use App\Services\InvoiceService;
+use App\Services\Shipping\Drivers\KsaDropExpressDriver;
+use App\Services\Shipping\Enums\ShipmentStatus;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 
 class InvoiceController extends Controller
@@ -34,6 +37,76 @@ class InvoiceController extends Controller
             'message' => 'Shipping invoice generated.',
             'invoice' => $invoice,
         ], 201);
+    }
+
+    /**
+     * Generate the KSA Express waybills of many orders as one PDF download (admin).
+     *
+     * All or nothing: every selected order must have a live shipment booked
+     * with KSA Express, otherwise nothing is generated and the 422 response
+     * lists each order that blocks the run.
+     */
+    public function bulkKsaExpressWaybills(Request $request)
+    {
+        $validated = $request->validate([
+            'order_ids'   => 'required|array|min:1|max:200',
+            'order_ids.*' => 'integer',
+        ]);
+
+        $orderIds = array_values(array_unique($validated['order_ids']));
+
+        // A cancelled or failed booking has no usable label; the order's
+        // current shipment is its latest one that is still live.
+        $orders = Order::whereIn('id', $orderIds)
+            ->with(['items', 'client', 'shipments' => fn ($q) => $q
+                ->whereNotIn('status', [ShipmentStatus::CANCELLED->value, ShipmentStatus::FAILED->value])
+                ->latest('id')])
+            ->get()
+            ->keyBy('id');
+
+        $shipments = [];
+        $errors = [];
+
+        foreach ($orderIds as $id) {
+            $order = $orders->get($id);
+
+            if (! $order) {
+                $errors[] = ['order_id' => $id, 'order_number' => null, 'error' => 'Order not found.'];
+                continue;
+            }
+
+            $shipment = $order->shipments->first();
+
+            if (! $shipment) {
+                $errors[] = ['order_id' => $id, 'order_number' => $order->order_number, 'error' => 'No shipment has been created for this order.'];
+            } elseif ($shipment->courier !== KsaDropExpressDriver::KEY) {
+                $errors[] = ['order_id' => $id, 'order_number' => $order->order_number, 'error' => 'Shipment is not assigned to KSA Express.'];
+            } elseif (! $shipment->tracking_number) {
+                $errors[] = ['order_id' => $id, 'order_number' => $order->order_number, 'error' => 'KSA Express shipment has no tracking number yet.'];
+            } else {
+                $shipment->setRelation('order', $order);
+                $shipments[] = $shipment;
+            }
+        }
+
+        if ($errors) {
+            // e.g. "2 order(s): No shipment has been created for this order. 1 order(s): Shipment is not assigned to KSA Express."
+            $summary = collect($errors)->countBy('error')
+                ->map(fn ($count, $error) => "{$count} order(s): {$error}")
+                ->implode(' ');
+
+            $message = "Waybills were not generated — every selected order needs a KSA Express shipment. {$summary}";
+
+            return response()->json(['message' => $message, 'errors' => $errors], 422);
+        }
+
+        $pdf = $this->invoices->bulkKsaExpressLabels($shipments);
+        $filename = 'ksa-express-waybills-' . now()->format('Ymd-His') . '.pdf';
+
+        return response($pdf, 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => "attachment; filename=\"{$filename}\"",
+        ]);
     }
 
     /**

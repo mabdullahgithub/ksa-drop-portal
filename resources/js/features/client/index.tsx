@@ -5,12 +5,11 @@ import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
 import { useClients, useClientStatistics, useClientFilterOptions } from '@/hooks/useClients'
-import { ClientProvider, useClientContext } from './components/client-provider'
+import { ClientProvider } from './components/client-provider'
 import { ClientStats } from './components/client-stats'
 import { ClientTable } from './components/client-table'
 import { ClientFiltersComponent } from './components/client-filters'
 import { ClientPrimaryButtons } from './components/client-primary-buttons'
-import { ClientBulkActions } from './components/client-bulk-actions'
 import { ClientDialogs } from './components/client-dialogs'
 
 export function Client() {
@@ -25,7 +24,6 @@ function ClientContent() {
   const { clients, meta, loading, filters, updateFilters, refresh } = useClients()
   const { stats, loading: statsLoading, refresh: refreshStats } = useClientStatistics()
   const filterOptions = useClientFilterOptions()
-  const { selectedRows } = useClientContext()
 
   const handlePageChange = (page: number) => updateFilters({ page })
   const handlePageSizeChange = (perPage: number) => updateFilters({ per_page: perPage, page: 1 })
@@ -65,8 +63,6 @@ function ClientContent() {
             onFiltersChange={updateFilters}
           />
 
-          <ClientBulkActions selectedIds={selectedRows} onSuccess={handleSuccess} />
-
           <ClientTable
             data={clients}
             meta={meta}
@@ -74,6 +70,7 @@ function ClientContent() {
             onPageChange={handlePageChange}
             onPageSizeChange={handlePageSizeChange}
             onSortChange={handleSortChange}
+            onRefresh={handleSuccess}
           />
         </div>
 

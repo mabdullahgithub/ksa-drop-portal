@@ -1,6 +1,6 @@
 import { DotsHorizontalIcon } from '@radix-ui/react-icons'
 import { type Row } from '@tanstack/react-table'
-import { Eye, Package, DollarSign, Tag, Truck, Pencil, MapPin } from 'lucide-react'
+import { Eye, Package, DollarSign, Tag, Truck, Pencil, MapPin, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import {
@@ -18,6 +18,7 @@ import { useOrdersContext } from './orders-provider'
 import { usePermissions } from '@/hooks/use-permissions'
 import { useOrderMutations } from '@/hooks/useOrders'
 import { OrderTagsDialog } from './order-tags-dialog'
+import { ConfirmDialog } from '@/components/confirm-dialog'
 import { toast } from 'sonner'
 
 type DataTableRowActionsProps<TData> = {
@@ -28,12 +29,15 @@ export function DataTableRowActions<TData>({ row }: DataTableRowActionsProps<TDa
   const order = row.original as Order
   const { setOpen, setCurrentRow, refresh } = useOrdersContext()
   const { can } = usePermissions()
-  const { updateFulfillmentStatus, updateFinancialStatus, updateOrder } = useOrderMutations()
+  const { updateFulfillmentStatus, updateFinancialStatus, updateOrder, deleteOrder } = useOrderMutations()
   const [showTagDialog, setShowTagDialog] = useState(false)
   const [isSavingTags, setIsSavingTags] = useState(false)
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   const canView = can('view orders')
   const canEdit = can('edit orders')
+  const canDelete = can('delete orders')
 
   const handleStatusUpdate = async (status: string) => {
     const success = await updateFulfillmentStatus(order.id, status)
@@ -65,6 +69,21 @@ export function DataTableRowActions<TData>({ row }: DataTableRowActionsProps<TDa
       refresh()
     } else {
       toast.error('Failed to update tags')
+    }
+  }
+
+  const handleDelete = async () => {
+    setDeleting(true)
+    try {
+      await deleteOrder(order.id)
+      toast.success(`${order.order_number} moved to the recycle bin`)
+      setShowDeleteDialog(false)
+      refresh()
+    } catch (error) {
+      // The server refuses orders with an active shipment, and says why.
+      toast.error(error instanceof Error ? error.message : 'Failed to delete order')
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -157,8 +176,37 @@ export function DataTableRowActions<TData>({ row }: DataTableRowActionsProps<TDa
               </DropdownMenuSub>
             </>
           )}
+
+          {canDelete && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onClick={() => setShowDeleteDialog(true)}
+                className='text-destructive focus:text-destructive'
+              >
+                <Trash2 className='mr-2 h-4 w-4' />
+                Delete Order
+              </DropdownMenuItem>
+            </>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
+
+      <ConfirmDialog
+        open={showDeleteDialog}
+        onOpenChange={setShowDeleteDialog}
+        title='Delete order'
+        desc={
+          <span>
+            Move <strong>{order.order_number}</strong> to the recycle bin? You can restore it from
+            there. An order with an active shipment cannot be deleted.
+          </span>
+        }
+        confirmText='Delete'
+        destructive
+        isLoading={deleting}
+        handleConfirm={handleDelete}
+      />
 
       <OrderTagsDialog
         open={showTagDialog}

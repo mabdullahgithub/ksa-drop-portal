@@ -36,7 +36,7 @@ import { Main } from '@/components/layout/main'
 import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
-import { usePortalOrders, usePortalOrderMutations, usePortalDashboard, usePortalSkuSearch, type SkuItem } from '@/hooks/usePortal'
+import { usePortalOrders, usePortalOrderMutations, usePortalOrderStatistics, usePortalSkuSearch, type SkuItem } from '@/hooks/usePortal'
 import { OrdersPagination } from '@/features/orders/components/orders-pagination'
 import { ShipmentStatusInfoModal } from '@/features/orders/components/shipment-status-info-modal'
 import { PortalShipmentStatusCards } from './components/portal-shipment-status-cards'
@@ -53,6 +53,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
+import { BUSINESS_TIMEZONE } from '@/lib/business-time'
 
 const MAX_FILE_SIZE_MB = 10
 const ALLOWED_MIME = ['text/csv', 'application/vnd.ms-excel', 'application/csv']
@@ -295,7 +296,7 @@ function makeColumns(tagColors: Record<string, string>, onView: (order: any) => 
       const val = row.getValue('created_at') as string
       if (!val) return <span>—</span>
       try {
-        return <span>{new Date(val).toLocaleDateString()}</span>
+        return <span>{new Date(val).toLocaleDateString(undefined, { timeZone: BUSINESS_TIMEZONE })}</span>
       } catch {
         return <span>—</span>
       }
@@ -1150,18 +1151,24 @@ export function PortalOrders() {
     has_shipment: false,
   })
   const { exportOrders } = usePortalOrderMutations()
-  const { data: dashboardData } = usePortalDashboard()
+  // Every stat card and tab count on the page follows the current filters.
+  const { statistics: stats, loading: statsLoading, refresh: refreshStats } = usePortalOrderStatistics(filters)
+
+  // New or imported orders move the numbers above the table too.
+  const refreshAll = useCallback(async () => {
+    await Promise.all([refresh(), refreshStats()])
+  }, [refresh, refreshStats])
   const { options: filterOptions, loading: filterOptionsLoading } = usePortalOrderFilterOptions()
 
-  // Map tag name → color from the dashboard's tag stats so the Tags column can
-  // render each tag in its configured colour.
+  // Map tag name → color from the tag stats so the Tags column can render each
+  // tag in its configured colour.
   const tagColors = useMemo(() => {
     const map: Record<string, string> = {}
-    ;(dashboardData?.stats?.by_tag ?? []).forEach((t: { name: string; color: string }) => {
+    ;(stats?.by_tag ?? []).forEach((t: { name: string; color: string }) => {
       map[t.name] = t.color
     })
     return map
-  }, [dashboardData])
+  }, [stats])
 
   const columns = useMemo(() => makeColumns(tagColors, handleViewOrder), [tagColors])
   const { connectors, refresh: refreshConnectors } = useEnabledConnectors()
@@ -1257,6 +1264,8 @@ export function PortalOrders() {
 
         {/* Tags */}
         <PortalTagStatCards
+          statistics={stats}
+          loading={statsLoading}
           activeTag={filters.tag}
           onTagClick={(tagName) => {
             updateFilters({ tag: filters.tag === tagName ? undefined : tagName, page: 1 })
@@ -1276,6 +1285,8 @@ export function PortalOrders() {
             </button>
           </div>
           <PortalShipmentStatusCards
+            statistics={stats}
+            loading={statsLoading}
             onStatusClick={(status) => {
               updateFilters({ shipment_status: [status], has_shipment: true, page: 1 })
             }}
@@ -1293,9 +1304,9 @@ export function PortalOrders() {
             }`}
           >
             All Orders
-            {dashboardData?.stats?.total_orders != null && (
+            {stats?.unassigned_orders != null && (
               <span className='ml-1.5 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium tabular-nums'>
-                {dashboardData.stats.total_orders}
+                {stats.unassigned_orders}
               </span>
             )}
           </button>
@@ -1308,9 +1319,9 @@ export function PortalOrders() {
             }`}
           >
             Assigned to Courier
-            {dashboardData?.stats?.assigned_orders != null && (
+            {stats?.assigned_orders != null && (
               <span className='ml-1.5 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium tabular-nums'>
-                {dashboardData.stats.assigned_orders}
+                {stats.assigned_orders}
               </span>
             )}
           </button>
@@ -1480,12 +1491,12 @@ export function PortalOrders() {
       <PortalOrdersImportDialog
         open={importDialogOpen}
         onOpenChange={setImportDialogOpen}
-        onSuccess={refresh}
+        onSuccess={refreshAll}
       />
       <CreateOrderDialog
         open={createDialogOpen}
         onOpenChange={setCreateDialogOpen}
-        onSuccess={refresh}
+        onSuccess={refreshAll}
       />
       <ShipmentStatusInfoModal
         open={statusInfoModalOpen}
