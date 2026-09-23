@@ -60,13 +60,18 @@ class PortalController extends Controller
     {
         // Count existing orders with this prefix to derive the next sequential number.
         // Keeps IDs short and human-readable: e.g. ASCXAS00001, ASCXAS00002 …
-        $count = \App\Models\Order::where('order_number', 'like', $prefix . '%')->count();
+        // withoutGlobalScopes() so soft-deleted and Shopify-hidden orders still
+        // count: order_number is unique table-wide, so reusing a deleted order's
+        // number would make it unrestorable from the recycle bin.
+        $count = \App\Models\Order::withoutGlobalScopes()
+            ->where('order_number', 'like', $prefix . '%')
+            ->count();
         $next  = $count + 1;
 
         $candidate = $prefix . str_pad($next, 5, '0', STR_PAD_LEFT);
 
         // Resolve collisions (concurrent requests, gaps from deletions, etc.)
-        while (\App\Models\Order::where('order_number', $candidate)->exists()) {
+        while (\App\Models\Order::withoutGlobalScopes()->where('order_number', $candidate)->exists()) {
             $next++;
             $candidate = $prefix . str_pad($next, 5, '0', STR_PAD_LEFT);
         }

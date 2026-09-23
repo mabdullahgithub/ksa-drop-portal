@@ -24,6 +24,7 @@ import { NotificationsDropdown } from '@/components/layout/notifications-dropdow
 import { Main } from '@/components/layout/main'
 import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
+import { SearchBeam } from '@/components/search-beam'
 import { ThemeSwitch } from '@/components/theme-switch'
 import { NewChat } from './components/new-chat'
 import { type ChatUser, type Convo } from './data/chat-types'
@@ -94,22 +95,24 @@ export function Chats() {
                 </Button>
               </div>
 
-              <label
-                className={cn(
-                  'focus-within:ring-1 focus-within:ring-ring focus-within:outline-hidden',
-                  'flex h-10 w-full items-center space-x-0 rounded-md border border-border ps-2'
-                )}
-              >
-                <SearchIcon size={15} className='me-2 stroke-slate-500' />
-                <span className='sr-only'>Search</span>
-                <input
-                  type='text'
-                  className='w-full flex-1 bg-inherit text-sm focus-visible:outline-hidden'
-                  placeholder='Search chat...'
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                />
-              </label>
+              <SearchBeam>
+                <label
+                  className={cn(
+                    'focus-within:ring-1 focus-within:ring-ring focus-within:outline-hidden',
+                    'flex h-10 w-full items-center space-x-0 rounded-md border border-border ps-2'
+                  )}
+                >
+                  <SearchIcon size={15} className='me-2 stroke-slate-500' />
+                  <span className='sr-only'>Search</span>
+                  <input
+                    type='text'
+                    className='w-full flex-1 bg-inherit text-sm focus-visible:outline-hidden'
+                    placeholder='Search chat...'
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                  />
+                </label>
+              </SearchBeam>
             </div>
 
             <ScrollArea className='-mx-3 h-full overflow-scroll overscroll-contain p-3'>

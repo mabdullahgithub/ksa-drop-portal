@@ -278,6 +278,29 @@ export function useClientMutations() {
     }
   }
 
+  /** Move clients to the recycle bin. Their orders and products are untouched. */
+  const bulkDelete = async (clientIds: number[]): Promise<boolean> => {
+    setLoading(true)
+    try {
+      const response = await fetch('/api/clients/bulk-delete', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+          'X-CSRF-TOKEN': getCsrfToken(),
+        },
+        body: JSON.stringify({ client_ids: clientIds }),
+      })
+      if (!response.ok) throw new Error('Failed')
+      return true
+    } catch (error) {
+      console.error('Error deleting clients:', error)
+      return false
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const exportClients = async (filters: ClientFilters = {}): Promise<void> => {
     const params = new URLSearchParams()
     Object.entries(filters).forEach(([key, value]) => {
@@ -298,6 +321,7 @@ export function useClientMutations() {
     sendResetLink,
     deleteClient,
     bulkUpdate,
+    bulkDelete,
     exportClients,
   }
 }

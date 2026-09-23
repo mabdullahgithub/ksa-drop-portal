@@ -36,6 +36,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'role' => \App\Http\Middleware\CheckRole::class,
             'shopify.session' => \App\Http\Middleware\VerifyShopifySessionToken::class,
             'shopify.csp' => \App\Http\Middleware\ShopifyEmbeddedCsp::class,
+            'recyclebin.unlocked' => \App\Http\Middleware\EnsureRecycleBinUnlocked::class,
         ]);
 
         \Illuminate\Auth\Middleware\RedirectIfAuthenticated::redirectUsing(function ($request) {

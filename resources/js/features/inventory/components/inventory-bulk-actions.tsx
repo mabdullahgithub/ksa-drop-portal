@@ -1,5 +1,6 @@
+import { useState } from 'react'
 import { type Table } from '@tanstack/react-table'
-import { CheckCircle, FileText, Archive, Globe, GlobeLock } from 'lucide-react'
+import { CheckCircle, FileText, Archive, Globe, GlobeLock, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import {
@@ -16,6 +17,8 @@ import {
 import { DataTableBulkActions as BulkActionsToolbar } from '@/components/data-table'
 import { type Product } from '@/types/product'
 import { useProductMutations } from '@/hooks/useProducts'
+import { usePermissions } from '@/hooks/use-permissions'
+import { ConfirmDialog } from '@/components/confirm-dialog'
 
 type InventoryBulkActionsProps<TData> = {
   table: Table<TData>
@@ -23,7 +26,10 @@ type InventoryBulkActionsProps<TData> = {
 
 export function InventoryBulkActions<TData>({ table }: InventoryBulkActionsProps<TData>) {
   const selectedRows = table.getFilteredSelectedRowModel().rows
-  const { updateProduct } = useProductMutations()
+  const { updateProduct, bulkDeleteProducts } = useProductMutations()
+  const { can } = usePermissions()
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   const handleBulkStatusChange = async (status: 'active' | 'draft' | 'archived') => {
     const products = selectedRows.map((row) => row.original as Product)
@@ -61,7 +67,31 @@ export function InventoryBulkActions<TData>({ table }: InventoryBulkActionsProps
     )
   }
 
+  const handleBulkDelete = async () => {
+    const products = selectedRows.map((row) => row.original as Product)
+
+    setDeleting(true)
+    try {
+      const ok = await bulkDeleteProducts(products.map((product) => product.id))
+
+      if (!ok) {
+        toast.error('Failed to delete products')
+        return
+      }
+
+      toast.success(
+        `Moved ${products.length} product${products.length > 1 ? 's' : ''} to the recycle bin`
+      )
+      table.resetRowSelection()
+      setShowDeleteDialog(false)
+      window.location.reload()
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   return (
+    <>
     <BulkActionsToolbar table={table} entityName='product'>
       {/* Change Status */}
       <DropdownMenu>
@@ -131,6 +161,45 @@ export function InventoryBulkActions<TData>({ table }: InventoryBulkActionsProps
           <p>Unpublish selected</p>
         </TooltipContent>
       </Tooltip>
+
+      {/* Delete -- distinct from "Set Archived" above, which is the Shopify
+          product status and has nothing to do with the recycle bin. */}
+      {can('delete inventory') && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant='destructive'
+              size='icon'
+              className='size-8'
+              aria-label='Delete selected'
+              onClick={() => setShowDeleteDialog(true)}
+            >
+              <Trash2 className='h-4 w-4' />
+              <span className='sr-only'>Delete selected</span>
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>
+            <p>Delete selected (moves to recycle bin)</p>
+          </TooltipContent>
+        </Tooltip>
+      )}
     </BulkActionsToolbar>
+
+    <ConfirmDialog
+      open={showDeleteDialog}
+      onOpenChange={setShowDeleteDialog}
+      title='Delete products'
+      desc={
+        <span>
+          Move {selectedRows.length} selected product{selectedRows.length > 1 ? 's' : ''} to the
+          recycle bin? You can restore {selectedRows.length > 1 ? 'them' : 'it'} from there.
+        </span>
+      }
+      confirmText='Delete'
+      destructive
+      isLoading={deleting}
+      handleConfirm={handleBulkDelete}
+    />
+    </>
   )
 }

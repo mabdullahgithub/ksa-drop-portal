@@ -343,7 +343,39 @@ class ClientController extends Controller
         $client->delete();
 
         return response()->json([
-            'message' => 'Client deleted successfully',
+            'message' => 'Client moved to recycle bin',
+        ]);
+    }
+
+    /**
+     * Soft-delete many clients into the recycle bin.
+     *
+     * Deliberately does not cascade: the client's orders and products stay
+     * live and visible. Order::client() is withTrashed() so those orders keep
+     * showing the client name while it sits in the bin.
+     */
+    public function bulkDestroy(Request $request)
+    {
+        $validated = $request->validate([
+            'client_ids' => 'required|array|min:1',
+            'client_ids.*' => 'integer',
+        ]);
+
+        $deleted = 0;
+
+        DB::transaction(function () use ($validated, &$deleted) {
+            Client::whereIn('id', $validated['client_ids'])
+                ->get()
+                ->each(function (Client $client) use (&$deleted) {
+                    $client->delete();
+                    $deleted++;
+                });
+        });
+
+        return response()->json([
+            'message' => 'Clients moved to recycle bin',
+            'deleted_count' => $deleted,
+            'requested_count' => count($validated['client_ids']),
         ]);
     }
 

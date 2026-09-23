@@ -70,4 +70,13 @@ class Product extends Model
               ->orWhere('type', 'like', "%{$term}%");
         });
     }
+
+    /**
+     * Who deleted this row. Null once restored, or for rows deleted before the
+     * audit columns existed.
+     */
+    public function deletedBy()
+    {
+        return $this->belongsTo(User::class, 'deleted_by');
+    }
 }

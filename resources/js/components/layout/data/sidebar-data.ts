@@ -20,6 +20,7 @@ import {
   Wallet,
   Truck,
   Plug,
+  Trash2,
 } from 'lucide-react'
 import { type SidebarData } from '../types'
 
@@ -87,6 +88,13 @@ export const sidebarData: SidebarData = {
           url: '/tags',
           icon: Tag,
           permission: 'view tags',
+        },
+        {
+          title: 'Recycle Bin',
+          url: '/recycle-bin',
+          icon: Trash2,
+          // Array = any-of, matching the canAny check the route uses.
+          permission: ['delete orders', 'delete client', 'delete inventory'],
         },
       ],
     },
