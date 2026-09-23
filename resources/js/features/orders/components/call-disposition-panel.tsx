@@ -34,6 +34,8 @@ interface Props {
 export function CallDispositionPanel({ order, onSaved }: Props) {
   const { can } = usePermissions()
   const editable = can('edit orders')
+  // The message history is WhatsApp data, gated separately from the order.
+  const canViewWhatsapp = can('view whatsapp')
 
   const [callStatus, setCallStatus] = useState<CallStatus>(order.call_status ?? 'not_called')
   const [notes, setNotes] = useState(order.call_notes ?? '')
@@ -47,7 +49,7 @@ export function CallDispositionPanel({ order, onSaved }: Props) {
   }, [order.id, order.call_status, order.call_notes])
 
   const loadMessages = useCallback(async () => {
-    if (!order.whatsapp_status) return
+    if (!order.whatsapp_status || !canViewWhatsapp) return
     setLoadingMessages(true)
     try {
       const res = await axios.get(`/api/orders/${order.id}/whatsapp-messages`)
@@ -57,7 +59,7 @@ export function CallDispositionPanel({ order, onSaved }: Props) {
     } finally {
       setLoadingMessages(false)
     }
-  }, [order.id, order.whatsapp_status])
+  }, [order.id, order.whatsapp_status, canViewWhatsapp])
 
   useEffect(() => {
     loadMessages()

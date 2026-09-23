@@ -30,10 +30,18 @@ class WhatsAppInboxTest extends TestCase
         Role::findOrCreate('admin')->givePermissionTo([
             Permission::findOrCreate('view orders'),
             Permission::findOrCreate('edit orders'),
+            Permission::findOrCreate('view whatsapp'),
+            Permission::findOrCreate('reply whatsapp'),
         ]);
 
         // Read-only role: can open the inbox, must not be able to message a customer.
-        Role::findOrCreate('order-viewer')->givePermissionTo(Permission::findOrCreate('view orders'));
+        Role::findOrCreate('whatsapp-viewer')->givePermissionTo(Permission::findOrCreate('view whatsapp'));
+
+        // Full order rights but no WhatsApp permission at all.
+        Role::findOrCreate('order-editor')->givePermissionTo([
+            Permission::findOrCreate('view orders'),
+            Permission::findOrCreate('edit orders'),
+        ]);
     }
 
     private function actingAsAgent(): User
@@ -99,11 +107,24 @@ class WhatsAppInboxTest extends TestCase
         $this->getJson('/api/whatsapp/conversations')->assertUnauthorized();
     }
 
-    public function test_a_user_without_order_permission_is_denied(): void
+    public function test_a_user_without_whatsapp_permission_is_denied(): void
     {
         $this->actingAs(User::factory()->create());
 
         $this->getJson('/api/whatsapp/conversations')->assertForbidden();
+    }
+
+    public function test_order_permissions_alone_do_not_open_the_inbox(): void
+    {
+        $user = User::factory()->create();
+        $user->assignRole('order-editor');
+        $this->actingAs($user);
+
+        $order = $this->makeConversation();
+
+        $this->get('/whatsapp')->assertForbidden();
+        $this->getJson('/api/whatsapp/conversations')->assertForbidden();
+        $this->getJson("/api/orders/{$order->id}/whatsapp-messages")->assertForbidden();
     }
 
     // ── Conversation list ────────────────────────────────────────────────
@@ -356,11 +377,11 @@ class WhatsAppInboxTest extends TestCase
         $this->assertDatabaseMissing('whatsapp_messages', ['body' => 'Hello?']);
     }
 
-    public function test_replying_requires_edit_permission(): void
+    public function test_replying_requires_the_reply_permission(): void
     {
-        // view orders alone must not let someone message a customer.
+        // view whatsapp alone must not let someone message a customer.
         $viewer = User::factory()->create();
-        $viewer->assignRole('order-viewer');
+        $viewer->assignRole('whatsapp-viewer');
         $this->actingAs($viewer);
 
         $order = $this->makeConversation();

@@ -75,7 +75,7 @@ export const sidebarData: SidebarData = {
           title: 'WhatsApp',
           url: '/whatsapp',
           icon: MessageCircle,
-          permission: 'view orders',
+          permission: 'view whatsapp',
         },
         {
           title: 'Track Shipment',
@@ -100,8 +100,7 @@ export const sidebarData: SidebarData = {
           title: 'Recycle Bin',
           url: '/recycle-bin',
           icon: Trash2,
-          // Array = any-of, matching the canAny check the route uses.
-          permission: ['delete orders', 'delete client', 'delete inventory'],
+          permission: 'view recycle bin',
         },
       ],
     },

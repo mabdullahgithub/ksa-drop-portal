@@ -86,6 +86,18 @@ class PermissionCategoriesSeeder extends Seeder
                 'description' => 'Settings and configuration permissions',
                 'order' => 12,
             ],
+            [
+                'name' => 'whatsapp',
+                'label' => 'WhatsApp',
+                'description' => 'WhatsApp confirmation inbox permissions',
+                'order' => 13,
+            ],
+            [
+                'name' => 'recycle bin',
+                'label' => 'Recycle Bin',
+                'description' => 'Recycle bin permissions',
+                'order' => 14,
+            ],
         ];
 
         foreach ($categories as $categoryData) {

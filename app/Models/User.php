@@ -73,6 +73,7 @@ class User extends Authenticatable
             'view client' => 'client',
             'view inventory' => 'inventory',
             'view orders' => 'orders',
+            'view whatsapp' => 'whatsapp',
             'view apps' => 'apps',
             'view tags' => 'tags',
             'view users' => 'team-management.users',

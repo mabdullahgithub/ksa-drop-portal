@@ -68,9 +68,8 @@ Route::middleware(['auth', 'verified', 'role:!client'])->group(function () {
     Route::get('/orders', fn () => Inertia::render('Orders'))->middleware('permission:view orders')->name('orders');
 
     // WhatsApp inbox — the confirmation conversations started when an agent
-    // marks a call unanswered. Gated on order permissions: a conversation is
-    // just an order's message thread.
-    Route::get('/whatsapp', fn () => Inertia::render('WhatsApp'))->middleware('permission:view orders')->name('whatsapp');
+    // marks a call unanswered.
+    Route::get('/whatsapp', fn () => Inertia::render('WhatsApp'))->middleware('permission:view whatsapp')->name('whatsapp');
     Route::get('/apps', fn () => Inertia::render('Apps'))->middleware('permission:view apps')->name('apps');
 
     // Connectors API
@@ -151,7 +150,7 @@ Route::middleware(['auth', 'verified', 'role:!client'])->group(function () {
         Route::post('/{order}/fulfillment-status', [OrderController::class, 'updateFulfillmentStatus'])->middleware('permission:edit orders')->name('api.orders.fulfillment-status');
         Route::post('/{order}/financial-status', [OrderController::class, 'updateFinancialStatus'])->middleware('permission:edit orders')->name('api.orders.financial-status');
         Route::post('/{order}/call-status', [OrderController::class, 'updateCallStatus'])->middleware('permission:edit orders')->name('api.orders.call-status');
-        Route::get('/{order}/whatsapp-messages', [OrderController::class, 'whatsappMessages'])->middleware('permission:view orders')->name('api.orders.whatsapp-messages');
+        Route::get('/{order}/whatsapp-messages', [OrderController::class, 'whatsappMessages'])->middleware('permission:view whatsapp')->name('api.orders.whatsapp-messages');
         Route::post('/bulk-update', [OrderController::class, 'bulkUpdate'])->middleware('permission:edit orders')->name('api.orders.bulk-update');
         Route::post('/bulk-delete', [OrderController::class, 'bulkDestroy'])->middleware('permission:delete orders')->name('api.orders.bulk-delete');
         // Takes the id as a plain int, not a bound model: implicit binding applies
@@ -161,11 +160,11 @@ Route::middleware(['auth', 'verified', 'role:!client'])->group(function () {
     });
 
     // WhatsApp inbox API
-    Route::prefix('api/whatsapp')->middleware('permission:view orders')->group(function () {
+    Route::prefix('api/whatsapp')->middleware('permission:view whatsapp')->group(function () {
         Route::get('/conversations', [WhatsAppConversationController::class, 'index'])->name('api.whatsapp.conversations');
         Route::get('/stats', [WhatsAppConversationController::class, 'stats'])->name('api.whatsapp.stats');
         Route::get('/conversations/{order}', [WhatsAppConversationController::class, 'show'])->name('api.whatsapp.conversation');
-        Route::post('/conversations/{order}/reply', [WhatsAppConversationController::class, 'reply'])->middleware('permission:edit orders')->name('api.whatsapp.reply');
+        Route::post('/conversations/{order}/reply', [WhatsAppConversationController::class, 'reply'])->middleware('permission:reply whatsapp')->name('api.whatsapp.reply');
     });
 
     // Clients API
@@ -251,56 +250,59 @@ Route::middleware(['auth', 'verified', 'role:!client'])->group(function () {
     Route::delete('/team-management/users/{user}', [UserRoleController::class, 'destroy'])->middleware('permission:delete users')->name('team-management.users.destroy');
 
     // Recycle Bin
-    // Each entity is gated on its own delete permission rather than on one
-    // shared canAny -- CheckPermission takes a static string, so a polymorphic
-    // {type} route could not distinguish them. Note the separator is a PIPE:
-    // CheckPermission splits on '|', not ','.
+    // Two gates stack on every data route: the bin's own permission for the
+    // action (view / restore / purge), then the entity's delete permission, so
+    // a tab only opens for records the user could have deleted. Each entity is
+    // gated separately rather than on one shared canAny -- CheckPermission
+    // takes a static string, so a polymorphic {type} route could not
+    // distinguish them. Note the separator is a PIPE: CheckPermission splits
+    // on '|', not ','.
     Route::get('/recycle-bin', [RecycleBinController::class, 'page'])
-        ->middleware('permission:delete orders|delete client|delete inventory')->name('recycle-bin');
+        ->middleware('permission:view recycle bin')->name('recycle-bin');
 
     Route::prefix('api/recycle-bin')->group(function () {
         // Unlock sits outside the recyclebin.unlocked gate (it is what opens
         // it) and is throttled so the PIN cannot be brute-forced.
         Route::post('/unlock', [RecycleBinController::class, 'unlock'])
-            ->middleware(['permission:delete orders|delete client|delete inventory', 'throttle:5,1'])
+            ->middleware(['permission:view recycle bin', 'throttle:5,1'])
             ->name('api.recycle-bin.unlock');
         Route::post('/lock', [RecycleBinController::class, 'lock'])
-            ->middleware('permission:delete orders|delete client|delete inventory')
+            ->middleware('permission:view recycle bin')
             ->name('api.recycle-bin.lock');
 
         Route::get('/counts', [RecycleBinController::class, 'counts'])
-            ->middleware('recyclebin.unlocked')->middleware('permission:delete orders|delete client|delete inventory')->name('api.recycle-bin.counts');
+            ->middleware('recyclebin.unlocked')->middleware('permission:view recycle bin')->name('api.recycle-bin.counts');
 
         Route::get('/orders', [RecycleBinController::class, 'orders'])
-            ->middleware('recyclebin.unlocked')->middleware('permission:delete orders')->name('api.recycle-bin.orders');
+            ->middleware('recyclebin.unlocked')->middleware('permission:view recycle bin')->middleware('permission:delete orders')->name('api.recycle-bin.orders');
         Route::post('/orders/restore', [RecycleBinController::class, 'restoreOrders'])
-            ->middleware('recyclebin.unlocked')->middleware('permission:delete orders')->name('api.recycle-bin.orders.restore');
+            ->middleware('recyclebin.unlocked')->middleware('permission:restore recycle bin')->middleware('permission:delete orders')->name('api.recycle-bin.orders.restore');
         Route::post('/orders/purge', [RecycleBinController::class, 'purgeOrders'])
-            ->middleware('recyclebin.unlocked')->middleware('permission:delete orders')->name('api.recycle-bin.orders.purge');
+            ->middleware('recyclebin.unlocked')->middleware('permission:purge recycle bin')->middleware('permission:delete orders')->name('api.recycle-bin.orders.purge');
         Route::post('/orders/purge-all', [RecycleBinController::class, 'purgeAllOrders'])
-            ->middleware('recyclebin.unlocked')->middleware('permission:delete orders')->name('api.recycle-bin.orders.purge-all');
+            ->middleware('recyclebin.unlocked')->middleware('permission:purge recycle bin')->middleware('permission:delete orders')->name('api.recycle-bin.orders.purge-all');
 
         Route::get('/clients', [RecycleBinController::class, 'clients'])
-            ->middleware('recyclebin.unlocked')->middleware('permission:delete client')->name('api.recycle-bin.clients');
+            ->middleware('recyclebin.unlocked')->middleware('permission:view recycle bin')->middleware('permission:delete client')->name('api.recycle-bin.clients');
         Route::post('/clients/restore', [RecycleBinController::class, 'restoreClients'])
-            ->middleware('recyclebin.unlocked')->middleware('permission:delete client')->name('api.recycle-bin.clients.restore');
+            ->middleware('recyclebin.unlocked')->middleware('permission:restore recycle bin')->middleware('permission:delete client')->name('api.recycle-bin.clients.restore');
         Route::post('/clients/purge', [RecycleBinController::class, 'purgeClients'])
-            ->middleware('recyclebin.unlocked')->middleware('permission:delete client')->name('api.recycle-bin.clients.purge');
+            ->middleware('recyclebin.unlocked')->middleware('permission:purge recycle bin')->middleware('permission:delete client')->name('api.recycle-bin.clients.purge');
         Route::post('/clients/purge-all', [RecycleBinController::class, 'purgeAllClients'])
-            ->middleware('recyclebin.unlocked')->middleware('permission:delete client')->name('api.recycle-bin.clients.purge-all');
+            ->middleware('recyclebin.unlocked')->middleware('permission:purge recycle bin')->middleware('permission:delete client')->name('api.recycle-bin.clients.purge-all');
 
         // The inventory tab spans two models: the catalog (delete inventory)
         // and per-client stock, which is gated on 'delete client' everywhere
         // else in this file. Rows of each kind are filtered by permission
         // inside the controller.
         Route::get('/inventory', [RecycleBinController::class, 'inventory'])
-            ->middleware('recyclebin.unlocked')->middleware('permission:delete inventory|delete client')->name('api.recycle-bin.inventory');
+            ->middleware('recyclebin.unlocked')->middleware('permission:view recycle bin')->middleware('permission:delete inventory|delete client')->name('api.recycle-bin.inventory');
         Route::post('/inventory/restore', [RecycleBinController::class, 'restoreInventory'])
-            ->middleware('recyclebin.unlocked')->middleware('permission:delete inventory|delete client')->name('api.recycle-bin.inventory.restore');
+            ->middleware('recyclebin.unlocked')->middleware('permission:restore recycle bin')->middleware('permission:delete inventory|delete client')->name('api.recycle-bin.inventory.restore');
         Route::post('/inventory/purge', [RecycleBinController::class, 'purgeInventory'])
-            ->middleware('recyclebin.unlocked')->middleware('permission:delete inventory|delete client')->name('api.recycle-bin.inventory.purge');
+            ->middleware('recyclebin.unlocked')->middleware('permission:purge recycle bin')->middleware('permission:delete inventory|delete client')->name('api.recycle-bin.inventory.purge');
         Route::post('/inventory/purge-all', [RecycleBinController::class, 'purgeAllInventory'])
-            ->middleware('recyclebin.unlocked')->middleware('permission:delete inventory|delete client')->name('api.recycle-bin.inventory.purge-all');
+            ->middleware('recyclebin.unlocked')->middleware('permission:purge recycle bin')->middleware('permission:delete inventory|delete client')->name('api.recycle-bin.inventory.purge-all');
     });
 
     // Tags

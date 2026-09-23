@@ -32,7 +32,7 @@ export function ReplyComposer({
   const [body, setBody] = useState('')
   const [sending, setSending] = useState(false)
 
-  if (!can('edit orders')) return null
+  if (!can('reply whatsapp')) return null
 
   const send = async () => {
     const text = body.trim()

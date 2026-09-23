@@ -23,8 +23,10 @@ type RecycleBinTableProps<T> = {
   getRowId?: (row: T) => string
   onPageChange: (page: number) => void
   onPageSizeChange: (size: number) => void
-  onRestore: (ids: (number | string)[]) => Promise<void>
-  onPurge: (ids: (number | string)[]) => Promise<void>
+  /** Omitted when the user may not restore; hides the action. */
+  onRestore?: (ids: (number | string)[]) => Promise<void>
+  /** Omitted when the user may not purge; hides the action. */
+  onPurge?: (ids: (number | string)[]) => Promise<void>
 }
 
 export function RecycleBinTable<T extends { id: number }>({
@@ -117,12 +119,14 @@ export function RecycleBinTable<T extends { id: number }>({
         <RecycleBinPagination meta={meta} onPageChange={onPageChange} onPageSizeChange={onPageSizeChange} />
       )}
 
-      <RecycleBinBulkActions
-        table={table}
-        entityName={entityName}
-        onRestore={onRestore}
-        onPurge={onPurge}
-      />
+      {(onRestore || onPurge) && (
+        <RecycleBinBulkActions
+          table={table}
+          entityName={entityName}
+          onRestore={onRestore}
+          onPurge={onPurge}
+        />
+      )}
     </div>
   )
 }

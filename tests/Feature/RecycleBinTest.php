@@ -34,7 +34,7 @@ class RecycleBinTest extends TestCase
 
         app(PermissionRegistrar::class)->forgetCachedPermissions();
 
-        foreach (['delete orders', 'delete client', 'delete inventory', 'view orders'] as $permission) {
+        foreach (['delete orders', 'delete client', 'delete inventory', 'view orders', ...self::BIN_PERMISSIONS] as $permission) {
             Permission::findOrCreate($permission);
         }
 
@@ -44,7 +44,19 @@ class RecycleBinTest extends TestCase
         $this->withSession([EnsureRecycleBinUnlocked::SESSION_KEY => now()]);
     }
 
+    private const BIN_PERMISSIONS = ['view recycle bin', 'restore recycle bin', 'purge recycle bin'];
+
+    /**
+     * A user with full use of the bin plus $permissions. Most tests here are
+     * about per-entity scoping, which the delete permissions decide.
+     */
     private function userWith(array $permissions): User
+    {
+        return $this->userWithOnly([...self::BIN_PERMISSIONS, ...$permissions]);
+    }
+
+    /** A user with exactly $permissions and nothing else. */
+    private function userWithOnly(array $permissions): User
     {
         $role = Role::create(['name' => 'role-' . uniqid()]);
         $role->givePermissionTo($permissions);
@@ -88,18 +100,54 @@ class RecycleBinTest extends TestCase
 
     // ------------------------------------------------------------ permissions
 
-    public function test_a_user_with_no_delete_permission_cannot_open_the_bin(): void
+    public function test_delete_permissions_alone_do_not_open_the_bin(): void
     {
-        $this->actingAs($this->userWith(['view orders']))
+        $this->actingAs($this->userWithOnly(['delete orders', 'delete client', 'delete inventory']))
             ->get('/recycle-bin')
             ->assertForbidden();
     }
 
-    public function test_any_single_delete_permission_opens_the_bin(): void
+    public function test_the_view_permission_opens_the_bin(): void
     {
-        $this->actingAs($this->userWith(['delete inventory']))
+        $this->actingAs($this->userWithOnly(['view recycle bin', 'delete inventory']))
             ->get('/recycle-bin')
             ->assertOk();
+    }
+
+    public function test_a_tab_still_needs_that_entitys_delete_permission(): void
+    {
+        $this->actingAs($this->userWith(['view orders']))
+            ->getJson('/api/recycle-bin/orders')
+            ->assertForbidden();
+    }
+
+    public function test_restoring_needs_the_restore_permission(): void
+    {
+        $order = $this->makeOrder();
+        $order->delete();
+
+        $this->actingAs($this->userWithOnly(['view recycle bin', 'purge recycle bin', 'delete orders']))
+            ->postJson('/api/recycle-bin/orders/restore', ['ids' => [$order->id]])
+            ->assertForbidden();
+
+        $this->assertSoftDeleted($order);
+    }
+
+    public function test_purging_needs_the_purge_permission(): void
+    {
+        $order = $this->makeOrder();
+        $order->delete();
+
+        $user = $this->userWithOnly(['view recycle bin', 'restore recycle bin', 'delete orders']);
+
+        $this->actingAs($user)
+            ->postJson('/api/recycle-bin/orders/purge', ['ids' => [$order->id]])
+            ->assertForbidden();
+        $this->actingAs($user)
+            ->postJson('/api/recycle-bin/orders/purge-all')
+            ->assertForbidden();
+
+        $this->assertNotNull(Order::withTrashed()->find($order->id));
     }
 
     public function test_delete_inventory_alone_does_not_expose_deleted_client_products(): void
