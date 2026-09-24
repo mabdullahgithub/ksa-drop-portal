@@ -146,7 +146,9 @@ export const ordersColumns: ColumnDef<Order>[] = [
       if (!client) return <span className='text-xs text-muted-foreground'>—</span>
       return (
         <div className='flex flex-col gap-0'>
-          <span className='truncate text-sm font-medium'>{client.company_name}</span>
+          <span className='block max-w-[160px] truncate text-sm font-medium' title={client.company_name}>
+            {client.company_name}
+          </span>
           <span className='text-xs text-muted-foreground'>{client.client_id}</span>
         </div>
       )
@@ -158,13 +160,18 @@ export const ordersColumns: ColumnDef<Order>[] = [
     header: ({ column }) => (
       <DataTableColumnHeader column={column} title='Customer' />
     ),
-    meta: {
-      className: 'ps-1 max-w-0 w-1/4',
-      tdClassName: 'ps-4',
-    },
+    meta: { className: 'ps-1', tdClassName: 'ps-4' },
     cell: ({ row }) => {
       const name = row.getValue('customer_name') as string | null
-      return <span className='truncate font-medium text-sm'>{name || 'N/A'}</span>
+      return (
+        <span
+          className='block min-w-[120px] max-w-[200px] truncate text-sm font-medium'
+          dir='auto'
+          title={name ?? undefined}
+        >
+          {name || 'N/A'}
+        </span>
+      )
     },
   },
   {
