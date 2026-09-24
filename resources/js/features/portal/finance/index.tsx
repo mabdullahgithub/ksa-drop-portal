@@ -152,6 +152,7 @@ export function PortalFinance() {
                   payments={data?.payments}
                   loading={loading}
                   onPageChange={updatePage}
+                  onPageSizeChange={(per_page) => updateFilters({ per_page, page: 1 })}
                 />
               </CardContent>
             </Card>

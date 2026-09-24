@@ -58,7 +58,7 @@ class ShopifySyncFailureController extends Controller
         $failures = $this->failureQuery($client)
             ->unresolved()
             ->orderByDesc('created_at')
-            ->paginate(min((int) $request->get('per_page', 25), 100))
+            ->paginate(min((int) $request->get('per_page', 20), 100))
             ->withQueryString();
 
         return response()->json($failures);

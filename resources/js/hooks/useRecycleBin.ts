@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { DEFAULT_PAGE_SIZE } from '@/components/data-table'
 
 export type RecycleBinTab = 'orders' | 'clients' | 'inventory' | 'users'
 
@@ -174,7 +175,7 @@ export function useRecycleBinList<T>(tab: RecycleBinTab, enabled = true, onLocke
   const [meta, setMeta] = useState<RecycleBinMeta | null>(null)
   const [loading, setLoading] = useState(enabled)
   const [page, setPage] = useState(1)
-  const [perPage, setPerPage] = useState(25)
+  const [perPage, setPerPage] = useState(DEFAULT_PAGE_SIZE)
   const [search, setSearch] = useState('')
 
   const fetchPage = useCallback(async () => {

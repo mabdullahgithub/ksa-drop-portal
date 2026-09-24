@@ -37,7 +37,7 @@ import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
 import { usePortalOrders, usePortalOrderMutations, usePortalOrderStatistics, usePortalSkuSearch, type SkuItem } from '@/hooks/usePortal'
-import { OrdersPagination } from '@/features/orders/components/orders-pagination'
+import { Pagination, DEFAULT_PAGE_SIZE } from '@/components/data-table'
 import { ShipmentStatusInfoModal } from '@/features/orders/components/shipment-status-info-modal'
 import { PortalShipmentStatusCards } from './components/portal-shipment-status-cards'
 import { PortalTagStatCards } from './components/portal-tag-stat-cards'
@@ -1145,7 +1145,7 @@ export function PortalOrders() {
   }
 
   const { orders, meta, loading, filters, updateFilters, refresh } = usePortalOrders({
-    per_page: 15,
+    per_page: DEFAULT_PAGE_SIZE,
     sort_by: 'created_at',
     sort_order: 'desc',
     has_shipment: false,
@@ -1468,8 +1468,8 @@ export function PortalOrders() {
             </Table>
           </div>
 
-          {meta && meta.last_page > 1 && (
-            <OrdersPagination
+          {meta && (
+            <Pagination
               meta={meta}
               onPageChange={(page) => updateFilters({ page })}
               onPageSizeChange={(perPage) => updateFilters({ per_page: perPage, page: 1 })}

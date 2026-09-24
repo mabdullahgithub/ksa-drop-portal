@@ -417,9 +417,11 @@ Route::prefix('portal')->middleware(['auth', 'verified', 'role:client'])->group(
 Route::get('/pricing', fn () => Inertia::render('Pricing'))->name('pricing');
 Route::redirect('/billing', '/pricing');
 
-// Tracking — single search page + JSON API for AJAX lookup
-Route::get('/track', [TrackingController::class, 'search'])->name('tracking.search');
-Route::get('/api/track/{identifier}', [TrackingController::class, 'api'])->name('tracking.api');
+// Tracking — single search page + JSON API for AJAX lookup. Public, so both
+// are throttled per IP to stop bots hammering the database or guessing
+// order numbers.
+Route::get('/track', [TrackingController::class, 'search'])->middleware('throttle:60,1')->name('tracking.search');
+Route::get('/api/track/{identifier}', [TrackingController::class, 'api'])->middleware('throttle:20,1')->name('tracking.api');
 
 // Webhooks (no auth, no CSRF)
 Route::post('/webhooks/jnt-express', [WebhookController::class, 'handleJntExpress'])->name('webhooks.jnt-express');

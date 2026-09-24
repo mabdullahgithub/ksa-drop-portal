@@ -50,7 +50,7 @@ class ProductController extends Controller
         $sortOrder = $request->get('sort_order', 'desc');
         $query->orderBy($sortBy, $sortOrder);
 
-        $perPage = $request->get('per_page', 15);
+        $perPage = $request->get('per_page', 20);
         $products = $query->paginate($perPage);
 
         return response()->json($products);

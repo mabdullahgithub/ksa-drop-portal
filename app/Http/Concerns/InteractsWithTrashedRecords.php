@@ -84,6 +84,6 @@ trait InteractsWithTrashedRecords
      */
     protected function trashedPerPage(Request $request): int
     {
-        return min(max((int) $request->input('per_page', 25), 1), 100);
+        return min(max((int) $request->input('per_page', 20), 1), 100);
     }
 }

@@ -20,7 +20,7 @@ import {
 import { type Order } from '@/types/order'
 import { DataTableBulkActions } from './data-table-bulk-actions'
 import { ordersColumns as columns } from './orders-columns'
-import { OrdersPagination } from './orders-pagination'
+import { Pagination } from '@/components/data-table'
 import { OrdersTableSkeleton } from './orders-skeleton'
 
 type OrdersTableProps = {
@@ -35,8 +35,8 @@ type OrdersTableProps = {
   } | null
   loading?: boolean
   onRefresh?: () => void
-  onPageChange?: (page: number) => void
-  onPageSizeChange?: (pageSize: number) => void
+  onPageChange: (page: number) => void
+  onPageSizeChange: (pageSize: number) => void
   onSortChange?: (sortBy: string, sortOrder: 'asc' | 'desc') => void
   onTableReady?: (table: any) => void
 }
@@ -176,9 +176,9 @@ export function OrdersTable({
 
       {/* Pagination */}
       {meta && (
-        <OrdersPagination
+        <Pagination
           meta={meta}
-          onPageChange={onPageChange!}
+          onPageChange={onPageChange}
           onPageSizeChange={onPageSizeChange}
         />
       )}

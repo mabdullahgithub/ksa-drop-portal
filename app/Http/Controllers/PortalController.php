@@ -248,7 +248,7 @@ class PortalController extends Controller
         $sortOrder = $request->get('sort_order', 'desc');
         $query->orderBy($sortBy, $sortOrder);
 
-        $perPage = $request->get('per_page', 15);
+        $perPage = $request->get('per_page', 20);
 
         return response()->json($query->paginate($perPage));
     }
@@ -855,7 +855,7 @@ class PortalController extends Controller
         $sortOrder = $request->get('sort_order', 'desc');
         $query->orderBy($sortBy, $sortOrder);
 
-        $perPage = $request->get('per_page', 15);
+        $perPage = $request->get('per_page', 20);
 
         $paginator = $query->paginate($perPage);
         $paginator->getCollection()->load('images');
@@ -889,7 +889,7 @@ class PortalController extends Controller
         $sortOrder = $request->get('sort_order', 'desc');
         $query->orderBy($sortBy, $sortOrder);
 
-        $perPage = $request->get('per_page', 15);
+        $perPage = $request->get('per_page', 20);
 
         return response()->json($query->paginate($perPage));
     }
@@ -1218,7 +1218,7 @@ class PortalController extends Controller
         $totalReceived = round((float) $client->payments()->sum('amount'), 2);
         $balanceOwed   = round($totalProfit - $totalReceived, 2);
 
-        $perPage  = $request->get('per_page', 15);
+        $perPage  = $request->get('per_page', 20);
         $payments = $client->payments()
             ->with('createdBy:id,name')
             ->orderBy('paid_at', 'desc')

@@ -15,7 +15,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { cn } from '@/lib/utils'
-import { DataTableColumnHeader } from '@/components/data-table'
+import { DataTableColumnHeader, Pagination } from '@/components/data-table'
 import { Header } from '@/components/layout/header'
 import { NotificationsDropdown } from '@/components/layout/notifications-dropdown'
 import { Main } from '@/components/layout/main'
@@ -23,7 +23,6 @@ import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search as SearchBar } from '@/components/search'
 import { SearchBeam } from '@/components/search-beam'
 import { ThemeSwitch } from '@/components/theme-switch'
-import { InventoryPagination } from '@/features/inventory/components/inventory-pagination'
 import { usePortalProducts, usePortalProductFilterOptions } from '@/hooks/usePortal'
 import type { Product } from '@/types/product'
 import { PortalProductDetailsDialog } from './product-details-dialog'
@@ -343,7 +342,7 @@ function ProductTableView({ data, meta, loading, onPageChange, onPageSizeChange,
       </div>
 
       {meta && (
-        <InventoryPagination
+        <Pagination
           meta={meta}
           onPageChange={onPageChange}
           onPageSizeChange={onPageSizeChange}
@@ -468,7 +467,7 @@ function ProductCardView({ data, meta, loading, onPageChange, onPageSizeChange, 
       )}
 
       {meta && (
-        <InventoryPagination
+        <Pagination
           meta={meta}
           onPageChange={onPageChange}
           onPageSizeChange={onPageSizeChange}

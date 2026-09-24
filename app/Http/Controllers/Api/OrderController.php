@@ -47,7 +47,7 @@ class OrderController extends Controller
         $query->orderBy($sortBy, $sortOrder);
 
         // Pagination
-        $perPage = $request->get('per_page', 15);
+        $perPage = $request->get('per_page', 20);
         $orders = $query->paginate($perPage);
 
         return response()->json($orders);

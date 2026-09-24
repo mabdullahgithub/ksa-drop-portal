@@ -15,10 +15,11 @@ import { ShipmentStatusCards } from './components/shipment-status-cards'
 import { TagStatCards } from './components/tag-stat-cards'
 import { ShipmentStatusInfoModal } from './components/shipment-status-info-modal'
 import { useOrders, useOrderStatistics } from '@/hooks/useOrders'
+import { DEFAULT_PAGE_SIZE } from '@/components/data-table'
 
 export function Orders() {
   const { orders, meta, loading, filters, updateFilters, refresh } = useOrders({
-    per_page: 15,
+    per_page: DEFAULT_PAGE_SIZE,
     sort_by: 'created_at',
     sort_order: 'desc',
     has_shipment: false,

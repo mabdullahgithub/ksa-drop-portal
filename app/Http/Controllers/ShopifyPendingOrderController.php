@@ -56,7 +56,7 @@ class ShopifyPendingOrderController extends Controller
         }
 
         $orders = $query->orderByDesc('created_at')
-            ->paginate(min((int) $request->get('per_page', 25), 100))
+            ->paginate(min((int) $request->get('per_page', 20), 100))
             ->withQueryString();
 
         return response()->json($orders);

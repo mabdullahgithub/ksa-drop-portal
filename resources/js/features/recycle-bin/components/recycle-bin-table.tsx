@@ -5,7 +5,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { type RecycleBinMeta } from '@/hooks/useRecycleBin'
 import { RecycleBinBulkActions } from './recycle-bin-bulk-actions'
-import { RecycleBinPagination } from './recycle-bin-pagination'
+import { Pagination } from '@/components/data-table'
 
 type RecycleBinTableProps<T> = {
   data: T[]
@@ -113,8 +113,8 @@ export function RecycleBinTable<T extends { id: number }>({
         </Table>
       </div>
 
-      {meta && meta.total > 0 && (
-        <RecycleBinPagination meta={meta} onPageChange={onPageChange} onPageSizeChange={onPageSizeChange} />
+      {meta && (
+        <Pagination meta={meta} onPageChange={onPageChange} onPageSizeChange={onPageSizeChange} />
       )}
 
       <RecycleBinBulkActions

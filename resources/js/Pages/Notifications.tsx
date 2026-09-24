@@ -1,11 +1,5 @@
 import { useState } from 'react'
 import { Head, router } from '@inertiajs/react'
-import {
-  ChevronLeftIcon,
-  ChevronRightIcon,
-  DoubleArrowLeftIcon,
-  DoubleArrowRightIcon,
-} from '@radix-ui/react-icons'
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout'
 import { Header } from '@/components/layout/header'
 import { NotificationsDropdown } from '@/components/layout/notifications-dropdown'
@@ -15,16 +9,10 @@ import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Pagination } from '@/components/data-table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { Bell, Check, CheckCheck, Trash2 } from 'lucide-react'
-import { cn, getPageNumbers } from '@/lib/utils'
+import { cn } from '@/lib/utils'
 import { usePermissions } from '@/hooks/use-permissions'
 import axios from 'axios'
 
@@ -158,8 +146,7 @@ export default function NotificationsPage({
     fetchNotifications(page)
   }
 
-  const handlePerPageChange = (value: string) => {
-    const newPerPage = Number(value)
+  const handlePerPageChange = (newPerPage: number) => {
     setPerPage(newPerPage)
     fetchNotifications(1, newPerPage)
   }
@@ -170,7 +157,6 @@ export default function NotificationsPage({
       : notifications
 
   const unreadCount = notifications.filter((n) => !n.read_at).length
-  const pageNumbers = getPageNumbers(pagination.current_page, pagination.last_page)
 
   return (
     <AuthenticatedLayout>
@@ -291,117 +277,13 @@ export default function NotificationsPage({
                   ))}
                 </div>
 
-                {/* Pagination - Same as Orders page */}
-                {pagination.last_page > 1 && (
-                  <div className='mt-6 flex items-center justify-between overflow-clip border-t pt-4'>
-                    <div className='flex w-full items-center justify-between'>
-                      <div className='flex w-25 items-center justify-center text-sm font-medium md:hidden'>
-                        Page {pagination.current_page} of {pagination.last_page}
-                      </div>
-                      <div className='flex items-center gap-2'>
-                        <Select value={`${perPage}`} onValueChange={handlePerPageChange}>
-                          <SelectTrigger className='h-8 w-17.5'>
-                            <SelectValue placeholder={perPage} />
-                          </SelectTrigger>
-                          <SelectContent side='top'>
-                            {[10, 20, 30, 40, 50].map((pageSize) => (
-                              <SelectItem key={pageSize} value={`${pageSize}`}>
-                                {pageSize}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <p className='hidden text-sm font-medium sm:block'>
-                          Rows per page
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className='flex items-center space-x-6 lg:space-x-8'>
-                      <div className='hidden w-25 items-center justify-center text-sm font-medium md:flex'>
-                        Page {pagination.current_page} of {pagination.last_page}
-                      </div>
-                      <div className='flex items-center space-x-2'>
-                        <Button
-                          variant='outline'
-                          className='size-8 p-0 max-md:hidden'
-                          onClick={() => handlePageChange(1)}
-                          disabled={pagination.current_page === 1 || loading}
-                        >
-                          <span className='sr-only'>Go to first page</span>
-                          <DoubleArrowLeftIcon className='h-4 w-4' />
-                        </Button>
-                        <Button
-                          variant='outline'
-                          className='size-8 p-0'
-                          onClick={() =>
-                            handlePageChange(pagination.current_page - 1)
-                          }
-                          disabled={pagination.current_page === 1 || loading}
-                        >
-                          <span className='sr-only'>Go to previous page</span>
-                          <ChevronLeftIcon className='h-4 w-4' />
-                        </Button>
-
-                        {/* Page number buttons */}
-                        {pageNumbers.map((pageNumber, index) => (
-                          <div key={`${pageNumber}-${index}`} className='flex items-center'>
-                            {pageNumber === '...' ? (
-                              <span className='px-1 text-sm text-muted-foreground'>
-                                ...
-                              </span>
-                            ) : (
-                              <Button
-                                variant={
-                                  pagination.current_page === pageNumber
-                                    ? 'default'
-                                    : 'outline'
-                                }
-                                className='h-8 min-w-8 px-2'
-                                onClick={() =>
-                                  handlePageChange(pageNumber as number)
-                                }
-                                disabled={loading}
-                              >
-                                <span className='sr-only'>
-                                  Go to page {pageNumber}
-                                </span>
-                                {pageNumber}
-                              </Button>
-                            )}
-                          </div>
-                        ))}
-
-                        <Button
-                          variant='outline'
-                          className='size-8 p-0'
-                          onClick={() =>
-                            handlePageChange(pagination.current_page + 1)
-                          }
-                          disabled={
-                            pagination.current_page === pagination.last_page ||
-                            loading
-                          }
-                        >
-                          <span className='sr-only'>Go to next page</span>
-                          <ChevronRightIcon className='h-4 w-4' />
-                        </Button>
-                        <Button
-                          variant='outline'
-                          className='size-8 p-0 max-md:hidden'
-                          onClick={() => handlePageChange(pagination.last_page)}
-                          disabled={
-                            pagination.current_page === pagination.last_page ||
-                            loading
-                          }
-                        >
-                          <span className='sr-only'>Go to last page</span>
-                          <DoubleArrowRightIcon className='h-4 w-4' />
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                )}
+                <Pagination
+                  meta={pagination}
+                  onPageChange={handlePageChange}
+                  onPageSizeChange={handlePerPageChange}
+                  disabled={loading}
+                  className='mt-6 border-t pt-4'
+                />
               </>
             )}
           </TabsContent>

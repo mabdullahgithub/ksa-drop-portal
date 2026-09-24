@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
+import { Pagination } from '@/components/data-table'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { ChevronLeft, ChevronRight, Download, Eye } from 'lucide-react'
+import { Download, Eye } from 'lucide-react'
 
 interface Payment {
   id: number
@@ -26,6 +27,7 @@ interface Props {
   payments: PaginatedPayments | null | undefined
   loading: boolean
   onPageChange: (page: number) => void
+  onPageSizeChange: (pageSize: number) => void
 }
 
 function formatDate(dateStr: string) {
@@ -91,7 +93,7 @@ function ProofDialog({ url }: { url: string }) {
   )
 }
 
-export function FinancePaymentsTable({ payments, loading, onPageChange }: Props) {
+export function FinancePaymentsTable({ payments, loading, onPageChange, onPageSizeChange }: Props) {
   if (loading && !payments) {
     return (
       <div className='flex items-center justify-center py-8 text-sm text-muted-foreground'>
@@ -144,36 +146,12 @@ export function FinancePaymentsTable({ payments, loading, onPageChange }: Props)
         </table>
       </div>
 
-      {payments.last_page > 1 && (
-        <div className='flex items-center justify-between pt-2'>
-          <span className='text-xs text-muted-foreground'>
-            Showing {payments.from}–{payments.to} of {payments.total}
-          </span>
-          <div className='flex items-center gap-1'>
-            <Button
-              variant='outline'
-              size='icon'
-              className='h-7 w-7'
-              disabled={payments.current_page === 1}
-              onClick={() => onPageChange(payments.current_page - 1)}
-            >
-              <ChevronLeft className='h-4 w-4' />
-            </Button>
-            <span className='px-2 text-xs'>
-              {payments.current_page} / {payments.last_page}
-            </span>
-            <Button
-              variant='outline'
-              size='icon'
-              className='h-7 w-7'
-              disabled={payments.current_page === payments.last_page}
-              onClick={() => onPageChange(payments.current_page + 1)}
-            >
-              <ChevronRight className='h-4 w-4' />
-            </Button>
-          </div>
-        </div>
-      )}
+      <Pagination
+        meta={payments}
+        onPageChange={onPageChange}
+        onPageSizeChange={onPageSizeChange}
+        className='pt-2'
+      />
     </div>
   )
 }

@@ -10,7 +10,7 @@ import {
 import { type Product } from '@/types/product'
 import { inventoryColumns as columns } from './inventory-columns'
 import { InventoryBulkActions } from './inventory-bulk-actions'
-import { InventoryPagination } from './inventory-pagination'
+import { Pagination } from '@/components/data-table'
 import { InventoryTableSkeleton } from './inventory-skeleton'
 
 type InventoryTableProps = {
@@ -24,8 +24,8 @@ type InventoryTableProps = {
     to: number
   } | null
   loading?: boolean
-  onPageChange?: (page: number) => void
-  onPageSizeChange?: (pageSize: number) => void
+  onPageChange: (page: number) => void
+  onPageSizeChange: (pageSize: number) => void
   onSortChange?: (sortBy: string, sortOrder: 'asc' | 'desc') => void
   onTableReady?: (table: any) => void
 }
@@ -115,8 +115,8 @@ export function InventoryTable({
         </Table>
       </div>
 
-      {meta && onPageChange && (
-        <InventoryPagination
+      {meta && (
+        <Pagination
           meta={meta}
           onPageChange={onPageChange}
           onPageSizeChange={onPageSizeChange}

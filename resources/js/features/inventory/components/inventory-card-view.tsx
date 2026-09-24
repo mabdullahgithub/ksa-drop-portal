@@ -5,7 +5,7 @@ import { Eye, Package } from 'lucide-react'
 import { type Product } from '@/types/product'
 import { useInventoryContext } from './inventory-provider'
 import { InventoryCardsSkeleton } from './inventory-skeleton'
-import { InventoryPagination } from './inventory-pagination'
+import { Pagination } from '@/components/data-table'
 import { ProductActions } from './inventory-row-actions'
 
 const statusColorMap: Record<string, string> = {
@@ -31,8 +31,8 @@ interface InventoryCardViewProps {
     to: number
   } | null
   loading?: boolean
-  onPageChange?: (page: number) => void
-  onPageSizeChange?: (pageSize: number) => void
+  onPageChange: (page: number) => void
+  onPageSizeChange: (pageSize: number) => void
 }
 
 export function InventoryCardView({ data, meta, loading, onPageChange, onPageSizeChange }: InventoryCardViewProps) {
@@ -136,8 +136,8 @@ export function InventoryCardView({ data, meta, loading, onPageChange, onPageSiz
         </div>
       )}
 
-      {meta && onPageChange && (
-        <InventoryPagination
+      {meta && (
+        <Pagination
           meta={meta}
           onPageChange={onPageChange}
           onPageSizeChange={onPageSizeChange}

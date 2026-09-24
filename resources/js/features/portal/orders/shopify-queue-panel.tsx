@@ -11,7 +11,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { OrdersPagination } from '@/features/orders/components/orders-pagination'
+import { Pagination, DEFAULT_PAGE_SIZE } from '@/components/data-table'
 import {
   useShopifyPendingOrders,
   useShopifyPendingMutations,
@@ -30,7 +30,7 @@ interface PendingOrder {
 
 export function ShopifyQueuePanel({ onChanged }: { onChanged?: () => void }) {
   const { orders, meta, loading, updateFilters, refresh } = useShopifyPendingOrders({
-    per_page: 25,
+    per_page: DEFAULT_PAGE_SIZE,
   })
   const { submit, submitBulk, dismiss, loading: mutating } = useShopifyPendingMutations()
   const [selected, setSelected] = useState<Set<number>>(new Set())
@@ -220,8 +220,8 @@ export function ShopifyQueuePanel({ onChanged }: { onChanged?: () => void }) {
         </Table>
       </div>
 
-      {meta && meta.last_page > 1 && (
-        <OrdersPagination
+      {meta && (
+        <Pagination
           meta={meta}
           onPageChange={(page) => updateFilters({ page })}
           onPageSizeChange={(perPage) => updateFilters({ per_page: perPage, page: 1 })}

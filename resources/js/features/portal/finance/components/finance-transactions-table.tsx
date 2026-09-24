@@ -1,6 +1,5 @@
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { Pagination } from '@/components/data-table'
 
 interface Transaction {
   id: number
@@ -35,6 +34,7 @@ interface Props {
   transactions: PaginatedTransactions | null
   loading: boolean
   onPageChange: (page: number) => void
+  onPageSizeChange: (pageSize: number) => void
 }
 
 const statusVariant = (status: string) => {
@@ -47,7 +47,7 @@ const statusVariant = (status: string) => {
   }
 }
 
-export function FinanceTransactionsTable({ transactions, loading, onPageChange }: Props) {
+export function FinanceTransactionsTable({ transactions, loading, onPageChange, onPageSizeChange }: Props) {
   if (!transactions || transactions.data.length === 0) {
     return (
       <div className='flex items-center justify-center py-8 text-sm text-muted-foreground'>
@@ -107,37 +107,12 @@ export function FinanceTransactionsTable({ transactions, loading, onPageChange }
         </table>
       </div>
 
-      {/* Pagination */}
-      {transactions.last_page > 1 && (
-        <div className='flex items-center justify-between pt-2'>
-          <span className='text-xs text-muted-foreground'>
-            Showing {transactions.from}–{transactions.to} of {transactions.total}
-          </span>
-          <div className='flex items-center gap-1'>
-            <Button
-              variant='outline'
-              size='icon'
-              className='h-7 w-7'
-              disabled={transactions.current_page === 1}
-              onClick={() => onPageChange(transactions.current_page - 1)}
-            >
-              <ChevronLeft className='h-4 w-4' />
-            </Button>
-            <span className='px-2 text-xs'>
-              {transactions.current_page} / {transactions.last_page}
-            </span>
-            <Button
-              variant='outline'
-              size='icon'
-              className='h-7 w-7'
-              disabled={transactions.current_page === transactions.last_page}
-              onClick={() => onPageChange(transactions.current_page + 1)}
-            >
-              <ChevronRight className='h-4 w-4' />
-            </Button>
-          </div>
-        </div>
-      )}
+      <Pagination
+        meta={transactions}
+        onPageChange={onPageChange}
+        onPageSizeChange={onPageSizeChange}
+        className='pt-2'
+      />
     </div>
   )
 }
