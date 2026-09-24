@@ -310,4 +310,38 @@ class KsaExpressShipmentTest extends TestCase
         $pdf = Storage::disk('local')->get($response->json('invoice.file_path'));
         $this->assertSame(1, preg_match_all('#/Type\s*/Page[^s]#', $pdf), 'Waybill must fit on a single page.');
     }
+    /**
+     * Arabic fields are wrapped and shaped by hand (ArabicShaper); the label
+     * must still fit on one page.
+     */
+    public function test_waybill_prints_arabic_joined_and_on_one_page(): void
+    {
+        Storage::fake('local');
+
+        $order = $this->makeOrder();
+        $order->items()->create([
+            'lineitem_name' => 'مصباح تخييم متعدد الوظائف قابل للتمديد والطي',
+            'lineitem_quantity' => 1,
+            'lineitem_price' => 169.0,
+        ]);
+
+        $this->actingAs($this->actor())->postJson('/api/shipments', [
+            'order_id' => $order->id,
+            'warehouse_id' => $this->warehouse()->id,
+            'courier' => 'ksadrop_express',
+            'receiver_name' => 'AlsahliGhalab - الامين البدراني',
+            'receiver_phone' => '+966555494463',
+            'receiver_address' => str_repeat('حي الخليج، شارع الأمير محمد بن عبدالعزيز 15، ', 6),
+            'receiver_city' => 'الرياض',
+            'remark' => 'الرجاء الاتصال قبل الوصول',
+        ])->assertCreated();
+
+        $shipment = Shipment::firstOrFail();
+
+        $response = $this->actingAs($this->actor())->postJson("/api/shipments/{$shipment->id}/invoice");
+        $response->assertCreated();
+
+        $pdf = Storage::disk('local')->get($response->json('invoice.file_path'));
+        $this->assertSame(1, preg_match_all('#/Type\s*/Page[^s]#', $pdf), 'Waybill must fit on a single page.');
+    }
 }
