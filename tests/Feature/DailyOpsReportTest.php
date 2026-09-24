@@ -165,6 +165,28 @@ class DailyOpsReportTest extends TestCase
         $this->assertStringContainsString('No sync failures', $blocks);
     }
 
+    public function test_it_names_stores_by_client_not_by_shop_handle(): void
+    {
+        $this->fakeSlack();
+
+        $client = $this->makeClient();
+
+        $this->makeOrder('2026-09-06 18:00:00', [
+            'client_id'           => $client->id,
+            'shopify_shop_domain' => '0p64nd-dz.myshopify.com',
+        ]);
+        $this->makeOrder('2026-09-06 18:10:00', ['shopify_shop_domain' => 'orphan-xy.myshopify.com']);
+
+        $this->artisan('report:daily', ['--date' => '2026-09-06'])->assertSuccessful();
+
+        $blocks = $this->flatten($this->postedBlocks());
+
+        $this->assertStringContainsString('Test Client', $blocks);
+        $this->assertStringNotContainsString('0p64nd-dz', $blocks);
+        // No client to name it after — the handle is still better than nothing.
+        $this->assertStringContainsString('orphan-xy', $blocks);
+    }
+
     public function test_it_flags_orders_with_no_shipping_city(): void
     {
         $this->fakeSlack();

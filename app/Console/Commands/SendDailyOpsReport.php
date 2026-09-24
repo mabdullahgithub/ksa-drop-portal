@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Models\Client;
 use App\Models\ClientShopifyConnection;
 use App\Models\Order;
 use App\Models\Shipment;
@@ -147,10 +148,19 @@ class SendDailyOpsReport extends Command
             ->map->count()
             ->sortDesc();
 
+        // Label each store with the client's company name, not its myshopify
+        // handle — the handles are random strings nobody recognises. Trashed
+        // clients still placed the orders, so their names are kept too.
+        $clientNames = Client::withTrashed()
+            ->whereIn('id', $orders->pluck('client_id')->filter()->unique())
+            ->pluck('company_name', 'id');
+
         $stores = $orders
             ->groupBy(fn (Order $order) => $order->shopify_shop_domain ?: 'manual entry')
             ->map(fn ($group, $shop) => [
-                'shop'    => $shop,
+                'shop'    => $shop === 'manual entry'
+                    ? $shop
+                    : ($clientNames[$group->firstWhere('client_id', '!=', null)?->client_id] ?? str_replace('.myshopify.com', '', $shop)),
                 'orders'  => $group->count(),
                 'revenue' => (float) $group->sum('total'),
             ])
@@ -328,9 +338,11 @@ class SendDailyOpsReport extends Command
         if ($report['stores']->isNotEmpty()) {
             $rows = $report['stores']
                 ->take(6)
+                // mb_* so Arabic names are cut and padded by character, not
+                // byte, and the columns still line up.
                 ->map(fn (array $store) => sprintf(
-                    '%-26s %4d   SAR %s',
-                    str_replace('.myshopify.com', '', $store['shop']),
+                    '%s %4d   SAR %s',
+                    mb_str_pad(mb_strimwidth($store['shop'], 0, 26, '…'), 26),
                     $store['orders'],
                     number_format($store['revenue'])
                 ))
