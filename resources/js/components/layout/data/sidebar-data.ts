@@ -94,7 +94,7 @@ export const sidebarData: SidebarData = {
           url: '/recycle-bin',
           icon: Trash2,
           // Array = any-of, matching the canAny check the route uses.
-          permission: ['delete orders', 'delete client', 'delete inventory'],
+          permission: ['delete orders', 'delete client', 'delete inventory', 'delete users'],
         },
       ],
     },

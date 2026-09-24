@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { SearchBeam } from '@/components/search-beam'
 import {
+  type PurgeResult,
   type RecycleBinTab,
   type RestoreResult,
   RecycleBinLockedError,
@@ -83,6 +84,17 @@ export function RecycleBinPanel<T extends { id: number }>({
     }
   }
 
+  /** Purges can skip rows the database would not let go (e.g. a client's login user). */
+  const reportPurge = (result: PurgeResult) => {
+    if (result.purged_count > 0 || !result.blocked?.length) {
+      toast.success(result.message)
+    }
+
+    result.blocked?.forEach((item) => {
+      toast.warning(`"${item.name}" was not deleted. ${item.reason}`)
+    })
+  }
+
   /** A lock failure means re-prompt for the PIN, not an error toast. */
   const guardLock = async (action: () => Promise<void>) => {
     try {
@@ -104,15 +116,13 @@ export function RecycleBinPanel<T extends { id: number }>({
 
   const handlePurge = (ids: (number | string)[]) =>
     guardLock(async () => {
-      const result = await purge(ids)
-      toast.success(result.message)
+      reportPurge(await purge(ids))
       await afterChange()
     })
 
   const handlePurgeAll = () =>
     guardLock(async () => {
-      const result = await purgeAll()
-      toast.success(result.message)
+      reportPurge(await purgeAll())
       await afterChange()
     })
 

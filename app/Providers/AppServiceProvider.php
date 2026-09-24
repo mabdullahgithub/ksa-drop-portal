@@ -7,10 +7,12 @@ use App\Models\Client;
 use App\Models\ClientProduct;
 use App\Models\Order;
 use App\Models\Product;
+use App\Models\User;
 use App\Observers\ClientObserver;
 use App\Observers\ClientProductObserver;
 use App\Observers\OrderObserver;
 use App\Observers\ProductObserver;
+use App\Observers\UserObserver;
 use Illuminate\Mail\Events\MessageSending;
 use Illuminate\Mail\Events\MessageSent;
 use Illuminate\Support\Facades\Event;
@@ -56,5 +58,6 @@ class AppServiceProvider extends ServiceProvider
         Client::observe(ClientObserver::class);
         ClientProduct::observe(ClientProductObserver::class);
         Product::observe(ProductObserver::class);
+        User::observe(UserObserver::class);
     }
 }

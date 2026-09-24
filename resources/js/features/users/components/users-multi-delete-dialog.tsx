@@ -3,8 +3,8 @@
 import { useState } from 'react'
 import { type Table } from '@tanstack/react-table'
 import { AlertTriangle } from 'lucide-react'
+import { router } from '@inertiajs/react'
 import { toast } from 'sonner'
-import { sleep } from '@/lib/utils'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -33,19 +33,20 @@ export function UsersMultiDeleteDialog<TData>({
       return
     }
 
-    onOpenChange(false)
+    const ids = selectedRows.map((row) => (row.original as { id: number }).id)
 
-    toast.promise(sleep(2000), {
-      loading: 'Deleting users...',
-      success: () => {
-        setValue('')
-        table.resetRowSelection()
-        return `Deleted ${selectedRows.length} ${
-          selectedRows.length > 1 ? 'users' : 'user'
-        }`
-      },
-      error: 'Error',
-    })
+    router.post(
+      route('team-management.users.bulk-destroy'),
+      { ids },
+      {
+        preserveScroll: true,
+        onSuccess: () => {
+          onOpenChange(false)
+          setValue('')
+          table.resetRowSelection()
+        },
+      }
+    )
   }
 
   return (
@@ -75,7 +76,7 @@ export function UsersMultiDeleteDialog<TData>({
         >
           <p className='mb-2'>
             Are you sure you want to delete the selected users? <br />
-            This action cannot be undone.
+            They will lose access right away and move to the recycle bin, where they can be restored.
           </p>
 
           <Label className='my-4 flex flex-col items-start gap-1.5'>
@@ -91,7 +92,7 @@ export function UsersMultiDeleteDialog<TData>({
           <Alert variant='destructive'>
             <AlertTitle>Warning!</AlertTitle>
             <AlertDescription>
-              Please be careful, this operation can not be rolled back.
+              Super admins and your own account are skipped.
             </AlertDescription>
           </Alert>
         </form>

@@ -108,7 +108,7 @@ export function UsersDeleteDialog({
                 Are you sure you want to delete{' '}
                 <span className='font-bold'>{displayName}</span>?
                 <br />
-                This action will permanently remove the user from the system. This cannot be undone.
+                They will lose access right away and move to the recycle bin, where they can be restored.
               </p>
 
               <Label className='my-2'>

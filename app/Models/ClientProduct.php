@@ -46,7 +46,7 @@ class ClientProduct extends Model
 
     public function verifiedByUser(): BelongsTo
     {
-        return $this->belongsTo(User::class, 'verified_by');
+        return $this->belongsTo(User::class, 'verified_by')->withTrashed();
     }
 
     public function scopeSearch($query, string $term)
@@ -130,6 +130,6 @@ class ClientProduct extends Model
      */
     public function deletedBy()
     {
-        return $this->belongsTo(User::class, 'deleted_by');
+        return $this->belongsTo(User::class, 'deleted_by')->withTrashed();
     }
 }

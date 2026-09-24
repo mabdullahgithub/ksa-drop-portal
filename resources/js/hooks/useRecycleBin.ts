@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 
-export type RecycleBinTab = 'orders' | 'clients' | 'inventory'
+export type RecycleBinTab = 'orders' | 'clients' | 'inventory' | 'users'
 
 /** Who deleted a record, and from where. Null for rows deleted before auditing existed. */
 export type DeletedByInfo = {
@@ -52,6 +52,16 @@ export type TrashedInventoryItem = {
   deleted_by: DeletedByInfo | null
 }
 
+export type TrashedUser = {
+  id: number
+  name: string
+  email: string
+  roles: string[]
+  is_client: boolean
+  deleted_at: string | null
+  deleted_by: DeletedByInfo | null
+}
+
 export type RecycleBinMeta = {
   current_page: number
   last_page: number
@@ -63,6 +73,7 @@ export type RecycleBinCounts = {
   orders: number
   clients: number
   inventory: number
+  users: number
 }
 
 export type RestoreResult = {
@@ -71,6 +82,13 @@ export type RestoreResult = {
   requested_count: number
   blocked?: { name: string; reason: string }[]
   renamed?: { name: string; from: string; to: string }[]
+}
+
+export type PurgeResult = {
+  message: string
+  purged_count: number
+  /** Rows the server refused to purge (users only, for now), with why. */
+  blocked?: { name: string; reason: string }[]
 }
 
 const getCsrfToken = () =>
@@ -125,7 +143,7 @@ export async function lockRecycleBin(): Promise<void> {
 
 /** Tab badge counts, refetched after anything that changes the bin. */
 export function useRecycleBinCounts(enabled = true) {
-  const [counts, setCounts] = useState<RecycleBinCounts>({ orders: 0, clients: 0, inventory: 0 })
+  const [counts, setCounts] = useState<RecycleBinCounts>({ orders: 0, clients: 0, inventory: 0, users: 0 })
 
   const refresh = useCallback(async () => {
     if (!enabled) return
@@ -233,10 +251,9 @@ export function useRecycleBinActions(tab: RecycleBinTab) {
     post<RestoreResult>(`/api/recycle-bin/${tab}/restore`, { ids })
 
   const purge = (ids: (number | string)[]) =>
-    post<{ message: string; purged_count: number }>(`/api/recycle-bin/${tab}/purge`, { ids })
+    post<PurgeResult>(`/api/recycle-bin/${tab}/purge`, { ids })
 
-  const purgeAll = () =>
-    post<{ message: string; purged_count: number }>(`/api/recycle-bin/${tab}/purge-all`)
+  const purgeAll = () => post<PurgeResult>(`/api/recycle-bin/${tab}/purge-all`)
 
   return { restore, purge, purgeAll }
 }

@@ -228,6 +228,7 @@ Route::middleware(['auth', 'verified', 'role:!client'])->group(function () {
 
     Route::get('/team-management/users', [UserRoleController::class, 'index'])->middleware('permission:view users')->name('team-management.users');
     Route::post('/team-management/users', [UserRoleController::class, 'store'])->middleware('permission:create users')->name('team-management.users.store');
+    Route::post('/team-management/users/bulk-delete', [UserRoleController::class, 'bulkDestroy'])->middleware('permission:delete users')->name('team-management.users.bulk-destroy');
     Route::put('/team-management/users/{user}', [UserRoleController::class, 'update'])->middleware('permission:edit users')->name('team-management.users.update');
     Route::delete('/team-management/users/{user}', [UserRoleController::class, 'destroy'])->middleware('permission:delete users')->name('team-management.users.destroy');
 
@@ -237,20 +238,20 @@ Route::middleware(['auth', 'verified', 'role:!client'])->group(function () {
     // {type} route could not distinguish them. Note the separator is a PIPE:
     // CheckPermission splits on '|', not ','.
     Route::get('/recycle-bin', [RecycleBinController::class, 'page'])
-        ->middleware('permission:delete orders|delete client|delete inventory')->name('recycle-bin');
+        ->middleware('permission:delete orders|delete client|delete inventory|delete users')->name('recycle-bin');
 
     Route::prefix('api/recycle-bin')->group(function () {
         // Unlock sits outside the recyclebin.unlocked gate (it is what opens
         // it) and is throttled so the PIN cannot be brute-forced.
         Route::post('/unlock', [RecycleBinController::class, 'unlock'])
-            ->middleware(['permission:delete orders|delete client|delete inventory', 'throttle:5,1'])
+            ->middleware(['permission:delete orders|delete client|delete inventory|delete users', 'throttle:5,1'])
             ->name('api.recycle-bin.unlock');
         Route::post('/lock', [RecycleBinController::class, 'lock'])
-            ->middleware('permission:delete orders|delete client|delete inventory')
+            ->middleware('permission:delete orders|delete client|delete inventory|delete users')
             ->name('api.recycle-bin.lock');
 
         Route::get('/counts', [RecycleBinController::class, 'counts'])
-            ->middleware('recyclebin.unlocked')->middleware('permission:delete orders|delete client|delete inventory')->name('api.recycle-bin.counts');
+            ->middleware('recyclebin.unlocked')->middleware('permission:delete orders|delete client|delete inventory|delete users')->name('api.recycle-bin.counts');
 
         Route::get('/orders', [RecycleBinController::class, 'orders'])
             ->middleware('recyclebin.unlocked')->middleware('permission:delete orders')->name('api.recycle-bin.orders');
@@ -269,6 +270,15 @@ Route::middleware(['auth', 'verified', 'role:!client'])->group(function () {
             ->middleware('recyclebin.unlocked')->middleware('permission:delete client')->name('api.recycle-bin.clients.purge');
         Route::post('/clients/purge-all', [RecycleBinController::class, 'purgeAllClients'])
             ->middleware('recyclebin.unlocked')->middleware('permission:delete client')->name('api.recycle-bin.clients.purge-all');
+
+        Route::get('/users', [RecycleBinController::class, 'users'])
+            ->middleware('recyclebin.unlocked')->middleware('permission:delete users')->name('api.recycle-bin.users');
+        Route::post('/users/restore', [RecycleBinController::class, 'restoreUsers'])
+            ->middleware('recyclebin.unlocked')->middleware('permission:delete users')->name('api.recycle-bin.users.restore');
+        Route::post('/users/purge', [RecycleBinController::class, 'purgeUsers'])
+            ->middleware('recyclebin.unlocked')->middleware('permission:delete users')->name('api.recycle-bin.users.purge');
+        Route::post('/users/purge-all', [RecycleBinController::class, 'purgeAllUsers'])
+            ->middleware('recyclebin.unlocked')->middleware('permission:delete users')->name('api.recycle-bin.users.purge-all');
 
         // The inventory tab spans two models: the catalog (delete inventory)
         // and per-client stock, which is gated on 'delete client' everywhere
