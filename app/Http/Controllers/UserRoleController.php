@@ -17,13 +17,15 @@ class UserRoleController extends Controller
     {
         abort_if(!auth()->user()->can('view users'), 403, 'Unauthorized');
 
-        $users = User::with('roles')->get()->map(function ($user) {
+        $users = User::with('roles')->withExists('client')->get()->map(function ($user) {
             return [
                 'id' => $user->id,
                 'name' => $user->name,
                 'email' => $user->email,
                 'roles' => $user->roles->pluck('name'),
                 'is_super_admin' => $user->hasRole('superadmin'),
+                // Client accounts are listed on their own tab, apart from the team.
+                'is_client' => $user->client_exists || $user->hasRole('client'),
                 'created_at' => $user->created_at,
             ];
         });

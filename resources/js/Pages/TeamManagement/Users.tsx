@@ -8,6 +8,7 @@ interface User {
   email: string
   roles: string[]
   is_super_admin: boolean
+  is_client: boolean
   created_at: string
 }
 
