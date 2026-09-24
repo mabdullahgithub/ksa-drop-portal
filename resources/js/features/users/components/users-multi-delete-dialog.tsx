@@ -40,10 +40,15 @@ export function UsersMultiDeleteDialog<TData>({
       { ids },
       {
         preserveScroll: true,
-        onSuccess: () => {
+        onSuccess: (page) => {
           onOpenChange(false)
           setValue('')
           table.resetRowSelection()
+          const flash = (page.props as { flash?: { success?: string } }).flash
+          toast.success(flash?.success ?? 'Selected users were moved to the recycle bin.')
+        },
+        onError: (errors) => {
+          toast.error(Object.values(errors)[0] ?? 'Could not delete the selected users.')
         },
       }
     )
