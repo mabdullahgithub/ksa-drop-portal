@@ -7,6 +7,7 @@ import { useInventoryContext } from './inventory-provider'
 import { InventoryCardsSkeleton } from './inventory-skeleton'
 import { Pagination } from '@/components/data-table'
 import { ProductActions } from './inventory-row-actions'
+import { EmptyState } from '@/components/empty-state'
 
 const statusColorMap: Record<string, string> = {
   active: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
@@ -43,10 +44,7 @@ export function InventoryCardView({ data, meta, loading, onPageChange, onPageSiz
   return (
     <div className='space-y-4'>
       {data.length === 0 ? (
-        <div className='flex flex-col items-center justify-center py-16 text-center'>
-          <Package className='h-12 w-12 text-muted-foreground/30 mb-3' />
-          <p className='text-sm font-medium text-muted-foreground'>No products found</p>
-        </div>
+        <EmptyState bot='square' size='lg' title='No products found' className='py-16' />
       ) : (
         <div className='grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5'>
           {data.map((product) => (

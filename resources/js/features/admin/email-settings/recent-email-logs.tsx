@@ -8,6 +8,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { EmptyState } from '@/components/empty-state'
 
 interface EmailLog {
   id: number
@@ -64,12 +65,13 @@ export function RecentEmailLogs({ logs }: { logs: EmailLog[] }) {
 
   if (!logs || logs.length === 0) {
     return (
-      <div className='text-center py-12'>
-        <p className='text-muted-foreground'>No emails sent yet</p>
-        <p className='text-sm text-muted-foreground mt-1'>
-          Email logs will appear here once emails are sent
-        </p>
-      </div>
+      <EmptyState
+        bot='cloud'
+        state='sleeping'
+        title='No emails sent yet'
+        description='Email logs will appear here once emails are sent'
+        className='py-12'
+      />
     )
   }
 

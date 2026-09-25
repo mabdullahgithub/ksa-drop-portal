@@ -12,6 +12,7 @@ import { inventoryColumns as columns } from './inventory-columns'
 import { InventoryBulkActions } from './inventory-bulk-actions'
 import { Pagination } from '@/components/data-table'
 import { InventoryTableSkeleton } from './inventory-skeleton'
+import { EmptyState } from '@/components/empty-state'
 
 type InventoryTableProps = {
   data: Product[]
@@ -106,8 +107,8 @@ export function InventoryTable({
               ))
             ) : (
               <TableRow>
-                <TableCell colSpan={columns.length} className='h-24 text-center text-sm text-muted-foreground'>
-                  No products found.
+                <TableCell colSpan={columns.length} className='h-24 text-center'>
+                  <EmptyState bot='square' title='No products found.' />
                 </TableCell>
               </TableRow>
             )}

@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import axios from 'axios'
+import { EmptyState } from '@/components/empty-state'
 
 interface Notification {
   id: string
@@ -87,10 +88,7 @@ export function RecentNotificationsCard() {
             ))}
           </div>
         ) : notifications.length === 0 ? (
-          <div className='py-8 text-center'>
-            <Bell className='mx-auto mb-2 h-12 w-12 text-muted-foreground/30' />
-            <p className='text-sm text-muted-foreground'>No notifications yet</p>
-          </div>
+          <EmptyState bot='cat' state='sleeping' title='No notifications yet' />
         ) : (
           <div className='space-y-4'>
             {notifications.map((notification) => (

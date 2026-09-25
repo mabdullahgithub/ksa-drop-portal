@@ -22,6 +22,7 @@ import { DataTableBulkActions } from './data-table-bulk-actions'
 import { ordersColumns as columns } from './orders-columns'
 import { Pagination } from '@/components/data-table'
 import { OrdersTableSkeleton } from './orders-skeleton'
+import { EmptyState } from '@/components/empty-state'
 
 type OrdersTableProps = {
   data: Order[]
@@ -166,7 +167,7 @@ export function OrdersTable({
                   colSpan={columns.length}
                   className='h-24 text-center'
                 >
-                  No orders found.
+                  <EmptyState bot='droid' title='No orders found.' />
                 </TableCell>
               </TableRow>
             )}

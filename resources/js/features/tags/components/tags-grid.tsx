@@ -1,9 +1,10 @@
-import { Search, Tag as TagIcon } from 'lucide-react'
+import { Search } from 'lucide-react'
 import { useState } from 'react'
 import { Input } from '@/components/ui/input'
 import { SearchBeam } from '@/components/search-beam'
 import { type Tag } from '../data/schema'
 import { TagCard } from './tag-card'
+import { EmptyState } from '@/components/empty-state'
 
 export function TagsGrid({ data }: { data: Tag[] }) {
   const [search, setSearch] = useState('')
@@ -28,12 +29,12 @@ export function TagsGrid({ data }: { data: Tag[] }) {
       </div>
 
       {filtered.length === 0 ? (
-        <div className='flex flex-1 flex-col items-center justify-center gap-2 rounded-xl border border-dashed py-16 text-center'>
-          <TagIcon className='h-8 w-8 text-muted-foreground/40' />
-          <p className='text-sm text-muted-foreground'>
-            {search ? 'No tags match your search.' : 'No tags yet. Create your first tag.'}
-          </p>
-        </div>
+        <EmptyState
+          bot='clover'
+          state={search ? 'default' : 'sleeping'}
+          title={search ? 'No tags match your search.' : 'No tags yet. Create your first tag.'}
+          className='flex-1 rounded-xl border border-dashed py-16'
+        />
       ) : (
         <div className='grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5'>
           {filtered.map((tag) => (

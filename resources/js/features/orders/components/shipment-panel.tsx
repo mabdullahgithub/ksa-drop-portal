@@ -16,6 +16,7 @@ import { toast } from 'sonner'
 import axios from 'axios'
 import { useState } from 'react'
 import { BUSINESS_TIMEZONE } from '@/lib/business-time'
+import { EmptyState } from '@/components/empty-state'
 
 interface TrackingEvent {
   status: string
@@ -86,13 +87,16 @@ export function ShipmentPanel({ shipment, orderId, onCreateShipment, onShipmentU
 
   if (!shipment) {
     return (
-      <div className='flex flex-col items-center justify-center py-6 text-center'>
-        <Truck className='h-10 w-10 text-muted-foreground mb-3' />
-        <p className='text-sm text-muted-foreground mb-3'>No shipment created yet</p>
-        <Button onClick={onCreateShipment} size='sm'>
-          Create Shipment
-        </Button>
-      </div>
+      <EmptyState
+        bot='pill'
+        title='No shipment created yet'
+        action={
+          <Button onClick={onCreateShipment} size='sm'>
+            Create Shipment
+          </Button>
+        }
+        className='py-6'
+      />
     )
   }
 

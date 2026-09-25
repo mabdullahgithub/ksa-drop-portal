@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { BotAvatar } from 'bot-avatars'
 import { Check, ChevronDown, Copy, Home, RefreshCw, Undo2 } from 'lucide-react'
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard'
 import { cn } from '@/lib/utils'
@@ -8,6 +9,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible'
+import { DEFAULT_ERROR_COPY, copyForStatus } from './status-map'
 
 export type ErrorPageProps = {
   /** HTTP status or short code shown as the headline. */
@@ -56,6 +58,7 @@ export function ErrorPage({
 }: ErrorPageProps) {
   const [detailOpen, setDetailOpen] = useState(false)
   const { copied, copy } = useCopyToClipboard()
+  const bot = (typeof status === 'number' ? copyForStatus(status) : DEFAULT_ERROR_COPY).bot
 
   useEffect(() => {
     if (!manageDocumentTitle || minimal) return
@@ -89,6 +92,14 @@ export function ErrorPage({
         className
       )}
     >
+      <div aria-hidden='true'>
+        <BotAvatar
+          type={bot.type}
+          state={bot.state}
+          size={minimal ? 56 : 80}
+        />
+      </div>
+
       {status && (
         <h1 className='text-[7rem] leading-none font-bold tracking-tight'>
           {status}

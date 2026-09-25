@@ -1,5 +1,6 @@
 import { Badge } from '@/components/ui/badge'
 import { Pagination } from '@/components/data-table'
+import { EmptyState } from '@/components/empty-state'
 
 interface Transaction {
   id: number
@@ -50,9 +51,7 @@ const statusVariant = (status: string) => {
 export function FinanceTransactionsTable({ transactions, loading, onPageChange, onPageSizeChange }: Props) {
   if (!transactions || transactions.data.length === 0) {
     return (
-      <div className='flex items-center justify-center py-8 text-sm text-muted-foreground'>
-        No transactions found for the selected period.
-      </div>
+      <EmptyState bot='hexagon' title='No transactions found for the selected period.' />
     )
   }
 

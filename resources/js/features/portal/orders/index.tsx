@@ -54,6 +54,7 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
 import { BUSINESS_TIMEZONE } from '@/lib/business-time'
+import { EmptyState } from '@/components/empty-state'
 
 const MAX_FILE_SIZE_MB = 10
 const ALLOWED_MIME = ['text/csv', 'application/vnd.ms-excel', 'application/csv']
@@ -1453,14 +1454,14 @@ export function PortalOrders() {
                 ) : (
                   <TableRow>
                     <TableCell colSpan={columns.length} className='h-32 text-center'>
-                      <div className='flex flex-col items-center gap-2 text-muted-foreground'>
-                        <Package className='h-8 w-8 text-muted-foreground/30' />
-                        <p className='text-sm'>
-                          {activeTab === 'assigned'
+                      <EmptyState
+                        bot='droid'
+                        title={
+                          activeTab === 'assigned'
                             ? 'No orders assigned to courier found.'
-                            : 'No orders found.'}
-                        </p>
-                      </div>
+                            : 'No orders found.'
+                        }
+                      />
                     </TableCell>
                   </TableRow>
                 )}

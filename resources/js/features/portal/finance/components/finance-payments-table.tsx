@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button'
 import { Pagination } from '@/components/data-table'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Download, Eye } from 'lucide-react'
+import { EmptyState } from '@/components/empty-state'
 
 interface Payment {
   id: number
@@ -104,9 +105,7 @@ export function FinancePaymentsTable({ payments, loading, onPageChange, onPageSi
 
   if (!payments || payments.data.length === 0) {
     return (
-      <div className='flex items-center justify-center py-8 text-sm text-muted-foreground'>
-        No payments recorded yet.
-      </div>
+      <EmptyState bot='hexagon' state='sleeping' title='No payments recorded yet.' />
     )
   }
 

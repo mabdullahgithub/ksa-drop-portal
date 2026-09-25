@@ -32,6 +32,7 @@ import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
 import { useDashboard } from '@/hooks/useDashboard'
+import { EmptyState } from '@/components/empty-state'
 
 
 const financialColors: Record<string, string> = {
@@ -206,7 +207,7 @@ export function Dashboard() {
                         )
                       })}
                     {!loading && (stats?.by_payment_method ?? []).length === 0 && (
-                      <p className='text-sm text-muted-foreground'>No orders yet.</p>
+                      <EmptyState bot='blob' state='sleeping' size='sm' title='No orders yet.' className='py-4' />
                     )}
                   </div>
                 )}
@@ -257,7 +258,7 @@ export function Dashboard() {
                       )
                     })}
                     {!loading && (stats?.by_financial_status ?? []).length === 0 && (
-                      <p className='text-sm text-muted-foreground'>No orders yet.</p>
+                      <EmptyState bot='hexagon' state='sleeping' size='sm' title='No orders yet.' className='py-4' />
                     )}
                   </div>
                 )}

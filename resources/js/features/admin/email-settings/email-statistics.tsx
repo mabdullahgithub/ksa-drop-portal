@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Mail, CheckCircle, XCircle, Clock, TrendingUp } from 'lucide-react'
+import { EmptyState } from '@/components/empty-state'
 
 interface EmailStats {
   total_sent: number
@@ -150,9 +151,7 @@ export function EmailStatistics() {
                 ))}
             </div>
           ) : (
-            <p className='text-sm text-muted-foreground text-center py-8'>
-              No emails sent yet
-            </p>
+            <EmptyState bot='cloud' state='sleeping' size='sm' title='No emails sent yet' />
           )}
         </CardContent>
       </Card>
