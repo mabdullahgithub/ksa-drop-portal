@@ -26,6 +26,7 @@ import {
 } from '@/components/ui/dialog'
 import { usePermissions } from '@/hooks/use-permissions'
 import type { Client } from '@/types/client'
+import { EmptyState } from '@/components/empty-state'
 
 interface Payment {
   id: number
@@ -222,10 +223,13 @@ export function ClientPaymentsTab({ client }: Props) {
               ))}
             </div>
           ) : payments.length === 0 ? (
-            <div className='flex flex-col items-center justify-center py-10 text-center'>
-              <p className='text-sm text-muted-foreground'>No payments recorded yet</p>
-              <p className='text-xs text-muted-foreground mt-1'>Record a payment after transferring funds to this client</p>
-            </div>
+            <EmptyState
+              bot='hexagon'
+              state='sleeping'
+              title='No payments recorded yet'
+              description='Record a payment after transferring funds to this client'
+              className='py-10'
+            />
           ) : (
             <div className='overflow-x-auto'>
               <table className='w-full text-sm'>

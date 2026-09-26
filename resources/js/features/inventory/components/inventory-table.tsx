@@ -10,8 +10,9 @@ import {
 import { type Product } from '@/types/product'
 import { inventoryColumns as columns } from './inventory-columns'
 import { InventoryBulkActions } from './inventory-bulk-actions'
-import { InventoryPagination } from './inventory-pagination'
+import { Pagination } from '@/components/data-table'
 import { InventoryTableSkeleton } from './inventory-skeleton'
+import { EmptyState } from '@/components/empty-state'
 
 type InventoryTableProps = {
   data: Product[]
@@ -24,8 +25,8 @@ type InventoryTableProps = {
     to: number
   } | null
   loading?: boolean
-  onPageChange?: (page: number) => void
-  onPageSizeChange?: (pageSize: number) => void
+  onPageChange: (page: number) => void
+  onPageSizeChange: (pageSize: number) => void
   onSortChange?: (sortBy: string, sortOrder: 'asc' | 'desc') => void
   onTableReady?: (table: any) => void
 }
@@ -106,8 +107,8 @@ export function InventoryTable({
               ))
             ) : (
               <TableRow>
-                <TableCell colSpan={columns.length} className='h-24 text-center text-sm text-muted-foreground'>
-                  No products found.
+                <TableCell colSpan={columns.length} className='h-24 text-center'>
+                  <EmptyState bot='square' title='No products found.' />
                 </TableCell>
               </TableRow>
             )}
@@ -115,8 +116,8 @@ export function InventoryTable({
         </Table>
       </div>
 
-      {meta && onPageChange && (
-        <InventoryPagination
+      {meta && (
+        <Pagination
           meta={meta}
           onPageChange={onPageChange}
           onPageSizeChange={onPageSizeChange}

@@ -14,7 +14,9 @@
            (App\Services\Shipping\WaybillTextFit). Only the item list, which
            is unbounded, can fall back to "+N more items" — whole items only.
 
-        English only: dompdf can't shape Arabic. Tables throughout: no flexbox.
+        dompdf can't shape Arabic, so fields go through WaybillTextFit::html(),
+        which joins the letters and orders them right to left (ArabicShaper).
+        Tables throughout: no flexbox.
     --}}
     @include('invoices.partials.ksadrop-express-label-styles')
 </head>

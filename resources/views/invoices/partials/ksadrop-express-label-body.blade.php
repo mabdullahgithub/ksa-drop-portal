@@ -103,8 +103,8 @@
             <td class="pad" style="width: 60%; border-top: none;">
                 <div class="k">Destination</div>
                 <div class="fit" style="height: {{ $destBoxH }}px;">
-                    <div class="b up" style="font-size: {{ $destCitySize }}px; line-height: {{ $destCitySize * 1.3 }}px;">{{ $destCity }}</div>
-                    @if($destArea !== '')<div class="b up" style="font-size: {{ $destAreaSize }}px; line-height: {{ $destAreaSize * 1.3 }}px;">{{ $destArea }}</div>@endif
+                    <div class="b up" style="font-size: {{ $destCitySize }}px; line-height: {{ $destCitySize * 1.3 }}px;">{{ Fit::html($destCity, 204, $destCitySize, Fit::BOLD_UPPER) }}</div>
+                    @if($destArea !== '')<div class="b up" style="font-size: {{ $destAreaSize }}px; line-height: {{ $destAreaSize * 1.3 }}px;">{{ Fit::html($destArea, 204, $destAreaSize, Fit::BOLD_UPPER) }}</div>@endif
                 </div>
             </td>
             <td class="pad center" style="width: 40%; border-top: none;">
@@ -125,13 +125,13 @@
                         <td style="width: 40%;" class="right"><div class="k">Phone</div></td>
                     </tr>
                     <tr>
-                        <td><div class="fit b" style="height: 17px; font-size: {{ $toNameSize }}px; line-height: {{ $toNameSize * 1.3 }}px;">{{ $toName }}</div></td>
+                        <td><div class="fit b" style="height: 17px; font-size: {{ $toNameSize }}px; line-height: {{ $toNameSize * 1.3 }}px;">{{ Fit::html($toName, $partyNameW, $toNameSize, Fit::BOLD) }}</div></td>
                         <td class="right"><div class="fit b" style="height: 17px; font-size: {{ $toPhoneSize }}px; line-height: {{ $toPhoneSize * 1.3 }}px;">{{ $toPhone }}</div></td>
                     </tr>
                 </table>
                 <div class="fit" style="height: 51px; font-size: {{ $toAddrSize }}px; line-height: {{ $toAddrSize * 1.3 }}px;">
-                    <div>{{ $toAddress }}</div>
-                    <div>{{ $toRegion }}</div>
+                    <div>{{ Fit::html($toAddress, $W, $toAddrSize) }}</div>
+                    <div>{{ Fit::html($toRegion, $W, $toAddrSize) }}</div>
                 </div>
             </td>
         </tr>
@@ -147,11 +147,11 @@
                         <td style="width: 40%;" class="right"><div class="k">Phone</div></td>
                     </tr>
                     <tr>
-                        <td><div class="fit b" style="height: 17px; font-size: {{ $shipperNameSize }}px; line-height: {{ $shipperNameSize * 1.3 }}px;">{{ $shipperName }}</div></td>
+                        <td><div class="fit b" style="height: 17px; font-size: {{ $shipperNameSize }}px; line-height: {{ $shipperNameSize * 1.3 }}px;">{{ Fit::html($shipperName, $partyNameW, $shipperNameSize, Fit::BOLD) }}</div></td>
                         <td class="right"><div class="fit b" style="height: 17px; font-size: {{ $shipperPhoneSize }}px; line-height: {{ $shipperPhoneSize * 1.3 }}px;">{{ $shipperPhone }}</div></td>
                     </tr>
                 </table>
-                <div class="fit" style="height: 14px; font-size: {{ $shipperAddrSize }}px; line-height: {{ $shipperAddrSize * 1.3 }}px;">{{ $shipperAddress }}</div>
+                <div class="fit" style="height: 14px; font-size: {{ $shipperAddrSize }}px; line-height: {{ $shipperAddrSize * 1.3 }}px;">{{ Fit::html($shipperAddress, $W, $shipperAddrSize) }}</div>
             </td>
         </tr>
     </table>
@@ -161,7 +161,7 @@
         <tr>
             <td class="pad center" style="width: 34%; border-top: none;">
                 <div class="k">Reference</div>
-                <div class="fit b" style="height: 16px; font-size: {{ $refSize }}px; line-height: {{ $refSize * 1.3 }}px;">{{ $reference }}</div>
+                <div class="fit b" style="height: 16px; font-size: {{ $refSize }}px; line-height: {{ $refSize * 1.3 }}px;">{{ Fit::html($reference, 108, $refSize, Fit::BOLD) }}</div>
             </td>
             <td class="pad center" style="width: 16%; border-top: none;">
                 <div class="k">Pieces</div>
@@ -184,8 +184,8 @@
             <td class="pad" style="border-top: none;">
                 <div class="k">Description of contents</div>
                 <div class="fit" style="height: {{ $contentsBoxH }}px;">
-                    <div style="font-size: {{ $contentsSize }}px; line-height: {{ $contentsSize * 1.3 }}px;">{{ $contents }}</div>
-                    @if($noteText !== '')<div style="font-size: {{ $noteSize }}px; line-height: {{ $noteSize * 1.3 }}px;"><b>Note:</b> {{ $remark }}</div>@endif
+                    <div style="font-size: {{ $contentsSize }}px; line-height: {{ $contentsSize * 1.3 }}px;">{{ Fit::html($contents, $W, $contentsSize) }}</div>
+                    @if($noteText !== '')<div style="font-size: {{ $noteSize }}px; line-height: {{ $noteSize * 1.3 }}px;">{!! \Illuminate\Support\Str::replaceFirst('Note:', '<b>Note:</b>', Fit::html($noteText, $W, $noteSize)) !!}</div>@endif
                 </div>
             </td>
         </tr>
@@ -212,7 +212,7 @@
                 </table>
                 <div class="order-barcode center" style="margin-top: 5px;">
                     <img src="{{ $orderBarcode }}" alt="{{ $reference }}">
-                    <div class="fit" style="height: 9px; font-size: {{ $refLineSize }}px; line-height: {{ $refLineSize * 1.3 }}px; letter-spacing: 0.5px;">REF {{ $reference }}</div>
+                    <div class="fit" style="height: 9px; font-size: {{ $refLineSize }}px; line-height: {{ $refLineSize * 1.3 }}px; letter-spacing: 0.5px;">{{ Fit::html('REF ' . $reference, 208, $refLineSize) }}</div>
                 </div>
             </td>
             <td class="pad center" style="width: 38%; border-top: none; vertical-align: middle;">

@@ -13,10 +13,11 @@ import { InventoryCardView } from './components/inventory-card-view'
 import { InventoryFilters } from './components/inventory-filters'
 import { InventoryStats } from './components/inventory-stats'
 import { useProducts } from '@/hooks/useProducts'
+import { DEFAULT_PAGE_SIZE } from '@/components/data-table'
 
 function InventoryContent() {
   const { products, meta, loading, filters, updateFilters, refresh } = useProducts({
-    per_page: 20,
+    per_page: DEFAULT_PAGE_SIZE,
     sort_by: 'created_at',
     sort_order: 'desc',
   })

@@ -45,7 +45,7 @@ class ClientController extends Controller
         $sortOrder = $request->get('sort_order', 'desc');
         $query->orderBy($sortBy, $sortOrder);
 
-        $perPage = $request->get('per_page', 15);
+        $perPage = $request->get('per_page', 20);
         $clients = $query->paginate($perPage);
 
         $clients->getCollection()->transform(function ($client) {
@@ -472,7 +472,7 @@ class ClientController extends Controller
         $sortOrder = $request->get('sort_order', 'desc');
         $query->orderBy($sortBy, $sortOrder);
 
-        $perPage = $request->get('per_page', 15);
+        $perPage = $request->get('per_page', 20);
 
         $paginator = $query->paginate($perPage);
         $paginator->getCollection()->load('images');

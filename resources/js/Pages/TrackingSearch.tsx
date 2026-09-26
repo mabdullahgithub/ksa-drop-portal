@@ -72,6 +72,12 @@ const STATUS_BADGE: Record<string, string> = {
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
+const RATE_LIMIT_MSG = 'Too many searches. Please wait a minute and try again.'
+
+function isRateLimited(err: unknown): boolean {
+  return axios.isAxiosError(err) && err.response?.status === 429
+}
+
 function stepIndex(status: string): number {
   switch (status) {
     case 'info_received':    return 0
@@ -321,7 +327,10 @@ export default function TrackingSearch() {
       setPhase('searching')
       axios.get<ShipmentData>(`/api/track/${encodeURIComponent(q)}`)
         .then(({ data }) => { setShipment(data); setPhase('found') })
-        .catch(() => setPhase('not_found'))
+        .catch((err) => {
+          if (isRateLimited(err)) { setErrorMsg(RATE_LIMIT_MSG); setPhase('idle'); return }
+          setPhase('not_found')
+        })
     }
   }, [])
 
@@ -356,8 +365,9 @@ export default function TrackingSearch() {
       setShipment(data)
       setPhase('found')
       if (!isDesktop) setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 150)
-    } catch {
+    } catch (err) {
       setShipment(null)
+      if (isRateLimited(err)) { setErrorMsg(RATE_LIMIT_MSG); setPhase('idle'); return }
       setPhase('not_found')
     }
   }

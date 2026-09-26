@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { AlertTriangle } from 'lucide-react'
 import { useForm, usePage } from '@inertiajs/react'
+import { toast } from 'sonner'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -53,9 +54,17 @@ export function UsersDeleteDialog({
 
     if (isRealData) {
       destroy(route('team-management.users.destroy', currentRow.id), {
-        onSuccess: () => {
+        preserveScroll: true,
+        onSuccess: (page) => {
           onOpenChange(false)
           setValue('')
+          const flash = (page.props as { flash?: { success?: string } }).flash
+          toast.success(flash?.success ?? `${displayName} was moved to the recycle bin.`)
+        },
+        // The server refuses with a validation-style error (e.g. superadmin);
+        // without this the dialog would just sit there.
+        onError: (errors) => {
+          toast.error(Object.values(errors)[0] ?? 'Could not delete this user.')
         },
       })
     } else {
@@ -108,23 +117,23 @@ export function UsersDeleteDialog({
                 Are you sure you want to delete{' '}
                 <span className='font-bold'>{displayName}</span>?
                 <br />
-                This action will permanently remove the user from the system. This cannot be undone.
+                They will lose access right away and move to the recycle bin, where they can be restored.
               </p>
 
               <Label className='my-2'>
-                Name:
+                Type the name exactly to enable Delete:
                 <Input
                   value={value}
                   onChange={(e) => setValue(e.target.value)}
-                  placeholder='Enter user name to confirm deletion.'
+                  placeholder={`Type "${displayName}" to confirm`}
                   autoFocus
                 />
               </Label>
 
               <Alert variant='destructive'>
-                <AlertTitle>Warning!</AlertTitle>
+                <AlertTitle>Heads up</AlertTitle>
                 <AlertDescription>
-                  Please be careful, this operation can not be rolled back.
+                  They are signed out immediately. Restore them from the recycle bin if this was a mistake.
                 </AlertDescription>
               </Alert>
             </>

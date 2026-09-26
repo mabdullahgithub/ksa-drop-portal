@@ -12,12 +12,14 @@ import {
   type TrashedClient,
   type TrashedInventoryItem,
   type TrashedOrder,
+  type TrashedUser,
   lockRecycleBin,
   useRecycleBinCounts,
 } from '@/hooks/useRecycleBin'
 import { trashedClientsColumns } from './components/clients-columns'
 import { trashedInventoryColumns } from './components/inventory-columns'
 import { trashedOrdersColumns } from './components/orders-columns'
+import { trashedUsersColumns } from './components/users-columns'
 import { RecycleBinLock } from './components/recycle-bin-lock'
 import { RecycleBinPanel } from './components/recycle-bin-panel'
 
@@ -49,6 +51,7 @@ export function RecycleBin() {
   // The inventory tab spans the catalog ('delete inventory') and per-client
   // stock, which is gated on 'delete client' everywhere else in the portal.
   const canInventory = can('delete inventory') || canClients
+  const canUsers = can('delete users')
 
   const tabs = useMemo(
     () =>
@@ -56,8 +59,9 @@ export function RecycleBin() {
         canOrders ? { value: 'orders', label: 'Orders', count: counts.orders } : null,
         canClients ? { value: 'clients', label: 'Clients', count: counts.clients } : null,
         canInventory ? { value: 'inventory', label: 'Inventory', count: counts.inventory } : null,
+        canUsers ? { value: 'users', label: 'Users', count: counts.users } : null,
       ].filter((tab): tab is { value: string; label: string; count: number } => tab !== null),
-    [canOrders, canClients, canInventory, counts]
+    [canOrders, canClients, canInventory, canUsers, counts]
   )
 
   const [active, setActive] = useState(tabs[0]?.value ?? 'orders')
@@ -149,6 +153,22 @@ export function RecycleBin() {
                   totalInBin={counts.inventory}
                   // Catalog and client-stock ids collide, so identity is composite.
                   getRowId={(row) => row.row_id}
+                  onChanged={refreshCounts}
+                  onLocked={handleLocked}
+                />
+              </TabsContent>
+            )}
+
+            {canUsers && (
+              <TabsContent value='users'>
+                <RecycleBinPanel<TrashedUser>
+                  tab='users'
+                  columns={trashedUsersColumns}
+                  entityName='user'
+                  entityLabel='Users'
+                  searchPlaceholder='Search by name or email…'
+                  emptyMessage='No deleted users.'
+                  totalInBin={counts.users}
                   onChanged={refreshCounts}
                   onLocked={handleLocked}
                 />

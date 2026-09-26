@@ -11,7 +11,7 @@ use Spatie\Permission\PermissionRegistrar;
  * Gives the WhatsApp inbox and the Recycle Bin permissions of their own.
  *
  * Both shipped borrowing other permissions -- the inbox rode on view/edit
- * orders and the bin on the three delete permissions -- so neither could be
+ * orders and the bin on the entity delete permissions -- so neither could be
  * granted on its own. Every role and user that can reach them today is granted
  * the matching new permission here, so nobody loses access on deploy.
  *
@@ -26,9 +26,9 @@ return new class extends Migration
     private const GRANTS = [
         'view whatsapp' => ['view orders'],
         'reply whatsapp' => ['edit orders'],
-        'view recycle bin' => ['delete orders', 'delete client', 'delete inventory'],
-        'restore recycle bin' => ['delete orders', 'delete client', 'delete inventory'],
-        'purge recycle bin' => ['delete orders', 'delete client', 'delete inventory'],
+        'view recycle bin' => ['delete orders', 'delete client', 'delete inventory', 'delete users'],
+        'restore recycle bin' => ['delete orders', 'delete client', 'delete inventory', 'delete users'],
+        'purge recycle bin' => ['delete orders', 'delete client', 'delete inventory', 'delete users'],
     ];
 
     private const CATEGORIES = [

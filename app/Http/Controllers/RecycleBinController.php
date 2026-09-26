@@ -5,9 +5,11 @@ namespace App\Http\Controllers;
 use App\Http\Concerns\InteractsWithTrashedRecords;
 use App\Http\Middleware\EnsureRecycleBinUnlocked;
 use App\Models\Client;
+use App\Models\ClientPayment;
 use App\Models\ClientProduct;
 use App\Models\Order;
 use App\Models\Product;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -85,6 +87,7 @@ class RecycleBinController extends Controller
             'clients' => $user->can('delete client') ? Client::onlyTrashed()->count() : 0,
             'inventory' => ($user->can('delete inventory') ? Product::onlyTrashed()->count() : 0)
                 + ($user->can('delete client') ? ClientProduct::onlyTrashed()->count() : 0),
+            'users' => $user->can('delete users') ? User::onlyTrashed()->count() : 0,
         ]);
     }
 
@@ -238,6 +241,108 @@ class RecycleBinController extends Controller
         return response()->json([
             'message' => "Permanently deleted {$purged} " . str('client')->plural($purged),
             'purged_count' => $purged,
+        ]);
+    }
+
+    // ----------------------------------------------------------------- users
+
+    public function users(Request $request)
+    {
+        $query = User::onlyTrashed()->with(['roles', 'deletedBy'])->withExists([
+            'client' => fn ($q) => $q->withTrashed(),
+        ]);
+
+        if ($search = trim((string) $request->input('search'))) {
+            $query->where(function ($q) use ($search) {
+                $q->where('name', 'like', "%{$search}%")
+                    ->orWhere('email', 'like', "%{$search}%");
+            });
+        }
+
+        $this->applyTrashedSort($request, $query, ['deleted_at', 'name', 'email', 'created_at']);
+
+        $paginator = $query->paginate($this->trashedPerPage($request));
+
+        return response()->json([
+            'data' => $paginator->getCollection()->map(fn (User $user) => [
+                'id' => $user->id,
+                'name' => $user->name,
+                'email' => $user->email,
+                'roles' => $user->roles->pluck('name')->all(),
+                'is_client' => $user->client_exists || $user->hasRole('client'),
+                'deleted_at' => $user->deleted_at?->toIso8601String(),
+                'deleted_by' => self::auditFields($user),
+            ])->all(),
+            'meta' => $this->paginationMeta($paginator),
+        ]);
+    }
+
+    public function restoreUsers(Request $request)
+    {
+        $ids = $this->trashedIds($request);
+
+        $restored = 0;
+
+        DB::transaction(function () use ($ids, &$restored) {
+            User::onlyTrashed()->whereIn('id', $ids)->get()->each(function (User $user) use (&$restored) {
+                $user->restore();
+                $restored++;
+            });
+        });
+
+        return response()->json([
+            'message' => $this->restoreMessage($restored, count($ids), 'user'),
+            'restored_count' => $restored,
+            'requested_count' => count($ids),
+        ]);
+    }
+
+    public function purgeUsers(Request $request)
+    {
+        return $this->purgeUserQuery(User::onlyTrashed()->whereIn('id', $this->trashedIds($request)));
+    }
+
+    public function purgeAllUsers()
+    {
+        return $this->purgeUserQuery(User::onlyTrashed());
+    }
+
+    /**
+     * Permanently delete users, skipping the ones the database would not let
+     * go cleanly:
+     *  - a client's login: clients.user_id cascades, so purging the user would
+     *    silently destroy the client record too;
+     *  - anyone who recorded a client payment: client_payments.created_by has
+     *    no ON DELETE rule, so the delete would fail outright.
+     */
+    private function purgeUserQuery($query)
+    {
+        $users = $query->get();
+
+        $clientUserIds = Client::withTrashed()->whereIn('user_id', $users->modelKeys())->pluck('user_id')->all();
+        $payerIds = ClientPayment::whereIn('created_by', $users->modelKeys())->distinct()->pluck('created_by')->all();
+
+        $blocked = [];
+        $purgeable = [];
+
+        foreach ($users as $user) {
+            if ($user->hasRole('superadmin')) {
+                $blocked[] = ['name' => $user->name, 'reason' => 'Super admin accounts cannot be permanently deleted.'];
+            } elseif (in_array($user->id, $clientUserIds, true)) {
+                $blocked[] = ['name' => $user->name, 'reason' => "It is a client's login. Delete the client instead."];
+            } elseif (in_array($user->id, $payerIds, true)) {
+                $blocked[] = ['name' => $user->name, 'reason' => 'It is referenced by client payment records, so it has to stay in the bin.'];
+            } else {
+                $purgeable[] = $user->id;
+            }
+        }
+
+        $purged = $purgeable === [] ? 0 : $this->purgeTrashed(User::onlyTrashed()->whereIn('id', $purgeable));
+
+        return response()->json([
+            'message' => "Permanently deleted {$purged} " . str('user')->plural($purged),
+            'purged_count' => $purged,
+            'blocked' => $blocked,
         ]);
     }
 

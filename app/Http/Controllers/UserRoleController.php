@@ -17,13 +17,15 @@ class UserRoleController extends Controller
     {
         abort_if(!auth()->user()->can('view users'), 403, 'Unauthorized');
 
-        $users = User::with('roles')->get()->map(function ($user) {
+        $users = User::with('roles')->withExists('client')->get()->map(function ($user) {
             return [
                 'id' => $user->id,
                 'name' => $user->name,
                 'email' => $user->email,
                 'roles' => $user->roles->pluck('name'),
                 'is_super_admin' => $user->hasRole('superadmin'),
+                // Client accounts are listed on their own tab, apart from the team.
+                'is_client' => $user->client_exists || $user->hasRole('client'),
                 'created_at' => $user->created_at,
             ];
         });
@@ -44,7 +46,13 @@ class UserRoleController extends Controller
 
         $validated = $request->validate([
             'name' => 'required|string|max:255',
-            'email' => 'required|string|email|max:255|unique:users',
+            'email' => ['required', 'string', 'email', 'max:255', 'unique:users',
+                // unique:users also sees deleted users, so say where the clash is.
+                function ($attribute, $value, $fail) {
+                    if (User::onlyTrashed()->where('email', $value)->exists()) {
+                        $fail('A deleted user with this email is in the recycle bin. Restore them from there instead.');
+                    }
+                }],
             'roles' => 'array',
             'roles.*' => 'string|exists:roles,name',
         ]);
@@ -111,6 +119,34 @@ class UserRoleController extends Controller
         return back();
     }
 
+    /**
+     * Send several users to the recycle bin. Superadmins and the caller are
+     * skipped, same as the single delete.
+     */
+    public function bulkDestroy(Request $request)
+    {
+        abort_if(!auth()->user()->can('delete users'), 403, 'Unauthorized');
+
+        $validated = $request->validate([
+            'ids' => 'required|array|min:1',
+            'ids.*' => 'integer',
+        ]);
+
+        $deleted = 0;
+
+        User::whereIn('id', $validated['ids'])->whereKeyNot(auth()->id())->get()
+            ->reject(fn (User $user) => $user->hasRole('superadmin'))
+            ->each(function (User $user) use (&$deleted) {
+                $user->delete();
+                $deleted++;
+            });
+
+        $skipped = count($validated['ids']) - $deleted;
+
+        return back()->with('success', "Moved {$deleted} " . str('user')->plural($deleted) . ' to the recycle bin.'
+            . ($skipped > 0 ? " Skipped {$skipped} (super admins and your own account can't be deleted)." : ''));
+    }
+
     public function destroy(User $user)
     {
         abort_if(!auth()->user()->can('delete users'), 403, 'Unauthorized');
@@ -125,8 +161,9 @@ class UserRoleController extends Controller
             return back()->withErrors(['user' => 'You cannot delete your own account.']);
         }
 
+        // Soft delete: the user goes to the recycle bin and can be restored.
         $user->delete();
 
-        return back();
+        return back()->with('success', "{$user->name} was moved to the recycle bin.");
     }
 }

@@ -246,6 +246,7 @@ Route::middleware(['auth', 'verified', 'role:!client'])->group(function () {
 
     Route::get('/team-management/users', [UserRoleController::class, 'index'])->middleware('permission:view users')->name('team-management.users');
     Route::post('/team-management/users', [UserRoleController::class, 'store'])->middleware('permission:create users')->name('team-management.users.store');
+    Route::post('/team-management/users/bulk-delete', [UserRoleController::class, 'bulkDestroy'])->middleware('permission:delete users')->name('team-management.users.bulk-destroy');
     Route::put('/team-management/users/{user}', [UserRoleController::class, 'update'])->middleware('permission:edit users')->name('team-management.users.update');
     Route::delete('/team-management/users/{user}', [UserRoleController::class, 'destroy'])->middleware('permission:delete users')->name('team-management.users.destroy');
 
@@ -290,6 +291,15 @@ Route::middleware(['auth', 'verified', 'role:!client'])->group(function () {
             ->middleware('recyclebin.unlocked')->middleware('permission:purge recycle bin')->middleware('permission:delete client')->name('api.recycle-bin.clients.purge');
         Route::post('/clients/purge-all', [RecycleBinController::class, 'purgeAllClients'])
             ->middleware('recyclebin.unlocked')->middleware('permission:purge recycle bin')->middleware('permission:delete client')->name('api.recycle-bin.clients.purge-all');
+
+        Route::get('/users', [RecycleBinController::class, 'users'])
+            ->middleware('recyclebin.unlocked')->middleware('permission:view recycle bin')->middleware('permission:delete users')->name('api.recycle-bin.users');
+        Route::post('/users/restore', [RecycleBinController::class, 'restoreUsers'])
+            ->middleware('recyclebin.unlocked')->middleware('permission:restore recycle bin')->middleware('permission:delete users')->name('api.recycle-bin.users.restore');
+        Route::post('/users/purge', [RecycleBinController::class, 'purgeUsers'])
+            ->middleware('recyclebin.unlocked')->middleware('permission:purge recycle bin')->middleware('permission:delete users')->name('api.recycle-bin.users.purge');
+        Route::post('/users/purge-all', [RecycleBinController::class, 'purgeAllUsers'])
+            ->middleware('recyclebin.unlocked')->middleware('permission:purge recycle bin')->middleware('permission:delete users')->name('api.recycle-bin.users.purge-all');
 
         // The inventory tab spans two models: the catalog (delete inventory)
         // and per-client stock, which is gated on 'delete client' everywhere
@@ -428,9 +438,11 @@ Route::prefix('portal')->middleware(['auth', 'verified', 'role:client'])->group(
 Route::get('/pricing', fn () => Inertia::render('Pricing'))->name('pricing');
 Route::redirect('/billing', '/pricing');
 
-// Tracking — single search page + JSON API for AJAX lookup
-Route::get('/track', [TrackingController::class, 'search'])->name('tracking.search');
-Route::get('/api/track/{identifier}', [TrackingController::class, 'api'])->name('tracking.api');
+// Tracking — single search page + JSON API for AJAX lookup. Public, so both
+// are throttled per IP to stop bots hammering the database or guessing
+// order numbers.
+Route::get('/track', [TrackingController::class, 'search'])->middleware('throttle:60,1')->name('tracking.search');
+Route::get('/api/track/{identifier}', [TrackingController::class, 'api'])->middleware('throttle:20,1')->name('tracking.api');
 
 // Webhooks (no auth, no CSRF)
 Route::post('/webhooks/jnt-express', [WebhookController::class, 'handleJntExpress'])->name('webhooks.jnt-express');

@@ -48,7 +48,7 @@ class Client extends Model
 
     public function creator(): BelongsTo
     {
-        return $this->belongsTo(User::class, 'created_by');
+        return $this->belongsTo(User::class, 'created_by')->withTrashed();
     }
 
     public function orders(): HasMany
@@ -197,6 +197,6 @@ class Client extends Model
      */
     public function deletedBy()
     {
-        return $this->belongsTo(User::class, 'deleted_by');
+        return $this->belongsTo(User::class, 'deleted_by')->withTrashed();
     }
 }

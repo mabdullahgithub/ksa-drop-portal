@@ -22,7 +22,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { DataTablePagination, DataTableToolbar } from '@/components/data-table'
+import { DataTablePagination, DataTableToolbar, DEFAULT_PAGE_SIZE } from '@/components/data-table'
 import { DataTableBulkActions } from './data-table-bulk-actions'
 import { usersColumnsSimple } from './users-columns-simple'
 
@@ -39,7 +39,7 @@ export function UsersTable({ data, availableRoles }: DataTableProps) {
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
   const [pagination, setPagination] = useState<PaginationState>({
     pageIndex: 0,
-    pageSize: 10,
+    pageSize: DEFAULT_PAGE_SIZE,
   })
 
   const table = useReactTable({

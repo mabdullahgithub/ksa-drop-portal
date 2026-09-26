@@ -22,7 +22,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { DataTablePagination, DataTableToolbar } from '@/components/data-table'
+import { DataTablePagination, DataTableToolbar, DEFAULT_PAGE_SIZE } from '@/components/data-table'
 import { type Tag } from '../data/schema'
 import { tagsColumns } from './tags-columns'
 
@@ -31,7 +31,7 @@ export function TagsTable({ data }: { data: Tag[] }) {
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
   const [sorting, setSorting]                 = useState<SortingState>([])
   const [columnFilters, setColumnFilters]     = useState<ColumnFiltersState>([])
-  const [pagination, setPagination]           = useState<PaginationState>({ pageIndex: 0, pageSize: 10 })
+  const [pagination, setPagination]           = useState<PaginationState>({ pageIndex: 0, pageSize: DEFAULT_PAGE_SIZE })
 
   const table = useReactTable({
     data,

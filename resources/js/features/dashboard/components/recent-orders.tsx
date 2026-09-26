@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from '@inertiajs/react'
 import { Badge } from '@/components/ui/badge'
 import type { Order } from '@/types/order'
+import { EmptyState } from '@/components/empty-state'
 
 const financialColorMap: Record<string, string> = {
   paid: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
@@ -39,7 +40,7 @@ export function RecentOrders() {
   }
 
   if (!orders.length) {
-    return <p className='text-sm text-muted-foreground'>No orders yet.</p>
+    return <EmptyState bot='droid' state='sleeping' size='sm' title='No orders yet.' className='py-4' />
   }
 
   return (

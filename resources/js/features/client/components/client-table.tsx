@@ -17,7 +17,7 @@ import {
 } from '@/components/ui/table'
 import type { Client } from '@/types/client'
 import { clientColumns } from './client-columns'
-import { ClientPagination } from './client-pagination'
+import { Pagination } from '@/components/data-table'
 import { ClientBulkActions } from './client-bulk-actions'
 
 interface ClientTableProps {
@@ -124,7 +124,7 @@ export function ClientTable({
         </Table>
       </div>
       {meta && (
-        <ClientPagination
+        <Pagination
           meta={meta}
           onPageChange={onPageChange}
           onPageSizeChange={onPageSizeChange}

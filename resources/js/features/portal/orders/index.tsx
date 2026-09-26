@@ -37,7 +37,7 @@ import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
 import { usePortalOrders, usePortalOrderMutations, usePortalOrderStatistics, usePortalSkuSearch, type SkuItem } from '@/hooks/usePortal'
-import { OrdersPagination } from '@/features/orders/components/orders-pagination'
+import { Pagination, DEFAULT_PAGE_SIZE } from '@/components/data-table'
 import { ShipmentStatusInfoModal } from '@/features/orders/components/shipment-status-info-modal'
 import { PortalShipmentStatusCards } from './components/portal-shipment-status-cards'
 import { PortalTagStatCards } from './components/portal-tag-stat-cards'
@@ -54,6 +54,7 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
 import { BUSINESS_TIMEZONE } from '@/lib/business-time'
+import { EmptyState } from '@/components/empty-state'
 
 const MAX_FILE_SIZE_MB = 10
 const ALLOWED_MIME = ['text/csv', 'application/vnd.ms-excel', 'application/csv']
@@ -1145,7 +1146,7 @@ export function PortalOrders() {
   }
 
   const { orders, meta, loading, filters, updateFilters, refresh } = usePortalOrders({
-    per_page: 15,
+    per_page: DEFAULT_PAGE_SIZE,
     sort_by: 'created_at',
     sort_order: 'desc',
     has_shipment: false,
@@ -1453,14 +1454,14 @@ export function PortalOrders() {
                 ) : (
                   <TableRow>
                     <TableCell colSpan={columns.length} className='h-32 text-center'>
-                      <div className='flex flex-col items-center gap-2 text-muted-foreground'>
-                        <Package className='h-8 w-8 text-muted-foreground/30' />
-                        <p className='text-sm'>
-                          {activeTab === 'assigned'
+                      <EmptyState
+                        bot='droid'
+                        title={
+                          activeTab === 'assigned'
                             ? 'No orders assigned to courier found.'
-                            : 'No orders found.'}
-                        </p>
-                      </div>
+                            : 'No orders found.'
+                        }
+                      />
                     </TableCell>
                   </TableRow>
                 )}
@@ -1468,8 +1469,8 @@ export function PortalOrders() {
             </Table>
           </div>
 
-          {meta && meta.last_page > 1 && (
-            <OrdersPagination
+          {meta && (
+            <Pagination
               meta={meta}
               onPageChange={(page) => updateFilters({ page })}
               onPageSizeChange={(perPage) => updateFilters({ per_page: perPage, page: 1 })}
