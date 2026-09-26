@@ -34,6 +34,7 @@ import { useClientProducts, useClientProductMutations } from '@/hooks/useClientP
 import { ClientProductFormDialog } from './client-product-form-dialog'
 import { ClientProductVerifyDialog } from './client-product-verify-dialog'
 import type { Client, ClientProduct } from '@/types/client'
+import { EmptyState } from '@/components/empty-state'
 
 interface ClientInventoryTabProps {
   client: Client
@@ -139,13 +140,20 @@ export function ClientInventoryTab({ client }: ClientInventoryTabProps) {
               ))
             ) : products.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={canEdit ? 7 : 6} className='h-24 text-center text-muted-foreground'>
-                  No products in inventory.
-                  {canEdit && (
-                    <Button variant='link' className='ml-1 h-auto p-0' onClick={openAdd}>
-                      Add the first one.
-                    </Button>
-                  )}
+                <TableCell colSpan={canEdit ? 7 : 6} className='h-24 text-center'>
+                  <EmptyState
+                    bot='square'
+                    state='sleeping'
+                    title='No products in inventory.'
+                    action={
+                      canEdit && (
+                        <Button variant='outline' size='sm' onClick={openAdd}>
+                          <Plus className='mr-2 h-4 w-4' />
+                          Add Product
+                        </Button>
+                      )
+                    }
+                  />
                 </TableCell>
               </TableRow>
             ) : (

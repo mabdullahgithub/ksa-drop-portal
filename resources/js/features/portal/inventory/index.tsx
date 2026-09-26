@@ -47,6 +47,7 @@ import { ThemeSwitch } from '@/components/theme-switch'
 import { usePortalInventory, usePortalInventoryMutations } from '@/hooks/usePortal'
 import { PortalProductFormDialog } from './portal-product-form-dialog'
 import type { ClientProductImage } from '@/types/client'
+import { EmptyState } from '@/components/empty-state'
 
 interface PortalProduct {
   id: number
@@ -245,14 +246,22 @@ export function PortalInventory() {
                 ) : (products as PortalProduct[]).length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={9} className='h-32 text-center'>
-                      <div className='flex flex-col items-center gap-2 text-muted-foreground'>
-                        <p className='text-sm'>You haven&apos;t added any products yet.</p>
-                        <p className='text-xs'>Add your first product to request warehouse intake.</p>
-                        <Button variant='outline' size='sm' className='mt-2' onClick={openAdd}>
-                          <Plus className='mr-2 h-4 w-4' />
-                          Add Product
-                        </Button>
-                      </div>
+                      {search || statusFilter !== 'all' ? (
+                        <EmptyState bot='square' title='No products match your filters.' />
+                      ) : (
+                        <EmptyState
+                          bot='square'
+                          state='sleeping'
+                          title="You haven't added any products yet."
+                          description='Add your first product to request warehouse intake.'
+                          action={
+                            <Button variant='outline' size='sm' onClick={openAdd}>
+                              <Plus className='mr-2 h-4 w-4' />
+                              Add Product
+                            </Button>
+                          }
+                        />
+                      )}
                     </TableCell>
                   </TableRow>
                 ) : (

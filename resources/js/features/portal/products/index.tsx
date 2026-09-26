@@ -26,6 +26,7 @@ import { ThemeSwitch } from '@/components/theme-switch'
 import { usePortalProducts, usePortalProductFilterOptions } from '@/hooks/usePortal'
 import type { Product } from '@/types/product'
 import { PortalProductDetailsDialog } from './product-details-dialog'
+import { EmptyState } from '@/components/empty-state'
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -329,11 +330,8 @@ function ProductTableView({ data, meta, loading, onPageChange, onPageSizeChange,
               ))
             ) : (
               <TableRow>
-                <TableCell colSpan={columns.length} className='h-32 text-center text-sm text-muted-foreground'>
-                  <div className='flex flex-col items-center gap-2'>
-                    <Package className='h-8 w-8 text-muted-foreground/30' />
-                    No products available.
-                  </div>
+                <TableCell colSpan={columns.length} className='h-32 text-center'>
+                  <EmptyState bot='square' title='No products available.' />
                 </TableCell>
               </TableRow>
             )}
@@ -370,10 +368,7 @@ function ProductCardView({ data, meta, loading, onPageChange, onPageSizeChange, 
   return (
     <div className='space-y-4'>
       {data.length === 0 ? (
-        <div className='flex flex-col items-center justify-center py-16 text-center'>
-          <Package className='mb-3 h-12 w-12 text-muted-foreground/30' />
-          <p className='text-sm font-medium text-muted-foreground'>No products available</p>
-        </div>
+        <EmptyState bot='square' size='lg' title='No products available' className='py-16' />
       ) : (
         <div className='grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5'>
           {data.map((product) => (

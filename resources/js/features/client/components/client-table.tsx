@@ -19,6 +19,7 @@ import type { Client } from '@/types/client'
 import { clientColumns } from './client-columns'
 import { Pagination } from '@/components/data-table'
 import { ClientBulkActions } from './client-bulk-actions'
+import { EmptyState } from '@/components/empty-state'
 
 interface ClientTableProps {
   data: Client[]
@@ -116,7 +117,7 @@ export function ClientTable({
             ) : (
               <TableRow>
                 <TableCell colSpan={clientColumns.length} className='h-24 text-center'>
-                  No clients found.
+                  <EmptyState bot='cat' title='No clients found.' />
                 </TableCell>
               </TableRow>
             )}
