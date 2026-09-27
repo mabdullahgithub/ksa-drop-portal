@@ -12,6 +12,7 @@ import {
   type TrashedClient,
   type TrashedInventoryItem,
   type TrashedOrder,
+  type TrashedRider,
   type TrashedUser,
   lockRecycleBin,
   useRecycleBinCounts,
@@ -19,6 +20,7 @@ import {
 import { trashedClientsColumns } from './components/clients-columns'
 import { trashedInventoryColumns } from './components/inventory-columns'
 import { trashedOrdersColumns } from './components/orders-columns'
+import { trashedRidersColumns } from './components/riders-columns'
 import { trashedUsersColumns } from './components/users-columns'
 import { RecycleBinLock } from './components/recycle-bin-lock'
 import { RecycleBinPanel } from './components/recycle-bin-panel'
@@ -52,6 +54,8 @@ export function RecycleBin() {
   // stock, which is gated on 'delete client' everywhere else in the portal.
   const canInventory = can('delete inventory') || canClients
   const canUsers = can('delete users')
+  // Riders are removed under 'manage riders'; there is no delete permission.
+  const canRiders = can('manage riders')
 
   const tabs = useMemo(
     () =>
@@ -60,8 +64,9 @@ export function RecycleBin() {
         canClients ? { value: 'clients', label: 'Clients', count: counts.clients } : null,
         canInventory ? { value: 'inventory', label: 'Inventory', count: counts.inventory } : null,
         canUsers ? { value: 'users', label: 'Users', count: counts.users } : null,
+        canRiders ? { value: 'riders', label: 'Riders', count: counts.riders } : null,
       ].filter((tab): tab is { value: string; label: string; count: number } => tab !== null),
-    [canOrders, canClients, canInventory, canUsers, counts]
+    [canOrders, canClients, canInventory, canUsers, canRiders, counts]
   )
 
   const [active, setActive] = useState(tabs[0]?.value ?? 'orders')
@@ -169,6 +174,23 @@ export function RecycleBin() {
                   searchPlaceholder='Search by name or email…'
                   emptyMessage='No deleted users.'
                   totalInBin={counts.users}
+                  onChanged={refreshCounts}
+                  onLocked={handleLocked}
+                />
+              </TabsContent>
+            )}
+
+            {canRiders && (
+              <TabsContent value='riders'>
+                <RecycleBinPanel<TrashedRider>
+                  tab='riders'
+                  columns={trashedRidersColumns}
+                  entityName='rider'
+                  entityLabel='Riders'
+                  searchPlaceholder='Search by name or phone…'
+                  emptyMessage='No removed riders.'
+                  totalInBin={counts.riders}
+                  emptyBinNote='Riders who ever handled a parcel are skipped and stay in the bin, so the record of who delivered it and collected its cash is kept.'
                   onChanged={refreshCounts}
                   onLocked={handleLocked}
                 />

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { type ReactNode, useState } from 'react'
 import { AlertTriangle } from 'lucide-react'
 import { toast } from 'sonner'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -13,11 +13,15 @@ type EmptyBinDialogProps = {
   onOpenChange: (open: boolean) => void
   /** Total in this tab, unfiltered — an active search must not make this look smaller than it is. */
   count: number
+  /** Singular noun, e.g. "order". */
+  entityName: string
   entityLabel: string
+  /** What else goes with the rows, or what the purge skips. Defaults to the orders/clients cascade. */
+  note?: ReactNode
   onConfirm: () => Promise<void>
 }
 
-export function EmptyBinDialog({ open, onOpenChange, count, entityLabel, onConfirm }: EmptyBinDialogProps) {
+export function EmptyBinDialog({ open, onOpenChange, count, entityName, entityLabel, note, onConfirm }: EmptyBinDialogProps) {
   const [value, setValue] = useState('')
   const [working, setWorking] = useState(false)
 
@@ -59,9 +63,8 @@ export function EmptyBinDialog({ open, onOpenChange, count, entityLabel, onConfi
         <div className='space-y-4'>
           <p>
             This permanently deletes all <strong>{count}</strong> deleted{' '}
-            {entityLabel.toLowerCase()}
-            {count === 1 ? '' : 's'}, including any not shown by the current search. It cannot be
-            undone.
+            {count === 1 ? entityName : `${entityName}s`}, including any not shown by the current
+            search. It cannot be undone.
           </p>
 
           <Label className='flex flex-col items-start gap-1.5'>
@@ -76,8 +79,8 @@ export function EmptyBinDialog({ open, onOpenChange, count, entityLabel, onConfi
           <Alert variant='destructive'>
             <AlertTitle>This cannot be undone.</AlertTitle>
             <AlertDescription>
-              Attached records go too — orders take their items, shipments and invoices; clients
-              take their products, payments and store connection.
+              {note ??
+                'Attached records go too — orders take their items, shipments and invoices; clients take their products, payments and store connection.'}
             </AlertDescription>
           </Alert>
         </div>

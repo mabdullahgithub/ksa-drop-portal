@@ -53,6 +53,9 @@ class KsaDropExpressDriver implements CourierDriver
             'tracking_number' => $trackingNumber,
             'receiver' => $data->receiver,
             'remark' => $data->remark,
+            // What the rider collects at the door and the label prints.
+            'cod_amount' => round($data->codAmount, 2),
+            'cod_currency' => $data->codCurrency,
         ];
     }
 

@@ -8,19 +8,17 @@ type Props = {
 
 type State = {
   error: Error | null
-  componentStack: string | null
 }
 
 /**
  * Catches render-time exceptions anywhere in the page tree.
  *
  * Without this, React 19 unmounts the whole tree when a component throws, which
- * leaves the user staring at a blank white page with the real cause buried in
- * the console. Instead we show the error, keep the app navigable, and let the
- * user copy a support-ready report.
+ * leaves the user staring at a blank white page. Instead we show a friendly error
+ * page, keep the app navigable, and leave the technical cause in the console.
  */
 export class ErrorBoundary extends Component<Props, State> {
-  state: State = { error: null, componentStack: null }
+  state: State = { error: null }
 
   private stopListening?: () => void
 
@@ -29,8 +27,6 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
-    this.setState({ componentStack: info.componentStack ?? null })
-
     // Keep the console trace — this boundary hides the red screen, not the cause.
     console.error('[ErrorBoundary]', error, info.componentStack)
   }
@@ -48,28 +44,18 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   reset = () => {
-    this.setState({ error: null, componentStack: null })
+    this.setState({ error: null })
   }
 
   render() {
-    const { error, componentStack } = this.state
+    if (!this.state.error) return this.props.children
 
-    if (!error) return this.props.children
-
-    // error.stack already opens with "Name: message", so only fall back to
-    // composing that line ourselves when there is no stack to show.
-    const detail = [
-      error.stack || `${error.name}: ${error.message}`,
-      componentStack ? `--- Component stack ---${componentStack}` : null,
-    ]
-      .filter(Boolean)
-      .join('\n\n')
-
+    // The error and component stack are in the console (componentDidCatch);
+    // the page itself shows none of it.
     return (
       <ErrorPage
         title='Something went wrong on this page'
         description='This page failed to load. You can go back, retry, or copy the details below and send them to support.'
-        detail={detail}
         // A hard reload, not router.reload(): the crashed tree may have left
         // stale client state behind, and a clean document is the only retry
         // guaranteed not to trip over it again.

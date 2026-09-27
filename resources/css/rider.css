@@ -1,0 +1,206 @@
+/* KSA Express rider app. Its own small stylesheet: Tailwind only scans the
+   rider app and the shared UI primitives, not the whole portal. */
+@import 'tailwindcss' source(none);
+@import 'tw-animate-css';
+@import './theme.css';
+
+@source '../js/rider-app.tsx';
+@source '../js/features/rider-app';
+@source '../js/components/ui';
+@source '../js/components/empty-state.tsx';
+
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  --brand: #fe6414;
+  --brand-foreground: #ffffff;
+  /* Solid surfaces (Profile, the welcome guide): the page, a card on it,
+     and the near-black of the welcome screen's type and button. */
+  --canvas: #f2f2f7;
+  --surface: #ffffff;
+  --ink: #111111;
+}
+
+.dark {
+  --canvas: #0b0b0c;
+  --surface: #1c1c1e;
+}
+
+@theme inline {
+  --color-brand: var(--brand);
+  --color-brand-foreground: var(--brand-foreground);
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-ink: var(--ink);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html,
+  body {
+    @apply text-foreground;
+    overscroll-behavior-y: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  body {
+    min-height: 100dvh;
+    /* Plain, readable Arabic on every phone (not a desktop fallback font). */
+    font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Noto Sans Arabic', 'Noto Naskh Arabic',
+      'SF Arabic', Tahoma, sans-serif;
+  }
+  button:not(:disabled),
+  [role='button']:not(:disabled) {
+    cursor: pointer;
+  }
+  /* iOS zooms into inputs under 16px. */
+  input,
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
+
+/* ────────────────────────────────────────────────────────────────────────
+   Liquid Glass
+
+   Apple's iOS 26 material, as far as the web allows: a translucent surface
+   that blurs and saturates what's behind it, a bright rim where light
+   catches the edge, and a floating shadow. Solid colours only — no
+   gradients anywhere. Safari can't refract (SVG filters in backdrop-filter
+   are Chromium-only), so depth comes from the rim and shadow instead.
+
+   Deliberately unlayered: unlayered CSS wins over Tailwind's layers, so a
+   stray bg-* utility from a shared component (e.g. the sheet's
+   bg-background) can't paint over the glass.
+
+   .glass          controls and chrome (bars, tiles, sheets) — live blur
+   .glass-strong   more opaque, for surfaces carrying lots of text
+   .glass-lite     list rows: same look, no live blur — cheap to scroll
+   .glass-dark     over the camera
+   .glass-tint     coloured glass for primary actions; set --tint
+   ──────────────────────────────────────────────────────────────────────── */
+
+:root {
+  --glass-fill: rgb(255 255 255 / 0.55);
+  --glass-fill-strong: rgb(255 255 255 / 0.78);
+  --glass-fill-lite: rgb(255 255 255 / 0.72);
+  --glass-edge: rgb(255 255 255 / 0.7);
+  --glass-rim: rgb(255 255 255 / 0.95);
+  --glass-shadow: 0 12px 32px -12px rgb(23 16 10 / 0.22), 0 2px 8px -2px rgb(23 16 10 / 0.08);
+  --glass-blur: 24px;
+}
+
+.dark {
+  --glass-fill: rgb(38 36 40 / 0.5);
+  --glass-fill-strong: rgb(28 26 30 / 0.78);
+  --glass-fill-lite: rgb(44 42 46 / 0.72);
+  --glass-edge: rgb(255 255 255 / 0.1);
+  --glass-rim: rgb(255 255 255 / 0.22);
+  --glass-shadow: 0 12px 32px -12px rgb(0 0 0 / 0.7), 0 2px 8px -2px rgb(0 0 0 / 0.4);
+}
+
+/* The canvas the glass sits on: one flat colour. */
+body {
+  background: var(--canvas);
+}
+
+/* Positioning lives in the base layer so layout utilities still win — a
+   glass sheet must stay `fixed`. Only the look is unlayered. */
+@layer base {
+  .glass,
+  .glass-strong,
+  .glass-lite,
+  .glass-dark,
+  .glass-tint {
+    position: relative;
+  }
+}
+
+.glass,
+.glass-strong,
+.glass-lite,
+.glass-dark,
+.glass-tint {
+  isolation: isolate;
+  border: 1px solid var(--glass-edge);
+  box-shadow:
+    inset 0 1px 0 0 var(--glass-rim),
+    inset 0 -1px 1px 0 rgb(255 255 255 / 0.08),
+    var(--glass-shadow);
+}
+
+.glass,
+.glass-strong,
+.glass-dark,
+.glass-tint {
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(180%);
+  backdrop-filter: blur(var(--glass-blur)) saturate(180%);
+}
+
+.glass {
+  background: var(--glass-fill);
+}
+
+.glass-strong {
+  background: var(--glass-fill-strong);
+  --glass-blur: 32px;
+}
+
+.glass-lite {
+  background: var(--glass-fill-lite);
+  --glass-shadow: 0 6px 18px -10px rgb(23 16 10 / 0.25), 0 1px 3px -1px rgb(23 16 10 / 0.06);
+}
+
+.dark .glass-lite {
+  --glass-shadow: 0 6px 18px -10px rgb(0 0 0 / 0.7);
+}
+
+.glass-dark {
+  background: rgb(18 18 22 / 0.38);
+  color: #fff;
+  --glass-edge: rgb(255 255 255 / 0.2);
+  --glass-rim: rgb(255 255 255 / 0.35);
+  --glass-shadow: 0 10px 28px -10px rgb(0 0 0 / 0.6);
+}
+
+/* Coloured glass: set --tint to any colour (defaults to the brand). */
+.glass-tint {
+  --tint: var(--brand);
+  color: #fff;
+  background: var(--tint);
+  --glass-edge: color-mix(in oklab, var(--tint) 70%, white);
+  --glass-rim: rgb(255 255 255 / 0.45);
+  --glass-shadow: 0 10px 24px -8px color-mix(in oklab, var(--tint) 65%, transparent), 0 2px 6px -2px rgb(0 0 0 / 0.15);
+}
+
+.glass-tint:disabled {
+  --glass-shadow: none;
+}
+
+/* A glass control gives a little under the thumb. */
+.glass-press {
+  transition:
+    transform 160ms cubic-bezier(0.3, 0.7, 0.4, 1.4),
+    box-shadow 160ms ease;
+}
+
+.glass-press:active:not(:disabled) {
+  transform: scale(0.96);
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .glass,
+  .glass-strong,
+  .glass-dark {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    background: var(--glass-fill-strong);
+  }
+}
+
+/* Sheets: a light dim, so the glass still shows the colour behind it. */
+[data-slot='sheet-overlay'] {
+  background: rgb(0 0 0 / 0.22);
+}

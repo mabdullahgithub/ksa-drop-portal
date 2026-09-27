@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { type ReactNode, useState } from 'react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { Search, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -30,6 +30,8 @@ type RecycleBinPanelProps<T> = {
    * radius look smaller than it is.
    */
   totalInBin: number
+  /** Overrides the Empty bin dialog's warning about what goes with the rows. */
+  emptyBinNote?: ReactNode
   onChanged: () => void
   /** Called when the server reports the bin is locked, so the page can re-prompt. */
   onLocked: () => void
@@ -48,6 +50,7 @@ export function RecycleBinPanel<T extends { id: number }>({
   emptyMessage,
   getRowId,
   totalInBin,
+  emptyBinNote,
   onChanged,
   onLocked,
 }: RecycleBinPanelProps<T>) {
@@ -171,7 +174,9 @@ export function RecycleBinPanel<T extends { id: number }>({
         open={showEmptyDialog}
         onOpenChange={setShowEmptyDialog}
         count={totalInBin}
+        entityName={entityName}
         entityLabel={entityLabel}
+        note={emptyBinNote}
         onConfirm={handlePurgeAll}
       />
     </div>

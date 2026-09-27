@@ -14,6 +14,7 @@ class Shipment extends Model
     protected $fillable = [
         'order_id',
         'courier',
+        'rider_id',
         'tracking_number',
         'shopify_fulfillment_id',
         'txlogistic_id',
@@ -73,6 +74,65 @@ class Shipment extends Model
     public function invoices()
     {
         return $this->hasMany(Invoice::class);
+    }
+
+    /**
+     * The KSA Express rider holding the parcel, if any.
+     */
+    public function rider()
+    {
+        return $this->belongsTo(Rider::class)->withTrashed();
+    }
+
+    /**
+     * Updates recorded by our own people (riders), newest first.
+     */
+    public function events()
+    {
+        return $this->hasMany(ShipmentEvent::class)->latest('id');
+    }
+
+    public function latestEvent()
+    {
+        return $this->hasOne(ShipmentEvent::class)->latestOfMany();
+    }
+
+    /**
+     * Who to deliver to: the receiver the admin confirmed when booking a KSA
+     * Express parcel (KsaDropExpressDriver::bookingRecord), falling back to the
+     * order's shipping address. Same resolution the printed label uses.
+     *
+     * @return array{name: ?string, phone: ?string, address: ?string, area: ?string, city: ?string, province: ?string}
+     */
+    public function receiverDetails(): array
+    {
+        $order = $this->order;
+        $r = $this->api_response['receiver'] ?? [];
+
+        return [
+            'name' => ($r['name'] ?? null) ?: ($order?->shipping_name ?: $order?->customer_name),
+            'phone' => ($r['phone'] ?? null) ?: ($order?->shipping_phone ?: $order?->customer_phone),
+            'address' => ($r['address'] ?? null) ?: collect([$order?->shipping_address1, $order?->shipping_address2])->filter()->implode(', '),
+            'area' => ($r['area'] ?? null) ?: null,
+            'city' => ($r['city'] ?? null) ?: $order?->shipping_city,
+            'province' => ($r['province'] ?? null) ?: $order?->shipping_province,
+        ];
+    }
+
+    /**
+     * Cash to collect at the door. KSA Express stores the amount decided at
+     * booking; older bookings predate that, so fall back to the same rule
+     * ShipmentData::fromOrder() applies.
+     */
+    public function expectedCodAmount(): float
+    {
+        if (is_array($this->api_response) && array_key_exists('cod_amount', $this->api_response)) {
+            return (float) $this->api_response['cod_amount'];
+        }
+
+        $order = $this->order;
+
+        return $order && $order->isCashOnDelivery() ? (float) ($order->total ?? 0) : 0.0;
     }
 
     public function scopeActive($query)

@@ -1,6 +1,7 @@
 import { Cross2Icon } from '@radix-ui/react-icons'
 import { type Table } from '@tanstack/react-table'
 import { Button } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
 import { Input } from '@/components/ui/input'
 import { SearchBeam } from '@/components/search-beam'
 import { DataTableFacetedFilter } from './faceted-filter'
@@ -10,6 +11,8 @@ type DataTableToolbarProps<TData> = {
   table: Table<TData>
   searchPlaceholder?: string
   searchKey?: string
+  /** Extra classes for the search + filters row. */
+  className?: string
   filters?: {
     columnId: string
     title: string
@@ -25,6 +28,7 @@ export function DataTableToolbar<TData>({
   table,
   searchPlaceholder = 'Filter...',
   searchKey,
+  className,
   filters = [],
 }: DataTableToolbarProps<TData>) {
   const isFiltered =
@@ -32,7 +36,12 @@ export function DataTableToolbar<TData>({
 
   return (
     <div className='flex items-center justify-between'>
-      <div className='flex flex-1 flex-col-reverse items-start gap-y-2 sm:flex-row sm:items-center sm:space-x-2'>
+      <div
+        className={cn(
+          'flex flex-1 flex-col-reverse items-start gap-y-2 sm:flex-row sm:items-center sm:space-x-2',
+          className
+        )}
+      >
         <SearchBeam>
           {searchKey ? (
             <Input

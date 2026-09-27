@@ -11,7 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Truck, RefreshCw, X, Copy, ExternalLink, MapPin, AlertTriangle, CheckCircle2, ShieldCheck } from 'lucide-react'
+import { Truck, RefreshCw, X, Copy, ExternalLink, MapPin, AlertTriangle, CheckCircle2, ShieldCheck, Bike, Image as ImageIcon, UserMinus } from 'lucide-react'
 import { toast } from 'sonner'
 import axios from 'axios'
 import { useState } from 'react'
@@ -26,9 +26,29 @@ interface TrackingEvent {
   raw_status: string | null
 }
 
+/** A KSA Express rider's update (shipment_events). */
+interface RiderEvent {
+  id: number
+  action: 'out_for_delivery' | 'delivered' | 'attempt_failed'
+  reason: string | null
+  note: string | null
+  cod_amount: string | null
+  payment_method: string | null
+  recipient_name: string | null
+  lat: string | null
+  lng: string | null
+  entry_method: 'camera' | 'manual' | null
+  occurred_at: string
+  has_photo: boolean
+  rider: { id: number; name: string } | null
+}
+
 interface Shipment {
   id: number
   courier: string
+  rider_id?: number | null
+  rider?: { id: number; name: string; phone: string } | null
+  events?: RiderEvent[]
   tracking_number: string | null
   txlogistic_id: string
   sorting_code: string | null
@@ -68,6 +88,32 @@ const courierLabels: Record<string, string> = {
 
 const courierLabel = (courier: string) => courierLabels[courier] || courier
 
+/**
+ * Couriers send event times in different shapes: J&T "2026-09-27 14:05:00"
+ * (already local), while KSA Express and LogesTechs send ISO 8601 with an
+ * offset. Show the ISO ones in business time; leave the rest as sent.
+ */
+const formatEventTime = (timestamp: string) =>
+  /^\d{4}-\d{2}-\d{2}T/.test(timestamp) && !Number.isNaN(Date.parse(timestamp))
+    ? new Date(timestamp).toLocaleString(undefined, { timeZone: BUSINESS_TIMEZONE })
+    : timestamp
+
+const riderActionLabels: Record<RiderEvent['action'], string> = {
+  out_for_delivery: 'Out for delivery',
+  delivered: 'Delivered',
+  attempt_failed: 'Delivery failed',
+}
+
+const failedReasonLabels: Record<string, string> = {
+  no_answer: 'Customer not answering',
+  refused: 'Customer refused',
+  wrong_address: 'Wrong address',
+  reschedule: 'Customer asked for another day',
+  no_cash: 'Customer had no cash',
+  closed: 'Place closed',
+  other: 'Other',
+}
+
 const statusColorMap: Record<string, string> = {
   gray: 'bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400',
   blue: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400',
@@ -84,6 +130,7 @@ export function ShipmentPanel({ shipment, orderId, onCreateShipment, onShipmentU
   const [escalating, setEscalating] = useState(false)
   const [showEscalateDialog, setShowEscalateDialog] = useState(false)
   const [escalateNote, setEscalateNote] = useState('')
+  const [unassigning, setUnassigning] = useState(false)
 
   if (!shipment) {
     return (
@@ -148,6 +195,21 @@ export function ShipmentPanel({ shipment, orderId, onCreateShipment, onShipmentU
       toast.error(err.response?.data?.message || 'Failed to escalate')
     } finally {
       setEscalating(false)
+    }
+  }
+
+  const unassignRider = async () => {
+    if (!confirm(`Take this parcel off ${shipment.rider?.name ?? 'the rider'}? Any rider can then scan it out.`)) return
+
+    setUnassigning(true)
+    try {
+      await axios.post(`/api/shipments/${shipment.id}/unassign-rider`)
+      toast.success('Rider unassigned')
+      onShipmentUpdated?.()
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Failed to unassign rider')
+    } finally {
+      setUnassigning(false)
     }
   }
 
@@ -221,6 +283,24 @@ export function ShipmentPanel({ shipment, orderId, onCreateShipment, onShipmentU
           <div className='text-muted-foreground'>Weight</div>
           <div className='font-medium'>{shipment.weight} kg</div>
         </div>
+        {shipment.rider && (
+          <div className='col-span-2'>
+            <div className='text-muted-foreground'>Rider</div>
+            <div className='font-medium flex items-center gap-2'>
+              <Bike className='h-3 w-3' />
+              <span>{shipment.rider.name}</span>
+              <a href={`tel:${shipment.rider.phone}`} className='font-normal text-muted-foreground hover:text-foreground' dir='ltr'>
+                {shipment.rider.phone}
+              </a>
+              {!isTerminal && (
+                <Button size='sm' variant='ghost' className='ms-auto h-6 px-2 text-xs' onClick={unassignRider} disabled={unassigning}>
+                  <UserMinus className='h-3 w-3 mr-1' />
+                  {unassigning ? 'Unassigning…' : 'Unassign'}
+                </Button>
+              )}
+            </div>
+          </div>
+        )}
         {isDelivered && shipment.delivered_at && (
           <div>
             <div className='text-muted-foreground'>Delivered</div>
@@ -283,9 +363,60 @@ export function ShipmentPanel({ shipment, orderId, onCreateShipment, onShipmentU
                     </div>
                     <div className='text-muted-foreground text-xs'>
                       {event.location && `${event.location} · `}
-                      {event.timestamp}
+                      {formatEventTime(event.timestamp)}
                     </div>
                   </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* KSA Express rider updates: the full record behind the public
+          tracking lines above — cash, photo, location. */}
+      {shipment.events && shipment.events.length > 0 && (
+        <>
+          <Separator />
+          <div>
+            <div className='text-sm font-medium mb-2'>Rider Updates</div>
+            <div className='space-y-2 max-h-56 overflow-y-auto'>
+              {shipment.events.map((event) => (
+                <div key={event.id} className='rounded-md border p-2 text-sm'>
+                  <div className='flex items-center gap-2'>
+                    <span className='font-medium'>{riderActionLabels[event.action] ?? event.action}</span>
+                    {event.entry_method === 'manual' && (
+                      <Badge variant='outline' className='h-5 px-1.5 text-[10px] text-amber-700 border-amber-300' title='The rider typed or picked the parcel instead of scanning its label'>
+                        not scanned
+                      </Badge>
+                    )}
+                    <span className='ms-auto text-xs text-muted-foreground'>
+                      {new Date(event.occurred_at).toLocaleString(undefined, { timeZone: BUSINESS_TIMEZONE })}
+                    </span>
+                  </div>
+                  <div className='text-xs text-muted-foreground space-y-0.5 mt-1'>
+                    {event.rider && <div>By {event.rider.name}</div>}
+                    {event.reason && <div>Reason: {failedReasonLabels[event.reason] ?? event.reason}</div>}
+                    {event.cod_amount && Number(event.cod_amount) > 0 && (
+                      <div>Collected SAR {Number(event.cod_amount).toFixed(2)}{event.payment_method && ` · ${event.payment_method}`}</div>
+                    )}
+                    {event.recipient_name && <div>Received by {event.recipient_name}</div>}
+                    {event.note && <div className='text-foreground'>“{event.note}”</div>}
+                  </div>
+                  {(event.has_photo || (event.lat && event.lng)) && (
+                    <div className='flex gap-3 mt-1.5 text-xs'>
+                      {event.has_photo && (
+                        <a href={`/api/shipment-events/${event.id}/photo`} target='_blank' rel='noopener noreferrer' className='inline-flex items-center gap-1 text-primary hover:underline'>
+                          <ImageIcon className='h-3 w-3' /> Photo
+                        </a>
+                      )}
+                      {event.lat && event.lng && (
+                        <a href={`https://www.google.com/maps?q=${event.lat},${event.lng}`} target='_blank' rel='noopener noreferrer' className='inline-flex items-center gap-1 text-primary hover:underline'>
+                          <MapPin className='h-3 w-3' /> Location
+                        </a>
+                      )}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

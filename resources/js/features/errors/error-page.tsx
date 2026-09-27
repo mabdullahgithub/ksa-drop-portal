@@ -1,14 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { BotAvatar } from 'bot-avatars'
-import { Check, ChevronDown, Copy, Home, RefreshCw, Undo2 } from 'lucide-react'
+import { Check, Copy, Home, RefreshCw, Undo2 } from 'lucide-react'
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from '@/components/ui/collapsible'
 import { DEFAULT_ERROR_COPY, copyForStatus } from './status-map'
 
 export type ErrorPageProps = {
@@ -16,11 +11,6 @@ export type ErrorPageProps = {
   status?: number | string
   title: string
   description: React.ReactNode
-  /**
-   * Raw technical detail (exception message, component stack, …). Rendered in a
-   * collapsible block and always included in the copied report.
-   */
-  detail?: string | null
   /** Correlation id from the server, so support can find the log line. */
   reference?: string | null
   /** Renders a "Try again" button. Omit for states retrying can't fix (403/404). */
@@ -49,14 +39,12 @@ export function ErrorPage({
   status,
   title,
   description,
-  detail,
   reference,
   onRetry,
   minimal = false,
   manageDocumentTitle = true,
   className,
 }: ErrorPageProps) {
-  const [detailOpen, setDetailOpen] = useState(false)
   const { copied, copy } = useCopyToClipboard()
   const bot = (typeof status === 'number' ? copyForStatus(status) : DEFAULT_ERROR_COPY).bot
 
@@ -79,7 +67,6 @@ export function ErrorPage({
       `URL:       ${window.location.href}`,
       `Time:      ${new Date().toISOString()}`,
       `Browser:   ${navigator.userAgent}`,
-      detail ? `\n--- Details ---\n${detail}` : null,
     ]
       .filter(Boolean)
       .join('\n')
@@ -145,32 +132,6 @@ export function ErrorPage({
           {copied ? 'Copied' : 'Copy Details'}
         </Button>
       </div>
-
-      {detail && (
-        <Collapsible
-          open={detailOpen}
-          onOpenChange={setDetailOpen}
-          className='mt-8 w-full max-w-2xl'
-        >
-          <CollapsibleTrigger asChild>
-            <Button variant='ghost' size='sm' className='text-muted-foreground'>
-              <ChevronDown
-                className={cn(
-                  'transition-transform',
-                  detailOpen && 'rotate-180'
-                )}
-              />
-              {detailOpen ? 'Hide' : 'Show'} technical details
-            </Button>
-          </CollapsibleTrigger>
-
-          <CollapsibleContent>
-            <pre className='bg-muted text-muted-foreground mt-3 max-h-72 overflow-auto rounded-md border p-4 text-left font-mono text-xs whitespace-pre-wrap'>
-              {detail}
-            </pre>
-          </CollapsibleContent>
-        </Collapsible>
-      )}
     </div>
   )
 }

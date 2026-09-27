@@ -9,7 +9,11 @@ use App\Models\ClientPayment;
 use App\Models\ClientProduct;
 use App\Models\Order;
 use App\Models\Product;
+use App\Models\Rider;
+use App\Models\Shipment;
+use App\Models\ShipmentEvent;
 use App\Models\User;
+use App\Support\PhoneNumber;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -88,6 +92,7 @@ class RecycleBinController extends Controller
             'inventory' => ($user->can('delete inventory') ? Product::onlyTrashed()->count() : 0)
                 + ($user->can('delete client') ? ClientProduct::onlyTrashed()->count() : 0),
             'users' => $user->can('delete users') ? User::onlyTrashed()->count() : 0,
+            'riders' => $user->can('manage riders') ? Rider::onlyTrashed()->count() : 0,
         ]);
     }
 
@@ -341,6 +346,117 @@ class RecycleBinController extends Controller
 
         return response()->json([
             'message' => "Permanently deleted {$purged} " . str('user')->plural($purged),
+            'purged_count' => $purged,
+            'blocked' => $blocked,
+        ]);
+    }
+
+    // ---------------------------------------------------------------- riders
+
+    public function riders(Request $request)
+    {
+        $query = Rider::onlyTrashed()->with(['warehouse:id,name', 'deletedBy'])->withCount([
+            'events as parcels_count' => fn ($q) => $q->select(DB::raw('count(distinct shipment_id)')),
+        ]);
+
+        if ($search = trim((string) $request->input('search'))) {
+            $phone = PhoneNumber::normalize($search);
+
+            $query->where(function ($q) use ($search, $phone) {
+                $q->where('name', 'like', "%{$search}%")
+                    ->orWhere('name_ar', 'like', "%{$search}%")
+                    ->orWhere('phone', 'like', "%{$search}%")
+                    ->when($phone, fn ($q) => $q->orWhere('phone', $phone));
+            });
+        }
+
+        $this->applyTrashedSort($request, $query, ['deleted_at', 'name', 'created_at']);
+
+        $paginator = $query->paginate($this->trashedPerPage($request));
+
+        return response()->json([
+            'data' => $paginator->getCollection()->map(fn (Rider $rider) => [
+                'id' => $rider->id,
+                'name' => $rider->name,
+                'name_ar' => $rider->name_ar,
+                'phone_local' => PhoneNumber::local($rider->phone),
+                'warehouse_name' => $rider->warehouse?->name,
+                'city' => $rider->city,
+                'status' => $rider->status,
+                'parcels_count' => $rider->parcels_count,
+                'deleted_at' => $rider->deleted_at?->toIso8601String(),
+                'deleted_by' => self::auditFields($rider),
+            ])->all(),
+            'meta' => $this->paginationMeta($paginator),
+        ]);
+    }
+
+    /**
+     * A restored rider comes back with the status they had. Removal signed
+     * them out, so they sign in again with their PIN or a new link.
+     */
+    public function restoreRiders(Request $request)
+    {
+        $ids = $this->trashedIds($request);
+
+        $restored = 0;
+
+        DB::transaction(function () use ($ids, &$restored) {
+            Rider::onlyTrashed()->whereIn('id', $ids)->get()->each(function (Rider $rider) use (&$restored) {
+                $rider->restore();
+                $restored++;
+            });
+        });
+
+        return response()->json([
+            'message' => $this->restoreMessage($restored, count($ids), 'rider')
+                . ($restored ? '. They were signed out when removed — send a new link or PIN from the Riders page.' : ''),
+            'restored_count' => $restored,
+            'requested_count' => count($ids),
+        ]);
+    }
+
+    public function purgeRiders(Request $request)
+    {
+        return $this->purgeRiderQuery(Rider::onlyTrashed()->whereIn('id', $this->trashedIds($request)));
+    }
+
+    public function purgeAllRiders()
+    {
+        return $this->purgeRiderQuery(Rider::onlyTrashed());
+    }
+
+    /**
+     * Permanently delete riders who never handled a parcel. Anyone with
+     * delivery history stays in the bin: shipments.rider_id and
+     * shipment_events.rider_id null out on delete, which would erase who
+     * delivered each parcel and who collected its cash.
+     */
+    private function purgeRiderQuery($query)
+    {
+        $riders = $query->get();
+        $ids = $riders->modelKeys();
+
+        $withHistory = array_flip(array_merge(
+            ShipmentEvent::whereIn('rider_id', $ids)->distinct()->pluck('rider_id')->all(),
+            Shipment::whereIn('rider_id', $ids)->distinct()->pluck('rider_id')->all(),
+        ));
+
+        $blocked = [];
+        $purgeable = [];
+
+        foreach ($riders as $rider) {
+            if (isset($withHistory[$rider->id])) {
+                $blocked[] = ['name' => $rider->name, 'reason' => 'They have delivery history, so they stay in the bin to keep who handled each parcel and its cash.'];
+            } else {
+                $purgeable[] = $rider->id;
+            }
+        }
+
+        $purged = $purgeable === [] ? 0 : $this->purgeTrashed(Rider::onlyTrashed()->whereIn('id', $purgeable));
+
+        return response()->json([
+            'message' => "Permanently deleted {$purged} " . str('rider')->plural($purged),
             'purged_count' => $purged,
             'blocked' => $blocked,
         ]);

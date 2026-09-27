@@ -8,7 +8,9 @@ use App\Http\Controllers\Api\LogesTechsController;
 use App\Http\Controllers\Api\LogesTechsWebhookController;
 use App\Http\Controllers\Api\InvoiceController;
 use App\Http\Controllers\Api\OrderController;
+use App\Http\Controllers\Api\RiderController;
 use App\Http\Controllers\Api\ShipmentController;
+use App\Http\Controllers\Api\ShipmentEventController;
 use App\Http\Controllers\Api\WarehouseController;
 use App\Http\Controllers\Api\WebhookController;
 use App\Http\Controllers\Api\ShipmentAnalyticsController;
@@ -109,7 +111,30 @@ Route::middleware(['auth', 'verified', 'role:!client'])->group(function () {
         Route::post('/{shipment}/track', [ShipmentController::class, 'track'])->middleware('permission:view orders')->name('api.shipments.track');
         Route::post('/{shipment}/cancel', [ShipmentController::class, 'cancel'])->middleware('permission:edit orders')->name('api.shipments.cancel');
         Route::post('/{shipment}/escalate', [ShipmentController::class, 'escalate'])->middleware('permission:edit orders')->name('api.shipments.escalate');
+        Route::post('/{shipment}/unassign-rider', [ShipmentController::class, 'unassignRider'])->middleware('permission:edit orders')->name('api.shipments.unassign-rider');
         Route::post('/{shipment}/invoice', [InvoiceController::class, 'generateShipping'])->middleware('permission:edit orders')->name('api.shipments.invoice');
+    });
+
+    // Rider proof-of-delivery photos (private disk)
+    Route::get('/api/shipment-events/{event}/photo', [ShipmentEventController::class, 'photo'])->middleware('permission:view orders')->name('api.shipment-events.photo');
+
+    // KSA Express riders
+    Route::get('/riders', [RiderController::class, 'page'])->middleware('permission:view riders|manage riders')->name('riders');
+    Route::get('/api/riders', [RiderController::class, 'index'])->middleware('permission:view riders|manage riders')->name('api.riders.index');
+    Route::get('/api/riders/presence', [RiderController::class, 'presence'])->middleware('permission:view riders|manage riders')->name('api.riders.presence');
+    Route::get('/api/riders/{rider}/photo', [RiderController::class, 'photo'])->middleware('permission:view riders|manage riders')->name('api.riders.photo');
+    Route::prefix('api/riders')->middleware('permission:manage riders')->group(function () {
+        // Before /{rider}: "support" isn't a rider id.
+        Route::put('/support', [RiderController::class, 'updateSupport'])->name('api.riders.support');
+        Route::post('/', [RiderController::class, 'store'])->name('api.riders.store');
+        Route::put('/{rider}', [RiderController::class, 'update'])->name('api.riders.update');
+        Route::post('/{rider}/status', [RiderController::class, 'status'])->name('api.riders.status');
+        Route::post('/{rider}/activation-link', [RiderController::class, 'activationLink'])->name('api.riders.activation-link');
+        Route::post('/{rider}/pin', [RiderController::class, 'resetPin'])->name('api.riders.pin');
+        Route::post('/{rider}/sign-out', [RiderController::class, 'signOut'])->name('api.riders.sign-out');
+        Route::post('/{rider}/photo', [RiderController::class, 'uploadPhoto'])->name('api.riders.photo.upload');
+        Route::delete('/{rider}/photo', [RiderController::class, 'removePhoto'])->name('api.riders.photo.remove');
+        Route::delete('/{rider}', [RiderController::class, 'destroy'])->name('api.riders.destroy');
     });
 
     // Shipment analytics
@@ -238,20 +263,20 @@ Route::middleware(['auth', 'verified', 'role:!client'])->group(function () {
     // {type} route could not distinguish them. Note the separator is a PIPE:
     // CheckPermission splits on '|', not ','.
     Route::get('/recycle-bin', [RecycleBinController::class, 'page'])
-        ->middleware('permission:delete orders|delete client|delete inventory|delete users')->name('recycle-bin');
+        ->middleware('permission:delete orders|delete client|delete inventory|delete users|manage riders')->name('recycle-bin');
 
     Route::prefix('api/recycle-bin')->group(function () {
         // Unlock sits outside the recyclebin.unlocked gate (it is what opens
         // it) and is throttled so the PIN cannot be brute-forced.
         Route::post('/unlock', [RecycleBinController::class, 'unlock'])
-            ->middleware(['permission:delete orders|delete client|delete inventory|delete users', 'throttle:5,1'])
+            ->middleware(['permission:delete orders|delete client|delete inventory|delete users|manage riders', 'throttle:5,1'])
             ->name('api.recycle-bin.unlock');
         Route::post('/lock', [RecycleBinController::class, 'lock'])
-            ->middleware('permission:delete orders|delete client|delete inventory|delete users')
+            ->middleware('permission:delete orders|delete client|delete inventory|delete users|manage riders')
             ->name('api.recycle-bin.lock');
 
         Route::get('/counts', [RecycleBinController::class, 'counts'])
-            ->middleware('recyclebin.unlocked')->middleware('permission:delete orders|delete client|delete inventory|delete users')->name('api.recycle-bin.counts');
+            ->middleware('recyclebin.unlocked')->middleware('permission:delete orders|delete client|delete inventory|delete users|manage riders')->name('api.recycle-bin.counts');
 
         Route::get('/orders', [RecycleBinController::class, 'orders'])
             ->middleware('recyclebin.unlocked')->middleware('permission:delete orders')->name('api.recycle-bin.orders');
@@ -279,6 +304,17 @@ Route::middleware(['auth', 'verified', 'role:!client'])->group(function () {
             ->middleware('recyclebin.unlocked')->middleware('permission:delete users')->name('api.recycle-bin.users.purge');
         Route::post('/users/purge-all', [RecycleBinController::class, 'purgeAllUsers'])
             ->middleware('recyclebin.unlocked')->middleware('permission:delete users')->name('api.recycle-bin.users.purge-all');
+
+        // Riders are removed under 'manage riders' (there is no separate
+        // delete permission), so the bin gates them the same way.
+        Route::get('/riders', [RecycleBinController::class, 'riders'])
+            ->middleware('recyclebin.unlocked')->middleware('permission:manage riders')->name('api.recycle-bin.riders');
+        Route::post('/riders/restore', [RecycleBinController::class, 'restoreRiders'])
+            ->middleware('recyclebin.unlocked')->middleware('permission:manage riders')->name('api.recycle-bin.riders.restore');
+        Route::post('/riders/purge', [RecycleBinController::class, 'purgeRiders'])
+            ->middleware('recyclebin.unlocked')->middleware('permission:manage riders')->name('api.recycle-bin.riders.purge');
+        Route::post('/riders/purge-all', [RecycleBinController::class, 'purgeAllRiders'])
+            ->middleware('recyclebin.unlocked')->middleware('permission:manage riders')->name('api.recycle-bin.riders.purge-all');
 
         // The inventory tab spans two models: the catalog (delete inventory)
         // and per-client stock, which is gated on 'delete client' everywhere
