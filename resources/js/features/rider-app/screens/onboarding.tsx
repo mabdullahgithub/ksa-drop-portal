@@ -27,6 +27,23 @@ function markSeen() {
   }
 }
 
+/**
+ * Show the welcome again after each install. On Android, uninstalling the app
+ * leaves Chrome's storage for the site in place, so without this a reinstall
+ * would remember the welcome from last time. Chrome fires appinstalled in the
+ * tab the app was installed from; iPhone doesn't, but a home screen app there
+ * doesn't share storage with Safari anyway.
+ */
+export function resetOnboardingOnInstall() {
+  window.addEventListener('appinstalled', () => {
+    try {
+      localStorage.removeItem(SEEN_KEY)
+    } catch {
+      // Storage blocked: onboardingSeen() already treats that as seen.
+    }
+  })
+}
+
 type Step = { color: string; icon: LucideIcon; chipIcon: LucideIcon; chip: Key; title: Key; text: Key; tip?: Key }
 
 // The colours the rider meets in the app: orange scan, green delivered, red failed.
@@ -45,7 +62,8 @@ type Props = {
 
 /**
  * First open on a phone: a welcome screen with the rider video, then four
- * short steps on how the app works. Shown once; Profile opens the steps again.
+ * short steps on how the app works. Shown once per install; Profile opens the
+ * steps again.
  */
 export function Onboarding({ onDone, startAt = 'welcome' }: Props) {
   const [page, setPage] = useState(startAt === 'welcome' ? -1 : 0)

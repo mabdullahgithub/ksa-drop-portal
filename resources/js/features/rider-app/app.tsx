@@ -10,7 +10,7 @@ import type { RiderBoot } from './types'
 export function RiderApp({ boot }: { boot: RiderBoot }) {
   const [mode, setMode] = useState(boot.mode)
   const [reason, setReason] = useState<string | null>(boot.reason ?? null)
-  // First open on this phone: the welcome and the guide, once. Not on the
+  // First open after installing: the welcome and the guide, once. Not on the
   // activation page — in a browser tab that only helps the rider install.
   const [welcome, setWelcome] = useState(() => boot.mode !== 'activate' && !onboardingSeen())
 

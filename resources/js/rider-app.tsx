@@ -4,6 +4,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { RiderApp } from '@/features/rider-app/app'
 import { captureInstallPrompt } from '@/features/rider-app/lib/device'
+import { resetOnboardingOnInstall } from '@/features/rider-app/screens/onboarding'
 import type { RiderBoot } from '@/features/rider-app/types'
 
 /**
@@ -19,6 +20,7 @@ declare global {
 }
 
 captureInstallPrompt()
+resetOnboardingOnInstall()
 
 // After a deploy, an open app may try to load a chunk that no longer exists.
 // Reload once to pick up the new build (same guard as the portal's app.tsx).
