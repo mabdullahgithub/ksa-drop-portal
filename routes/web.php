@@ -122,7 +122,10 @@ Route::middleware(['auth', 'verified', 'role:!client'])->group(function () {
     Route::get('/riders', [RiderController::class, 'page'])->middleware('permission:view riders|manage riders')->name('riders');
     Route::get('/api/riders', [RiderController::class, 'index'])->middleware('permission:view riders|manage riders')->name('api.riders.index');
     Route::get('/api/riders/presence', [RiderController::class, 'presence'])->middleware('permission:view riders|manage riders')->name('api.riders.presence');
+    Route::get('/api/riders/performance', [RiderController::class, 'performance'])->middleware('permission:view riders|manage riders')->name('api.riders.performance');
     Route::get('/api/riders/{rider}/photo', [RiderController::class, 'photo'])->middleware('permission:view riders|manage riders')->name('api.riders.photo');
+    Route::get('/api/riders/{rider}/performance', [RiderController::class, 'riderPerformance'])->middleware('permission:view riders|manage riders')->name('api.riders.rider-performance');
+    Route::get('/api/riders/{rider}/parcels', [RiderController::class, 'riderParcels'])->middleware('permission:view riders|manage riders')->name('api.riders.parcels');
     Route::prefix('api/riders')->middleware('permission:manage riders')->group(function () {
         // Before /{rider}: "support" isn't a rider id.
         Route::put('/support', [RiderController::class, 'updateSupport'])->name('api.riders.support');

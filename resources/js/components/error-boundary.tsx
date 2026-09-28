@@ -55,7 +55,7 @@ export class ErrorBoundary extends Component<Props, State> {
     return (
       <ErrorPage
         title='Something went wrong on this page'
-        description='This page failed to load. You can go back, retry, or copy the details below and send them to support.'
+        description='This page failed to load. You can go back or try again.'
         // A hard reload, not router.reload(): the crashed tree may have left
         // stale client state behind, and a clean document is the only retry
         // guaranteed not to trip over it again.

@@ -1,7 +1,6 @@
 import { useEffect } from 'react'
 import { BotAvatar } from 'bot-avatars'
-import { Check, Copy, Home, RefreshCw, Undo2 } from 'lucide-react'
-import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard'
+import { Home, RefreshCw, Undo2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { DEFAULT_ERROR_COPY, copyForStatus } from './status-map'
@@ -45,7 +44,6 @@ export function ErrorPage({
   manageDocumentTitle = true,
   className,
 }: ErrorPageProps) {
-  const { copied, copy } = useCopyToClipboard()
   const bot = (typeof status === 'number' ? copyForStatus(status) : DEFAULT_ERROR_COPY).bot
 
   useEffect(() => {
@@ -57,19 +55,6 @@ export function ErrorPage({
     // not worth racing it for.
     document.title = status ? `${status} - ${title}` : title
   }, [status, title, minimal, manageDocumentTitle])
-
-  // A support-ready report: everything needed to reproduce, in one paste.
-  const buildReport = () =>
-    [
-      `Status:    ${status ?? 'Client error'}`,
-      `Message:   ${title}`,
-      reference ? `Reference: ${reference}` : null,
-      `URL:       ${window.location.href}`,
-      `Time:      ${new Date().toISOString()}`,
-      `Browser:   ${navigator.userAgent}`,
-    ]
-      .filter(Boolean)
-      .join('\n')
 
   return (
     <div
@@ -121,15 +106,6 @@ export function ErrorPage({
         <Button onClick={() => window.location.assign('/')}>
           <Home />
           Back to Home
-        </Button>
-
-        <Button
-          variant='ghost'
-          onClick={() => copy(buildReport())}
-          aria-label='Copy error details'
-        >
-          {copied ? <Check className='text-emerald-600' /> : <Copy />}
-          {copied ? 'Copied' : 'Copy Details'}
         </Button>
       </div>
     </div>

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import axios from 'axios'
-import { Activity, LayoutGrid, Plus, Search as SearchIcon, Smartphone, Table2, Warehouse, X } from 'lucide-react'
+import { Activity, LayoutGrid, Plus, Search as SearchIcon, Smartphone, Table2, Trophy, Warehouse, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
@@ -24,6 +24,7 @@ import { RiderCard } from './components/rider-card'
 import { RiderFormDialog } from './components/rider-form-dialog'
 import { RiderSupportButton } from './components/rider-support-button'
 import { AppState, appStateOf, RiderAvatar, RowActions, sar, type RiderDialog } from './components/rider-parts'
+import { TopPerformers } from './components/top-performers'
 import type { RiderRow, RiderSupportContact, WarehouseOption } from './data/types'
 
 const STATUS_OPTIONS = [
@@ -62,6 +63,8 @@ export function Riders({
   const [hubs, setHubs] = useState<string[]>([])
   const [dialog, setDialog] = useState<RiderDialog | null>(null)
   const [busy, setBusy] = useState(false)
+  // Closed on every visit: its numbers are only worked out when asked for.
+  const [showPerformers, setShowPerformers] = useState(false)
 
   const hubOptions = useMemo(
     () => [...warehouses.map((w) => ({ value: String(w.id), label: w.name })), { value: NO_HUB, label: 'No hub' }],
@@ -161,6 +164,12 @@ export function Riders({
             <p className='text-muted-foreground'>KSA Express riders and the app on their phones.</p>
           </div>
           <div className='flex items-center gap-2'>
+            {!showPerformers && riders.length > 0 && (
+              <Button variant='outline' onClick={() => setShowPerformers(true)}>
+                <Trophy size={16} className='me-1 text-amber-600 dark:text-amber-400' />
+                Top performers
+              </Button>
+            )}
             <RiderSupportButton support={support} canManage={canManage} onChange={setSupport} />
             <Can permission='manage riders'>
               <Button onClick={() => setDialog({ type: 'add' })}>
@@ -179,6 +188,8 @@ export function Riders({
           <Summary label='Delivered today' value={totals.delivered} />
           <Summary label='Cash collected today' value={sar(totals.cash)} />
         </div>
+
+        {showPerformers && riders.length > 0 && <TopPerformers onClose={() => setShowPerformers(false)} />}
 
         {riders.length === 0 ? (
           <EmptyState

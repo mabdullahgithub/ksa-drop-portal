@@ -9,6 +9,7 @@ use App\Models\RiderDevice;
 use App\Models\Warehouse;
 use App\Services\Riders\RiderAuthService;
 use App\Services\Riders\RiderDayStats;
+use App\Services\Riders\RiderPerformance;
 use App\Services\Riders\RiderPresence;
 use App\Services\Riders\RiderPhoto;
 use App\Services\Riders\RiderSupport;
@@ -16,7 +17,10 @@ use App\Support\ClientDevice;
 use App\Support\PhoneNumber;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -80,6 +84,112 @@ class RiderController extends Controller
     public function presence(): JsonResponse
     {
         return response()->json(['online' => RiderPresence::online(Rider::pluck('id')->all())]);
+    }
+
+    /**
+     * The "Top performers" section: every rider who delivered or failed an
+     * attempt between two dates (KSA days, both inclusive), best first.
+     */
+    public function performance(Request $request): JsonResponse
+    {
+        $validated = $this->validatedRange($request);
+
+        $performance = Cache::remember(
+            "riders:performance:{$validated['from']}:{$validated['to']}",
+            $this->cacheSeconds($validated['to']),
+            fn () => RiderPerformance::between($validated['from'], $validated['to'])
+        );
+
+        // Names and photos stay live; only the heavy aggregate is cached.
+        $riders = Rider::with('warehouse:id,name')
+            ->whereKey(array_keys($performance['riders']))
+            ->get(['id', 'name', 'photo_path', 'warehouse_id', 'status'])
+            ->map(fn (Rider $rider) => [
+                'id' => $rider->id,
+                'name' => $rider->name,
+                'photo_url' => $this->photoUrl($rider),
+                'warehouse_name' => $rider->warehouse?->name,
+                'status' => $rider->status,
+                ...$performance['riders'][$rider->id],
+            ])
+            ->sortBy([['delivered', 'desc'], ['failed', 'asc'], ['name', 'asc']])
+            ->values();
+
+        return response()->json([
+            'from' => $validated['from'],
+            'to' => $validated['to'],
+            'days' => $performance['days'],
+            'riders' => $riders,
+            'team_daily' => $performance['team_daily'],
+        ]);
+    }
+
+    /**
+     * One rider between two dates: how many parcels they were given, where
+     * each ended up, and why attempts failed.
+     */
+    public function riderPerformance(Request $request, Rider $rider): JsonResponse
+    {
+        $validated = $this->validatedRange($request);
+
+        return response()->json(Cache::remember(
+            "riders:performance:{$rider->id}:{$validated['from']}:{$validated['to']}",
+            $this->cacheSeconds($validated['to']),
+            fn () => RiderPerformance::summary($rider, $validated['from'], $validated['to'])
+        ));
+    }
+
+    /**
+     * One page of the rider's parcels and what happened to each. Only asked
+     * for when someone opens the list.
+     */
+    public function riderParcels(Request $request, Rider $rider): JsonResponse
+    {
+        $validated = $this->validatedRange($request) + $request->validate([
+            'outcome' => ['nullable', Rule::in(RiderPerformance::OUTCOMES)],
+            'search' => 'nullable|string|max:60',
+            'page' => 'nullable|integer|min:1|max:1000',
+        ]);
+
+        return response()->json(RiderPerformance::parcels(
+            $rider,
+            $validated['from'],
+            $validated['to'],
+            $validated['outcome'] ?? null,
+            $validated['search'] ?? null,
+            (int) ($validated['page'] ?? 1),
+        ));
+    }
+
+    /**
+     * Rider updates can arrive up to a week late (a phone offline, see
+     * ShipmentEventRecorder::occurredAt()), so only older ranges are settled
+     * enough to keep for longer.
+     */
+    private function cacheSeconds(string $to): int
+    {
+        $timezone = config('app.business_timezone', 'Asia/Riyadh');
+        $settled = Carbon::parse($to, $timezone)->lt(now($timezone)->subDays(8)->startOfDay());
+
+        return $settled ? 600 : 60;
+    }
+
+    /**
+     * @return array{from: string, to: string} KSA days, both inclusive.
+     */
+    private function validatedRange(Request $request): array
+    {
+        $validated = $request->validate([
+            'from' => 'required|date_format:Y-m-d',
+            'to' => 'required|date_format:Y-m-d|after_or_equal:from',
+        ]);
+
+        $days = (int) Carbon::parse($validated['from'])->diffInDays(Carbon::parse($validated['to'])) + 1;
+        if ($days > RiderPerformance::MAX_DAYS) {
+            throw ValidationException::withMessages(['to' => 'Pick a range of '.RiderPerformance::MAX_DAYS.' days or less.']);
+        }
+
+        return $validated;
     }
 
     public function store(Request $request): JsonResponse
@@ -314,7 +424,7 @@ class RiderController extends Controller
             'id' => $rider->id,
             'name' => $rider->name,
             'name_ar' => $rider->name_ar,
-            'photo_url' => $rider->hasPhoto() ? route('api.riders.photo', ['rider' => $rider, 'v' => RiderPhoto::version($rider)]) : null,
+            'photo_url' => $this->photoUrl($rider),
             'phone' => $rider->phone,
             'phone_local' => PhoneNumber::local($rider->phone),
             'national_id' => $canManage ? $rider->national_id : null,
@@ -349,6 +459,11 @@ class RiderController extends Controller
             'stats' => $stats ?? RiderDayStats::forRiders([$rider->id])[$rider->id],
             'created_at' => $rider->created_at?->toIso8601String(),
         ];
+    }
+
+    private function photoUrl(Rider $rider): ?string
+    {
+        return $rider->hasPhoto() ? route('api.riders.photo', ['rider' => $rider, 'v' => RiderPhoto::version($rider)]) : null;
     }
 
     private function whatsAppUrl(Rider $rider, string $text): string

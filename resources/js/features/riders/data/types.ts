@@ -56,3 +56,75 @@ export const EMPLOYMENT_TYPES = [
   { value: 'freelancer', label: 'Freelancer' },
   { value: 'agency', label: 'Agency' },
 ] as const
+
+/** One rider's totals in the Top performers leaderboard. */
+export type RiderPerformanceRow = {
+  id: number
+  name: string
+  photo_url: string | null
+  warehouse_name: string | null
+  status: 'active' | 'suspended'
+  /** Parcels the rider scanned out, delivered or attempted in the range. */
+  assigned: number
+  delivered: number
+  /** Failed attempts (a parcel can fail more than once). */
+  failed: number
+  cod_collected: number
+}
+
+/** Numbers per KSA day, lined up with `RiderPerformance.days`. */
+export type DailySeries = { delivered: number[]; failed: number[]; cod_collected: number[] }
+
+/** The whole team per day; `riders` is how many made an attempt that day. */
+export type TeamDaily = DailySeries & { riders: number[] }
+
+/** Where a parcel the rider handled ended up. */
+export type ParcelOutcome = 'delivered' | 'out_for_delivery' | 'attempt_fail' | 'cancelled' | 'returned' | 'handed_back' | 'other'
+
+export type RiderParcelEvent = {
+  action: 'out_for_delivery' | 'delivered' | 'attempt_failed'
+  occurred_at: string | null
+  /** Failed-attempt reason, already worded. */
+  reason: string | null
+  note: string | null
+  cod_amount: number | null
+  payment_method: string | null
+}
+
+export type RiderParcel = {
+  id: number
+  tracking_number: string | null
+  order_number: string | null
+  city: string | null
+  cod_amount: number
+  status: string
+  status_label: string
+  outcome: ParcelOutcome
+  /** Handed back: the rider who has it now, or null when an admin unassigned it. */
+  held_by: string | null
+  cancel_reason: string | null
+  cancelled_at: string | null
+  /** This rider's updates on the parcel in the range, oldest first. */
+  events: RiderParcelEvent[]
+}
+
+/** One rider in the range — the details under the leaderboard. */
+export type RiderSummary = {
+  assigned: number
+  outcomes: Record<ParcelOutcome, number>
+  failed_reasons: { reason: string; label: string; count: number }[]
+  daily: DailySeries
+}
+
+/** One page of a rider's parcel list, most recently touched first. */
+export type RiderParcelsPage = { parcels: RiderParcel[]; next_page: number | null }
+
+export type RiderPerformance = {
+  from: string
+  to: string
+  /** Every KSA day in the range, `yyyy-MM-dd`. */
+  days: string[]
+  /** Riders who made an update in the range, most deliveries first. */
+  riders: RiderPerformanceRow[]
+  team_daily: TeamDaily
+}

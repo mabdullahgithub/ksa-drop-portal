@@ -22,7 +22,7 @@ export function BottomNav({ tab, onTab, onScan, held }: Props) {
   return (
     <nav className='pointer-events-none fixed inset-x-0 bottom-0 z-30 px-4 pb-[calc(env(safe-area-inset-bottom)+10px)]'>
       {/* Light glass: the list stays visible, blurred, as it scrolls underneath. */}
-      <div className='glass pointer-events-auto mx-auto grid h-[68px] max-w-sm grid-cols-3 items-center rounded-full px-2 [--glass-blur:14px] [--glass-fill:rgb(255_255_255/0.42)] dark:[--glass-fill:rgb(38_36_40/0.42)]'>
+      <div className='glass pointer-events-auto mx-auto grid h-[68px] max-w-sm grid-cols-3 items-center rounded-full px-2 [--glass-blur:10px] [--glass-fill:rgb(255_255_255/0.22)] dark:[--glass-fill:rgb(38_36_40/0.22)]'>
         <NavItem active={tab === 'home'} onClick={() => onTab('home')} label={t('nav_home')} badge={held}>
           <House className='h-[22px] w-[22px]' />
         </NavItem>

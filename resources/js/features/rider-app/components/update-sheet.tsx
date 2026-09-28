@@ -52,7 +52,7 @@ export function UpdateSheet({ request, onClose, onUpdated, helpLink }: Props) {
   )
 }
 
-/** Each action's glass tint — orange out, green delivered, red failed. */
+/** Each action's colour — orange out, green delivered, red failed. */
 const ACTION_STYLE: Record<RiderAction, { icon: typeof Truck; tint: string }> = {
   out_for_delivery: { icon: Truck, tint: 'var(--brand)' },
   delivered: { icon: PackageCheck, tint: '#16a34a' },
