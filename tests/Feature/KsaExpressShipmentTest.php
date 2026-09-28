@@ -218,6 +218,42 @@ class KsaExpressShipmentTest extends TestCase
         $this->assertMatchesRegularExpression('#/MediaBox \[0\.0+ 0\.0+ 288\.0+ 432\.0+\]#', $pdf);
     }
 
+    public function test_waybill_is_dated_when_generated_not_when_the_order_was_placed(): void
+    {
+        Storage::fake('local');
+
+        $this->travelTo(now()->subDays(10));
+        $order = $this->makeOrder();
+
+        $this->travelTo(now()->addDays(3));
+        $this->actingAs($this->actor())->postJson('/api/shipments', [
+            'order_id' => $order->id,
+            'warehouse_id' => $this->warehouse()->id,
+            'courier' => 'ksadrop_express',
+        ])->assertCreated();
+
+        $this->travelBack();
+        $shipment = Shipment::firstOrFail();
+
+        $this->actingAs($this->actor())
+            ->postJson("/api/shipments/{$shipment->id}/invoice")
+            ->assertCreated();
+
+        $html = view('invoices.ksadrop-express-label', [
+            'invoice' => $shipment->invoices()->firstOrFail(),
+            'order' => $order->fresh('items'),
+            'shipment' => $shipment,
+            'seller' => ['name' => 'KSA Drop', 'phone' => '', 'address' => 'Riyadh', 'city' => 'Riyadh'],
+            'barcode' => '',
+            'orderBarcode' => '',
+            'qr' => '',
+        ])->render();
+
+        $this->assertStringContainsString(now()->format('d M Y'), $html);
+        $this->assertStringNotContainsString($order->created_at->format('d M Y'), $html);
+        $this->assertStringNotContainsString($shipment->shipped_at->format('d M Y'), $html);
+    }
+
     public function test_waybill_stays_on_one_page_with_worst_case_data(): void
     {
         Storage::fake('local');

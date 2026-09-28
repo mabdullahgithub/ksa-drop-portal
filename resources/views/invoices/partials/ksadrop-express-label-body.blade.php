@@ -4,7 +4,9 @@
     @php
         $isCod = $order->payment_method && str_contains(strtolower($order->payment_method), 'cod');
         $pieces = (int) $order->items->sum('lineitem_quantity');
-        $shippedAt = $shipment->shipped_at ?? now();
+        // Date the waybill was generated (InvoiceService::issueShippingInvoice()
+        // stamps it on every generation), not when the order or shipment was created.
+        $generatedAt = $invoice->issued_at ?? now();
 
         // Receiver as confirmed in the create dialog (KsaDropExpressDriver::bookingRecord),
         // falling back to the order's shipping address.
@@ -81,7 +83,7 @@
             <td class="pad center" style="width: 24%;">
                 <div class="k">Service</div>
                 <div class="svc">{{ $shipment->service_type === '01' ? 'EXPRESS' : 'STANDARD' }}</div>
-                <div style="font-size: 7px;">{{ $shippedAt->format('d M Y') }}</div>
+                <div style="font-size: 7px;">{{ $generatedAt->format('d M Y') }}</div>
             </td>
             <td class="badge" style="width: 24%;">{{ $isCod ? 'COD' : 'PPD' }}</td>
         </tr>
@@ -219,7 +221,7 @@
                 <div class="qr"><img src="{{ $qr }}" alt="Track"></div>
                 <div class="k" style="margin-top: 2px;">Scan to track</div>
                 <div style="font-size: 6px; margin-top: 1px;">{{ preg_replace('#^https?://#', '', rtrim(config('app.url'), '/')) }}/track</div>
-                <div style="font-size: 5.5px; margin-top: 3px;">{{ $invoice->invoice_number }} &middot; {{ now()->format('d M Y H:i') }}</div>
+                <div style="font-size: 5.5px; margin-top: 3px;">{{ $invoice->invoice_number }} &middot; {{ $generatedAt->format('d M Y H:i') }}</div>
             </td>
         </tr>
     </table>
