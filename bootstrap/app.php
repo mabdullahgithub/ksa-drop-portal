@@ -15,6 +15,9 @@ return Application::configure(basePath: dirname(__DIR__))
         web: __DIR__.'/../routes/web.php',
         commands: __DIR__.'/../routes/console.php',
         health: '/up',
+        then: function () {
+            \Illuminate\Support\Facades\Route::middleware('rider')->group(base_path('routes/rider.php'));
+        },
     )
     ->withMiddleware(function (Middleware $middleware): void {
         // Trust the ngrok / reverse-proxy forwarded headers so Laravel detects
@@ -29,6 +32,16 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->web(append: [
             \App\Http\Middleware\HandleInertiaRequests::class,
             \App\Http\Middleware\AddLinkHeadersForPreloadedAssetsUnlessInertia::class,
+        ]);
+
+        // KSA Express rider app: its own device cookie instead of a
+        // session, so no session and no CSRF token — writes are checked by
+        // Origin instead. See App\Services\Riders\RiderAuthService.
+        $middleware->group('rider', [
+            \Illuminate\Cookie\Middleware\EncryptCookies::class,
+            \Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse::class,
+            \App\Http\Middleware\VerifyRiderOrigin::class,
+            \Illuminate\Routing\Middleware\SubstituteBindings::class,
         ]);
 
         $middleware->alias([
@@ -69,11 +82,11 @@ return Application::configure(basePath: dirname(__DIR__))
             ]);
         });
 
-        // Statuses we own a designed page for. Anything else keeps Laravel's
-        // default response.
-        $rendered = [401, 403, 404, 419, 429, 500, 503];
-
-        $exceptions->respond(function (Response $response, Throwable $exception, Request $request) use ($rendered) {
+        // Every browser-facing error gets our designed page and nothing else:
+        // no exception class, message or stack trace ever reaches the screen,
+        // even with APP_DEBUG on. The cause goes to the log instead, under a
+        // reference the user can quote to support.
+        $exceptions->respond(function (Response $response, Throwable $exception, Request $request) {
             $status = $response->getStatusCode();
 
             // Only take over full-page browser navigations and Inertia visits.
@@ -83,18 +96,10 @@ return Application::configure(basePath: dirname(__DIR__))
                 return $response;
             }
 
-            if (! in_array($status, $rendered, true)) {
+            if ($status < 400) {
                 return $response;
             }
 
-            // While developing, a 5xx should still open the full stack-trace
-            // page — it is far more useful than our error screen. Set
-            // APP_DEBUG=false to preview what a user actually sees.
-            if ($status >= 500 && config('app.debug')) {
-                return $response;
-            }
-
-            // Give the user something support can grep the logs for.
             $reference = null;
 
             if ($status >= 500) {
@@ -104,6 +109,7 @@ return Application::configure(basePath: dirname(__DIR__))
                     'reference' => $reference,
                     'exception' => $exception::class,
                     'message' => $exception->getMessage(),
+                    'location' => $exception->getFile().':'.$exception->getLine(),
                     'url' => $request->fullUrl(),
                     'user_id' => $request->user()?->id,
                 ]);
@@ -112,9 +118,6 @@ return Application::configure(basePath: dirname(__DIR__))
             return Inertia::render('Errors/Error', [
                 'status' => $status,
                 'reference' => $reference,
-                'detail' => config('app.debug')
-                    ? $exception::class.': '.$exception->getMessage()."\n\n".$exception->getTraceAsString()
-                    : null,
             ])
                 ->toResponse($request)
                 ->setStatusCode($status);

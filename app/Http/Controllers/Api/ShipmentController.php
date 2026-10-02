@@ -8,6 +8,7 @@ use App\Jobs\PushShopifyFulfillmentJob;
 use App\Models\Shipment;
 use App\Models\Warehouse;
 use App\Services\Shipping\CourierManager;
+use App\Services\Shipping\Drivers\KsaDropExpressDriver;
 use App\Services\Shipping\Drivers\LogesTechsDriver;
 use App\Services\Shipping\DTOs\ShipmentData;
 use App\Services\Shipping\Enums\ShipmentStatus;
@@ -381,6 +382,12 @@ class ShipmentController extends Controller
             return response()->json(['message' => 'No tracking number available.'], 422);
         }
 
+        // Our own riders write KSA Express status as it happens; there is
+        // nothing to fetch, and rewriting the history could race a rider.
+        if ($shipment->courier === KsaDropExpressDriver::KEY) {
+            return response()->json(['message' => 'Tracking updated.', 'shipment' => $shipment->fresh()]);
+        }
+
         $driver = $this->courierManager->driver($shipment->courier);
         $result = $driver->trackShipment($shipment->tracking_number);
 
@@ -421,6 +428,25 @@ class ShipmentController extends Controller
 
         return response()->json([
             'message'  => 'Exception escalated and admins notified.',
+            'shipment' => $shipment->fresh(),
+        ]);
+    }
+
+    /**
+     * Free a KSA Express parcel from its rider — e.g. the rider left, or it
+     * came back to the hub and goes out with someone else — so another rider
+     * can scan it out.
+     */
+    public function unassignRider(Shipment $shipment)
+    {
+        if (! $shipment->rider_id) {
+            return response()->json(['message' => 'No rider is assigned to this shipment.'], 422);
+        }
+
+        $shipment->update(['rider_id' => null]);
+
+        return response()->json([
+            'message'  => 'Rider unassigned. Any rider can now scan this parcel out.',
             'shipment' => $shipment->fresh(),
         ]);
     }

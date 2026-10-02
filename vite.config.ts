@@ -7,7 +7,7 @@ import path from 'path'
 export default defineConfig({
     plugins: [
         laravel({
-            input: ['resources/js/app.tsx', 'resources/js/embedded-app.tsx'],
+            input: ['resources/js/app.tsx', 'resources/js/embedded-app.tsx', 'resources/js/rider-app.tsx'],
             refresh: true,
         }),
         react(),

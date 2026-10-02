@@ -55,7 +55,7 @@ export const ERROR_COPY: Record<ErrorStatus, ErrorCopy> = {
   500: {
     title: 'Something went wrong on our end',
     description:
-      'We hit an unexpected error while handling your request. The team has been notified. Copy the details below if you need to report it.',
+      'We hit an unexpected error while handling your request. The team has been notified. Please try again in a moment.',
     retryable: true,
     bot: { type: 'puddle', state: 'default' },
   },
@@ -71,7 +71,7 @@ export const ERROR_COPY: Record<ErrorStatus, ErrorCopy> = {
 export const DEFAULT_ERROR_COPY: ErrorCopy = {
   title: 'Something went wrong',
   description:
-    'We hit an unexpected error. You can go back, retry, or copy the details below and send them to support.',
+    'We hit an unexpected error. You can go back or try again.',
   retryable: true,
   bot: { type: 'puddle', state: 'default' },
 }

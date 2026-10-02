@@ -8,6 +8,7 @@ use App\Services\Shipping\CourierManager;
 use App\Services\Shipping\DTOs\TrackingEvent;
 use App\Services\Shipping\DTOs\TrackingResult;
 use App\Services\Shipping\Drivers\ImileDriver;
+use App\Services\Shipping\Drivers\KsaDropExpressDriver;
 use App\Services\Shipping\Enums\ShipmentStatus;
 use Illuminate\Console\Command;
 use Illuminate\Support\Collection;
@@ -24,6 +25,11 @@ class SyncShipmentTracking extends Command
 
         $shipments = Shipment::trackable()
             ->whereNotNull('tracking_number')
+            // KSA Express has no courier to ask — its riders record status as
+            // it happens (ShipmentEventRecorder). Polling it would only
+            // rewrite tracking_history from a copy read moments earlier, and
+            // could drop an update a rider made in between.
+            ->where('courier', '!=', KsaDropExpressDriver::KEY)
             ->orderBy('updated_at', 'asc')
             ->limit($limit)
             ->get();

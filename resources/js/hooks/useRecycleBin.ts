@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { DEFAULT_PAGE_SIZE } from '@/components/data-table'
 
-export type RecycleBinTab = 'orders' | 'clients' | 'inventory' | 'users'
+export type RecycleBinTab = 'orders' | 'clients' | 'inventory' | 'users' | 'riders'
 
 /** Who deleted a record, and from where. Null for rows deleted before auditing existed. */
 export type DeletedByInfo = {
@@ -63,6 +63,20 @@ export type TrashedUser = {
   deleted_by: DeletedByInfo | null
 }
 
+export type TrashedRider = {
+  id: number
+  name: string
+  name_ar: string | null
+  phone_local: string
+  warehouse_name: string | null
+  city: string | null
+  status: 'active' | 'suspended'
+  /** Parcels they ever updated. Riders with any history can't be permanently deleted. */
+  parcels_count: number
+  deleted_at: string | null
+  deleted_by: DeletedByInfo | null
+}
+
 export type RecycleBinMeta = {
   current_page: number
   last_page: number
@@ -75,6 +89,7 @@ export type RecycleBinCounts = {
   clients: number
   inventory: number
   users: number
+  riders: number
 }
 
 export type RestoreResult = {
@@ -88,7 +103,7 @@ export type RestoreResult = {
 export type PurgeResult = {
   message: string
   purged_count: number
-  /** Rows the server refused to purge (users only, for now), with why. */
+  /** Rows the server refused to purge (users and riders), with why. */
   blocked?: { name: string; reason: string }[]
 }
 
@@ -144,7 +159,7 @@ export async function lockRecycleBin(): Promise<void> {
 
 /** Tab badge counts, refetched after anything that changes the bin. */
 export function useRecycleBinCounts(enabled = true) {
-  const [counts, setCounts] = useState<RecycleBinCounts>({ orders: 0, clients: 0, inventory: 0, users: 0 })
+  const [counts, setCounts] = useState<RecycleBinCounts>({ orders: 0, clients: 0, inventory: 0, users: 0, riders: 0 })
 
   const refresh = useCallback(async () => {
     if (!enabled) return

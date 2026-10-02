@@ -78,6 +78,7 @@ export function UsersTable({ data, availableRoles }: DataTableProps) {
         table={table}
         searchPlaceholder='Filter users...'
         searchKey='name'
+        className='sm:space-x-0 sm:gap-x-2'
         filters={
           availableRoles
             ? [

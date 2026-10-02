@@ -21,6 +21,7 @@ import {
   Truck,
   Plug,
   Trash2,
+  Bike,
 } from 'lucide-react'
 import { type SidebarData } from '../types'
 
@@ -59,12 +60,6 @@ export const sidebarData: SidebarData = {
           permission: 'view client',
         },
         {
-          title: 'Inventory',
-          url: '/inventory',
-          icon: PackageSearch,
-          permission: 'view inventory',
-        },
-        {
           title: 'Orders',
           url: '/orders',
           icon: ShoppingCart,
@@ -78,10 +73,10 @@ export const sidebarData: SidebarData = {
           newTab: true,
         },
         {
-          title: 'Connectors',
-          url: '/apps',
-          icon: Package,
-          permission: 'view apps',
+          title: 'Riders',
+          url: '/riders',
+          icon: Bike,
+          permission: ['view riders', 'manage riders'],
         },
         {
           title: 'Tags',
@@ -90,11 +85,23 @@ export const sidebarData: SidebarData = {
           permission: 'view tags',
         },
         {
+          title: 'Inventory',
+          url: '/inventory',
+          icon: PackageSearch,
+          permission: 'view inventory',
+        },
+        {
+          title: 'Connectors',
+          url: '/apps',
+          icon: Package,
+          permission: 'view apps',
+        },
+        {
           title: 'Recycle Bin',
           url: '/recycle-bin',
           icon: Trash2,
           // Array = any-of, matching the canAny check the route uses.
-          permission: ['delete orders', 'delete client', 'delete inventory', 'delete users'],
+          permission: ['delete orders', 'delete client', 'delete inventory', 'delete users', 'manage riders'],
         },
       ],
     },

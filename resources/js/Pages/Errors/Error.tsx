@@ -6,8 +6,6 @@ import { useDefaultRoute } from '@/hooks/use-default-route'
 
 type Props = {
   status: number
-  /** Exception message and trace — only sent by the server when debug is on. */
-  detail?: string | null
   /** Log correlation id, safe to show in production. */
   reference?: string | null
 }
@@ -19,7 +17,7 @@ type Props = {
  * Deliberately not named `Error` — importing it under that name would shadow the
  * global `Error` constructor in the consuming module.
  */
-export default function ErrorStatusPage({ status, detail, reference }: Props) {
+export default function ErrorStatusPage({ status, reference }: Props) {
   const { title, description, retryable } = copyForStatus(status)
   const fallbackRoute = useDefaultRoute()
 
@@ -49,7 +47,6 @@ export default function ErrorStatusPage({ status, detail, reference }: Props) {
         status={status}
         title={title}
         description={description}
-        detail={detail}
         reference={reference}
         manageDocumentTitle={false}
         onRetry={retryable ? () => router.reload() : undefined}

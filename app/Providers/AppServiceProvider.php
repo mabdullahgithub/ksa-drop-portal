@@ -7,15 +7,21 @@ use App\Models\Client;
 use App\Models\ClientProduct;
 use App\Models\Order;
 use App\Models\Product;
+use App\Models\Rider;
 use App\Models\User;
 use App\Observers\ClientObserver;
 use App\Observers\ClientProductObserver;
 use App\Observers\OrderObserver;
 use App\Observers\ProductObserver;
+use App\Observers\RiderObserver;
 use App\Observers\UserObserver;
+use App\Support\PhoneNumber;
+use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Http\Request;
 use Illuminate\Mail\Events\MessageSending;
 use Illuminate\Mail\Events\MessageSent;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Facades\Vite;
 use Illuminate\Support\ServiceProvider;
@@ -59,5 +65,14 @@ class AppServiceProvider extends ServiceProvider
         ClientProduct::observe(ClientProductObserver::class);
         Product::observe(ProductObserver::class);
         User::observe(UserObserver::class);
+        Rider::observe(RiderObserver::class);
+
+        // Rider phone + PIN sign-in. Per phone on top of per IP, so guessing
+        // one rider's PIN is slow even from many networks; the rider's own
+        // lock after Rider::MAX_PIN_ATTEMPTS wrong PINs is the backstop.
+        RateLimiter::for('rider-login', fn (Request $request) => [
+            Limit::perMinute(10)->by('ip:' . $request->ip()),
+            Limit::perMinutes(15, 5)->by('phone:' . (PhoneNumber::normalize((string) $request->input('phone')) ?? $request->ip())),
+        ]);
     }
 }

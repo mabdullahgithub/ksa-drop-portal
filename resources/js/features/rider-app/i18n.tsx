@@ -1,0 +1,513 @@
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
+
+/**
+ * English / Arabic for the rider app. The choice is kept per phone.
+ * To add a language, add a column here and a button in LanguageToggle.
+ */
+
+export type Lang = 'en' | 'ar'
+
+const en = {
+  app_name: 'KSA Express Rider',
+  loading: 'Loading…',
+  retry: 'Try again',
+  refresh: 'Refresh',
+  close: 'Close',
+  cancel: 'Cancel',
+  update: 'Update',
+  updating: 'Updating…',
+  offline: 'No internet. Try again when you have signal.',
+  too_many: 'Too many tries. Wait a few minutes and try again.',
+  something_wrong: 'Something went wrong. Try again.',
+
+  // Home
+  hello: 'Hey {name}!',
+  home_headline: 'Let’s deliver\ntoday’s parcels!',
+  search_placeholder: 'Search name, phone, tracking',
+  clear_search: 'Clear search',
+  filter: 'Filter',
+  filter_title: 'Show parcels',
+  filter_all: 'All parcels',
+  filter_out_for_delivery: 'Out for delivery',
+  filter_attempt_fail: 'Delivery failed',
+  filter_cod: 'Cash to collect',
+  period_title: 'Delivered in',
+  no_match: 'Nothing matches your search or filter.',
+  scan: 'Scan parcel',
+  with_me: 'With me',
+  delivered_today: 'Delivered',
+  failed_today: 'Failed',
+  cash_today: 'Cash',
+  today: 'Today',
+  my_parcels: 'My parcels',
+  no_parcels: 'No parcels with you. Tap Scan to start.',
+  profile: 'My profile',
+  nav_home: 'Home',
+  nav_profile: 'Profile',
+  tab_with_me: 'With me',
+  tab_delivered: 'Delivered',
+  range_today: 'Today',
+  range_yesterday: 'Yesterday',
+  range_week: '7 days',
+  no_delivered: 'No deliveries in this period.',
+  delivered_summary: '{n} delivered',
+  cash_label: 'Cash',
+  delivered_to: 'Received by {name}',
+  language_label: 'Language',
+  help_text: 'Problem with the app, a parcel or your cash? Contact your supervisor.',
+  support_title: 'Need help?',
+  log_out: 'Log out',
+  log_out_title: 'Log out of the app?',
+  log_out_text: 'To sign back in on this phone you’ll need your PIN or a new link from your supervisor.',
+  logging_out: 'Logging out…',
+  mode_single: 'One by one',
+  mode_batch: 'Batch',
+  picked_up: 'Picked up — out for delivery',
+  batch_hint: 'Scan each parcel you are taking. Each one is assigned to you and marked out for delivery.',
+  batch_count: '{n} picked up',
+  batch_problems: '{n} not picked up',
+  batch_done: 'Done',
+  batch_summary: '{n} parcels assigned to you',
+  claim_claimed: 'Picked up',
+  claim_already_mine: 'Already with you',
+  claim_held_by_other: 'With {name}',
+  claim_finished: '{status} — do not take it',
+  claim_not_ksa_express: 'Not a KSA Express parcel',
+  claim_not_found: 'Not found',
+  claim_error: 'No internet — tap to try again',
+  support_intro: 'Problem with the app, a parcel or your cash? Message support on WhatsApp.',
+  contact_support: 'Contact support on WhatsApp',
+  parcel_help: 'Problem with this parcel? Message support',
+  support_message: 'Hi, I am {name} ({phone}), KSA Express rider. I need help with: ',
+  support_parcel_message: 'Hi, I am {name} ({phone}), KSA Express rider. I need help with parcel {tracking}: ',
+  add_photo: 'Add my photo',
+  change_photo: 'Change my photo',
+  photo_updated: 'Photo updated',
+  photo_hint: 'Your supervisor sees this photo.',
+  rider_role: 'KSA Express rider',
+  phone_label: 'Phone',
+  hub_label: 'Hub',
+  app_guide: 'How to use the app',
+  app_guide_hint: 'Scan, deliver, cash and help',
+
+  // Welcome and guide (first open on a phone; again from Profile)
+  welcome_title: 'Scan. Ride.\nDeliver.',
+  welcome_text: 'Your parcels, your customers and your cash — all in one app.',
+  get_started: 'Get started',
+  guide_skip: 'Skip',
+  guide_next: 'Next',
+  guide_back: 'Back',
+  guide_done: 'Let’s go',
+  guide_step: 'Step {n} of {total}',
+  guide_scan_title: 'Scan to pick up',
+  guide_scan_text: 'Tap the orange Scan button and point the camera at the barcode. The parcel is assigned to you and marked out for delivery.',
+  guide_scan_tip: 'At the hub? Switch to Batch and scan all your parcels in one go.',
+  guide_deliver_title: 'Deliver and confirm',
+  guide_deliver_text: 'Call or WhatsApp the customer from the parcel. Once it’s handed over, tap Delivered and enter the amount you collected. A photo of the parcel helps if there’s ever a question.',
+  guide_failed_title: 'Couldn’t deliver?',
+  guide_failed_text: 'Tap Delivery failed and choose why — no answer, wrong address and so on. The parcel stays with you for the next try.',
+  guide_day_title: 'Your day and your cash',
+  guide_day_text: 'Home shows the parcels with you, what you delivered today and the cash you collected. Stuck? Open Profile to get help.',
+
+  // Scanner
+  point_camera: 'Point the camera at the barcode',
+  type_number: 'Type number',
+  tracking_or_order: 'Tracking or order number',
+  find: 'Find',
+  light: 'Light',
+  camera_denied: 'Camera is blocked. Allow the camera for this app in your phone settings, or type the number.',
+  camera_unavailable: 'Camera is not available. Type the number instead.',
+  camera_starting: 'Starting camera…',
+
+  // Parcel
+  not_found: 'No parcel found for {code}.',
+  collect: 'Collect',
+  prepaid: 'Prepaid — collect nothing',
+  attempts: 'Attempts: {n}',
+  pieces: '{n} pcs',
+  call: 'Call',
+  whatsapp: 'WhatsApp',
+  map: 'Map',
+  note_from_office: 'Note',
+  already_delivered: 'Already delivered',
+  delivered_on: 'Delivered {time}',
+  blocked_stop: '{status} — do not deliver. Take it back to the hub.',
+  blocked_held_by_other: 'This parcel is with {name}. Ask your supervisor to unassign it.',
+  blocked_not_ksa_express: 'This is not a KSA Express parcel.',
+  what_happened: 'What happened?',
+
+  // Actions
+  action_out_for_delivery: 'Out for delivery',
+  action_delivered: 'Delivered',
+  action_attempt_failed: 'Delivery failed',
+  hint_out_for_delivery: 'I have it and I am taking it to the customer',
+  hint_delivered: 'Handed over to the customer',
+  hint_attempt_failed: 'Could not deliver this time',
+  updated: 'Updated: {action}',
+
+  // Delivered form
+  amount_collected: 'Amount collected',
+  amount_differs: 'Amount is different from {amount} — write why in the note.',
+  paid_by: 'Paid by',
+  pay_cash: 'Cash',
+  pay_card: 'Card',
+  pay_transfer: 'Transfer',
+  photo_optional: 'Photo of the delivered parcel (optional)',
+  take_photo: 'Take photo',
+  retake: 'Retake',
+  received_by: 'Received by (optional)',
+  need_amount: 'Enter the amount collected.',
+
+  // Failed form
+  why_failed: 'Why?',
+  reason_no_answer: 'Customer not answering',
+  reason_refused: 'Customer refused',
+  reason_wrong_address: 'Wrong address',
+  reason_reschedule: 'Customer asked for another day',
+  reason_no_cash: 'Customer had no cash',
+  reason_closed: 'Place closed',
+  reason_other: 'Other',
+  need_reason: 'Choose a reason.',
+
+  note: 'Note',
+  note_optional: 'Note (optional)',
+  need_note: 'Write a note.',
+
+  // Status labels
+  status_pending: 'Pending',
+  status_info_received: 'Ready',
+  status_in_transit: 'In transit',
+  status_out_for_delivery: 'Out for delivery',
+  status_attempt_fail: 'Delivery failed',
+  status_delivered: 'Delivered',
+  status_exception: 'Problem',
+  status_returned: 'Returned',
+  status_cancelled: 'Cancelled',
+  status_failed: 'Failed',
+
+  // Sign in
+  sign_in_title: 'Sign in',
+  sign_in_intro: 'Sign in with the phone number and PIN your supervisor gave you.',
+  phone: 'Phone number',
+  pin: 'PIN',
+  sign_in: 'Sign in',
+  signing_in: 'Signing you in…',
+  no_pin_help: 'No PIN? Ask your supervisor for your sign-in link or a PIN.',
+  reason_replaced: 'You signed in on another phone.',
+  reason_revoked: 'You were signed out by your supervisor.',
+  reason_suspended: 'Your account is suspended. Contact your supervisor.',
+  reason_link_used: 'This link was already used. Sign in with your phone and PIN, or ask for a new link.',
+  reason_link_expired: 'This link has expired. Ask your supervisor for a new one, or sign in with your PIN.',
+  reason_link_replaced: 'A newer link was sent to you. Open the latest one, or sign in with your PIN.',
+  reason_link_invalid: 'This link is not valid. Ask your supervisor for a new one.',
+  reason_invalid_credentials: 'Phone number or PIN is wrong.',
+  reason_pin_locked: 'Too many wrong PINs. Ask your supervisor for a new PIN.',
+
+  // Activation / install
+  welcome: 'Welcome, {name}',
+  activate_intro: 'Install the KSA Express Rider app on this phone. You will be signed in automatically — no password.',
+  install_app: 'Install app',
+  installed_open: 'Installed. Open “KSA Rider” from your home screen.',
+  android_already_installed: 'Already installed? Open “KSA Rider” from your home screen.',
+  android_no_prompt: 'No Install button? Tap ⋮ (top right), choose “Open in Chrome”, then ⋮ → “Install app” or “Add to Home screen”.',
+  ios_title: 'Install on iPhone',
+  ios_step_share: 'Tap the Share button at the bottom of Safari',
+  ios_step_add: 'Scroll down and tap “Add to Home Screen”',
+  ios_step_open: 'Tap “Add”, then open KSA Rider from your home screen',
+  ios_open_in_safari: 'If you don’t see the Share button, open this link in Safari first.',
+  in_app_browser: 'This link opened inside another app. Open it in Chrome (Android) or Safari (iPhone) to install.',
+  copy_link: 'Copy link',
+  link_copied: 'Link copied',
+  use_in_browser: 'Use without installing',
+  use_in_browser_confirm: 'Use the app in this browser instead? Installing is better. On iPhone, the link then can’t be used to install — you’d need a PIN.',
+  language: 'العربية',
+} as const
+
+type Key = keyof typeof en
+
+const ar: Record<Key, string> = {
+  app_name: 'مندوب KSA Express',
+  loading: 'جارٍ التحميل…',
+  retry: 'حاول مرة أخرى',
+  refresh: 'تحديث',
+  close: 'إغلاق',
+  cancel: 'إلغاء',
+  update: 'تحديث الحالة',
+  updating: 'جارٍ التحديث…',
+  offline: 'لا يوجد اتصال بالإنترنت. حاول مرة أخرى عند توفر الشبكة.',
+  too_many: 'محاولات كثيرة. انتظر بضع دقائق ثم حاول مرة أخرى.',
+  something_wrong: 'حدث خطأ. حاول مرة أخرى.',
+
+  hello: 'أهلاً {name}!',
+  home_headline: 'لنوصّل\nشحنات اليوم!',
+  search_placeholder: 'ابحث بالاسم أو الجوال أو الرقم',
+  clear_search: 'مسح البحث',
+  filter: 'تصفية',
+  filter_title: 'عرض الشحنات',
+  filter_all: 'كل الشحنات',
+  filter_out_for_delivery: 'خارج للتوصيل',
+  filter_attempt_fail: 'تعذّر التسليم',
+  filter_cod: 'نقد للتحصيل',
+  period_title: 'تم التسليم خلال',
+  no_match: 'لا توجد نتائج مطابقة للبحث أو التصفية.',
+  scan: 'مسح الشحنة',
+  with_me: 'معي',
+  delivered_today: 'تم التسليم',
+  failed_today: 'لم تُسلَّم',
+  cash_today: 'النقد',
+  today: 'اليوم',
+  my_parcels: 'شحناتي',
+  no_parcels: 'لا توجد شحنات معك. اضغط مسح للبدء.',
+  profile: 'ملفي',
+  nav_home: 'الرئيسية',
+  nav_profile: 'حسابي',
+  tab_with_me: 'معي',
+  tab_delivered: 'تم التسليم',
+  range_today: 'اليوم',
+  range_yesterday: 'أمس',
+  range_week: '7 أيام',
+  no_delivered: 'لا توجد شحنات مسلَّمة في هذه الفترة.',
+  delivered_summary: '{n} مسلَّمة',
+  cash_label: 'النقد',
+  delivered_to: 'استلمها {name}',
+  language_label: 'اللغة',
+  help_text: 'مشكلة في التطبيق أو شحنة أو النقد؟ تواصل مع المشرف.',
+  support_title: 'تحتاج مساعدة؟',
+  log_out: 'تسجيل الخروج',
+  log_out_title: 'تسجيل الخروج من التطبيق؟',
+  log_out_text: 'للدخول مرة أخرى على هذا الجوال ستحتاج إلى الرمز السري أو رابط جديد من المشرف.',
+  logging_out: 'جارٍ تسجيل الخروج…',
+  mode_single: 'واحدة تلو الأخرى',
+  mode_batch: 'دفعة',
+  picked_up: 'تم الاستلام — خارج للتوصيل',
+  batch_hint: 'امسح كل شحنة تأخذها. تُسنَد كل واحدة إليك وتُسجَّل خارجة للتوصيل.',
+  batch_count: 'تم استلام {n}',
+  batch_problems: 'لم يتم استلام {n}',
+  batch_done: 'تم',
+  batch_summary: 'أُسندت إليك {n} شحنات',
+  claim_claimed: 'تم الاستلام',
+  claim_already_mine: 'معك بالفعل',
+  claim_held_by_other: 'مع {name}',
+  claim_finished: '{status} — لا تأخذها',
+  claim_not_ksa_express: 'ليست شحنة KSA Express',
+  claim_not_found: 'غير موجودة',
+  claim_error: 'لا يوجد اتصال — اضغط للمحاولة مرة أخرى',
+  support_intro: 'مشكلة في التطبيق أو شحنة أو النقد؟ راسل الدعم على واتساب.',
+  contact_support: 'تواصل مع الدعم على واتساب',
+  parcel_help: 'مشكلة في هذه الشحنة؟ راسل الدعم',
+  support_message: 'مرحباً، أنا {name} ({phone})، مندوب KSA Express. أحتاج مساعدة في: ',
+  support_parcel_message: 'مرحباً، أنا {name} ({phone})، مندوب KSA Express. أحتاج مساعدة في الشحنة {tracking}: ',
+  add_photo: 'إضافة صورتي',
+  change_photo: 'تغيير صورتي',
+  photo_updated: 'تم تحديث الصورة',
+  photo_hint: 'يرى المشرف هذه الصورة.',
+  rider_role: 'مندوب KSA Express',
+  phone_label: 'الجوال',
+  hub_label: 'المستودع',
+  app_guide: 'طريقة استخدام التطبيق',
+  app_guide_hint: 'المسح والتسليم والنقد والمساعدة',
+
+  welcome_title: 'امسح. انطلق.\nسلّم.',
+  welcome_text: 'شحناتك وعملاؤك ونقدك — كلها في تطبيق واحد.',
+  get_started: 'ابدأ الآن',
+  guide_skip: 'تخطي',
+  guide_next: 'التالي',
+  guide_back: 'رجوع',
+  guide_done: 'لنبدأ',
+  guide_step: 'الخطوة {n} من {total}',
+  guide_scan_title: 'امسح لتستلم',
+  guide_scan_text: 'اضغط زر المسح البرتقالي ووجّه الكاميرا نحو الباركود. تُسنَد الشحنة إليك وتُسجَّل خارجة للتوصيل.',
+  guide_scan_tip: 'في المستودع؟ اختر «دفعة» وامسح كل شحناتك مرة واحدة.',
+  guide_deliver_title: 'سلّم وأكّد',
+  guide_deliver_text: 'اتصل بالعميل أو راسله على واتساب من صفحة الشحنة. بعد التسليم اضغط «تم التسليم» وأدخل المبلغ المحصَّل. صورة الشحنة تفيد إذا حدث أي استفسار.',
+  guide_failed_title: 'تعذّر التسليم؟',
+  guide_failed_text: 'اضغط «تعذّر التسليم» واختر السبب — العميل لا يرد، العنوان خاطئ وغيرها. تبقى الشحنة معك للمحاولة التالية.',
+  guide_day_title: 'يومك ونقدك',
+  guide_day_text: 'تعرض الرئيسية الشحنات التي معك وما سلّمته اليوم والنقد الذي حصّلته. تواجه مشكلة؟ افتح «حسابي» للمساعدة.',
+
+  point_camera: 'وجّه الكاميرا نحو الباركود',
+  type_number: 'اكتب الرقم',
+  tracking_or_order: 'رقم التتبع أو رقم الطلب',
+  find: 'بحث',
+  light: 'الإضاءة',
+  camera_denied: 'الكاميرا محظورة. اسمح للتطبيق باستخدام الكاميرا من إعدادات الجوال، أو اكتب الرقم.',
+  camera_unavailable: 'الكاميرا غير متاحة. اكتب الرقم بدلاً من ذلك.',
+  camera_starting: 'جارٍ تشغيل الكاميرا…',
+
+  not_found: 'لا توجد شحنة بالرقم {code}.',
+  collect: 'حصّل',
+  prepaid: 'مدفوع مسبقاً — لا تحصّل شيئاً',
+  attempts: 'المحاولات: {n}',
+  pieces: '{n} قطعة',
+  call: 'اتصال',
+  whatsapp: 'واتساب',
+  map: 'الخريطة',
+  note_from_office: 'ملاحظة',
+  already_delivered: 'تم تسليمها مسبقاً',
+  delivered_on: 'سُلِّمت {time}',
+  blocked_stop: '{status} — لا تسلّمها. أعدها إلى المستودع.',
+  blocked_held_by_other: 'هذه الشحنة مع {name}. اطلب من المشرف إلغاء إسنادها.',
+  blocked_not_ksa_express: 'هذه ليست شحنة KSA Express.',
+  what_happened: 'ماذا حدث؟',
+
+  action_out_for_delivery: 'خارج للتوصيل',
+  action_delivered: 'تم التسليم',
+  action_attempt_failed: 'تعذّر التسليم',
+  hint_out_for_delivery: 'استلمتها وسأوصلها إلى العميل',
+  hint_delivered: 'سُلِّمت إلى العميل',
+  hint_attempt_failed: 'لم أتمكن من التسليم هذه المرة',
+  updated: 'تم التحديث: {action}',
+
+  amount_collected: 'المبلغ المحصَّل',
+  amount_differs: 'المبلغ يختلف عن {amount} — اكتب السبب في الملاحظة.',
+  paid_by: 'طريقة الدفع',
+  pay_cash: 'نقداً',
+  pay_card: 'بطاقة',
+  pay_transfer: 'تحويل',
+  photo_optional: 'صورة الشحنة المسلَّمة (اختياري)',
+  take_photo: 'التقط صورة',
+  retake: 'إعادة التصوير',
+  received_by: 'المستلم (اختياري)',
+  need_amount: 'أدخل المبلغ المحصَّل.',
+
+  why_failed: 'السبب؟',
+  reason_no_answer: 'العميل لا يرد',
+  reason_refused: 'العميل رفض الاستلام',
+  reason_wrong_address: 'العنوان خاطئ',
+  reason_reschedule: 'العميل طلب يوماً آخر',
+  reason_no_cash: 'العميل لا يملك المبلغ',
+  reason_closed: 'المكان مغلق',
+  reason_other: 'أخرى',
+  need_reason: 'اختر السبب.',
+
+  note: 'ملاحظة',
+  note_optional: 'ملاحظة (اختياري)',
+  need_note: 'اكتب ملاحظة.',
+
+  status_pending: 'قيد الانتظار',
+  status_info_received: 'جاهزة',
+  status_in_transit: 'في الطريق',
+  status_out_for_delivery: 'خارج للتوصيل',
+  status_attempt_fail: 'تعذّر التسليم',
+  status_delivered: 'تم التسليم',
+  status_exception: 'مشكلة',
+  status_returned: 'مرتجعة',
+  status_cancelled: 'ملغاة',
+  status_failed: 'فشلت',
+
+  sign_in_title: 'تسجيل الدخول',
+  sign_in_intro: 'سجّل الدخول برقم الجوال والرمز السري الذي أعطاك إياه المشرف.',
+  phone: 'رقم الجوال',
+  pin: 'الرمز السري',
+  sign_in: 'دخول',
+  signing_in: 'جارٍ تسجيل الدخول…',
+  no_pin_help: 'ليس لديك رمز؟ اطلب من المشرف رابط الدخول أو رمزاً سرياً.',
+  reason_replaced: 'سجّلت الدخول من جوال آخر.',
+  reason_revoked: 'قام المشرف بتسجيل خروجك.',
+  reason_suspended: 'حسابك موقوف. تواصل مع المشرف.',
+  reason_link_used: 'تم استخدام هذا الرابط مسبقاً. سجّل الدخول برقم الجوال والرمز السري، أو اطلب رابطاً جديداً.',
+  reason_link_expired: 'انتهت صلاحية هذا الرابط. اطلب رابطاً جديداً، أو سجّل الدخول بالرمز السري.',
+  reason_link_replaced: 'أُرسل لك رابط أحدث. افتح الرابط الأخير، أو سجّل الدخول بالرمز السري.',
+  reason_link_invalid: 'هذا الرابط غير صالح. اطلب رابطاً جديداً من المشرف.',
+  reason_invalid_credentials: 'رقم الجوال أو الرمز السري غير صحيح.',
+  reason_pin_locked: 'محاولات خاطئة كثيرة. اطلب رمزاً سرياً جديداً من المشرف.',
+
+  welcome: 'مرحباً، {name}',
+  activate_intro: 'ثبّت تطبيق مندوب KSA Express على هذا الجوال. سيتم تسجيل دخولك تلقائياً — بدون كلمة مرور.',
+  install_app: 'تثبيت التطبيق',
+  installed_open: 'تم التثبيت. افتح «KSA Rider» من الشاشة الرئيسية.',
+  android_already_installed: 'مثبّت مسبقاً؟ افتح «KSA Rider» من الشاشة الرئيسية.',
+  android_no_prompt: 'لا يظهر زر التثبيت؟ اضغط ⋮ (أعلى الشاشة)، اختر «فتح في Chrome»، ثم ⋮ ← «تثبيت التطبيق» أو «إضافة إلى الشاشة الرئيسية».',
+  ios_title: 'التثبيت على الآيفون',
+  ios_step_share: 'اضغط زر المشاركة أسفل متصفح Safari',
+  ios_step_add: 'مرّر للأسفل واضغط «إضافة إلى الشاشة الرئيسية»',
+  ios_step_open: 'اضغط «إضافة»، ثم افتح KSA Rider من الشاشة الرئيسية',
+  ios_open_in_safari: 'إذا لم يظهر زر المشاركة، افتح هذا الرابط في Safari أولاً.',
+  in_app_browser: 'فُتح هذا الرابط داخل تطبيق آخر. افتحه في Chrome (أندرويد) أو Safari (آيفون) للتثبيت.',
+  copy_link: 'نسخ الرابط',
+  link_copied: 'تم نسخ الرابط',
+  use_in_browser: 'الاستخدام بدون تثبيت',
+  use_in_browser_confirm: 'استخدام التطبيق في هذا المتصفح بدلاً من التثبيت؟ التثبيت أفضل. على الآيفون لن يعمل الرابط للتثبيت بعد ذلك — ستحتاج إلى رمز سري.',
+  language: 'English',
+}
+
+const dictionaries: Record<Lang, Record<Key, string>> = { en, ar }
+
+export type TFunction = (key: Key, vars?: Record<string, string | number>) => string
+
+type I18nContextValue = { lang: Lang; t: TFunction; toggle: () => void; setLang: (lang: Lang) => void }
+
+const I18nContext = createContext<I18nContextValue | null>(null)
+
+const STORAGE_KEY = 'rider_lang'
+
+function initialLang(): Lang {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY)
+    if (saved === 'en' || saved === 'ar') return saved
+  } catch {
+    // Storage blocked — fall through to the phone's language.
+  }
+  return navigator.language?.toLowerCase().startsWith('ar') ? 'ar' : 'en'
+}
+
+export function I18nProvider({ children }: { children: React.ReactNode }) {
+  const [lang, setLang] = useState<Lang>(initialLang)
+
+  useEffect(() => {
+    document.documentElement.lang = lang
+    document.documentElement.dir = lang === 'ar' ? 'rtl' : 'ltr'
+    try {
+      localStorage.setItem(STORAGE_KEY, lang)
+    } catch {
+      // Not remembered on this phone; the toggle still works for this visit.
+    }
+  }, [lang])
+
+  const t = useCallback<TFunction>(
+    (key, vars) => {
+      let text = dictionaries[lang][key] ?? en[key] ?? key
+      if (vars) {
+        for (const [name, value] of Object.entries(vars)) {
+          text = text.replaceAll(`{${name}}`, String(value))
+        }
+      }
+      return text
+    },
+    [lang]
+  )
+
+  const value = useMemo(() => ({ lang, t, setLang, toggle: () => setLang((l) => (l === 'en' ? 'ar' : 'en')) }), [lang, t])
+
+  return <I18nContext value={value}>{children}</I18nContext>
+}
+
+export function useI18n() {
+  const ctx = useContext(I18nContext)
+  if (!ctx) throw new Error('useI18n must be used within <I18nProvider>')
+  return ctx
+}
+
+/** "reason_link_used" etc. for a server code, falling back to a generic line. */
+export function reasonText(t: TFunction, code: string | null | undefined): string | null {
+  if (!code) return null
+  const key = `reason_${code}` as Key
+  if (key in en) return t(key)
+  if (code === 'offline') return t('offline')
+  if (code === 'too_many') return t('too_many')
+  return null
+}
+
+export function statusText(t: TFunction, status: string): string {
+  const key = `status_${status}` as Key
+  return key in en ? t(key) : status
+}
+
+/** Western digits in both languages — the cash in hand is counted that way. */
+export function money(amount: number, currency: string): string {
+  const formatted = new Intl.NumberFormat('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(amount)
+  return `${currency} ${formatted}`
+}

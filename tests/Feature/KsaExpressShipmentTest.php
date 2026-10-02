@@ -181,6 +181,42 @@ class KsaExpressShipmentTest extends TestCase
         $this->assertCount(1, $shipment->tracking_history);
     }
 
+    /**
+     * The label and the rider app both read Shipment::expectedCodAmount(), so
+     * the amount printed is the amount the rider is asked to collect. The
+     * label used to look for "cod" in the payment method and printed PREPAID
+     * for "Cash on Delivery".
+     */
+    public function test_booking_stores_the_cod_amount_the_label_prints_and_the_rider_collects(): void
+    {
+        $warehouse = $this->warehouse();
+
+        foreach ([['Cash on Delivery', 100.0], ['COD', 100.0], ['Prepaid', 0.0]] as [$method, $expected]) {
+            $order = $this->makeOrder($method);
+
+            $this->actingAs($this->actor())->postJson('/api/shipments', [
+                'order_id' => $order->id,
+                'warehouse_id' => $warehouse->id,
+                'courier' => 'ksadrop_express',
+            ])->assertCreated();
+
+            $shipment = $order->shipments()->firstOrFail();
+            $this->assertEquals($expected, $shipment->api_response['cod_amount'], $method);
+            $this->assertSame($expected, $shipment->expectedCodAmount(), $method);
+        }
+
+        // Booked before the amount was stored: same rule as booking.
+        $legacy = Shipment::create([
+            'order_id' => $this->makeOrder('Cash on Delivery')->id,
+            'courier' => 'ksadrop_express',
+            'tracking_number' => $this->prefix() . '999999',
+            'txlogistic_id' => 'legacy',
+            'status' => ShipmentStatus::INFO_RECEIVED->value,
+            'api_response' => ['courier' => 'ksadrop_express', 'receiver' => []],
+        ]);
+        $this->assertSame(100.0, $legacy->expectedCodAmount());
+    }
+
     public function test_cancel_succeeds_without_calling_any_api(): void
     {
         $this->actingAs($this->actor())->postJson('/api/shipments', [

@@ -1,6 +1,6 @@
 import { type ReactNode } from 'react'
 import { Link, usePage } from '@inertiajs/react'
-import { ChevronRight } from 'lucide-react'
+import { ChevronRight, ExternalLink } from 'lucide-react'
 import {
   Collapsible,
   CollapsibleContent,
@@ -86,6 +86,7 @@ function SidebarMenuLink({ item, href }: { item: NavLink; href: string }) {
             {item.icon && <item.icon />}
             <span>{item.title}</span>
             {item.badge && <NavBadge>{item.badge}</NavBadge>}
+            <ExternalLink className='ms-auto size-3.5! opacity-60' aria-label='Opens in a new tab' />
           </a>
         </SidebarMenuButton>
       </SidebarMenuItem>

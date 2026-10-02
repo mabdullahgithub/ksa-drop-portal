@@ -2,7 +2,9 @@
      expects $order, $shipment, $invoice, $seller, $barcode, $orderBarcode, $qr. --}}
     @use('App\Services\Shipping\WaybillTextFit', 'Fit')
     @php
-        $isCod = $order->payment_method && str_contains(strtolower($order->payment_method), 'cod');
+        // Same amount the rider app asks the rider to collect (Shipment::expectedCodAmount()).
+        $codAmount = $shipment->expectedCodAmount();
+        $isCod = $codAmount > 0;
         $pieces = (int) $order->items->sum('lineitem_quantity');
         // Date the waybill was generated (InvoiceService::issueShippingInvoice()
         // stamps it on every generation), not when the order or shipment was created.
@@ -24,7 +26,7 @@
         $s = fn ($v) => trim((string) $v);
         $destCity = $s($to['city'] ?: ($to['province'] ?: '—'));
         $destArea = $to['province'] && $to['province'] !== $to['city'] ? $s($to['province']) : '';
-        $codText = $isCod ? $order->currency . ' ' . number_format((float) $order->total, 2) : 'PREPAID';
+        $codText = $isCod ? ($shipment->api_response['cod_currency'] ?? $order->currency) . ' ' . number_format($codAmount, 2) : 'PREPAID';
         $toName = $s($to['name']);
         $toPhone = $s($to['phone'] ?: '—');
         $toAddress = $s(collect([$to['address'], $to['area']])->filter()->implode(', ') ?: '—');
