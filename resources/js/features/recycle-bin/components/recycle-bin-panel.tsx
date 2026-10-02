@@ -5,6 +5,7 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { SearchBeam } from '@/components/search-beam'
+import { usePermissions } from '@/hooks/use-permissions'
 import {
   type PurgeResult,
   type RecycleBinTab,
@@ -57,6 +58,9 @@ export function RecycleBinPanel<T extends { id: number }>({
   const { items, meta, loading, setPage, setPerPage, search, setSearch, refresh } =
     useRecycleBinList<T>(tab, true, onLocked)
   const { restore, purge, purgeAll } = useRecycleBinActions(tab)
+  const { can } = usePermissions()
+  const canRestore = can('restore recycle bin')
+  const canPurge = can('purge recycle bin')
   const [showEmptyDialog, setShowEmptyDialog] = useState(false)
 
   const afterChange = async () => {
@@ -144,16 +148,18 @@ export function RecycleBinPanel<T extends { id: number }>({
           </SearchBeam>
         </div>
 
-        <Button
-          variant='destructive'
-          size='sm'
-          disabled={totalInBin === 0}
-          onClick={() => setShowEmptyDialog(true)}
-          className='gap-1.5'
-        >
-          <Trash2 className='h-4 w-4' />
-          Empty {entityLabel} bin ({totalInBin})
-        </Button>
+        {canPurge && (
+          <Button
+            variant='destructive'
+            size='sm'
+            disabled={totalInBin === 0}
+            onClick={() => setShowEmptyDialog(true)}
+            className='gap-1.5'
+          >
+            <Trash2 className='h-4 w-4' />
+            Empty {entityLabel} bin ({totalInBin})
+          </Button>
+        )}
       </div>
 
       <RecycleBinTable<T>
@@ -166,8 +172,8 @@ export function RecycleBinPanel<T extends { id: number }>({
         getRowId={getRowId}
         onPageChange={setPage}
         onPageSizeChange={setPerPage}
-        onRestore={handleRestore}
-        onPurge={handlePurge}
+        onRestore={canRestore ? handleRestore : undefined}
+        onPurge={canPurge ? handlePurge : undefined}
       />
 
       <EmptyBinDialog

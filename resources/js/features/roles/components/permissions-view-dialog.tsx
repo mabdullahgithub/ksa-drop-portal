@@ -8,19 +8,13 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { useRoles } from './roles-provider'
-import { permissionCategories } from '../data/data'
+import { groupPermissions } from '../data/data'
 
 export function PermissionsViewDialog() {
   const { open, setOpen, currentRow } = useRoles()
   const isOpen = open === 'view-permissions' && currentRow
 
-  const groupedPermissions = Object.entries(permissionCategories).reduce((acc, [category, permissions]) => {
-    const rolePermissions = permissions.filter((p) => currentRow?.permissions.includes(p))
-    if (rolePermissions.length > 0) {
-      acc[category] = rolePermissions
-    }
-    return acc
-  }, {} as Record<string, string[]>)
+  const groupedPermissions = Object.fromEntries(groupPermissions(currentRow?.permissions ?? []))
 
   return (
     <Dialog open={!!isOpen} onOpenChange={() => setOpen(null)}>

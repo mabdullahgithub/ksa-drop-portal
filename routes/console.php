@@ -19,6 +19,13 @@ Schedule::command('shipments:sync-tracking --limit=200')
     ->everyTenMinutes()
     ->withoutOverlapping();
 
+// WhatsApp order-confirmation sweep. Advances "sent" → "followup_sent" at 24h
+// of silence and "followup_sent" → "graveyard" at 48h. Runs every 15 minutes,
+// so the thresholds are "at least 24h", never early.
+Schedule::command('whatsapp:process-followups')
+    ->everyFifteenMinutes()
+    ->withoutOverlapping();
+
 // Replay Shopify webhooks that failed to sync into orders. Each parked failure
 // carries its own backoff (1m → 24h over 8 attempts), so sweeping every five
 // minutes just means "check what's due" — it does not retry anything faster

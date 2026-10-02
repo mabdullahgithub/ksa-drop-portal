@@ -34,7 +34,7 @@ class RecycleBinLockTest extends TestCase
         app(PermissionRegistrar::class)->forgetCachedPermissions();
         RateLimiter::clear('');
 
-        foreach (['delete orders', 'delete client', 'delete inventory'] as $permission) {
+        foreach (['delete orders', 'delete client', 'delete inventory', 'view recycle bin', 'restore recycle bin', 'purge recycle bin'] as $permission) {
             Permission::findOrCreate($permission);
         }
 
@@ -44,7 +44,7 @@ class RecycleBinLockTest extends TestCase
     private function admin(): User
     {
         $role = Role::create(['name' => 'role-' . uniqid()]);
-        $role->givePermissionTo(['delete orders', 'delete client', 'delete inventory']);
+        $role->givePermissionTo(['delete orders', 'delete client', 'delete inventory', 'view recycle bin', 'restore recycle bin', 'purge recycle bin']);
 
         $user = User::factory()->create();
         $user->assignRole($role);

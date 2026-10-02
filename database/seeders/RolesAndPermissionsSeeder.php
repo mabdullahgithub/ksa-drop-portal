@@ -40,6 +40,15 @@ class RolesAndPermissionsSeeder extends Seeder
             'edit orders',
             'delete orders',
 
+            // WhatsApp inbox
+            'view whatsapp',
+            'reply whatsapp',
+
+            // Recycle Bin (each tab also needs that entity's delete permission)
+            'view recycle bin',
+            'restore recycle bin',
+            'purge recycle bin',
+
             // Apps CRUD
             'view apps',
             'create apps',
@@ -112,6 +121,12 @@ class RolesAndPermissionsSeeder extends Seeder
             // Orders
             'view orders', 'create orders', 'edit orders', 'delete orders',
 
+            // WhatsApp
+            'view whatsapp', 'reply whatsapp',
+
+            // Recycle Bin
+            'view recycle bin', 'restore recycle bin', 'purge recycle bin',
+
             // Apps
             'view apps', 'create apps', 'edit apps', 'delete apps',
 
@@ -149,6 +164,12 @@ class RolesAndPermissionsSeeder extends Seeder
 
             // Orders
             'view orders', 'create orders', 'edit orders', 'delete orders',
+
+            // WhatsApp
+            'view whatsapp', 'reply whatsapp',
+
+            // Recycle Bin
+            'view recycle bin', 'restore recycle bin', 'purge recycle bin',
 
             // Apps
             'view apps', 'create apps', 'edit apps', 'delete apps',

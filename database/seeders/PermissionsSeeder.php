@@ -41,6 +41,15 @@ class PermissionsSeeder extends Seeder
             'edit orders',
             'delete orders',
 
+            // WhatsApp inbox
+            'view whatsapp',
+            'reply whatsapp',
+
+            // Recycle Bin (each tab also needs that entity's delete permission)
+            'view recycle bin',
+            'restore recycle bin',
+            'purge recycle bin',
+
             // Apps
             'view apps',
             'create apps',
@@ -103,6 +112,8 @@ class PermissionsSeeder extends Seeder
             'view client', 'create client', 'edit client', 'delete client', 'impersonate client',
             'view inventory', 'create inventory', 'edit inventory', 'delete inventory',
             'view orders', 'create orders', 'edit orders', 'delete orders',
+            'view whatsapp', 'reply whatsapp',
+            'view recycle bin', 'restore recycle bin', 'purge recycle bin',
             'view apps', 'create apps', 'edit apps', 'delete apps',
             'view tags', 'create tags', 'edit tags', 'delete tags',
             'view users', 'create users', 'edit users',
@@ -121,6 +132,7 @@ class PermissionsSeeder extends Seeder
             'view client', 'create client', 'edit client',
             'view inventory', 'create inventory', 'edit inventory',
             'view orders', 'create orders', 'edit orders',
+            'view whatsapp', 'reply whatsapp',
             'view apps',
             'view tags', 'create tags', 'edit tags',
             'view users',
@@ -136,6 +148,7 @@ class PermissionsSeeder extends Seeder
             'view client',
             'view inventory',
             'view orders',
+            'view whatsapp',
             'view tags',
             'view notifications',
             'view settings',

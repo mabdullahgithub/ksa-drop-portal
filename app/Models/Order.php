@@ -27,6 +27,36 @@ class Order extends Model
     }
 
     /**
+     * Call disposition — the outcome of the ops confirmation call. A separate
+     * axis from `fulfillment_status`, which stays Shopify-shaped.
+     */
+    public const CALL_NOT_CALLED = 'not_called';
+    public const CALL_NO_ANSWER = 'no_answer';
+    public const CALL_CONFIRMED = 'confirmed';
+    public const CALL_CANCELLED = 'cancelled';
+    public const CALL_WRONG_NUMBER = 'wrong_number';
+
+    public const CALL_STATUSES = [
+        self::CALL_NOT_CALLED,
+        self::CALL_NO_ANSWER,
+        self::CALL_CONFIRMED,
+        self::CALL_CANCELLED,
+        self::CALL_WRONG_NUMBER,
+    ];
+
+    /**
+     * WhatsApp conversation flow state. Per-message delivery state (delivered/
+     * read/failed) lives on `whatsapp_messages` instead — see
+     * {@see \App\Models\WhatsAppMessage}.
+     */
+    public const WHATSAPP_SENT = 'sent';
+    public const WHATSAPP_FOLLOWUP_SENT = 'followup_sent';
+    public const WHATSAPP_REPLIED = 'replied';
+    public const WHATSAPP_CONFIRMED = 'confirmed';
+    public const WHATSAPP_GRAVEYARD = 'graveyard';
+    public const WHATSAPP_FAILED = 'failed';
+
+    /**
      * Trashed orders as the recycle bin must see them.
      *
      * The shopify_visible scope hides orders awaiting client review, dismissed
@@ -85,6 +115,18 @@ class Order extends Model
         'shipping_phone',
         'financial_status',
         'fulfillment_status',
+        'call_status',
+        'call_attempts',
+        'last_called_at',
+        'call_notes',
+        'whatsapp_status',
+        'whatsapp_phone_e164',
+        'whatsapp_sent_at',
+        'whatsapp_followup_sent_at',
+        'whatsapp_replied_at',
+        'whatsapp_delivered_at',
+        'whatsapp_read_at',
+        'whatsapp_reply_message',
         'payment_method',
         'payment_reference',
         'currency',
@@ -132,6 +174,12 @@ class Order extends Model
         'fulfilled_at' => 'datetime',
         'shopify_fulfillment_requested_at' => 'datetime',
         'cancelled_at' => 'datetime',
+        'last_called_at' => 'datetime',
+        'whatsapp_sent_at' => 'datetime',
+        'whatsapp_followup_sent_at' => 'datetime',
+        'whatsapp_replied_at' => 'datetime',
+        'whatsapp_delivered_at' => 'datetime',
+        'whatsapp_read_at' => 'datetime',
         'accepts_marketing' => 'boolean',
         'note_attributes' => 'json',
         'tags' => 'array',
@@ -172,6 +220,44 @@ class Order extends Model
     public function invoices()
     {
         return $this->hasMany(Invoice::class);
+    }
+
+    /**
+     * When WhatsApp's 24-hour customer service window closes for this order.
+     *
+     * The customer opens it by messaging us; it runs 24h from their most recent
+     * inbound message. Inside it an agent may send free-form text. Outside it,
+     * Meta only accepts approved templates — so this is what gates the reply
+     * box in the inbox. Null means no window was ever opened.
+     */
+    public function whatsAppWindowExpiresAt(): ?\Illuminate\Support\Carbon
+    {
+        $lastInbound = $this->whatsappMessages()
+            ->where('direction', WhatsAppMessage::DIRECTION_INBOUND)
+            ->latest('created_at')
+            ->value('created_at');
+
+        return $lastInbound ? \Illuminate\Support\Carbon::parse($lastInbound)->addHours(24) : null;
+    }
+
+    public function whatsAppWindowIsOpen(): bool
+    {
+        $expiry = $this->whatsAppWindowExpiresAt();
+
+        return $expiry !== null && $expiry->isFuture();
+    }
+
+    public function whatsappMessages()
+    {
+        return $this->hasMany(WhatsAppMessage::class);
+    }
+
+    /**
+     * Orders the WhatsApp confirmation flow is still actively chasing.
+     */
+    public function scopeAwaitingWhatsAppReply($query)
+    {
+        return $query->whereIn('whatsapp_status', [self::WHATSAPP_SENT, self::WHATSAPP_FOLLOWUP_SENT]);
     }
 
     /**

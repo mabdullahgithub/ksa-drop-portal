@@ -1,18 +1,26 @@
 import { useState, useEffect } from 'react'
+import { usePermissions } from '@/hooks/use-permissions'
+import type { InboxStats } from '@/features/whatsapp/types'
 
-export interface DashboardStats {
+export interface OrderStats {
   total_orders: number
+  unassigned_orders: number
+  assigned_orders: number
   total_revenue: number
   average_order_value: number
   today_orders: number
   today_revenue: number
+  by_shipment_status: Array<{ status: string; count: number }>
+  by_tag: Array<{ id: number; name: string; color: string; count: number }>
+}
+
+export interface ClientStats {
   total_clients: number
   active_clients: number
-  new_clients_this_month: number
-  total_products: number
-  active_products: number
-  by_payment_method: Array<{ payment_method: string; count: number }>
-  by_financial_status: Array<{ financial_status: string; count: number }>
+  inactive_clients: number
+  suspended_clients: number
+  dropshippers_count: number
+  fulfilment_count: number
 }
 
 export interface RecentOrder {
@@ -27,12 +35,35 @@ export interface RecentOrder {
 }
 
 export interface DashboardData {
-  stats: DashboardStats | null
+  /** null when the request failed or the user cannot view that section. */
+  orders: OrderStats | null
+  whatsapp: InboxStats | null
+  clients: ClientStats | null
   recent_orders: RecentOrder[]
 }
 
+const EMPTY: DashboardData = { orders: null, whatsapp: null, clients: null, recent_orders: [] }
+
+/**
+ * One section failing must not blank the others, so every request resolves to
+ * null instead of rejecting.
+ */
+async function getJson<T>(url: string): Promise<T | null> {
+  try {
+    const res = await fetch(url, { headers: { Accept: 'application/json' } })
+    if (!res.ok) return null
+    return (await res.json()) as T
+  } catch {
+    return null
+  }
+}
+
 export function useDashboard() {
-  const [data, setData] = useState<DashboardData>({ stats: null, recent_orders: [] })
+  const { can } = usePermissions()
+  const canOrders = can('view orders')
+  const canClients = can('view client')
+
+  const [data, setData] = useState<DashboardData>(EMPTY)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -40,60 +71,54 @@ export function useDashboard() {
 
     const load = async () => {
       setLoading(true)
-      try {
-        const [statsRes, ordersRes, clientsRes] = await Promise.all([
-          fetch('/api/orders/statistics'),
-          fetch('/api/orders?per_page=8&sort_by=created_at&sort_order=desc'),
-          fetch('/api/clients/statistics'),
-        ])
 
-        const [statsData, ordersData, clientsData] = await Promise.all([
-          statsRes.json(),
-          ordersRes.json(),
-          clientsRes.json(),
-        ])
+      // Today's figures come from the statistics endpoint over a single-day
+      // range rather than by summing a page of orders — a page cap would
+      // silently under-report revenue on a busy day. `en-CA` is YYYY-MM-DD in
+      // the viewer's own timezone, so "today" is the local day, not UTC's.
+      // The range scope compares raw datetimes, so the end has to be spelled
+      // out to the last second or only midnight-exact orders would match.
+      const today = new Date().toLocaleDateString('en-CA')
+      const dayRange = `start_date=${today}&end_date=${encodeURIComponent(`${today} 23:59:59`)}`
 
-        // Compute today stats from orders (best effort)
-        const today = new Date().toISOString().slice(0, 10)
-        const todayOrdersRes = await fetch(`/api/orders?per_page=100&start_date=${today}&end_date=${today}&sort_by=created_at&sort_order=desc`)
-        const todayOrdersData = await todayOrdersRes.json()
-        const todayOrders: RecentOrder[] = todayOrdersData?.data ?? []
-        const todayRevenue = todayOrders.reduce((sum: number, o: RecentOrder) => sum + parseFloat(o.total || '0'), 0)
+      const [stats, todayStats, waStats, clientStats, ordersPage] = await Promise.all([
+        canOrders ? getJson<Record<string, unknown>>('/api/orders/statistics') : null,
+        canOrders ? getJson<Record<string, unknown>>(`/api/orders/statistics?${dayRange}`) : null,
+        // The inbox lives behind order permissions: a conversation is just an
+        // order's message thread.
+        canOrders ? getJson<InboxStats>('/api/whatsapp/stats') : null,
+        canClients ? getJson<ClientStats>('/api/clients/statistics') : null,
+        canOrders ? getJson<{ data?: RecentOrder[] }>('/api/orders?per_page=8&sort_by=created_at&sort_order=desc') : null,
+      ])
 
-        // New clients this month
-        const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10)
-        const newClientsRes = await fetch(`/api/clients?created_after=${monthStart}&per_page=1`)
-        const newClientsData = await newClientsRes.json()
+      if (cancelled) return
 
-        if (cancelled) return
-
-        setData({
-          stats: {
-            total_orders: statsData.total_orders ?? 0,
-            total_revenue: statsData.total_revenue ?? 0,
-            average_order_value: statsData.average_order_value ?? 0,
-            today_orders: todayOrders.length,
-            today_revenue: todayRevenue,
-            total_clients: clientsData.total_clients ?? 0,
-            active_clients: clientsData.active_clients ?? 0,
-            new_clients_this_month: newClientsData?.total ?? 0,
-            total_products: 0,
-            active_products: 0,
-            by_payment_method: statsData.by_payment_method ?? [],
-            by_financial_status: statsData.by_financial_status ?? [],
-          },
-          recent_orders: ordersData?.data ?? [],
-        })
-      } catch (e) {
-        console.error('Dashboard load error', e)
-      } finally {
-        if (!cancelled) setLoading(false)
-      }
+      setData({
+        orders: stats
+          ? {
+              total_orders: Number(stats.total_orders ?? 0),
+              unassigned_orders: Number(stats.unassigned_orders ?? 0),
+              assigned_orders: Number(stats.assigned_orders ?? 0),
+              total_revenue: Number(stats.total_revenue ?? 0),
+              average_order_value: Number(stats.average_order_value ?? 0),
+              today_orders: Number(todayStats?.total_orders ?? 0),
+              today_revenue: Number(todayStats?.total_revenue ?? 0),
+              by_shipment_status: (stats.by_shipment_status as OrderStats['by_shipment_status']) ?? [],
+              by_tag: (stats.by_tag as OrderStats['by_tag']) ?? [],
+            }
+          : null,
+        whatsapp: waStats,
+        clients: clientStats,
+        recent_orders: ordersPage?.data ?? [],
+      })
+      setLoading(false)
     }
 
     load()
-    return () => { cancelled = true }
-  }, [])
+    return () => {
+      cancelled = true
+    }
+  }, [canOrders, canClients])
 
   return { data, loading }
 }

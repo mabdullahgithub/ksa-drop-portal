@@ -30,11 +30,13 @@ class UserManagementTest extends TestCase
 
         app(PermissionRegistrar::class)->forgetCachedPermissions();
 
-        foreach (['view users', 'create users', 'delete users'] as $permission) {
+        $permissions = ['view users', 'create users', 'delete users', 'view recycle bin', 'restore recycle bin', 'purge recycle bin'];
+
+        foreach ($permissions as $permission) {
             Permission::findOrCreate($permission);
         }
 
-        Role::create(['name' => 'admin'])->givePermissionTo(['view users', 'create users', 'delete users']);
+        Role::create(['name' => 'admin'])->givePermissionTo($permissions);
         Role::create(['name' => 'superadmin']);
         Role::create(['name' => 'client']);
         Role::create(['name' => 'staff']);
@@ -189,7 +191,7 @@ class UserManagementTest extends TestCase
     {
         $role = Role::create(['name' => 'orders-only']);
         Permission::findOrCreate('delete orders');
-        $role->givePermissionTo('delete orders');
+        $role->givePermissionTo(['delete orders', 'view recycle bin']);
         $user = User::factory()->create();
         $user->assignRole($role);
 

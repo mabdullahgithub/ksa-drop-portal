@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Http\Middleware\EnsureRecycleBinUnlocked;
 use App\Models\Rider;
+use App\Models\User;
 use App\Models\ShipmentEvent;
 use App\Services\Riders\RiderPhoto;
 use App\Services\Shipping\Enums\ShipmentStatus;
@@ -24,19 +25,24 @@ class RiderRecycleBinTest extends TestCase
 {
     use MakesRiders, RefreshDatabase;
 
+    private const BIN_PERMISSIONS = ['view recycle bin', 'restore recycle bin', 'purge recycle bin'];
+
     protected function setUp(): void
     {
         parent::setUp();
 
         $this->setUpRiderPermissions();
         Permission::findOrCreate('delete orders');
+        foreach (self::BIN_PERMISSIONS as $permission) {
+            Permission::findOrCreate($permission);
+        }
 
         $this->withSession([EnsureRecycleBinUnlocked::SESSION_KEY => now()]);
     }
 
     public function test_a_removed_rider_is_listed_in_the_bin_with_who_removed_them(): void
     {
-        $admin = $this->staff();
+        $admin = $this->binStaff();
         $rider = $this->makeRider(['name' => 'Ahmed Khan', 'phone' => '+966551234567']);
 
         $this->actingAs($admin)->deleteJson("/api/riders/{$rider->id}")
@@ -55,7 +61,7 @@ class RiderRecycleBinTest extends TestCase
 
     public function test_restoring_brings_the_rider_back_signed_out(): void
     {
-        $admin = $this->staff();
+        $admin = $this->binStaff();
         $rider = $this->makeRider();
         $token = $this->signedInDevice($rider);
 
@@ -73,7 +79,7 @@ class RiderRecycleBinTest extends TestCase
     public function test_purge_removes_a_rider_with_no_history_and_their_photo(): void
     {
         Storage::fake(RiderPhoto::DISK);
-        $admin = $this->staff();
+        $admin = $this->binStaff();
         $rider = $this->makeRider();
         RiderPhoto::replace($rider, UploadedFile::fake()->image('me.jpg'));
         $path = $rider->fresh()->photo_path;
@@ -91,7 +97,7 @@ class RiderRecycleBinTest extends TestCase
 
     public function test_a_rider_with_delivery_history_cannot_be_purged(): void
     {
-        $admin = $this->staff();
+        $admin = $this->binStaff();
         $rider = $this->makeRider(['name' => 'Bilal']);
         $shipment = $this->ksaShipment(['status' => ShipmentStatus::DELIVERED->value]);
         ShipmentEvent::create([
@@ -123,16 +129,16 @@ class RiderRecycleBinTest extends TestCase
         $rider = $this->makeRider();
         $rider->delete();
 
-        $this->actingAs($this->staff(['delete orders']))
+        $this->actingAs($this->binStaff(['delete orders']))
             ->getJson('/api/recycle-bin/riders')
             ->assertForbidden();
 
-        $this->actingAs($this->staff(['delete orders']))
+        $this->actingAs($this->binStaff(['delete orders']))
             ->getJson('/api/recycle-bin/counts')
             ->assertJsonPath('riders', 0);
 
         $this->withoutVite()
-            ->actingAs($this->staff(['view riders', 'manage riders']))
+            ->actingAs($this->binStaff(['view riders', 'manage riders']))
             ->get('/recycle-bin')
             ->assertOk();
     }
@@ -146,5 +152,14 @@ class RiderRecycleBinTest extends TestCase
         $this->actingAs($admin)->putJson("/api/riders/{$rider->id}", ['name' => 'X', 'phone' => '0551234567'])
             ->assertStatus(422)
             ->assertJsonValidationErrors('phone');
+    }
+
+    /** staff() plus full use of the bin, so the tests turn on the rider gate alone. */
+    private function binStaff(?array $permissions = null): User
+    {
+        $user = $permissions === null ? $this->staff() : $this->staff($permissions);
+        $user->givePermissionTo(self::BIN_PERMISSIONS);
+
+        return $user;
     }
 }

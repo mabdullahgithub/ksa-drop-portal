@@ -15,7 +15,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
 import { useRoles } from './roles-provider'
-import { permissionCategories } from '../data/data'
+import { groupPermissions } from '../data/data'
 
 interface RolesActionDialogProps {
   availablePermissions: string[]
@@ -165,12 +165,8 @@ export function RolesActionDialog({ availablePermissions }: RolesActionDialogPro
               {/* Permissions Grid */}
               <div className='rounded-lg border bg-muted/20 p-4'>
                 <div className='grid grid-cols-1 md:grid-cols-2 gap-4'>
-                    {Object.entries(permissionCategories).map(
-                      ([category, permissions]) => {
-                        const categoryPerms = permissions.filter((p) =>
-                          availablePermissions.includes(p)
-                        )
-                        if (categoryPerms.length === 0) return null
+                    {groupPermissions(availablePermissions).map(
+                      ([category, categoryPerms]) => {
 
                         const allSelected = categoryPerms.every((p) =>
                           data.permissions.includes(p)

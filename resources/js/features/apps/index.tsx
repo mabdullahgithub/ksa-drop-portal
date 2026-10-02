@@ -12,7 +12,7 @@ import { ThemeSwitch } from '@/components/theme-switch'
 import { usePermissions } from '@/hooks/use-permissions'
 import { SearchBeam } from '@/components/search-beam'
 import { useConnectors, type Connector } from '@/hooks/useConnectors'
-import { IconShopify, IconJnt, IconImile, IconLogesTechs, IconKsaExpress } from '@/assets/brand-icons'
+import { IconShopify, IconJnt, IconImile, IconLogesTechs, IconKsaExpress, IconWhatsapp } from '@/assets/brand-icons'
 
 const logoMap: Record<string, React.ReactNode> = {
   shopify: <IconShopify />,
@@ -20,15 +20,18 @@ const logoMap: Record<string, React.ReactNode> = {
   imile: <IconImile />,
   logestechs: <IconLogesTechs />,
   ksadrop_express: <IconKsaExpress />,
+  whatsapp: <IconWhatsapp />,
 }
 
-// Fixed display order: couriers first (J&T, iMile, LogesTechs, KSA Express), then Shopify.
+// Fixed display order: couriers first (J&T, iMile, LogesTechs, KSA Express),
+// then Shopify, then messaging.
 const displayOrder: Record<string, number> = {
   jnt_express: 0,
   imile: 1,
   logestechs: 2,
   ksadrop_express: 3,
   shopify: 4,
+  whatsapp: 5,
 }
 
 // Connectors that have a dedicated settings page
@@ -36,6 +39,7 @@ const settingsRouteMap: Record<string, string> = {
   jnt_express: '/apps/jnt-express',
   imile: '/apps/imile',
   logestechs: '/apps/logestechs',
+  whatsapp: '/apps/whatsapp',
 }
 
 export function Apps() {

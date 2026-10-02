@@ -60,6 +60,9 @@ class AppServiceProvider extends ServiceProvider
         // These also carry the deletion audit trail (who/IP/device), so every
         // soft-deletable model needs one -- Product has no files to clean but
         // still gets an observer for that reason.
+        // OrderObserver also starts the WhatsApp order-confirmation flow
+        // whenever an agent marks a call unanswered. Register it only once:
+        // a second observe() would fire every hook twice.
         Order::observe(OrderObserver::class);
         Client::observe(ClientObserver::class);
         ClientProduct::observe(ClientProductObserver::class);

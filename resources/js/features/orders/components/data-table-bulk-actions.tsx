@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { type Table } from '@tanstack/react-table'
-import { Tag, Trash2, Truck, FileText, Loader2, CheckCircle2, XCircle, AlertTriangle, Ban } from 'lucide-react'
+import { Tag, Trash2, Truck, FileText, Loader2, CheckCircle2, XCircle, AlertTriangle, Ban, PhoneCall } from 'lucide-react'
 import { toast } from 'sonner'
 import axios from 'axios'
 import { Button } from '@/components/ui/button'
@@ -12,6 +12,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
@@ -24,6 +30,7 @@ import { type Order } from '@/types/order'
 import { useOrderMutations } from '@/hooks/useOrders'
 import { usePermissions } from '@/hooks/use-permissions'
 import { useOrdersContext } from './orders-provider'
+import { CALL_STATUS_OPTIONS } from '../data/call-status'
 import { OrderTagsDialog } from './order-tags-dialog'
 
 type Courier = 'jnt_express' | 'imile' | 'logestechs' | 'ksadrop_express'
@@ -183,6 +190,32 @@ export function DataTableBulkActions<TData>({
     }
   }
 
+  // Marking a batch "No Answer" is the main agent workflow: it records the
+  // call outcome and, through OrderObserver, fans out one WhatsApp
+  // confirmation message per order.
+  const handleBulkCallStatusChange = async (status: string) => {
+    const selectedOrders = selectedRows.map((row) => (row.original as Order).id)
+
+    toast.promise(
+      bulkUpdate({
+        order_ids: selectedOrders,
+        action: 'update_call_status',
+        call_status: status,
+      }),
+      {
+        loading: 'Updating call status...',
+        success: () => {
+          table.resetRowSelection()
+          refresh()
+          return status === 'no_answer'
+            ? `Marked ${selectedOrders.length} as no answer — WhatsApp confirmation sent`
+            : `Updated ${selectedOrders.length} order${selectedOrders.length > 1 ? 's' : ''}`
+        },
+        error: 'Failed to update orders',
+      }
+    )
+  }
+
   const handleAddTags = async (tags: string[]) => {
     const selectedOrders = selectedRows.map((row) => (row.original as Order).id)
 
@@ -270,6 +303,35 @@ export function DataTableBulkActions<TData>({
   return (
     <>
       <BulkActionsToolbar table={table} entityName='order'>
+        <DropdownMenu>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant='outline'
+                  size='icon'
+                  className='size-8'
+                  aria-label='Update call status'
+                  title='Update call status'
+                >
+                  <PhoneCall className='h-4 w-4' />
+                  <span className='sr-only'>Update call status</span>
+                </Button>
+              </DropdownMenuTrigger>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Update call status</p>
+            </TooltipContent>
+          </Tooltip>
+          <DropdownMenuContent sideOffset={14}>
+            {CALL_STATUS_OPTIONS.filter((o) => o.value !== 'not_called').map((option) => (
+              <DropdownMenuItem key={option.value} onClick={() => handleBulkCallStatusChange(option.value)}>
+                {option.label}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+
         <Tooltip>
           <TooltipTrigger asChild>
             <Button

@@ -20,6 +20,7 @@ import {
   Wallet,
   Truck,
   Plug,
+  MessageCircle,
   Trash2,
   Bike,
 } from 'lucide-react'
@@ -66,6 +67,12 @@ export const sidebarData: SidebarData = {
           permission: 'view orders',
         },
         {
+          title: 'WhatsApp',
+          url: '/whatsapp',
+          icon: MessageCircle,
+          permission: 'view whatsapp',
+        },
+        {
           title: 'Track Shipment',
           url: '/track',
           icon: Truck,
@@ -100,8 +107,7 @@ export const sidebarData: SidebarData = {
           title: 'Recycle Bin',
           url: '/recycle-bin',
           icon: Trash2,
-          // Array = any-of, matching the canAny check the route uses.
-          permission: ['delete orders', 'delete client', 'delete inventory', 'delete users', 'manage riders'],
+          permission: 'view recycle bin',
         },
       ],
     },

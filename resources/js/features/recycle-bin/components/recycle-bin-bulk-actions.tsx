@@ -10,8 +10,8 @@ import { ConfirmDialog } from '@/components/confirm-dialog'
 type RecycleBinBulkActionsProps<T> = {
   table: Table<T>
   entityName: string
-  onRestore: (ids: (number | string)[]) => Promise<void>
-  onPurge: (ids: (number | string)[]) => Promise<void>
+  onRestore?: (ids: (number | string)[]) => Promise<void>
+  onPurge?: (ids: (number | string)[]) => Promise<void>
 }
 
 export function RecycleBinBulkActions<T>({
@@ -43,7 +43,7 @@ export function RecycleBinBulkActions<T>({
   const handleRestore = () =>
     run(async () => {
       try {
-        await onRestore(selectedIds)
+        await onRestore?.(selectedIds)
       } catch (error) {
         toast.error(error instanceof Error ? error.message : 'Failed to restore')
       }
@@ -52,7 +52,7 @@ export function RecycleBinBulkActions<T>({
   const handlePurge = () =>
     run(async () => {
       try {
-        await onPurge(selectedIds)
+        await onPurge?.(selectedIds)
       } catch (error) {
         toast.error(error instanceof Error ? error.message : 'Failed to delete permanently')
       }
@@ -61,39 +61,43 @@ export function RecycleBinBulkActions<T>({
   return (
     <>
       <DataTableBulkActions table={table} entityName={entityName}>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant='outline'
-              size='sm'
-              onClick={handleRestore}
-              disabled={working}
-              className='h-8 gap-1.5'
-              aria-label={`Restore selected ${entityName}s`}
-            >
-              <RotateCcw className='h-4 w-4' />
-              Restore
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>Put these back where they were</TooltipContent>
-        </Tooltip>
+        {onRestore && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant='outline'
+                size='sm'
+                onClick={handleRestore}
+                disabled={working}
+                className='h-8 gap-1.5'
+                aria-label={`Restore selected ${entityName}s`}
+              >
+                <RotateCcw className='h-4 w-4' />
+                Restore
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Put these back where they were</TooltipContent>
+          </Tooltip>
+        )}
 
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant='destructive'
-              size='sm'
-              onClick={() => setShowPurgeDialog(true)}
-              disabled={working}
-              className='h-8 gap-1.5'
-              aria-label={`Permanently delete selected ${entityName}s`}
-            >
-              <Trash2 className='h-4 w-4' />
-              Delete forever
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>Remove permanently — this cannot be undone</TooltipContent>
-        </Tooltip>
+        {onPurge && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant='destructive'
+                size='sm'
+                onClick={() => setShowPurgeDialog(true)}
+                disabled={working}
+                className='h-8 gap-1.5'
+                aria-label={`Permanently delete selected ${entityName}s`}
+              >
+                <Trash2 className='h-4 w-4' />
+                Delete forever
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Remove permanently — this cannot be undone</TooltipContent>
+          </Tooltip>
+        )}
       </DataTableBulkActions>
 
       <ConfirmDialog
