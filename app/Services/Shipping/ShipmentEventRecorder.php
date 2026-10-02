@@ -5,6 +5,8 @@ namespace App\Services\Shipping;
 use App\Models\Rider;
 use App\Models\Shipment;
 use App\Models\ShipmentEvent;
+use App\Models\User;
+use App\Services\Riders\RiderPay;
 use App\Services\Shipping\DTOs\TrackingEvent;
 use App\Services\Shipping\Drivers\KsaDropExpressDriver;
 use App\Services\Shipping\Enums\FailedAttemptReason;
@@ -25,6 +27,10 @@ use Illuminate\Support\Str;
  * Shipment::resolveTrackingStatus() like every courier webhook does, and on
  * delivery runs the existing Shipment::markDelivered() side effects (order
  * fulfilled, admins notified).
+ *
+ * A parcel that ends returned or cancelled while a rider has it isn't done
+ * until the hub has it back: it stays in the rider's hands, with "returned
+ * to hub" as the only update left (Shipment::awaitsHandBack()).
  */
 class ShipmentEventRecorder
 {
@@ -43,28 +49,37 @@ class ShipmentEventRecorder
         }
 
         $status = $shipment->status_enum;
+        $holder = $shipment->rider_id ? (int) $shipment->rider_id : null;
 
         if ($status->isTerminal()) {
-            return ['actions' => [], 'blocked' => 'finished', 'held_by' => null];
+            // Returned or cancelled while out with this rider: all that's
+            // left is handing it back.
+            return $holder === $rider->id && $shipment->awaitsHandBack()
+                ? ['actions' => [RiderAction::RETURNED_TO_HUB], 'blocked' => null, 'held_by' => null]
+                : ['actions' => [], 'blocked' => 'finished', 'held_by' => null];
         }
-
-        $holder = $shipment->rider_id ? (int) $shipment->rider_id : null;
 
         if ($holder !== null && $holder !== $rider->id) {
             return ['actions' => [], 'blocked' => 'held_by_other', 'held_by' => $shipment->rider?->name];
         }
 
         $actions = match (true) {
+            // With the rider: deliver it, fail the attempt, or end it — the
+            // customer won't take it (returned) or called it off (cancelled).
             $holder !== null && $status === ShipmentStatus::OUT_FOR_DELIVERY => [
                 RiderAction::DELIVERED,
                 RiderAction::ATTEMPT_FAILED,
+                RiderAction::RETURNED,
+                RiderAction::CANCELLED,
             ],
-            // Failed earlier: try again now, fail again, or take it out on a
-            // later run.
+            // Failed earlier: try again now, fail again, take it out on a
+            // later run, or end it.
             $holder !== null && $status === ShipmentStatus::ATTEMPT_FAIL => [
                 RiderAction::DELIVERED,
                 RiderAction::ATTEMPT_FAILED,
                 RiderAction::OUT_FOR_DELIVERY,
+                RiderAction::RETURNED,
+                RiderAction::CANCELLED,
             ],
             default => [
                 RiderAction::OUT_FOR_DELIVERY,
@@ -105,16 +120,17 @@ class ShipmentEventRecorder
                     );
                 }
 
-                $reason = FailedAttemptReason::tryFrom((string) ($input['reason'] ?? ''));
+                $reason = $action->needsReason() ? FailedAttemptReason::tryFrom((string) ($input['reason'] ?? '')) : null;
                 $occurredAt = $this->occurredAt($input['occurred_at'] ?? null);
                 $statusBefore = $shipment->status;
+                $target = $action->targetStatus($shipment->status_enum);
 
                 $event = ShipmentEvent::create([
                     'shipment_id' => $shipment->id,
                     'rider_id' => $rider->id,
                     'action' => $action->value,
                     'status_before' => $statusBefore,
-                    'status_after' => $action->targetStatus()->value,
+                    'status_after' => $target->value,
                     'reason' => $reason?->value,
                     'note' => $input['note'] ?? null,
                     'cod_amount' => $action === RiderAction::DELIVERED ? ($input['cod_amount'] ?? null) : null,
@@ -131,18 +147,9 @@ class ShipmentEventRecorder
 
                 $description = $action->publicDescription($rider->publicName(), $reason);
 
-                $shipment->addTrackingEvent(new TrackingEvent(
-                    status: $action->targetStatus(),
-                    description: $description,
-                    location: $shipment->receiverDetails()['city'] ?: null,
-                    // Milliseconds: two updates in the same second still sort
-                    // newest-first (tracking_history sorts on this string).
-                    timestamp: $occurredAt->copy()->setTimezone(config('app.business_timezone', 'Asia/Riyadh'))->format('Y-m-d\\TH:i:s.vP'),
-                    rawStatus: strtoupper($action->value),
-                    staffName: $rider->publicName(),
-                ));
+                $shipment->addTrackingEvent($this->trackingEvent($shipment, $action, $target, $description, $occurredAt, $rider->publicName()));
 
-                [$applied, $extra] = $shipment->resolveTrackingStatus($action->targetStatus());
+                [$applied, $extra] = $shipment->resolveTrackingStatus($target);
 
                 $shipment->fill([
                     'rider_id' => $rider->id,
@@ -150,15 +157,13 @@ class ShipmentEventRecorder
                     'courier_status_description' => $description,
                 ] + $extra);
 
+                $this->apply($shipment, $action, $applied, $occurredAt, $this->endingReason($reason, $input['note'] ?? null, $rider->publicName()));
+
                 if ($action === RiderAction::DELIVERED) {
-                    // markDelivered() sets the status itself, and only
-                    // notifies admins when it wasn't delivered already.
-                    $shipment->save();
-                    $shipment->markDelivered();
                     $this->recordCodCollected($shipment, $event);
-                } else {
-                    $shipment->fill(['status' => $applied->value])->save();
                 }
+
+                RiderPay::record($rider, $event);
 
                 return $event;
             });
@@ -172,6 +177,104 @@ class ShipmentEventRecorder
 
             throw $e;
         }
+    }
+
+    /**
+     * The same updates made from the portal, for a rider who can't make them:
+     * marking a parcel returned, or taking a returned or cancelled one back
+     * at the hub (lost phone, unreadable label).
+     *
+     * @throws RiderActionRefused
+     */
+    public function recordByStaff(Shipment $shipment, User $user, RiderAction $action, ?string $note = null): ShipmentEvent
+    {
+        return DB::transaction(function () use ($shipment, $user, $action, $note) {
+            $shipment = Shipment::whereKey($shipment->id)->lockForUpdate()->firstOrFail();
+
+            $allowed = $shipment->courier === KsaDropExpressDriver::KEY && match ($action) {
+                RiderAction::RETURNED => ! $shipment->status_enum->isTerminal(),
+                RiderAction::RETURNED_TO_HUB => $shipment->awaitsHandBack(),
+                default => false,
+            };
+
+            if (! $allowed) {
+                throw new RiderActionRefused('not_allowed', $this->refusalMessage(null, $shipment, null));
+            }
+
+            $occurredAt = now();
+            $target = $action->targetStatus($shipment->status_enum);
+
+            $event = ShipmentEvent::create([
+                'shipment_id' => $shipment->id,
+                'user_id' => $user->id,
+                'action' => $action->value,
+                'status_before' => $shipment->status,
+                'status_after' => $target->value,
+                'note' => $note,
+                'occurred_at' => $occurredAt,
+                'client_uuid' => (string) Str::uuid(),
+            ]);
+
+            $description = $action->publicDescription('');
+
+            $shipment->addTrackingEvent($this->trackingEvent($shipment, $action, $target, $description, $occurredAt));
+
+            [$applied, $extra] = $shipment->resolveTrackingStatus($target);
+
+            $shipment->fill([
+                'courier_status' => $action->value,
+                'courier_status_description' => $description,
+            ] + $extra);
+
+            $this->apply($shipment, $action, $applied, $occurredAt, (string) $note);
+
+            return $event;
+        });
+    }
+
+    /**
+     * Save the update onto the shipment, through the same endings every
+     * courier's updates take.
+     */
+    private function apply(Shipment $shipment, RiderAction $action, ShipmentStatus $applied, Carbon $occurredAt, string $endingReason): void
+    {
+        if ($action === RiderAction::DELIVERED) {
+            // markDelivered() sets the status itself, and only notifies
+            // admins when it wasn't delivered already.
+            $shipment->save();
+            $shipment->markDelivered();
+
+            return;
+        }
+
+        match ($action) {
+            RiderAction::RETURNED => $shipment->markReturned($endingReason),
+            RiderAction::CANCELLED => $shipment->markCancelled($endingReason),
+            RiderAction::RETURNED_TO_HUB => $shipment->update(['hub_received_at' => $occurredAt]),
+            default => $shipment->update(['status' => $applied->value]),
+        };
+    }
+
+    /**
+     * What the portal shows as why a parcel was returned or cancelled.
+     */
+    private function endingReason(?FailedAttemptReason $reason, ?string $note, string $riderFirstName): string
+    {
+        return implode(' — ', array_filter([$reason?->label(), $note])) . " (rider {$riderFirstName})";
+    }
+
+    private function trackingEvent(Shipment $shipment, RiderAction $action, ShipmentStatus $status, string $description, Carbon $occurredAt, ?string $staffName = null): TrackingEvent
+    {
+        return new TrackingEvent(
+            status: $status,
+            description: $description,
+            location: $shipment->receiverDetails()['city'] ?: null,
+            // Milliseconds: two updates in the same second still sort
+            // newest-first (tracking_history sorts on this string).
+            timestamp: $occurredAt->copy()->setTimezone(config('app.business_timezone', 'Asia/Riyadh'))->format('Y-m-d\\TH:i:s.vP'),
+            rawStatus: strtoupper($action->value),
+            staffName: $staffName,
+        );
     }
 
     private function alreadyRecorded(string $clientUuid, Rider $rider): ?ShipmentEvent

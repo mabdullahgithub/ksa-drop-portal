@@ -2,7 +2,6 @@
 
 namespace App\Models;
 
-use App\Services\Shipping\Enums\ShipmentStatus;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -38,6 +37,8 @@ class Rider extends Model
         'city',
         'employment_type',
         'iban',
+        'delivery_rate',
+        'attempt_rate',
         'emergency_contact_name',
         'emergency_contact_phone',
         'notes',
@@ -48,6 +49,8 @@ class Rider extends Model
     protected $casts = [
         'national_id' => 'encrypted',
         'iban' => 'encrypted',
+        'delivery_rate' => 'decimal:2',
+        'attempt_rate' => 'decimal:2',
         'license_expiry' => 'date',
         'pin_set_at' => 'datetime',
         'last_seen_at' => 'datetime',
@@ -97,15 +100,20 @@ class Rider extends Model
     }
 
     /**
-     * Parcels this rider is still responsible for: marked out for delivery
-     * (or failed and not yet handed back) and not finished.
+     * Parcels this rider is still responsible for: out for delivery, failed
+     * and not yet tried again, or returned/cancelled and not handed back.
      */
     public function heldShipments(): HasMany
     {
-        return $this->shipments()->whereIn('status', [
-            ShipmentStatus::OUT_FOR_DELIVERY->value,
-            ShipmentStatus::ATTEMPT_FAIL->value,
-        ]);
+        return $this->shipments()->inRiderHands();
+    }
+
+    /**
+     * Money between the rider and KSA Drop, both ways, voided entries included.
+     */
+    public function payments(): HasMany
+    {
+        return $this->hasMany(RiderPayment::class);
     }
 
     public function isActive(): bool

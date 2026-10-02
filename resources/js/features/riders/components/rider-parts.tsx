@@ -1,6 +1,6 @@
 import { formatDistanceToNowStrict } from 'date-fns'
 import { DotsHorizontalIcon } from '@radix-ui/react-icons'
-import { Ban, KeyRound, Link2, LogOut, Pencil, RotateCcw, Smartphone, Trash2 } from 'lucide-react'
+import { Ban, KeyRound, Link2, ListChecks, LogOut, Pencil, RotateCcw, Smartphone, Trash2, Wallet } from 'lucide-react'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import {
@@ -12,13 +12,15 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/utils'
-import type { RiderRow } from '../data/types'
+import type { ParcelOutcome, PaymentDirection, RiderCash, RiderPay, RiderRow } from '../data/types'
 import type { AccessKind } from './rider-access-dialog'
 
 export type RiderDialog =
   | { type: 'add' }
   | { type: 'edit'; rider: RiderRow }
   | { type: AccessKind; rider: RiderRow }
+  | { type: 'payments'; rider: RiderRow; direction?: PaymentDirection }
+  | { type: 'orders'; rider: RiderRow; outcome?: ParcelOutcome }
   | { type: 'sign-out' | 'suspend' | 'delete'; rider: RiderRow }
 
 /** What the Riders filters match on for "App". */
@@ -32,6 +34,32 @@ export function appStateOf(rider: RiderRow): AppStateKey {
 }
 
 export const sar = (n: number) => `SAR ${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+
+/** What a rider still owes, or that they owe nothing. */
+export function CashDue({ cash, className }: { cash: RiderCash; className?: string }) {
+  if (cash.balance > 0) {
+    return <span className={cn('font-semibold tabular-nums text-amber-700 dark:text-amber-400', className)}>{sar(cash.balance)}</span>
+  }
+
+  return (
+    <span className={cn('tabular-nums text-muted-foreground', className)}>
+      {cash.balance < 0 ? `${sar(-cash.balance)} credit` : 'Settled'}
+    </span>
+  )
+}
+
+/** What KSA Drop still owes a rider for their orders, or that it owes nothing. */
+export function PayDue({ pay, className }: { pay: RiderPay; className?: string }) {
+  if (pay.balance > 0) {
+    return <span className={cn('font-semibold tabular-nums text-green-700 dark:text-green-400', className)}>{sar(pay.balance)}</span>
+  }
+
+  return (
+    <span className={cn('tabular-nums text-muted-foreground', className)}>
+      {pay.balance < 0 ? `${sar(-pay.balance)} overpaid` : 'Paid up'}
+    </span>
+  )
+}
 
 function initials(name: string) {
   return name
@@ -143,6 +171,14 @@ export function RowActions({ rider, onPick }: { rider: RiderRow; onPick: (dialog
             </DropdownMenuItem>
           </>
         )}
+        <DropdownMenuItem onClick={() => onPick({ type: 'orders', rider })}>
+          Orders
+          <DropdownMenuShortcut><ListChecks size={16} /></DropdownMenuShortcut>
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => onPick({ type: 'payments', rider })}>
+          Cash &amp; pay
+          <DropdownMenuShortcut><Wallet size={16} /></DropdownMenuShortcut>
+        </DropdownMenuItem>
         <DropdownMenuItem onClick={() => onPick({ type: 'edit', rider })}>
           Edit details
           <DropdownMenuShortcut><Pencil size={16} /></DropdownMenuShortcut>

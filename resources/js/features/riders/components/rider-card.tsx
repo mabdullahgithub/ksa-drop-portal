@@ -1,8 +1,8 @@
-import { Bike, Warehouse } from 'lucide-react'
+import { Bike, ChevronRight, Coins, ListChecks, Undo2, Wallet, Warehouse } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import { VEHICLE_TYPES, type RiderRow } from '../data/types'
-import { AppState, RiderAvatar, RowActions, sar, type RiderDialog } from './rider-parts'
+import { AppState, CashDue, PayDue, RiderAvatar, RowActions, sar, type RiderDialog } from './rider-parts'
 
 type Props = {
   rider: RiderRow
@@ -54,25 +54,110 @@ export function RiderCard({ rider, canManage, onPick }: Props) {
             {[vehicle, rider.vehicle_plate].filter(Boolean).join(' · ')}
           </span>
         )}
+        {rider.delivery_rate !== null || rider.attempt_rate !== null ? (
+          <span className='inline-flex items-center gap-1' title='What KSA Drop pays this rider per delivery / per attempt'>
+            <Coins className='h-3.5 w-3.5' />
+            SAR {rate(rider.delivery_rate)} / {rate(rider.attempt_rate)}
+          </span>
+        ) : (
+          <span className='inline-flex items-center gap-1 text-amber-700 dark:text-amber-400' title='Set this rider’s pay per delivery and per attempt in their details'>
+            <Coins className='h-3.5 w-3.5' />
+            No pay rates
+          </span>
+        )}
+        {rider.stats.to_return > 0 && (
+          <span
+            className='inline-flex items-center gap-1 font-medium text-amber-700 dark:text-amber-400'
+            title='Returned or cancelled parcels the rider has not handed back at the hub yet'
+          >
+            <Undo2 className='h-3.5 w-3.5' />
+            {rider.stats.to_return} to hand back
+          </span>
+        )}
       </div>
 
       <AppState rider={rider} />
 
-      <div className='mt-auto grid grid-cols-4 gap-2 border-t pt-3 text-center'>
-        <Stat label='With rider' value={rider.stats.held} />
-        <Stat label='Delivered' value={rider.stats.delivered} tone='text-green-700 dark:text-green-400' />
-        <Stat label='Failed' value={rider.stats.failed} tone={rider.stats.failed ? 'text-red-600' : undefined} />
-        <Stat label='Cash today' value={sar(rider.stats.cod_collected).replace('SAR ', '')} small />
+      {/* Each number opens the rider's orders on that filter. */}
+      <div className='mt-auto grid grid-cols-4 gap-1 border-t pt-2 text-center'>
+        <Stat label='With rider' value={rider.stats.held} onClick={() => onPick({ type: 'orders', rider })} />
+        <Stat
+          label='Delivered'
+          value={rider.stats.delivered}
+          tone='text-green-700 dark:text-green-400'
+          onClick={() => onPick({ type: 'orders', rider, outcome: 'delivered' })}
+        />
+        <Stat
+          label='Failed'
+          value={rider.stats.failed}
+          tone={rider.stats.failed ? 'text-red-600' : undefined}
+          onClick={() => onPick({ type: 'orders', rider, outcome: 'attempt_fail' })}
+        />
+        <Stat
+          label='Cash today'
+          value={sar(rider.stats.cash_collected).replace('SAR ', '')}
+          small
+          onClick={() => onPick({ type: 'orders', rider, outcome: 'delivered' })}
+        />
+      </div>
+
+      {/* The rider's orders, and their money both ways. Each line opens its sheet. */}
+      <div className='-mx-2 -my-1'>
+        <button
+          type='button'
+          onClick={() => onPick({ type: 'orders', rider })}
+          className='flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors hover:bg-muted/60'
+        >
+          <ListChecks className='h-3.5 w-3.5 text-muted-foreground' />
+          <span className='text-muted-foreground'>Orders</span>
+          <span className='ms-auto text-muted-foreground'>Delivered, failed, all</span>
+          <ChevronRight className='h-3.5 w-3.5 text-muted-foreground rtl:rotate-180' />
+        </button>
+        <button
+          type='button'
+          onClick={() => onPick({ type: 'payments', rider, direction: 'in' })}
+          className='flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors hover:bg-muted/60'
+        >
+          <Wallet className='h-3.5 w-3.5 text-muted-foreground' />
+          <span className='text-muted-foreground'>Cash to hand in</span>
+          <CashDue cash={rider.cash} className='ms-auto' />
+          <ChevronRight className='h-3.5 w-3.5 text-muted-foreground rtl:rotate-180' />
+        </button>
+        <button
+          type='button'
+          onClick={() => onPick({ type: 'payments', rider, direction: 'out' })}
+          className='flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors hover:bg-muted/60'
+        >
+          <Coins className='h-3.5 w-3.5 text-muted-foreground' />
+          <span className='text-muted-foreground'>Pay owed to rider</span>
+          <PayDue pay={rider.pay} className='ms-auto' />
+          <ChevronRight className='h-3.5 w-3.5 text-muted-foreground rtl:rotate-180' />
+        </button>
       </div>
     </div>
   )
 }
 
-function Stat({ label, value, tone, small }: { label: string; value: number | string; tone?: string; small?: boolean }) {
+/** A rate without trailing zeros: 10, 4.5. */
+const rate = (n: number | null) => (n ?? 0).toLocaleString('en-US', { maximumFractionDigits: 2 })
+
+function Stat({
+  label,
+  value,
+  tone,
+  small,
+  onClick,
+}: {
+  label: string
+  value: number | string
+  tone?: string
+  small?: boolean
+  onClick: () => void
+}) {
   return (
-    <div>
+    <button type='button' onClick={onClick} className='rounded-md py-1 transition-colors hover:bg-muted/60' title={`${label}: view orders`}>
       <p className={cn('font-semibold tabular-nums', small ? 'text-sm leading-6' : 'text-lg leading-6', tone)}>{value}</p>
       <p className='text-[11px] text-muted-foreground'>{label}</p>
-    </div>
+    </button>
   )
 }

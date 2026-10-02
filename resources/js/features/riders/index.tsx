@@ -22,8 +22,10 @@ import { cn } from '@/lib/utils'
 import { RiderAccessDialog } from './components/rider-access-dialog'
 import { RiderCard } from './components/rider-card'
 import { RiderFormDialog } from './components/rider-form-dialog'
+import { RiderOrdersSheet } from './components/rider-orders-sheet'
+import { RiderPaymentsSheet } from './components/rider-payments-sheet'
 import { RiderSupportButton } from './components/rider-support-button'
-import { AppState, appStateOf, RiderAvatar, RowActions, sar, type RiderDialog } from './components/rider-parts'
+import { AppState, appStateOf, CashDue, PayDue, RiderAvatar, RowActions, sar, type RiderDialog } from './components/rider-parts'
 import { TopPerformers } from './components/top-performers'
 import type { RiderRow, RiderSupportContact, WarehouseOption } from './data/types'
 
@@ -106,7 +108,10 @@ export function Riders({
       online: riders.filter((r) => r.online).length,
       held: riders.reduce((sum, r) => sum + r.stats.held, 0),
       delivered: riders.reduce((sum, r) => sum + r.stats.delivered, 0),
-      cash: riders.reduce((sum, r) => sum + r.stats.cod_collected, 0),
+      cash: riders.reduce((sum, r) => sum + r.stats.cash_collected, 0),
+      // Riders in credit don't offset what the others owe.
+      owed: riders.reduce((sum, r) => sum + Math.max(r.cash.balance, 0), 0),
+      pay: riders.reduce((sum, r) => sum + Math.max(r.pay.balance, 0), 0),
     }),
     [riders]
   )
@@ -180,13 +185,17 @@ export function Riders({
           </div>
         </div>
 
-        <div className='grid grid-cols-2 gap-3 md:grid-cols-6'>
+        {/* Never more than four across: the page is capped at 1280px, and an
+            amount like "SAR 12,345.00" needs the width. */}
+        <div className='grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-4'>
           <Summary label='Active riders' value={totals.active} />
           <Summary label='Online now' value={totals.online} dot />
           <Summary label='Signed in to the app' value={totals.signedIn} />
           <Summary label='Parcels with riders' value={totals.held} />
           <Summary label='Delivered today' value={totals.delivered} />
           <Summary label='Cash collected today' value={sar(totals.cash)} />
+          <Summary label='Cash riders owe' value={sar(totals.owed)} />
+          <Summary label='Pay owed to riders' value={sar(totals.pay)} />
         </div>
 
         {showPerformers && riders.length > 0 && <TopPerformers onClose={() => setShowPerformers(false)} />}
@@ -288,6 +297,8 @@ export function Riders({
                       <TableHead className='text-end'>With rider</TableHead>
                       <TableHead className='hidden text-end md:table-cell'>Today</TableHead>
                       <TableHead className='hidden text-end lg:table-cell'>Cash today</TableHead>
+                      <TableHead className='text-end'>To hand in</TableHead>
+                      <TableHead className='hidden text-end xl:table-cell'>Pay owed</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead className='w-10' />
                     </TableRow>
@@ -310,12 +321,60 @@ export function Riders({
                         <TableCell>
                           <AppState rider={rider} />
                         </TableCell>
-                        <TableCell className='text-end tabular-nums'>{rider.stats.held}</TableCell>
-                        <TableCell className='hidden text-end text-sm tabular-nums md:table-cell'>
-                          <span className='text-green-700 dark:text-green-400'>{rider.stats.delivered} delivered</span>
-                          {rider.stats.failed > 0 && <span className='text-red-600'> · {rider.stats.failed} failed</span>}
+                        <TableCell className='text-end tabular-nums'>
+                          <button
+                            type='button'
+                            onClick={() => setDialog({ type: 'orders', rider })}
+                            className='rounded-md px-1.5 py-0.5 hover:bg-muted/60'
+                            title='View orders'
+                          >
+                            {rider.stats.held}
+                          </button>
+                          {rider.stats.to_return > 0 && (
+                            <div className='text-xs text-amber-700 dark:text-amber-400'>{rider.stats.to_return} to hand back</div>
+                          )}
                         </TableCell>
-                        <TableCell className='hidden text-end tabular-nums lg:table-cell'>{sar(rider.stats.cod_collected)}</TableCell>
+                        <TableCell className='hidden text-end text-sm tabular-nums md:table-cell'>
+                          <button
+                            type='button'
+                            onClick={() => setDialog({ type: 'orders', rider, outcome: 'delivered' })}
+                            className='rounded-md px-1.5 py-0.5 text-green-700 hover:bg-muted/60 dark:text-green-400'
+                            title='View delivered orders'
+                          >
+                            {rider.stats.delivered} delivered
+                          </button>
+                          {rider.stats.failed > 0 && (
+                            <button
+                              type='button'
+                              onClick={() => setDialog({ type: 'orders', rider, outcome: 'attempt_fail' })}
+                              className='rounded-md px-1.5 py-0.5 text-red-600 hover:bg-muted/60'
+                              title='View failed orders'
+                            >
+                              {rider.stats.failed} failed
+                            </button>
+                          )}
+                        </TableCell>
+                        <TableCell className='hidden text-end tabular-nums lg:table-cell'>{sar(rider.stats.cash_collected)}</TableCell>
+                        <TableCell className='text-end'>
+                          <button
+                            type='button'
+                            onClick={() => setDialog({ type: 'payments', rider })}
+                            className='rounded-md px-1.5 py-0.5 text-sm hover:bg-muted/60'
+                            title='Cash & payments'
+                          >
+                            <CashDue cash={rider.cash} />
+                          </button>
+                        </TableCell>
+                        <TableCell className='hidden text-end xl:table-cell'>
+                          <button
+                            type='button'
+                            onClick={() => setDialog({ type: 'payments', rider, direction: 'out' })}
+                            className='rounded-md px-1.5 py-0.5 text-sm hover:bg-muted/60'
+                            title='Pay to rider'
+                          >
+                            <PayDue pay={rider.pay} />
+                          </button>
+                        </TableCell>
                         <TableCell>
                           {rider.status === 'active' ? (
                             <Badge variant='outline' className='border-green-300 text-green-700 dark:text-green-400'>Active</Badge>
@@ -357,6 +416,28 @@ export function Riders({
           open
           onOpenChange={(open) => !open && setDialog(null)}
           onChanged={upsert}
+        />
+      )}
+
+      {dialog?.type === 'orders' && (
+        <RiderOrdersSheet
+          key={`${dialog.rider.id}:${dialog.outcome ?? 'all'}`}
+          rider={dialog.rider}
+          outcome={dialog.outcome}
+          open
+          onOpenChange={(open) => !open && setDialog(null)}
+        />
+      )}
+
+      {dialog?.type === 'payments' && (
+        <RiderPaymentsSheet
+          key={dialog.rider.id}
+          rider={dialog.rider}
+          initialDirection={dialog.direction}
+          onEditRates={canManage ? () => setDialog({ type: 'edit', rider: dialog.rider }) : undefined}
+          open
+          onOpenChange={(open) => !open && setDialog(null)}
+          onChanged={(balances) => setRiders((list) => list.map((r) => (r.id === dialog.rider.id ? { ...r, ...balances } : r)))}
         />
       )}
 
@@ -413,7 +494,7 @@ function Summary({ label, value, dot, className }: { label: string; value: numbe
         {dot && <span className='size-2 rounded-full bg-green-500' />}
         {label}
       </p>
-      <p className='mt-1 text-xl font-semibold tabular-nums'>{value}</p>
+      <p className='mt-1 text-lg font-semibold whitespace-nowrap tabular-nums sm:text-xl'>{value}</p>
     </div>
   )
 }

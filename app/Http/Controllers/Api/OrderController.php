@@ -245,6 +245,7 @@ class OrderController extends Controller
             // KSA Express: who holds it, and what the riders recorded.
             'latestShipment.rider:id,name,phone',
             'latestShipment.events.rider:id,name',
+            'latestShipment.events.user:id,name',
         ]);
         return response()->json($order);
     }

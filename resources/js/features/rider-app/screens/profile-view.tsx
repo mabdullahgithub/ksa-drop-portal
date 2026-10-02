@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { BookOpen, Camera, ChevronRight, Languages, LifeBuoy, Loader2, LogOut, MessageCircle, type LucideIcon } from 'lucide-react'
+import { BookOpen, Camera, ChevronRight, Languages, LifeBuoy, Loader2, LogOut, MessageCircle, Wallet, type LucideIcon } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from '@/components/ui/sheet'
@@ -14,6 +14,7 @@ import { Onboarding } from './onboarding'
 type Props = {
   me: Me | null
   onPhotoChanged: (photoUrl: string) => void
+  onCash: () => void
 }
 
 /** wa.me link that opens a chat with the message already typed. */
@@ -26,8 +27,8 @@ const LANGUAGES: { value: Lang; label: string }[] = [
   { value: 'ar', label: 'العربية' },
 ]
 
-/** Who's signed in, their photo, the app language, the guide and support. */
-export function ProfileView({ me, onPhotoChanged }: Props) {
+/** Who's signed in, their photo, their cash, the app language, the guide and support. */
+export function ProfileView({ me, onPhotoChanged, onCash }: Props) {
   const { t, lang, setLang } = useI18n()
   const input = useRef<HTMLInputElement>(null)
   const [uploading, setUploading] = useState(false)
@@ -109,6 +110,7 @@ export function ProfileView({ me, onPhotoChanged }: Props) {
           busy={uploading}
           onClick={pickPhoto}
         />
+        <Row icon={Wallet} color='#16a34a' label={t('cash_title')} hint={t('cash_row_hint')} onClick={onCash} />
         <Row icon={BookOpen} color='#2563eb' label={t('app_guide')} hint={t('app_guide_hint')} onClick={() => setGuide(true)} />
       </section>
 

@@ -249,7 +249,7 @@ class RiderPerformanceTest extends TestCase
             'shipment_id' => ($shipment ?? $this->ksaShipment())->id,
             'rider_id' => $rider->id,
             'action' => $action->value,
-            'status_after' => $action->targetStatus()->value,
+            'status_after' => $action->targetStatus(ShipmentStatus::PENDING)->value,
             'reason' => $reason,
             'cod_amount' => $cod,
             'occurred_at' => Carbon::parse($utc, 'UTC'),

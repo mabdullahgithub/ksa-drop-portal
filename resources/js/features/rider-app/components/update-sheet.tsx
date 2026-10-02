@@ -1,14 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { AlertTriangle, Ban, Camera, Check, CheckCircle2, Loader2, MessageCircle, PackageCheck, PackageX, RefreshCw, Truck } from 'lucide-react'
+import { AlertTriangle, Ban, Camera, Check, CheckCircle2, CircleX, Loader2, MapPin, MapPinOff, MessageCircle, PackageCheck, PackageX, RefreshCw, Truck, Undo2, Warehouse } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from '@/components/ui/sheet'
 import { api, ApiError } from '../api'
 import { money, reasonText, statusText, useI18n } from '../i18n'
 import { compressImage } from '@/lib/compress-image'
-import { uuid, vibrate, watchPosition, type Position } from '../lib/device'
+import { currentPosition, requestPosition, uuid, vibrate, watchPosition, type Position, type PositionProblem } from '../lib/device'
 import type { EntryMethod, FailedReason, Parcel, PaymentMethod, RiderAction } from '../types'
-import { addressLine, CodBox, ContactButtons, StatusBadge } from './parcel-parts'
+import { addressLine, CodBox, ContactButtons, failedWhy, StatusBadge } from './parcel-parts'
 
 export type UpdateRequest = {
   /** Changes on every open, so the form starts fresh each time. */
@@ -52,12 +52,28 @@ export function UpdateSheet({ request, onClose, onUpdated, helpLink }: Props) {
   )
 }
 
-/** Each action's colour — orange out, green delivered, red failed. */
+/**
+ * Each action's colour — orange out, green delivered, red failed, amber and
+ * grey for a delivery that's over, blue for handing the parcel back.
+ */
 const ACTION_STYLE: Record<RiderAction, { icon: typeof Truck; tint: string }> = {
   out_for_delivery: { icon: Truck, tint: 'var(--brand)' },
   delivered: { icon: PackageCheck, tint: '#16a34a' },
   attempt_failed: { icon: PackageX, tint: '#dc2626' },
+  returned: { icon: Undo2, tint: '#d97706' },
+  cancelled: { icon: CircleX, tint: '#52525b' },
+  returned_to_hub: { icon: Warehouse, tint: '#2563eb' },
 }
+
+/** The customer didn't get the parcel: the rider says why. */
+const NEEDS_REASON: RiderAction[] = ['attempt_failed', 'returned', 'cancelled']
+
+/**
+ * The rider went and the customer didn't take it. A photo of the place shows
+ * they were there — it's what gets the attempt paid — and the phone's
+ * location goes with it when there is one.
+ */
+const NEEDS_PROOF: RiderAction[] = ['attempt_failed', 'returned']
 
 const tint = (color: string) => ({ '--tint': color }) as React.CSSProperties
 
@@ -89,6 +105,11 @@ function UpdateBody({ request, onClose, onUpdated, helpLink }: { request: Update
   const [photo, setPhoto] = useState<{ blob: Blob; url: string } | null>(null)
   const [preparingPhoto, setPreparingPhoto] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  // Whether the phone has given a location yet, and why not if it hasn't.
+  // The form asks the rider to turn it on, and never makes them wait for it.
+  const [located, setLocated] = useState(false)
+  const [locationProblem, setLocationProblem] = useState<PositionProblem | null>(null)
+  const [locating, setLocating] = useState(false)
 
   const positionRef = useRef<Position | null>(null)
   const photoInputRef = useRef<HTMLInputElement>(null)
@@ -119,9 +140,7 @@ function UpdateBody({ request, onClose, onUpdated, helpLink }: { request: Update
 
   useEffect(() => {
     load()
-    return watchPosition((position) => {
-      positionRef.current = position
-    })
+    return watchPosition(gotPosition, setLocationProblem)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -129,8 +148,31 @@ function UpdateBody({ request, onClose, onUpdated, helpLink }: { request: Update
     if (photo) URL.revokeObjectURL(photo.url)
   }, [photo])
 
+  const gotPosition = (position: Position) => {
+    positionRef.current = position
+    setLocated(true)
+    setLocationProblem(null)
+  }
+
+  // The rider tapped "Turn on location": the phone asks its question if it
+  // hasn't yet; otherwise we learn whether it's blocked or just switched off.
+  const turnOnLocation = async () => {
+    setLocating(true)
+    const result = await requestPosition()
+    setLocating(false)
+
+    if (typeof result === 'string') {
+      setLocationProblem(result)
+      vibrate([60, 80, 60])
+    } else {
+      gotPosition(result)
+    }
+  }
+
   const expected = parcel?.cod_amount ?? 0
   const codValue = toNumber(cod)
+  const needsReason = action !== null && NEEDS_REASON.includes(action)
+  const needsProof = action !== null && NEEDS_PROOF.includes(action)
   const amountDiffers = action === 'delivered' && expected > 0 && !Number.isNaN(codValue) && Math.abs(codValue - expected) >= 0.01
 
   const problem = useMemo(() => {
@@ -139,12 +181,13 @@ function UpdateBody({ request, onClose, onUpdated, helpLink }: { request: Update
       if (expected > 0 && (Number.isNaN(codValue) || codValue < 0)) return t('need_amount')
       if (amountDiffers && !note.trim()) return t('amount_differs', { amount: money(expected, parcel.currency) })
     }
-    if (action === 'attempt_failed') {
+    if (needsReason) {
       if (!reason) return t('need_reason')
       if (reason === 'other' && !note.trim()) return t('need_note')
     }
+    if (needsProof && !photo) return t('need_photo')
     return null
-  }, [parcel, action, expected, codValue, amountDiffers, note, reason, t])
+  }, [parcel, action, expected, codValue, amountDiffers, needsReason, needsProof, note, photo, reason, t])
 
   const takePhoto = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
@@ -181,16 +224,20 @@ function UpdateBody({ request, onClose, onUpdated, helpLink }: { request: Update
       if (recipient.trim()) form.append('recipient_name', recipient.trim())
       if (photo) form.append('photo', photo.blob, 'delivery.jpg')
     }
-    if (action === 'attempt_failed' && reason) form.append('reason', reason)
+    if (needsReason && reason) form.append('reason', reason)
+    if (needsProof && photo) form.append('photo', photo.blob, 'place.jpg')
 
-    const position = positionRef.current
+    setSubmitting(true)
+
+    // Where the phone is, read by the app — never typed. If it hasn't come
+    // yet, one short try; the update goes without it rather than wait.
+    const position = positionRef.current ?? (needsProof ? await currentPosition() : null)
     if (position) {
       form.append('lat', String(position.lat))
       form.append('lng', String(position.lng))
       form.append('accuracy_m', String(position.accuracy))
     }
 
-    setSubmitting(true)
     try {
       const result = await api.post<{ parcel: Parcel }>(`/rider/api/shipments/${parcel.id}/events`, form)
       vibrate(120)
@@ -208,6 +255,38 @@ function UpdateBody({ request, onClose, onUpdated, helpLink }: { request: Update
       setSubmitting(false)
     }
   }
+
+  const photoField = (label: string, hint?: string) => (
+    <div className='space-y-1.5'>
+      <span className='text-sm font-semibold'>{label}</span>
+      <input ref={photoInputRef} type='file' accept='image/*' capture='environment' className='hidden' onChange={takePhoto} />
+      {photo ? (
+        <div className='flex items-center gap-3'>
+          <img src={photo.url} alt='' className='h-16 w-16 rounded-2xl object-cover shadow-md' />
+          <button
+            type='button'
+            onClick={() => photoInputRef.current?.click()}
+            className='glass-lite glass-press flex h-10 items-center gap-2 rounded-full px-4 text-sm font-semibold'
+          >
+            <Camera className='h-5 w-5' />
+            {t('retake')}
+          </button>
+          <CheckCircle2 className='ms-auto h-6 w-6 text-green-600' />
+        </div>
+      ) : (
+        <button
+          type='button'
+          onClick={() => photoInputRef.current?.click()}
+          disabled={preparingPhoto}
+          className='glass-lite glass-press flex h-12 w-full items-center justify-center gap-2 rounded-2xl text-[15px] font-semibold'
+        >
+          {preparingPhoto ? <Loader2 className='h-5 w-5 animate-spin' /> : <Camera className='h-5 w-5' />}
+          {t('take_photo')}
+        </button>
+      )}
+      {hint && <p className='text-xs text-muted-foreground'>{hint}</p>}
+    </div>
+  )
 
   // ── Loading / not found ────────────────────────────────────────────────
   if (!parcel) {
@@ -270,13 +349,26 @@ function UpdateBody({ request, onClose, onUpdated, helpLink }: { request: Update
             {parcel.receiver.phone && <p className='text-sm text-muted-foreground' dir='ltr'>{parcel.receiver.phone}</p>}
             <p className='mt-1 text-sm'>{addressLine(parcel)}</p>
           </div>
-          <ContactButtons parcel={parcel} />
-          <CodBox parcel={parcel} />
+          {/* Going back to the hub: nobody to call, nothing to collect. */}
+          {parcel.to_return ? (
+            <div className='glass-tint flex items-center gap-3 rounded-2xl p-3.5' style={tint('#d97706')}>
+              <Undo2 className='h-6 w-6 shrink-0' />
+              <p className='text-sm font-semibold'>{t('return_notice', { status: statusText(t, parcel.status).toUpperCase() })}</p>
+            </div>
+          ) : (
+            <>
+              <ContactButtons parcel={parcel} />
+              <CodBox parcel={parcel} />
+            </>
+          )}
 
           <div className='flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground'>
             <span>{t('pieces', { n: parcel.pieces })}</span>
             {parcel.attempts > 0 && <span className='font-semibold text-red-600'>{t('attempts', { n: parcel.attempts })}</span>}
           </div>
+          {failedWhy(t, parcel) && (
+            <p className='text-sm font-medium text-red-600 dark:text-red-400'>{t('last_attempt', { reason: failedWhy(t, parcel)! })}</p>
+          )}
           {parcel.items.length > 0 && (
             <p className='line-clamp-2 text-sm text-muted-foreground'>
               {parcel.items.map((i) => `${i.name} ×${i.quantity}`).join(', ')}
@@ -386,34 +478,7 @@ function UpdateBody({ request, onClose, onUpdated, helpLink }: { request: Update
               </>
             )}
 
-            <div className='space-y-1.5'>
-              <span className='text-sm font-semibold'>{t('photo_optional')}</span>
-              <input ref={photoInputRef} type='file' accept='image/*' capture='environment' className='hidden' onChange={takePhoto} />
-              {photo ? (
-                <div className='flex items-center gap-3'>
-                  <img src={photo.url} alt='' className='h-16 w-16 rounded-2xl object-cover shadow-md' />
-                  <button
-                    type='button'
-                    onClick={() => photoInputRef.current?.click()}
-                    className='glass-lite glass-press flex h-10 items-center gap-2 rounded-full px-4 text-sm font-semibold'
-                  >
-                    <Camera className='h-5 w-5' />
-                    {t('retake')}
-                  </button>
-                  <CheckCircle2 className='ms-auto h-6 w-6 text-green-600' />
-                </div>
-              ) : (
-                <button
-                  type='button'
-                  onClick={() => photoInputRef.current?.click()}
-                  disabled={preparingPhoto}
-                  className='glass-lite glass-press flex h-12 w-full items-center justify-center gap-2 rounded-2xl text-[15px] font-semibold'
-                >
-                  {preparingPhoto ? <Loader2 className='h-5 w-5 animate-spin' /> : <Camera className='h-5 w-5' />}
-                  {t('take_photo')}
-                </button>
-              )}
-            </div>
+            {photoField(t('photo_optional'))}
 
             <label className='block space-y-1.5'>
               <span className='text-sm font-semibold'>{t('received_by')}</span>
@@ -426,35 +491,73 @@ function UpdateBody({ request, onClose, onUpdated, helpLink }: { request: Update
           </div>
         )}
 
-        {/* Failed: why */}
-        {canUpdate && action === 'attempt_failed' && (
-          <div className='mt-5 space-y-1.5'>
-            <span className='text-sm font-semibold'>{t('why_failed')}</span>
-            <div className='grid grid-cols-2 gap-2'>
-              {REASONS.map((option) => (
-                <button
-                  key={option}
-                  type='button'
-                  onClick={() => setReason(option)}
-                  aria-pressed={reason === option}
-                  className={cn(
-                    'glass-press min-h-10 rounded-2xl px-3.5 py-2 text-start text-[13px] font-semibold',
-                    reason === option ? 'glass-tint' : 'glass-lite',
-                    option === 'other' && 'col-span-2'
-                  )}
-                  style={reason === option ? tint('#dc2626') : undefined}
-                >
-                  {t(`reason_${option}`)}
-                </button>
-              ))}
+        {/* Failed, returned or cancelled: why — and, when the rider went, the photo that shows it */}
+        {canUpdate && action && needsReason && (
+          <div className='mt-5 space-y-4'>
+            <div className='space-y-1.5'>
+              <span className='text-sm font-semibold'>{t('why_failed')}</span>
+              <div className='grid grid-cols-2 gap-2'>
+                {REASONS.map((option) => (
+                  <button
+                    key={option}
+                    type='button'
+                    onClick={() => setReason(option)}
+                    aria-pressed={reason === option}
+                    className={cn(
+                      'glass-press min-h-10 rounded-2xl px-3.5 py-2 text-start text-[13px] font-semibold',
+                      reason === option ? 'glass-tint' : 'glass-lite',
+                      option === 'other' && 'col-span-2'
+                    )}
+                    style={reason === option ? tint(ACTION_STYLE[action].tint) : undefined}
+                  >
+                    {t(`reason_${option}`)}
+                  </button>
+                ))}
+              </div>
             </div>
+
+            {needsProof && (
+              <>
+                {photoField(t('place_photo'), t('place_photo_hint'))}
+                {located ? (
+                  <p className='flex items-center gap-1.5 text-xs text-muted-foreground'>
+                    <MapPin className='h-3.5 w-3.5 shrink-0 text-green-600' />
+                    {t('location_added')}
+                  </p>
+                ) : (
+                  // No location yet: ask for it. Sending without it stays possible.
+                  <div className='glass-lite space-y-2.5 rounded-2xl p-3.5'>
+                    <div className='flex items-start gap-2.5'>
+                      <MapPinOff className='mt-0.5 h-5 w-5 shrink-0 text-amber-600' />
+                      <div className='min-w-0 text-sm'>
+                        <p className='font-semibold'>{t(locationProblem === 'blocked' ? 'location_blocked' : 'location_ask')}</p>
+                        <p className='mt-0.5 text-xs text-muted-foreground'>
+                          {t(locationProblem === 'blocked' ? 'location_blocked_how' : locationProblem === 'unavailable' ? 'location_gps_off' : 'location_why')}
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type='button'
+                      onClick={turnOnLocation}
+                      disabled={locating}
+                      className='glass-tint glass-press flex h-11 w-full items-center justify-center gap-2 rounded-full text-sm font-semibold'
+                      style={tint('#d97706')}
+                    >
+                      {locating ? <Loader2 className='h-4 w-4 animate-spin' /> : <MapPin className='h-4 w-4' />}
+                      {t(locationProblem ? 'retry' : 'location_enable')}
+                    </button>
+                    <p className='text-center text-xs text-muted-foreground'>{t('location_optional')}</p>
+                  </div>
+                )}
+              </>
+            )}
           </div>
         )}
 
         {canUpdate && action && (
           <label className='mt-4 block space-y-1.5'>
             <span className='text-sm font-semibold'>
-              {(action === 'attempt_failed' && reason === 'other') || amountDiffers ? t('note') : t('note_optional')}
+              {(needsReason && reason === 'other') || amountDiffers ? t('note') : t('note_optional')}
             </span>
             <textarea
               value={note}

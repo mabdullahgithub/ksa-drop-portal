@@ -1,6 +1,6 @@
 import { MapPin, MessageCircle, Phone } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { money, statusText, useI18n } from '../i18n'
+import { money, statusText, useI18n, type TFunction } from '../i18n'
 import { whatsAppNumber } from '../lib/device'
 import type { Parcel } from '../types'
 
@@ -47,6 +47,16 @@ export function CodBox({ parcel, className }: { parcel: Parcel; className?: stri
       </span>
     </div>
   )
+}
+
+/**
+ * Why the last attempt failed, with the rider's note — for a parcel still
+ * waiting for another try. Null once it has moved on.
+ */
+export function failedWhy(t: TFunction, parcel: Parcel): string | null {
+  const last = parcel.last_event
+  if (parcel.status !== 'attempt_fail' || last?.action !== 'attempt_failed' || !last.reason) return null
+  return [t(`reason_${last.reason}`), last.note].filter(Boolean).join(' — ')
 }
 
 export function addressLine(parcel: Parcel): string {

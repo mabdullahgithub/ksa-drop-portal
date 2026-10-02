@@ -4,9 +4,12 @@ namespace App\Http\Controllers\Rider;
 
 use App\Http\Controllers\Controller;
 use App\Models\Rider;
+use App\Models\RiderPayment;
 use App\Models\Shipment;
 use App\Models\ShipmentEvent;
+use App\Services\Riders\RiderCash;
 use App\Services\Riders\RiderDayStats;
+use App\Services\Riders\RiderPay;
 use App\Services\Riders\RiderPhoto;
 use App\Services\Riders\RiderSupport;
 use App\Services\Riders\RiderParcelPresenter;
@@ -39,6 +42,8 @@ class RiderParcelController extends Controller
                 'photo_url' => $rider->hasPhoto() ? route('rider.api.photo', ['v' => RiderPhoto::version($rider)]) : null,
             ],
             'today' => RiderDayStats::forRiders([$rider->id])[$rider->id],
+            'cash' => RiderCash::forRider($rider->id),
+            'pay' => RiderPay::forRider($rider->id) + ['rates' => RiderPay::ratesFor($rider)],
             // Who to message on WhatsApp for help; null until the admin sets it.
             'support' => ($support = RiderSupport::get()) ? [
                 'name' => $support['name'],
@@ -49,7 +54,41 @@ class RiderParcelController extends Controller
     }
 
     /**
-     * Parcels the rider is still holding.
+     * The rider's money, both ways: the COD cash they owe KSA Drop with what
+     * they handed in, and what KSA Drop owes them with what it paid — newest
+     * first. Voided entries never counted, so the rider doesn't see them.
+     */
+    public function cash(Request $request): JsonResponse
+    {
+        $rider = $this->rider($request);
+
+        $payments = $rider->payments()
+            ->counted()
+            ->orderByDesc('received_at')
+            ->orderByDesc('id')
+            ->limit(200)
+            ->get()
+            ->groupBy('direction');
+
+        $list = fn (string $direction) => ($payments[$direction] ?? collect())->take(100)->map(fn (RiderPayment $payment) => [
+            'id' => $payment->id,
+            'amount' => (float) $payment->amount,
+            'method' => $payment->method,
+            'reference' => $payment->reference,
+            'received_at' => $payment->received_at->toIso8601String(),
+        ])->values();
+
+        return response()->json([
+            'cash' => RiderCash::forRider($rider->id),
+            'payments' => $list(RiderPayment::DIRECTION_IN),
+            'pay' => RiderPay::forRider($rider->id) + ['rates' => RiderPay::ratesFor($rider)],
+            'payouts' => $list(RiderPayment::DIRECTION_OUT),
+        ]);
+    }
+
+    /**
+     * Parcels in the rider's hands: to deliver, to try again, or to hand
+     * back to the hub.
      */
     public function parcels(Request $request): JsonResponse
     {
@@ -171,7 +210,9 @@ class RiderParcelController extends Controller
             ]);
         }
 
-        $result = (int) $shipment->rider_id === $rider->id ? 'already_mine' : ($options['blocked'] ?? 'already_mine');
+        // Finished (delivered, or handed back) says so even when this rider
+        // is the one who finished it.
+        $result = $options['blocked'] ?? 'already_mine';
 
         return response()->json([
             'result' => $result,
@@ -211,7 +252,7 @@ class RiderParcelController extends Controller
         $validated = $request->validate([
             'action' => ['required', Rule::enum(RiderAction::class)],
             'client_uuid' => 'required|uuid',
-            'reason' => [Rule::requiredIf($action === RiderAction::ATTEMPT_FAILED), 'nullable', Rule::enum(FailedAttemptReason::class)],
+            'reason' => [Rule::requiredIf($action?->needsReason() ?? false), 'nullable', Rule::enum(FailedAttemptReason::class)],
             'note' => [
                 Rule::requiredIf(fn () => $request->input('reason') === FailedAttemptReason::OTHER->value
                     || ($isDelivery && $expectedCod > 0 && abs((float) $request->input('cod_amount') - $expectedCod) >= 0.01)),
@@ -220,8 +261,9 @@ class RiderParcelController extends Controller
             'cod_amount' => [Rule::requiredIf($isDelivery && $expectedCod > 0), 'nullable', 'numeric', 'min:0', 'max:999999'],
             'payment_method' => [Rule::requiredIf($isDelivery && $expectedCod > 0), 'nullable', 'in:cash,card,transfer'],
             'recipient_name' => 'nullable|string|max:255',
-            // Proof-of-delivery photo: asked for, not required.
-            'photo' => ['nullable', 'image', 'max:8192'],
+            // A delivery's photo is asked for, not required. A failed attempt
+            // or a return needs one of the place: it shows the rider went.
+            'photo' => [Rule::requiredIf($action?->needsProof() ?? false), 'nullable', 'image', 'max:8192'],
             'lat' => 'nullable|numeric|between:-90,90',
             'lng' => 'nullable|numeric|between:-180,180',
             'accuracy_m' => 'nullable|integer|min:0|max:100000',
@@ -232,7 +274,8 @@ class RiderParcelController extends Controller
                 ? 'Write what happened.'
                 : 'The amount is different from the parcel\'s COD — write why.',
             'cod_amount.required' => 'Enter the amount collected.',
-            'reason.required' => 'Choose why the delivery failed.',
+            'photo.required' => 'Take a photo of the place.',
+            'reason.required' => $action === RiderAction::ATTEMPT_FAILED ? 'Choose why the delivery failed.' : 'Choose a reason.',
         ]);
 
         try {

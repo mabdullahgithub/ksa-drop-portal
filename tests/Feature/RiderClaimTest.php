@@ -44,7 +44,7 @@ class RiderClaimTest extends TestCase
             ->assertJsonPath('result', 'claimed')
             ->assertJsonPath('parcel.status', 'out_for_delivery')
             ->assertJsonPath('parcel.held_by_me', true)
-            ->assertJsonPath('parcel.allowed_actions', ['delivered', 'attempt_failed']);
+            ->assertJsonPath('parcel.allowed_actions', ['delivered', 'attempt_failed', 'returned', 'cancelled']);
 
         $shipment->refresh();
         $this->assertSame($rider->id, $shipment->rider_id);

@@ -243,6 +243,7 @@ class RiderPerformance
                 'shipments.status',
                 'shipments.cancel_reason',
                 'shipments.cancelled_at',
+                'shipments.hub_received_at',
                 'shipments.api_response',
                 'mine.last_at',
                 'orders.order_number as order_number',
@@ -266,7 +267,7 @@ class RiderPerformance
             ->whereIn('shipment_id', $rows->pluck('id'))
             ->orderBy('occurred_at')
             ->orderBy('id')
-            ->get(['shipment_id', 'action', 'reason', 'note', 'cod_amount', 'payment_method', 'occurred_at'])
+            ->get(['id', 'shipment_id', 'action', 'reason', 'note', 'cod_amount', 'payment_method', 'photo_path', 'lat', 'lng', 'occurred_at'])
             ->groupBy('shipment_id');
 
         $parcels = $rows->map(function (Shipment $shipment) use ($events) {
@@ -290,6 +291,9 @@ class RiderPerformance
                 'held_by' => $shipment->outcome === 'handed_back' ? $shipment->holder_name : null,
                 'cancel_reason' => $ended ? $shipment->cancel_reason : null,
                 'cancelled_at' => $ended ? $shipment->cancelled_at?->toIso8601String() : null,
+                // Returned or cancelled: still with the rider until this is set.
+                'awaiting_hand_back' => $shipment->awaitsHandBack(),
+                'hub_received_at' => $ended ? $shipment->hub_received_at?->toIso8601String() : null,
                 'events' => ($events[$shipment->id] ?? collect())->map(fn (ShipmentEvent $event) => [
                     'action' => $event->action,
                     'occurred_at' => $event->occurred_at?->toIso8601String(),
@@ -297,6 +301,10 @@ class RiderPerformance
                     'note' => $event->note,
                     'cod_amount' => $event->cod_amount !== null ? (float) $event->cod_amount : null,
                     'payment_method' => $event->payment_method,
+                    // Proof: the rider's photo, and where the phone was.
+                    'photo_url' => $event->photo_path !== null ? route('api.shipment-events.photo', $event->id) : null,
+                    'lat' => $event->lat !== null ? (float) $event->lat : null,
+                    'lng' => $event->lng !== null ? (float) $event->lng : null,
                 ])->values()->all(),
             ];
         })->values()->all();

@@ -34,6 +34,7 @@ class Shipment extends Model
         'delivered_at',
         'cancelled_at',
         'cancel_reason',
+        'hub_received_at',
         'error_message',
         'exception_note',
         'exception_escalated_at',
@@ -52,6 +53,7 @@ class Shipment extends Model
         'shipped_at'              => 'datetime',
         'delivered_at'            => 'datetime',
         'cancelled_at'            => 'datetime',
+        'hub_received_at'         => 'datetime',
         'exception_escalated_at'  => 'datetime',
         'otp_verified'            => 'boolean',
         'otp_verified_at'         => 'datetime',
@@ -153,6 +155,38 @@ class Shipment extends Model
     public function scopeNotCancelled($query)
     {
         return $query->where('status', '!=', ShipmentStatus::CANCELLED->value);
+    }
+
+    /**
+     * Parcels a rider physically has: out for delivery, failed and waiting
+     * for another try, or returned/cancelled and not handed back yet.
+     */
+    public function scopeInRiderHands($query)
+    {
+        return $query->whereNotNull('rider_id')->where(fn ($q) => $q
+            ->whereIn('status', [
+                ShipmentStatus::OUT_FOR_DELIVERY->value,
+                ShipmentStatus::ATTEMPT_FAIL->value,
+            ])
+            ->orWhere(fn ($q) => $q->awaitingHandBack()));
+    }
+
+    /**
+     * Returned or cancelled while a rider had it, and the hub hasn't got it
+     * back yet.
+     */
+    public function scopeAwaitingHandBack($query)
+    {
+        return $query->whereNotNull('rider_id')
+            ->whereIn('status', [ShipmentStatus::RETURNED->value, ShipmentStatus::CANCELLED->value])
+            ->whereNull('hub_received_at');
+    }
+
+    public function awaitsHandBack(): bool
+    {
+        return $this->rider_id !== null
+            && in_array($this->status_enum, [ShipmentStatus::RETURNED, ShipmentStatus::CANCELLED], true)
+            && $this->hub_received_at === null;
     }
 
     public function scopeByCourier($query, string $courier)

@@ -21,12 +21,12 @@ trait MakesRiders
     {
         app(PermissionRegistrar::class)->forgetCachedPermissions();
 
-        foreach (['view riders', 'manage riders', 'view orders', 'edit orders'] as $name) {
+        foreach (['view riders', 'manage riders', 'manage rider payments', 'view orders', 'edit orders'] as $name) {
             Permission::findOrCreate($name);
         }
     }
 
-    protected function staff(array $permissions = ['view riders', 'manage riders', 'view orders', 'edit orders']): User
+    protected function staff(array $permissions = ['view riders', 'manage riders', 'manage rider payments', 'view orders', 'edit orders']): User
     {
         $role = Role::create(['name' => 'role-' . uniqid()]);
         $role->givePermissionTo($permissions);

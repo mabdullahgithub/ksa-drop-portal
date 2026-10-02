@@ -31,7 +31,7 @@ type Props = {
 
 type FormState = Record<
   | 'name' | 'phone' | 'name_ar' | 'national_id' | 'nationality' | 'vehicle_type' | 'vehicle_plate'
-  | 'license_number' | 'license_expiry' | 'warehouse_id' | 'city' | 'employment_type' | 'iban'
+  | 'license_number' | 'license_expiry' | 'warehouse_id' | 'city' | 'employment_type' | 'iban' | 'delivery_rate' | 'attempt_rate'
   | 'emergency_contact_name' | 'emergency_contact_phone' | 'notes',
   string
 >
@@ -53,6 +53,8 @@ function initialState(rider?: RiderRow | null): FormState {
     city: rider?.city ?? '',
     employment_type: rider?.employment_type ?? '',
     iban: rider?.iban ?? '',
+    delivery_rate: rider?.delivery_rate != null ? String(rider.delivery_rate) : '',
+    attempt_rate: rider?.attempt_rate != null ? String(rider.attempt_rate) : '',
     emergency_contact_name: rider?.emergency_contact_name ?? '',
     emergency_contact_phone: rider?.emergency_contact_phone ?? '',
     notes: rider?.notes ?? '',
@@ -137,7 +139,7 @@ export function RiderFormDialog({ open, onOpenChange, rider, warehouses, onSaved
       const fieldErrors = err.response?.data?.errors ?? {}
       setErrors(Object.fromEntries(Object.entries(fieldErrors).map(([k, v]) => [k, (v as string[])[0]])))
       // Surface errors hidden under the collapsed section.
-      if (Object.keys(fieldErrors).some((k) => k !== 'name' && k !== 'phone')) setMoreOpen(true)
+      if (Object.keys(fieldErrors).some((k) => !['name', 'phone', 'delivery_rate', 'attempt_rate'].includes(k))) setMoreOpen(true)
       if (!Object.keys(fieldErrors).length) toast.error(err.response?.data?.message || 'Could not save the rider.')
     } finally {
       setSaving(false)
@@ -194,6 +196,22 @@ export function RiderFormDialog({ open, onOpenChange, rider, warehouses, onSaved
           >
             <Input {...input('phone')} inputMode='tel' autoComplete='off' placeholder='05XXXXXXXX or 03XXXXXXXXX' dir='ltr' />
           </Field>
+
+          {/* What KSA Drop pays this rider. Agreed rider by rider. */}
+          <div className='space-y-1.5'>
+            <div className='grid grid-cols-2 gap-4'>
+              <Field label='Pay per delivery (SAR)' error={errors.delivery_rate}>
+                <Input {...input('delivery_rate')} type='number' inputMode='decimal' min='0' step='0.01' placeholder='0.00' dir='ltr' />
+              </Field>
+              <Field label='Pay per attempt (SAR)' error={errors.attempt_rate}>
+                <Input {...input('attempt_rate')} type='number' inputMode='decimal' min='0' step='0.01' placeholder='0.00' dir='ltr' />
+              </Field>
+            </div>
+            <p className='text-xs text-muted-foreground'>
+              What KSA Drop pays this rider: for each delivered order, and for each visit the customer did not take the parcel on
+              (the rider takes a photo of the place). Orders marked Cancelled are not paid. A new rate applies from the next order.
+            </p>
+          </div>
 
           <Collapsible open={moreOpen} onOpenChange={setMoreOpen}>
             <CollapsibleTrigger asChild>

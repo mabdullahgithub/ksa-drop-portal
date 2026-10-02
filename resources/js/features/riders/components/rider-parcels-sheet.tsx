@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { format } from 'date-fns'
-import { ArrowRightLeft, Ban, Loader2, Search as SearchIcon, Undo2, X } from 'lucide-react'
+import { ArrowRightLeft, Ban, Image as ImageIcon, Loader2, MapPin, Search as SearchIcon, Undo2, X } from 'lucide-react'
 import { EmptyState } from '@/components/empty-state'
 import { SearchBeam } from '@/components/search-beam'
 import { Button } from '@/components/ui/button'
@@ -26,8 +26,16 @@ type Props = {
   riderName: string
   range: { from: string; to: string }
   rangeText: string
-  /** For the filter counts, which are already known. */
-  summary: RiderSummary
+  /** For the filter counts. Null while they load; the list doesn't wait for them. */
+  summary: RiderSummary | null
+  /** Instead of "…'s parcels". */
+  title?: string
+  /** Shown above the filters, e.g. a period picker. */
+  toolbar?: React.ReactNode
+  /** The filter the list opens on. */
+  initialOutcome?: ParcelOutcome
+  /** Filters offered even when the rider has none of them in the range. */
+  alwaysShow?: ParcelOutcome[]
 }
 
 /**
@@ -36,8 +44,20 @@ type Props = {
  * loads until the sheet opens; then one page at a time, filtered and
  * searched on the server.
  */
-export function RiderParcelsSheet({ open, onOpenChange, riderId, riderName, range, rangeText, summary }: Props) {
-  const [outcome, setOutcome] = useState<ParcelOutcome | 'all'>('all')
+export function RiderParcelsSheet({
+  open,
+  onOpenChange,
+  riderId,
+  riderName,
+  range,
+  rangeText,
+  summary,
+  title,
+  toolbar,
+  initialOutcome,
+  alwaysShow = [],
+}: Props) {
+  const [outcome, setOutcome] = useState<ParcelOutcome | 'all'>(initialOutcome ?? 'all')
   const [query, setQuery] = useState('')
   const search = useDebouncedValue(query.trim(), 350)
   const [parcels, setParcels] = useState<RiderParcel[]>([])
@@ -46,7 +66,7 @@ export function RiderParcelsSheet({ open, onOpenChange, riderId, riderName, rang
   const [failed, setFailed] = useState(false)
 
   // A "load more" that lands after the filters changed belongs to the old list.
-  const listKey = `${outcome}|${search}`
+  const listKey = `${range.from}|${range.to}|${outcome}|${search}`
   const currentKey = useRef(listKey)
   currentKey.current = listKey
 
@@ -88,20 +108,23 @@ export function RiderParcelsSheet({ open, onOpenChange, riderId, riderName, rang
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className='flex w-full flex-col gap-0 sm:max-w-xl'>
         <SheetHeader className='border-b'>
-          <SheetTitle>{riderName}&rsquo;s parcels</SheetTitle>
+          <SheetTitle>{title ?? <>{riderName}&rsquo;s parcels</>}</SheetTitle>
           <SheetDescription>
-            {formatCount(summary.assigned)} parcel{summary.assigned === 1 ? '' : 's'} · {rangeText}
+            {summary && `${formatCount(summary.assigned)} parcel${summary.assigned === 1 ? '' : 's'} · `}
+            {rangeText}
           </SheetDescription>
 
+          {toolbar}
+
           <div className='mt-2 flex flex-wrap gap-1.5'>
-            <Chip active={outcome === 'all'} onClick={() => setOutcome('all')} label='All' count={summary.assigned} />
-            {OUTCOMES.filter((o) => summary.outcomes[o.value] > 0).map((o) => (
+            <Chip active={outcome === 'all'} onClick={() => setOutcome('all')} label='All' count={summary?.assigned} />
+            {OUTCOMES.filter((o) => alwaysShow.includes(o.value) || outcome === o.value || (summary?.outcomes[o.value] ?? 0) > 0).map((o) => (
               <Chip
                 key={o.value}
                 active={outcome === o.value}
                 onClick={() => setOutcome(o.value)}
                 label={o.label}
-                count={summary.outcomes[o.value]}
+                count={summary?.outcomes[o.value]}
                 swatch={o.swatch}
               />
             ))}
@@ -179,7 +202,8 @@ function Chip({
   active: boolean
   onClick: () => void
   label: string
-  count: number
+  /** Absent while the counts load. */
+  count?: number
   swatch?: string
 }) {
   return (
@@ -194,7 +218,7 @@ function Chip({
     >
       {swatch && <span className={cn('size-2 rounded-full', swatch)} />}
       {label}
-      <span className='tabular-nums'>{formatCount(count)}</span>
+      {count !== undefined && <span className='tabular-nums'>{formatCount(count)}</span>}
     </button>
   )
 }
@@ -248,7 +272,9 @@ function ParcelItem({ parcel }: { parcel: RiderParcel }) {
                 <span className='font-medium'>{action.label}</span>
                 <span className='text-muted-foreground tabular-nums'>{when(event.occurred_at)}</span>
               </div>
-              {event.action === 'attempt_failed' && <p className='text-muted-foreground'>{event.reason ?? 'No reason given'}</p>}
+              {['attempt_failed', 'returned', 'cancelled'].includes(event.action) && (
+                <p className='text-muted-foreground'>{event.reason ?? 'No reason given'}</p>
+              )}
               {event.action === 'delivered' && event.cod_amount !== null && event.cod_amount > 0 && (
                 <p className='text-muted-foreground'>
                   Collected {sar(event.cod_amount)}
@@ -256,6 +282,29 @@ function ParcelItem({ parcel }: { parcel: RiderParcel }) {
                 </p>
               )}
               {event.note && <p className='mt-0.5 rounded bg-muted/60 px-2 py-1 text-muted-foreground'>&ldquo;{event.note}&rdquo;</p>}
+              {(event.photo_url || (event.lat !== null && event.lng !== null)) && (
+                <div className='mt-1 flex items-center gap-3'>
+                  {event.photo_url && (
+                    <a href={event.photo_url} target='_blank' rel='noopener noreferrer' className='inline-flex items-center gap-1 text-primary hover:underline'>
+                      <ImageIcon className='h-3 w-3' /> Photo
+                    </a>
+                  )}
+                  {event.lat !== null && event.lng !== null && (
+                    <a
+                      href={`https://www.google.com/maps?q=${event.lat},${event.lng}`}
+                      target='_blank'
+                      rel='noopener noreferrer'
+                      className='inline-flex items-center gap-1 text-primary hover:underline'
+                    >
+                      <MapPin className='h-3 w-3' /> Location
+                    </a>
+                  )}
+                  {/* The rider's phone had location off or blocked when they sent it. */}
+                  {event.lat === null && ['attempt_failed', 'returned'].includes(event.action) && (
+                    <span className='text-amber-700 dark:text-amber-400'>No location sent</span>
+                  )}
+                </div>
+              )}
             </li>
           )
         })}
@@ -280,6 +329,11 @@ function Ending({ parcel }: { parcel: RiderParcel }) {
           <span className='text-muted-foreground tabular-nums'>{when(parcel.cancelled_at)}</span>
         </div>
         {parcel.cancel_reason && <p className='text-muted-foreground'>{parcel.cancel_reason}</p>}
+        {parcel.awaiting_hand_back ? (
+          <p className='font-medium text-amber-700 dark:text-amber-400'>Still with the rider — not handed back yet</p>
+        ) : (
+          parcel.hub_received_at && <p className='text-muted-foreground'>Back at the hub {when(parcel.hub_received_at)}</p>
+        )}
       </li>
     )
   }

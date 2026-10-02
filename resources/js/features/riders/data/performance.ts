@@ -11,8 +11,8 @@ export const OUTCOMES: { value: ParcelOutcome; label: string; hint: string; swat
   { value: 'delivered', label: 'Delivered', hint: 'Delivered by this rider', swatch: 'bg-[var(--perf-series)]' },
   { value: 'out_for_delivery', label: 'Out with rider', hint: 'Scanned out, not finished yet', swatch: 'bg-[#eda100] dark:bg-[#c98500]' },
   { value: 'attempt_fail', label: 'Failed, to retry', hint: 'Last attempt failed; the rider still has it', swatch: 'bg-[#d03b3b]' },
-  { value: 'cancelled', label: 'Cancelled', hint: 'Cancelled by an admin', swatch: 'bg-slate-500 dark:bg-slate-400' },
-  { value: 'returned', label: 'Returned', hint: 'Returned to the merchant', swatch: 'bg-[#4a3aa7] dark:bg-[#9085e9]' },
+  { value: 'cancelled', label: 'Cancelled', hint: 'Cancelled by an admin or the rider', swatch: 'bg-slate-500 dark:bg-slate-400' },
+  { value: 'returned', label: 'Returned', hint: 'The customer did not take it; going back to the merchant', swatch: 'bg-[#4a3aa7] dark:bg-[#9085e9]' },
   { value: 'handed_back', label: 'Handed back', hint: 'Unassigned by an admin, or taken over by another rider', swatch: 'bg-zinc-300 dark:bg-zinc-600' },
   { value: 'other', label: 'Other', hint: 'Any other status', swatch: 'bg-zinc-200 dark:bg-zinc-700' },
 ]
@@ -21,6 +21,9 @@ export const RIDER_ACTIONS: Record<RiderParcelEvent['action'], { label: string; 
   out_for_delivery: { label: 'Out for delivery', dot: 'bg-[#eda100] dark:bg-[#c98500]' },
   delivered: { label: 'Delivered', dot: 'bg-[var(--perf-series)]' },
   attempt_failed: { label: 'Failed attempt', dot: 'bg-[#d03b3b]' },
+  returned: { label: 'Marked returned', dot: 'bg-[#4a3aa7] dark:bg-[#9085e9]' },
+  cancelled: { label: 'Marked cancelled', dot: 'bg-slate-500 dark:bg-slate-400' },
+  returned_to_hub: { label: 'Handed back at the hub', dot: 'bg-zinc-400 dark:bg-zinc-500' },
 }
 
 export type RangePreset = 'today' | '7d' | '30d' | 'month'

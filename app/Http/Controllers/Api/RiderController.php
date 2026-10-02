@@ -8,7 +8,9 @@ use App\Models\Rider;
 use App\Models\RiderDevice;
 use App\Models\Warehouse;
 use App\Services\Riders\RiderAuthService;
+use App\Services\Riders\RiderCash;
 use App\Services\Riders\RiderDayStats;
+use App\Services\Riders\RiderPay;
 use App\Services\Riders\RiderPerformance;
 use App\Services\Riders\RiderPresence;
 use App\Services\Riders\RiderPhoto;
@@ -364,6 +366,9 @@ class RiderController extends Controller
             'city' => 'nullable|string|max:100',
             'employment_type' => 'nullable|in:staff,freelancer,agency',
             'iban' => 'nullable|string|max:34',
+            // What KSA Drop pays this rider per delivered order and per attempt.
+            'delivery_rate' => 'nullable|numeric|min:0|max:9999.99',
+            'attempt_rate' => 'nullable|numeric|min:0|max:9999.99',
             'emergency_contact_name' => 'nullable|string|max:255',
             'emergency_contact_phone' => 'nullable|string|max:30',
             'notes' => 'nullable|string|max:1000',
@@ -406,13 +411,16 @@ class RiderController extends Controller
             ->orderBy('name')
             ->get();
 
-        $stats = RiderDayStats::forRiders($riders->pluck('id')->all());
-        $online = array_flip(RiderPresence::online($riders->pluck('id')->all()));
+        $ids = $riders->pluck('id')->all();
+        $stats = RiderDayStats::forRiders($ids);
+        $cash = RiderCash::forRiders($ids);
+        $pay = RiderPay::forRiders($ids);
+        $online = array_flip(RiderPresence::online($ids));
 
-        return $riders->map(fn (Rider $rider) => $this->row($rider, $request, $stats[$rider->id], isset($online[$rider->id])))->all();
+        return $riders->map(fn (Rider $rider) => $this->row($rider, $request, $stats[$rider->id], isset($online[$rider->id]), $cash[$rider->id], $pay[$rider->id]))->all();
     }
 
-    private function row(Rider $rider, Request $request, ?array $stats = null, ?bool $online = null): array
+    private function row(Rider $rider, Request $request, ?array $stats = null, ?bool $online = null, ?array $cash = null, ?array $pay = null): array
     {
         $rider->loadMissing(['warehouse:id,name', 'activeDevice']);
         $device = $rider->activeDevice;
@@ -438,6 +446,9 @@ class RiderController extends Controller
             'city' => $rider->city,
             'employment_type' => $rider->employment_type,
             'iban' => $canManage ? $rider->iban : null,
+            // What KSA Drop pays this rider; null until the admin sets it.
+            'delivery_rate' => $rider->delivery_rate !== null ? (float) $rider->delivery_rate : null,
+            'attempt_rate' => $rider->attempt_rate !== null ? (float) $rider->attempt_rate : null,
             'emergency_contact_name' => $rider->emergency_contact_name,
             'emergency_contact_phone' => $rider->emergency_contact_phone,
             'notes' => $rider->notes,
@@ -457,6 +468,10 @@ class RiderController extends Controller
             'last_seen_at' => $rider->last_seen_at?->toIso8601String(),
             'online' => $online ?? RiderPresence::isOnline($rider),
             'stats' => $stats ?? RiderDayStats::forRiders([$rider->id])[$rider->id],
+            // COD cash collected, handed in, and still owed (RiderCash).
+            'cash' => $cash ?? RiderCash::forRider($rider->id),
+            // Earned per order, paid out, and still owed to the rider (RiderPay).
+            'pay' => $pay ?? RiderPay::forRider($rider->id),
             'created_at' => $rider->created_at?->toIso8601String(),
         ];
     }

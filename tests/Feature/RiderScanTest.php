@@ -34,10 +34,21 @@ class RiderScanTest extends TestCase
 
     private function update(string $token, Shipment $shipment, array $data)
     {
-        return $this->asRider($token)->post("/rider/api/shipments/{$shipment->id}/events", $data + [
+        return $this->asRider($token)->post("/rider/api/shipments/{$shipment->id}/events", $this->withProof($data) + [
             'client_uuid' => (string) Str::uuid(),
             'entry_method' => 'camera',
         ]);
+    }
+
+    /**
+     * A failed attempt or a return needs a photo of the place; tests that
+     * aren't about that get one unless they pass `photo` themselves.
+     */
+    private function withProof(array $data): array
+    {
+        return in_array($data['action'] ?? null, ['attempt_failed', 'returned'], true)
+            ? $data + ['photo' => UploadedFile::fake()->image('place.jpg', 800, 600)]
+            : $data;
     }
 
     private function photo(): UploadedFile
@@ -86,7 +97,7 @@ class RiderScanTest extends TestCase
             ->assertOk()
             ->assertJsonPath('parcel.status', 'out_for_delivery')
             ->assertJsonPath('parcel.held_by_me', true)
-            ->assertJsonPath('parcel.allowed_actions', ['delivered', 'attempt_failed']);
+            ->assertJsonPath('parcel.allowed_actions', ['delivered', 'attempt_failed', 'returned', 'cancelled']);
 
         $shipment->refresh();
         $this->assertSame($rider->id, $shipment->rider_id);
@@ -219,12 +230,15 @@ class RiderScanTest extends TestCase
 
         $this->update($token, $shipment, ['action' => 'attempt_failed'])->assertStatus(422)->assertJsonValidationErrors('reason');
         $this->update($token, $shipment, ['action' => 'attempt_failed', 'reason' => 'other'])->assertStatus(422)->assertJsonValidationErrors('note');
+        // The photo of the place shows the rider went.
+        $this->update($token, $shipment, ['action' => 'attempt_failed', 'reason' => 'no_answer', 'photo' => null])
+            ->assertStatus(422)->assertJsonValidationErrors('photo');
 
         $this->update($token, $shipment, ['action' => 'attempt_failed', 'reason' => 'no_answer'])
             ->assertOk()
             ->assertJsonPath('parcel.status', 'attempt_fail')
             ->assertJsonPath('parcel.attempts', 1)
-            ->assertJsonPath('parcel.allowed_actions', ['delivered', 'attempt_failed', 'out_for_delivery']);
+            ->assertJsonPath('parcel.allowed_actions', ['delivered', 'attempt_failed', 'out_for_delivery', 'returned', 'cancelled']);
 
         $this->assertSame('Delivery attempt failed — Customer not answering', $shipment->fresh()->tracking_history[0]['description']);
     }

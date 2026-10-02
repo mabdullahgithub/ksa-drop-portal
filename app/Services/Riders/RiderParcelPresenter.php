@@ -62,6 +62,9 @@ class RiderParcelPresenter
                 'occurred_at' => $lastEvent->occurred_at?->toIso8601String(),
             ] : null,
             'held_by_me' => (int) $shipment->rider_id === $rider->id,
+            // Returned or cancelled and still with this rider: nothing to
+            // deliver or collect, only to hand back at the hub.
+            'to_return' => (int) $shipment->rider_id === $rider->id && $shipment->awaitsHandBack(),
             'allowed_actions' => array_map(fn (RiderAction $action) => $action->value, $options['actions']),
             'blocked' => $options['blocked'],
             'held_by' => $options['held_by'],

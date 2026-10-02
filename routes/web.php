@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\LogesTechsWebhookController;
 use App\Http\Controllers\Api\InvoiceController;
 use App\Http\Controllers\Api\OrderController;
 use App\Http\Controllers\Api\RiderController;
+use App\Http\Controllers\Api\RiderPaymentController;
 use App\Http\Controllers\Api\ShipmentController;
 use App\Http\Controllers\Api\ShipmentEventController;
 use App\Http\Controllers\Api\WarehouseController;
@@ -112,6 +113,8 @@ Route::middleware(['auth', 'verified', 'role:!client'])->group(function () {
         Route::post('/{shipment}/cancel', [ShipmentController::class, 'cancel'])->middleware('permission:edit orders')->name('api.shipments.cancel');
         Route::post('/{shipment}/escalate', [ShipmentController::class, 'escalate'])->middleware('permission:edit orders')->name('api.shipments.escalate');
         Route::post('/{shipment}/unassign-rider', [ShipmentController::class, 'unassignRider'])->middleware('permission:edit orders')->name('api.shipments.unassign-rider');
+        Route::post('/{shipment}/return', [ShipmentController::class, 'markReturned'])->middleware('permission:edit orders')->name('api.shipments.return');
+        Route::post('/{shipment}/receive-at-hub', [ShipmentController::class, 'receiveAtHub'])->middleware('permission:edit orders')->name('api.shipments.receive-at-hub');
         Route::post('/{shipment}/invoice', [InvoiceController::class, 'generateShipping'])->middleware('permission:edit orders')->name('api.shipments.invoice');
     });
 
@@ -126,6 +129,12 @@ Route::middleware(['auth', 'verified', 'role:!client'])->group(function () {
     Route::get('/api/riders/{rider}/photo', [RiderController::class, 'photo'])->middleware('permission:view riders|manage riders')->name('api.riders.photo');
     Route::get('/api/riders/{rider}/performance', [RiderController::class, 'riderPerformance'])->middleware('permission:view riders|manage riders')->name('api.riders.rider-performance');
     Route::get('/api/riders/{rider}/parcels', [RiderController::class, 'riderParcels'])->middleware('permission:view riders|manage riders')->name('api.riders.parcels');
+    // Cash a rider owes and has handed in. Recording it is its own permission.
+    Route::get('/api/riders/{rider}/payments', [RiderPaymentController::class, 'index'])->middleware('permission:view riders|manage riders|manage rider payments')->name('api.riders.payments.index');
+    Route::prefix('api/riders/{rider}/payments')->middleware('permission:manage rider payments')->scopeBindings()->group(function () {
+        Route::post('/', [RiderPaymentController::class, 'store'])->name('api.riders.payments.store');
+        Route::post('/{payment}/void', [RiderPaymentController::class, 'void'])->name('api.riders.payments.void');
+    });
     Route::prefix('api/riders')->middleware('permission:manage riders')->group(function () {
         // Before /{rider}: "support" isn't a rider id.
         Route::put('/support', [RiderController::class, 'updateSupport'])->name('api.riders.support');

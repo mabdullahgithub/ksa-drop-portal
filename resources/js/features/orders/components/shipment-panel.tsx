@@ -11,7 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Truck, RefreshCw, X, Copy, ExternalLink, MapPin, AlertTriangle, CheckCircle2, ShieldCheck, Bike, Image as ImageIcon, UserMinus } from 'lucide-react'
+import { Truck, RefreshCw, X, Copy, ExternalLink, MapPin, AlertTriangle, CheckCircle2, ShieldCheck, Bike, Image as ImageIcon, UserMinus, Undo2, PackageCheck } from 'lucide-react'
 import { toast } from 'sonner'
 import axios from 'axios'
 import { useState } from 'react'
@@ -26,10 +26,10 @@ interface TrackingEvent {
   raw_status: string | null
 }
 
-/** A KSA Express rider's update (shipment_events). */
+/** A KSA Express update by a rider, or by staff from the portal (shipment_events). */
 interface RiderEvent {
   id: number
-  action: 'out_for_delivery' | 'delivered' | 'attempt_failed'
+  action: 'out_for_delivery' | 'delivered' | 'attempt_failed' | 'returned' | 'cancelled' | 'returned_to_hub'
   reason: string | null
   note: string | null
   cod_amount: string | null
@@ -41,6 +41,7 @@ interface RiderEvent {
   occurred_at: string
   has_photo: boolean
   rider: { id: number; name: string } | null
+  user?: { id: number; name: string } | null
 }
 
 interface Shipment {
@@ -62,6 +63,8 @@ interface Shipment {
   delivered_at: string | null
   cancelled_at: string | null
   cancel_reason: string | null
+  /** A returned or cancelled parcel is with its rider until the hub has it back. */
+  hub_received_at?: string | null
   error_message: string | null
   exception_note: string | null
   exception_escalated_at: string | null
@@ -102,6 +105,9 @@ const riderActionLabels: Record<RiderEvent['action'], string> = {
   out_for_delivery: 'Out for delivery',
   delivered: 'Delivered',
   attempt_failed: 'Delivery failed',
+  returned: 'Marked returned',
+  cancelled: 'Marked cancelled',
+  returned_to_hub: 'Handed back at the hub',
 }
 
 const failedReasonLabels: Record<string, string> = {
@@ -131,6 +137,8 @@ export function ShipmentPanel({ shipment, orderId, onCreateShipment, onShipmentU
   const [showEscalateDialog, setShowEscalateDialog] = useState(false)
   const [escalateNote, setEscalateNote] = useState('')
   const [unassigning, setUnassigning] = useState(false)
+  const [returning, setReturning] = useState(false)
+  const [receiving, setReceiving] = useState(false)
 
   if (!shipment) {
     return (
@@ -213,7 +221,42 @@ export function ShipmentPanel({ shipment, orderId, onCreateShipment, onShipmentU
     }
   }
 
+  const markReturned = async () => {
+    const reason = prompt('Why is this parcel being returned?')
+    if (!reason) return
+
+    setReturning(true)
+    try {
+      const { data } = await axios.post(`/api/shipments/${shipment.id}/return`, { reason })
+      toast.success(data.message)
+      onShipmentUpdated?.()
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Failed to mark the shipment returned')
+    } finally {
+      setReturning(false)
+    }
+  }
+
+  const receiveAtHub = async () => {
+    if (!confirm(`Has the hub got this parcel back from ${shipment.rider?.name ?? 'the rider'}?`)) return
+
+    setReceiving(true)
+    try {
+      const { data } = await axios.post(`/api/shipments/${shipment.id}/receive-at-hub`)
+      toast.success(data.message)
+      onShipmentUpdated?.()
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Failed to mark the parcel received')
+    } finally {
+      setReceiving(false)
+    }
+  }
+
   const isTerminal = ['delivered', 'cancelled', 'failed', 'returned'].includes(shipment.status)
+  const isKsaExpress = shipment.courier === 'ksadrop_express'
+  const wentBack = shipment.status === 'cancelled' || shipment.status === 'returned'
+  // Returned or cancelled while a rider had it, and not handed back yet.
+  const awaitingHandBack = wentBack && !!shipment.rider && !shipment.hub_received_at
   const isException = shipment.status === 'exception'
   const isDelivered = shipment.status === 'delivered'
 
@@ -299,6 +342,21 @@ export function ShipmentPanel({ shipment, orderId, onCreateShipment, onShipmentU
                 </Button>
               )}
             </div>
+            {awaitingHandBack && (
+              <div className='mt-1.5 flex items-center gap-2 rounded-md bg-amber-50 px-2.5 py-1.5 text-xs text-amber-800 dark:bg-amber-900/20 dark:text-amber-300'>
+                <Undo2 className='h-3 w-3 shrink-0' />
+                <span>Still with the rider — not handed back at the hub yet.</span>
+                <Button size='sm' variant='outline' className='ms-auto h-6 px-2 text-xs' onClick={receiveAtHub} disabled={receiving}>
+                  <PackageCheck className='h-3 w-3 mr-1' />
+                  {receiving ? 'Saving…' : 'Mark received'}
+                </Button>
+              </div>
+            )}
+            {wentBack && shipment.hub_received_at && (
+              <div className='mt-1 text-xs text-muted-foreground'>
+                Back at the hub {new Date(shipment.hub_received_at).toLocaleString(undefined, { timeZone: BUSINESS_TIMEZONE })}
+              </div>
+            )}
           </div>
         )}
         {isDelivered && shipment.delivered_at && (
@@ -396,6 +454,7 @@ export function ShipmentPanel({ shipment, orderId, onCreateShipment, onShipmentU
                   </div>
                   <div className='text-xs text-muted-foreground space-y-0.5 mt-1'>
                     {event.rider && <div>By {event.rider.name}</div>}
+                    {!event.rider && event.user && <div>By {event.user.name} (staff)</div>}
                     {event.reason && <div>Reason: {failedReasonLabels[event.reason] ?? event.reason}</div>}
                     {event.cod_amount && Number(event.cod_amount) > 0 && (
                       <div>Collected SAR {Number(event.cod_amount).toFixed(2)}{event.payment_method && ` · ${event.payment_method}`}</div>
@@ -452,6 +511,14 @@ export function ShipmentPanel({ shipment, orderId, onCreateShipment, onShipmentU
               <Button size='sm' variant='outline' className='text-orange-600 border-orange-300' onClick={() => setShowEscalateDialog(true)}>
                 <AlertTriangle className='h-3 w-3 mr-1' />
                 Escalate
+              </Button>
+            )}
+
+            {/* Other couriers report their own returns; ours is marked here. */}
+            {isKsaExpress && (
+              <Button size='sm' variant='outline' onClick={markReturned} disabled={returning}>
+                <Undo2 className='h-3 w-3 mr-1' />
+                {returning ? 'Saving…' : 'Mark returned'}
               </Button>
             )}
 

@@ -11,7 +11,10 @@ use App\Services\Shipping\CourierManager;
 use App\Services\Shipping\Drivers\KsaDropExpressDriver;
 use App\Services\Shipping\Drivers\LogesTechsDriver;
 use App\Services\Shipping\DTOs\ShipmentData;
+use App\Services\Shipping\Enums\RiderAction;
 use App\Services\Shipping\Enums\ShipmentStatus;
+use App\Services\Shipping\RiderActionRefused;
+use App\Services\Shipping\ShipmentEventRecorder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 
@@ -447,6 +450,61 @@ class ShipmentController extends Controller
 
         return response()->json([
             'message'  => 'Rider unassigned. Any rider can now scan this parcel out.',
+            'shipment' => $shipment->fresh(),
+        ]);
+    }
+
+    /**
+     * End a KSA Express parcel as returned — the customer won't take it and
+     * it goes back to the merchant. Other couriers report their own returns.
+     * If a rider has it, it stays with them until it's handed back.
+     */
+    public function markReturned(Request $request, Shipment $shipment, ShipmentEventRecorder $recorder)
+    {
+        $validated = $request->validate(['reason' => 'required|string|max:500']);
+
+        if ($shipment->courier !== KsaDropExpressDriver::KEY) {
+            return response()->json(['message' => 'Only KSA Express parcels are marked returned here. Other couriers report returns themselves.'], 422);
+        }
+
+        if ($shipment->status_enum->isTerminal()) {
+            return response()->json(['message' => 'Cannot return a shipment with status: ' . $shipment->status_label], 422);
+        }
+
+        try {
+            $recorder->recordByStaff($shipment, $request->user(), RiderAction::RETURNED, trim($validated['reason']));
+        } catch (RiderActionRefused $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+
+        $shipment = $shipment->fresh();
+
+        return response()->json([
+            'message' => $shipment->awaitsHandBack()
+                ? 'Shipment marked returned. It stays with the rider until it is handed back at the hub.'
+                : 'Shipment marked returned.',
+            'shipment' => $shipment,
+        ]);
+    }
+
+    /**
+     * The hub has a returned or cancelled parcel back, and its rider didn't
+     * (or couldn't) scan it in themselves.
+     */
+    public function receiveAtHub(Request $request, Shipment $shipment, ShipmentEventRecorder $recorder)
+    {
+        if (! $shipment->awaitsHandBack()) {
+            return response()->json(['message' => 'This parcel is not waiting to be handed back by a rider.'], 422);
+        }
+
+        try {
+            $recorder->recordByStaff($shipment, $request->user(), RiderAction::RETURNED_TO_HUB);
+        } catch (RiderActionRefused $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+
+        return response()->json([
+            'message' => 'Parcel received at the hub.',
             'shipment' => $shipment->fresh(),
         ]);
     }

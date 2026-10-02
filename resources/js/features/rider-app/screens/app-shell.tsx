@@ -1,14 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { CheckCircle2, ChevronRight, Loader2, X } from 'lucide-react'
+import { CheckCircle2, ChevronRight, Loader2, Undo2, Wallet } from 'lucide-react'
 import { toast } from 'sonner'
 import { EmptyState } from '@/components/empty-state'
 import { cn } from '@/lib/utils'
 import { api, ApiError } from '../api'
 import { BatchPanel } from '../components/batch-panel'
 import { BottomNav, type Tab } from '../components/bottom-nav'
+import { cashLabel, CashSheet, hasPay, payLabel } from '../components/cash-sheet'
 import { FilterSheet } from '../components/filter-sheet'
 import { HomeHeader } from '../components/home-header'
-import { addressLine, StatusBadge } from '../components/parcel-parts'
+import { addressLine, failedWhy, StatusBadge } from '../components/parcel-parts'
 import { Scanner } from '../components/scanner'
 import { UpdateSheet, type UpdateRequest } from '../components/update-sheet'
 import { money, reasonText, useI18n, type Lang } from '../i18n'
@@ -17,7 +18,7 @@ import { uuid, vibrate } from '../lib/device'
 import { usePresence } from '../lib/presence'
 import { PullIndicator, usePullToRefresh } from '../lib/pull-to-refresh'
 import { cssColor, useStatusBarColor } from '../lib/status-bar'
-import type { BatchItem, ClaimResponse, EntryMethod, HistoryRange, HistoryResponse, Me, Parcel, ScanMode } from '../types'
+import type { BatchItem, ClaimResponse, EntryMethod, HistoryEvent, HistoryRange, HistoryResponse, Me, Parcel, RiderCash, RiderPay, ScanMode } from '../types'
 import { ProfileView, supportLink } from './profile-view'
 
 type List = 'with_me' | 'delivered'
@@ -34,7 +35,8 @@ function savedMode(): ScanMode {
 
 /**
  * The signed-in app: Home (parcels with me / delivered) and Profile, with
- * Scan in the bottom bar. Scanner and update sheet open over either tab.
+ * Scan in the bottom bar. Scanner, update sheet and the cash sheet open over
+ * either tab.
  */
 export function AppShell() {
   const { t } = useI18n()
@@ -51,6 +53,7 @@ export function AppShell() {
 
   const [scanning, setScanning] = useState(false)
   const [request, setRequest] = useState<UpdateRequest | null>(null)
+  const [cashOpen, setCashOpen] = useState(false)
 
   // Scanning picks parcels up (POST /rider/api/claim): one by one opens the
   // update sheet after each; batch keeps the camera going and lists them.
@@ -205,6 +208,7 @@ export function AppShell() {
 
   useBackToClose(scanning, closeScanner)
   useBackToClose(request !== null, () => setRequest(null))
+  useBackToClose(cashOpen, () => setCashOpen(false))
 
   // Pull down on Home or Profile to reload; not while the camera or a parcel is open.
   const pull = usePullToRefresh(refresh, !scanning && request === null)
@@ -233,11 +237,13 @@ export function AppShell() {
           onRefresh={refresh}
           onOpen={open}
           onProfile={() => setTab('profile')}
+          onCash={() => setCashOpen(true)}
         />
       ) : (
         <ProfileView
           me={me}
           onPhotoChanged={(photoUrl) => setMe((m) => (m ? { ...m, rider: { ...m.rider, photo_url: photoUrl } } : m))}
+          onCash={() => setCashOpen(true)}
         />
       )}
 
@@ -275,6 +281,14 @@ export function AppShell() {
             : undefined
         }
       />
+
+      <CashSheet
+        open={cashOpen}
+        onClose={() => setCashOpen(false)}
+        cash={me?.cash ?? null}
+        pay={me?.pay ?? null}
+        onLoaded={(balances) => setMe((m) => (m ? { ...m, ...balances } : m))}
+      />
     </div>
   )
 }
@@ -291,16 +305,22 @@ type HomeProps = {
   onRefresh: () => void
   onOpen: (code: string, entry: EntryMethod, preview?: Parcel) => void
   onProfile: () => void
+  onCash: () => void
 }
 
-type ParcelFilter = 'all' | 'out_for_delivery' | 'attempt_fail' | 'cod'
+type ParcelFilter = 'all' | 'out_for_delivery' | 'attempt_fail' | 'to_return' | 'cod'
 
-const PARCEL_FILTERS: ParcelFilter[] = ['all', 'out_for_delivery', 'attempt_fail', 'cod']
+const PARCEL_FILTERS: ParcelFilter[] = ['all', 'out_for_delivery', 'attempt_fail', 'to_return', 'cod']
 
 function passesFilter(parcel: Parcel, filter: ParcelFilter): boolean {
-  if (filter === 'cod') return parcel.cod_amount > 0
+  // Nothing is collected for a parcel that's going back.
+  if (filter === 'cod') return parcel.cod_amount > 0 && !parcel.to_return
+  if (filter === 'to_return') return parcel.to_return
   return filter === 'all' || parcel.status === filter
 }
+
+/** Cash is what the rider has to hand in; card and transfer reach KSA Drop directly. */
+const paidInCash = (event: HistoryEvent) => event.payment_method === 'cash' && (event.cod_amount ?? 0) > 0
 
 /** Lower case with Western digits, so "٠٥٥" finds "055". */
 const searchable = (value: string) => value.replace(/[٠-٩]/g, (d) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d))).toLowerCase().trim()
@@ -317,15 +337,36 @@ function matchesSearch(query: string, fields: (string | null | undefined)[]): bo
   })
 }
 
-function HomeView({ me, parcels, delivered, list, onList, range, onRange, error, onRefresh, onOpen, onProfile }: HomeProps) {
+function HomeView({ me, parcels, delivered, list, onList, range, onRange, error, onRefresh, onOpen, onProfile, onCash }: HomeProps) {
   const { t, lang } = useI18n()
   const today = me?.today
 
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<ParcelFilter>('all')
+  // Delivered list: only the parcels paid in cash.
+  const [cashOnly, setCashOnly] = useState(false)
   const [filtering, setFiltering] = useState(false)
 
   useBackToClose(filtering, () => setFiltering(false))
+
+  // A number at the top is a shortcut to its parcels.
+  const showParcels = (next: ParcelFilter) => {
+    onList('with_me')
+    setFilter(next)
+    window.scrollTo(0, 0)
+  }
+
+  const showDeliveredToday = (cash: boolean) => {
+    onList('delivered')
+    onRange('today')
+    setCashOnly(cash)
+    window.scrollTo(0, 0)
+  }
+
+  // The tiles are the only way between the lists, so the one whose parcels
+  // are on screen stays lit — whichever period Delivered is showing.
+  const showing = (which: ParcelFilter) => list === 'with_me' && filter === which
+  const showingDelivered = (cash: boolean) => list === 'delivered' && cashOnly === cash
 
   const shownParcels = useMemo(
     () =>
@@ -337,15 +378,25 @@ function HomeView({ me, parcels, delivered, list, onList, range, onRange, error,
     [parcels, filter, query]
   )
 
+  // The period's deliveries, or only the ones paid in cash.
+  const periodDelivered = useMemo(() => (delivered && cashOnly ? delivered.events.filter(paidInCash) : (delivered?.events ?? null)), [delivered, cashOnly])
+
+  // Counts the list as filtered; the cash is always cash, matching the tile above.
+  const deliveredSummary = useMemo(
+    () =>
+      periodDelivered && {
+        count: periodDelivered.length,
+        cash: periodDelivered.filter(paidInCash).reduce((sum, event) => sum + (event.cod_amount ?? 0), 0),
+      },
+    [periodDelivered]
+  )
+
   const shownDelivered = useMemo(
     () =>
-      delivered && {
-        ...delivered,
-        events: delivered.events.filter((event) =>
-          matchesSearch(query, [event.receiver_name, event.recipient_name, event.tracking_number, event.order_number, event.city])
-        ),
-      },
-    [delivered, query]
+      periodDelivered?.filter((event) =>
+        matchesSearch(query, [event.receiver_name, event.recipient_name, event.tracking_number, event.order_number, event.city])
+      ) ?? null,
+    [periodDelivered, query]
   )
 
   const searching = query.trim() !== ''
@@ -376,17 +427,41 @@ function HomeView({ me, parcels, delivered, list, onList, range, onRange, error,
           onProfile={onProfile}
           query={query}
           onQuery={setQuery}
-          filterActive={list === 'with_me' ? filter !== 'all' : range !== 'today'}
+          filterActive={list === 'with_me' ? filter !== 'all' : range !== 'today' || cashOnly}
           onFilter={() => setFiltering(true)}
         />
 
         <section className='px-4 pb-3 pt-5'>
           <p className='px-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground'>{t('today')}</p>
           <div className='mt-1.5 grid grid-cols-4 gap-2'>
-            <Stat label={t('with_me')} value={today?.held} />
-            <Stat label={t('delivered_today')} value={today?.delivered} tone='text-green-600 dark:text-green-400' />
-            <Stat label={t('failed_today')} value={today?.failed} tone={today?.failed ? 'text-red-600' : undefined} />
-            <Stat label={t('cash_today')} value={today ? money(today.cod_collected, '').trim() : undefined} tone='text-brand' small />
+            <Stat
+              label={t('with_me')}
+              value={today?.held}
+              active={list === 'with_me' && filter !== 'attempt_fail'}
+              onClick={() => showParcels('all')}
+            />
+            <Stat
+              label={t('delivered_today')}
+              value={today?.delivered}
+              tone='text-green-600 dark:text-green-400'
+              active={showingDelivered(false)}
+              onClick={() => showDeliveredToday(false)}
+            />
+            <Stat
+              label={t('failed_today')}
+              value={today?.failed}
+              tone={today?.failed ? 'text-red-600' : undefined}
+              active={showing('attempt_fail')}
+              onClick={() => showParcels('attempt_fail')}
+            />
+            <Stat
+              label={t('cash_today')}
+              value={today ? money(today.cash_collected, '').trim() : undefined}
+              tone='text-brand'
+              small
+              active={showingDelivered(true)}
+              onClick={() => showDeliveredToday(true)}
+            />
           </div>
         </section>
       </div>
@@ -416,24 +491,7 @@ function HomeView({ me, parcels, delivered, list, onList, range, onRange, error,
       )}
 
       <main className='px-4 pb-[calc(env(safe-area-inset-bottom)+96px)] pt-1'>
-        {/* With me / Delivered */}
-        <div className='glass grid grid-cols-2 rounded-full p-1'>
-          {(['with_me', 'delivered'] as const).map((option) => (
-            <button
-              key={option}
-              type='button'
-              onClick={() => onList(option)}
-              aria-pressed={list === option}
-              className={cn(
-                'h-9 rounded-full text-sm font-semibold transition-colors',
-                list === option ? 'glass-strong text-foreground' : 'border border-transparent text-muted-foreground'
-              )}
-            >
-              {t(option === 'with_me' ? 'tab_with_me' : 'tab_delivered')}
-              {option === 'with_me' && parcels && <span className='ms-1 text-muted-foreground'>({parcels.length})</span>}
-            </button>
-          ))}
-        </div>
+        {me && <CashCard cash={me.cash} pay={me.pay} onClick={onCash} />}
 
         {error && (
           <div className='glass-tint mt-3 rounded-2xl p-3.5 text-sm' style={{ '--tint': '#dc2626' } as React.CSSProperties}>
@@ -444,18 +502,23 @@ function HomeView({ me, parcels, delivered, list, onList, range, onRange, error,
           </div>
         )}
 
-        {list === 'with_me' && filter !== 'all' && (
+        {/* Parcels that ended returned or cancelled and still have to go
+            back. Tap to see only those; tap again for everything with me. */}
+        {list === 'with_me' && !!today?.to_return && (
           <button
             type='button'
-            onClick={() => setFilter('all')}
-            className='mt-3 inline-flex h-8 items-center gap-1.5 rounded-full bg-ink pe-2.5 ps-3.5 text-[13px] font-semibold text-white dark:bg-white dark:text-ink'
+            onClick={() => showParcels(filter === 'to_return' ? 'all' : 'to_return')}
+            aria-pressed={filter === 'to_return'}
+            className='glass-tint glass-press mt-3 flex w-full items-center gap-2.5 rounded-2xl px-3.5 py-3 text-start text-sm font-semibold'
+            style={{ '--tint': '#d97706' } as React.CSSProperties}
           >
-            {t(`filter_${filter}`)}
-            <X className='h-4 w-4' />
+            <Undo2 className='h-5 w-5 shrink-0' />
+            <span className='min-w-0 flex-1'>{t('to_return_notice', { n: today.to_return })}</span>
+            {filter !== 'to_return' && <ChevronRight className='h-4 w-4 shrink-0 rtl:rotate-180' />}
           </button>
         )}
 
-        {list === 'delivered' && <DeliveredHead range={range} onRange={onRange} summary={delivered?.summary ?? null} />}
+        {list === 'delivered' && <DeliveredHead range={range} onRange={onRange} summary={deliveredSummary} />}
 
         {list === 'with_me' ? (
           <WithMeList
@@ -466,10 +529,10 @@ function HomeView({ me, parcels, delivered, list, onList, range, onRange, error,
           />
         ) : (
           <DeliveredList
-            delivered={shownDelivered}
+            events={shownDelivered}
             range={range}
             lang={lang}
-            empty={searching ? { text: t('no_match'), matching: true } : { text: t('no_delivered'), matching: false }}
+            empty={searching || cashOnly ? { text: t('no_match'), matching: true } : { text: t('no_delivered'), matching: false }}
             onOpen={onOpen}
           />
         )}
@@ -514,14 +577,23 @@ function WithMeList({
                 <StatusBadge status={parcel.status} className='ms-auto' />
               </div>
               <p className='mt-0.5 truncate text-[13px] text-muted-foreground'>{addressLine(parcel)}</p>
+              {failedWhy(t, parcel) && (
+                <p className='mt-0.5 truncate text-[13px] font-medium text-red-600 dark:text-red-400'>{failedWhy(t, parcel)}</p>
+              )}
               <div className='mt-1 flex items-center gap-3 text-xs'>
                 <span className='font-mono text-muted-foreground' dir='ltr'>{parcel.tracking_number}</span>
-                {parcel.cod_amount > 0 && (
-                  <span className='font-semibold text-orange-700 dark:text-orange-300' dir='ltr'>
-                    {money(parcel.cod_amount, parcel.currency)}
-                  </span>
+                {parcel.to_return ? (
+                  <span className='font-semibold text-amber-700 dark:text-amber-400'>{t('return_to_hub')}</span>
+                ) : (
+                  <>
+                    {parcel.cod_amount > 0 && (
+                      <span className='font-semibold text-orange-700 dark:text-orange-300' dir='ltr'>
+                        {money(parcel.cod_amount, parcel.currency)}
+                      </span>
+                    )}
+                    {parcel.attempts > 0 && <span className='font-semibold text-red-600'>{t('attempts', { n: parcel.attempts })}</span>}
+                  </>
                 )}
-                {parcel.attempts > 0 && <span className='font-semibold text-red-600'>{t('attempts', { n: parcel.attempts })}</span>}
               </div>
             </div>
             <ChevronRight className='h-4 w-4 shrink-0 text-muted-foreground rtl:rotate-180' />
@@ -542,7 +614,7 @@ function DeliveredHead({
 }: {
   range: HistoryRange
   onRange: (range: HistoryRange) => void
-  summary: HistoryResponse['summary'] | null
+  summary: { count: number; cash: number } | null
 }) {
   const { t } = useI18n()
 
@@ -571,7 +643,7 @@ function DeliveredHead({
           <span className='text-muted-foreground'>
             {t('cash_label')}{' '}
             <span className='font-semibold text-foreground' dir='ltr'>
-              {money(summary.cod_collected, 'SAR')}
+              {money(summary.cash, 'SAR')}
             </span>
           </span>
         </div>
@@ -581,13 +653,13 @@ function DeliveredHead({
 }
 
 function DeliveredList({
-  delivered,
+  events,
   range,
   lang,
   empty,
   onOpen,
 }: {
-  delivered: HistoryResponse | null
+  events: HistoryEvent[] | null
   range: HistoryRange
   lang: Lang
   empty: EmptyInfo
@@ -604,17 +676,17 @@ function DeliveredList({
       ...(range === 'week' ? { day: 'numeric', month: 'short' } : {}),
     })
 
-  if (delivered === null) {
+  if (events === null) {
     return <Spinner />
   }
 
-  if (delivered.events.length === 0) {
+  if (events.length === 0) {
     return <Empty {...empty} />
   }
 
   return (
     <ul className='mt-3 space-y-2'>
-      {delivered.events.map((event) => (
+      {events.map((event) => (
         <li key={event.id}>
           <button
             type='button'
@@ -650,14 +722,71 @@ function DeliveredList({
   )
 }
 
-function Stat({ label, value, tone, small }: { label: string; value: number | string | undefined; tone?: string; small?: boolean }) {
+/** Today's number, and a button: tap it to see the parcels behind it. */
+function Stat({
+  label,
+  value,
+  tone,
+  small,
+  active,
+  onClick,
+}: {
+  label: string
+  value: number | string | undefined
+  tone?: string
+  small?: boolean
+  /** The list below is showing this tile's parcels. */
+  active: boolean
+  onClick: () => void
+}) {
   return (
-    <div className='glass rounded-2xl px-1 py-2 text-center'>
-      <p className={cn('font-bold tabular-nums leading-tight', small ? 'text-sm leading-7' : 'text-xl', tone)} dir='ltr'>
+    <button
+      type='button'
+      onClick={onClick}
+      aria-pressed={active}
+      className={cn('glass-press rounded-2xl px-1 py-2 text-center', active ? 'glass-tint' : 'glass')}
+    >
+      <p className={cn('font-bold tabular-nums leading-tight', small ? 'text-sm leading-7' : 'text-xl', !active && tone)} dir='ltr'>
         {value ?? '–'}
       </p>
-      <p className='truncate text-[10.5px] leading-tight text-muted-foreground'>{label}</p>
-    </div>
+      <p className={cn('truncate text-[10.5px] leading-tight', active ? 'text-white/85' : 'text-muted-foreground')}>{label}</p>
+    </button>
+  )
+}
+
+/**
+ * The rider's money above the lists: what they owe KSA Drop and, once pay is
+ * set up, what KSA Drop owes them. Opens the cash sheet.
+ */
+function CashCard({ cash, pay, onClick }: { cash: RiderCash; pay: RiderPay; onClick: () => void }) {
+  const { t } = useI18n()
+
+  return (
+    <button type='button' onClick={onClick} className='glass-lite glass-press flex w-full items-center gap-3 rounded-2xl px-3.5 py-3 text-start'>
+      <span className='flex h-9 w-9 shrink-0 items-center justify-center rounded-[11px] bg-brand text-white'>
+        <Wallet className='h-[18px] w-[18px]' />
+      </span>
+      <span className='min-w-0 flex-1 space-y-1.5'>
+        <MoneyRow label={t(cashLabel(cash.balance))} amount={cash.balance} tone={cash.balance > 0 ? 'text-brand' : 'text-green-700 dark:text-green-400'} />
+        {hasPay(pay) && (
+          <MoneyRow label={t(payLabel(pay.balance))} amount={pay.balance} tone={pay.balance > 0 ? 'text-green-700 dark:text-green-400' : 'text-muted-foreground'} />
+        )}
+      </span>
+      <ChevronRight className='h-4 w-4 shrink-0 text-muted-foreground rtl:rotate-180' />
+    </button>
+  )
+}
+
+function MoneyRow({ label, amount, tone }: { label: string; amount: number; tone: string }) {
+  return (
+    <span className='flex items-baseline justify-between gap-3'>
+      <span className='min-w-0 text-[15px] font-semibold leading-tight'>{label}</span>
+      {amount !== 0 && (
+        <span className={cn('shrink-0 text-[15px] font-bold tabular-nums', tone)} dir='ltr'>
+          {money(Math.abs(amount), 'SAR')}
+        </span>
+      )}
+    </span>
   )
 }
 

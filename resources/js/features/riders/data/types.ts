@@ -16,6 +16,9 @@ export type RiderRow = {
   city: string | null
   employment_type: string | null
   iban: string | null
+  /** What KSA Drop pays this rider per delivered order and per attempt; null until set. */
+  delivery_rate: number | null
+  attempt_rate: number | null
   emergency_contact_name: string | null
   emergency_contact_phone: string | null
   notes: string | null
@@ -34,9 +37,73 @@ export type RiderRow = {
   last_seen_at: string | null
   /** The app is open on their phone right now (checked in within 2 minutes). */
   online: boolean
-  stats: { held: number; delivered: number; failed: number; cod_collected: number }
+  /**
+   * A parcel counts once, by where it stands now. `held` is everything in the
+   * rider's hands, including `failed` (waiting for another try) and
+   * `to_return` (returned or cancelled, not handed back yet). The rest is
+   * today's; `cash_collected` is the part of the COD paid in cash.
+   */
+  stats: { held: number; delivered: number; failed: number; to_return: number; cod_collected: number; cash_collected: number }
+  cash: RiderCash
+  pay: RiderPay
   created_at: string | null
 }
+
+/**
+ * What KSA Drop owes a rider: the delivery rate per delivered order, the
+ * attempt rate per order they went for and the customer didn't take, minus
+ * what was paid out.
+ */
+export type RiderPay = {
+  earned: number
+  paid: number
+  /** Above zero: still to pay the rider. Below zero: paid more than earned. */
+  balance: number
+  /** Orders paid as delivered, and as an attempt. */
+  delivered: number
+  attempted: number
+}
+
+/** `in`: COD cash the rider hands in. `out`: KSA Drop paying the rider. */
+export type PaymentDirection = 'in' | 'out'
+
+/** What a rider owes: COD collected in cash, minus what they handed in. */
+export type RiderCash = {
+  collected: number
+  /** COD paid by card or transfer: it reached KSA Drop directly, never owed. */
+  direct: number
+  paid: number
+  /** Above zero: still owed. Below zero: handed in more than collected. */
+  balance: number
+}
+
+export const PAYMENT_METHODS = [
+  { value: 'cash', label: 'Cash' },
+  { value: 'bank_transfer', label: 'Bank transfer' },
+  { value: 'other', label: 'Other' },
+] as const
+
+export type RiderPaymentMethod = (typeof PAYMENT_METHODS)[number]['value']
+
+/** Money a rider handed in. A voided one stays listed but no longer counts. */
+export type RiderPayment = {
+  id: number
+  direction: PaymentDirection
+  amount: number
+  method: RiderPaymentMethod
+  reference: string | null
+  note: string | null
+  received_at: string
+  recorded_by: string | null
+  created_at: string | null
+  voided_at: string | null
+  voided_by: string | null
+  void_reason: string | null
+}
+
+export type RiderBalances = { cash: RiderCash; pay: RiderPay }
+
+export type RiderPaymentsPage = RiderBalances & { payments: RiderPayment[]; next_page: number | null }
 
 export type WarehouseOption = { id: number; name: string; is_default: boolean }
 
@@ -82,13 +149,17 @@ export type TeamDaily = DailySeries & { riders: number[] }
 export type ParcelOutcome = 'delivered' | 'out_for_delivery' | 'attempt_fail' | 'cancelled' | 'returned' | 'handed_back' | 'other'
 
 export type RiderParcelEvent = {
-  action: 'out_for_delivery' | 'delivered' | 'attempt_failed'
+  action: 'out_for_delivery' | 'delivered' | 'attempt_failed' | 'returned' | 'cancelled' | 'returned_to_hub'
   occurred_at: string | null
-  /** Failed-attempt reason, already worded. */
+  /** Why it failed, was returned or was cancelled, already worded. */
   reason: string | null
   note: string | null
   cod_amount: number | null
   payment_method: string | null
+  /** Proof: the rider's photo (of the delivery, or of the place on a failed attempt) and where the phone was. */
+  photo_url: string | null
+  lat: number | null
+  lng: number | null
 }
 
 export type RiderParcel = {
@@ -104,6 +175,9 @@ export type RiderParcel = {
   held_by: string | null
   cancel_reason: string | null
   cancelled_at: string | null
+  /** Returned or cancelled, and the rider hasn't handed it back at the hub yet. */
+  awaiting_hand_back: boolean
+  hub_received_at: string | null
   /** This rider's updates on the parcel in the range, oldest first. */
   events: RiderParcelEvent[]
 }

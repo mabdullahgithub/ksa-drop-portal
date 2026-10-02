@@ -28,6 +28,7 @@ Route::prefix('rider')->name('rider.')->group(function () {
             Route::get('/me', [RiderParcelController::class, 'me'])->name('me');
             Route::get('/me/photo', [RiderProfileController::class, 'photo'])->name('photo');
             Route::post('/me/photo', [RiderProfileController::class, 'updatePhoto'])->middleware('throttle:10,1')->name('photo.update');
+            Route::get('/cash', [RiderParcelController::class, 'cash'])->name('cash');
             Route::get('/parcels', [RiderParcelController::class, 'parcels'])->name('parcels');
             Route::get('/history', [RiderParcelController::class, 'history'])->name('history');
             Route::get('/scan', [RiderParcelController::class, 'scan'])->middleware('throttle:120,1')->name('scan');
