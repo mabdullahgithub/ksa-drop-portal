@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Middleware\EnsureWhatsAppUnlocked;
 use App\Models\Order;
 use App\Models\WhatsAppMessage;
 use App\Services\WhatsApp\MetaWhatsAppService;
@@ -21,6 +22,42 @@ use Illuminate\Http\Request;
  */
 class WhatsAppConversationController extends Controller
 {
+    /**
+     * Exchange the PIN for an unlocked session; see EnsureWhatsAppUnlocked.
+     * It is the recycle bin's PIN — one PIN for every locked screen.
+     */
+    public function unlock(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'pin' => 'required|string|max:32',
+        ]);
+
+        $expected = (string) config('recyclebin.pin');
+
+        if ($expected === '' || ! hash_equals($expected, $validated['pin'])) {
+            Log::warning('WhatsApp inbox unlock failed', [
+                'user_id' => $request->user()?->id,
+                'ip' => $request->ip(),
+            ]);
+
+            return response()->json(['message' => 'Incorrect PIN.'], 422);
+        }
+
+        $request->session()->put(EnsureWhatsAppUnlocked::SESSION_KEY, now());
+
+        return response()->json([
+            'message' => 'WhatsApp inbox unlocked',
+            'expires_in_minutes' => (int) config('whatsapp.unlock_ttl'),
+        ]);
+    }
+
+    public function lock(Request $request): JsonResponse
+    {
+        $request->session()->forget(EnsureWhatsAppUnlocked::SESSION_KEY);
+
+        return response()->json(['message' => 'WhatsApp inbox locked']);
+    }
+
     /**
      * Paginated conversation list for the left pane.
      *

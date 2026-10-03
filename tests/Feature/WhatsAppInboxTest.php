@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Http\Middleware\EnsureWhatsAppUnlocked;
 use App\Models\Order;
 use App\Models\User;
 use App\Models\WhatsAppMessage;
@@ -42,6 +43,11 @@ class WhatsAppInboxTest extends TestCase
             Permission::findOrCreate('view orders'),
             Permission::findOrCreate('edit orders'),
         ]);
+
+        // The conversation routes sit behind a PIN; the tests below are about
+        // what the inbox does once open, so unlock by default. The lock itself
+        // is covered by WhatsAppInboxLockTest.
+        $this->withSession([EnsureWhatsAppUnlocked::SESSION_KEY => now()]);
     }
 
     private function actingAsAgent(): User

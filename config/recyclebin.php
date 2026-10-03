@@ -2,7 +2,8 @@
 
 return [
     /*
-     * PIN required to reveal the recycle bin.
+     * PIN required to reveal the recycle bin. The WhatsApp inbox is unlocked
+     * with this same PIN.
      *
      * Checked server-side only -- it is never sent to the browser, so it does
      * not end up readable in the built JS bundle.

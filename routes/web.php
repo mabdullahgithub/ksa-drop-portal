@@ -198,10 +198,22 @@ Route::middleware(['auth', 'verified', 'role:!client'])->group(function () {
 
     // WhatsApp inbox API
     Route::prefix('api/whatsapp')->middleware('permission:view whatsapp')->group(function () {
-        Route::get('/conversations', [WhatsAppConversationController::class, 'index'])->name('api.whatsapp.conversations');
+        // Unlock sits outside the whatsapp.unlocked gate (it is what opens it)
+        // and is throttled so the PIN cannot be brute-forced. The prefix keeps
+        // its attempt count apart from the recycle bin's.
+        Route::post('/unlock', [WhatsAppConversationController::class, 'unlock'])
+            ->middleware('throttle:5,1,whatsapp-unlock')
+            ->name('api.whatsapp.unlock');
+        Route::post('/lock', [WhatsAppConversationController::class, 'lock'])->name('api.whatsapp.lock');
+
+        // Counts only, and the dashboard tiles read them, so they stay outside the lock.
         Route::get('/stats', [WhatsAppConversationController::class, 'stats'])->name('api.whatsapp.stats');
-        Route::get('/conversations/{order}', [WhatsAppConversationController::class, 'show'])->name('api.whatsapp.conversation');
-        Route::post('/conversations/{order}/reply', [WhatsAppConversationController::class, 'reply'])->middleware('permission:reply whatsapp')->name('api.whatsapp.reply');
+
+        Route::middleware('whatsapp.unlocked')->group(function () {
+            Route::get('/conversations', [WhatsAppConversationController::class, 'index'])->name('api.whatsapp.conversations');
+            Route::get('/conversations/{order}', [WhatsAppConversationController::class, 'show'])->name('api.whatsapp.conversation');
+            Route::post('/conversations/{order}/reply', [WhatsAppConversationController::class, 'reply'])->middleware('permission:reply whatsapp')->name('api.whatsapp.reply');
+        });
     });
 
     // Clients API

@@ -5,6 +5,7 @@ import { Main } from '@/components/layout/main'
 import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
+import { PinLock } from '@/components/pin-lock'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { usePermissions } from '@/hooks/use-permissions'
@@ -15,6 +16,7 @@ import {
   type TrashedRider,
   type TrashedUser,
   lockRecycleBin,
+  unlockRecycleBin,
   useRecycleBinCounts,
 } from '@/hooks/useRecycleBin'
 import { trashedClientsColumns } from './components/clients-columns'
@@ -22,7 +24,6 @@ import { trashedInventoryColumns } from './components/inventory-columns'
 import { trashedOrdersColumns } from './components/orders-columns'
 import { trashedRidersColumns } from './components/riders-columns'
 import { trashedUsersColumns } from './components/users-columns'
-import { RecycleBinLock } from './components/recycle-bin-lock'
 import { RecycleBinPanel } from './components/recycle-bin-panel'
 
 export function RecycleBin() {
@@ -86,8 +87,11 @@ export function RecycleBin() {
 
             The prompt is a modal over the page; nothing below it loads until
             the PIN is accepted, so there is no data behind the overlay. */}
-        <RecycleBinLock
+        <PinLock
           open={!unlocked}
+          title='Recycle Bin is locked'
+          description='Enter the PIN to unlock the recycle bin.'
+          unlock={unlockRecycleBin}
           notice={lockNotice}
           onUnlocked={() => {
             setLockNotice(null)

@@ -6,6 +6,7 @@ import { Send, Loader2, Lock } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { usePermissions } from '@/hooks/use-permissions'
+import { isWhatsAppLocked } from '../api'
 import type { ThreadMessage } from '../types'
 
 /**
@@ -22,11 +23,14 @@ export function ReplyComposer({
   windowOpen,
   windowExpiresAt,
   onSent,
+  onLocked,
 }: {
   orderId: number
   windowOpen: boolean
   windowExpiresAt: string | null
   onSent: (message: ThreadMessage) => void
+  /** The inbox locked while the agent was typing; back to the PIN prompt. */
+  onLocked: () => void
 }) {
   const { can } = usePermissions()
   const [body, setBody] = useState('')
@@ -44,6 +48,10 @@ export function ReplyComposer({
       setBody('')
       onSent(res.data.sent)
     } catch (err: any) {
+      if (isWhatsAppLocked(err)) {
+        onLocked()
+        return
+      }
       toast.error(err.response?.data?.message || 'Could not send the reply')
     } finally {
       setSending(false)
