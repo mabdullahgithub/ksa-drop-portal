@@ -6,6 +6,8 @@ export type RiderBoot = {
   reason?: string | null
   token?: string | null
   rider?: { name: string } | null
+  /** The build this page was served with (RiderAppController::build()). */
+  build?: string | null
 }
 
 /**
@@ -124,6 +126,8 @@ export type Me = {
   pay: RiderPay
   /** WhatsApp help contact set by the admin; null until set. */
   support: { name: string | null; whatsapp: string; whatsapp_digits: string } | null
+  /** The build live on the server now; differs from the page's after a deploy. */
+  build?: string | null
 }
 
 /** How the rider reached the update screen. */

@@ -2,12 +2,13 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { AlertTriangle, Ban, Camera, Check, CheckCircle2, CircleX, Loader2, MapPin, MapPinOff, MessageCircle, PackageCheck, PackageX, RefreshCw, Truck, Undo2, Warehouse } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
-import { Sheet, SheetContent, SheetDescription, SheetTitle } from '@/components/ui/sheet'
+import { SheetDescription, SheetTitle } from '@/components/ui/sheet'
 import { api, ApiError } from '../api'
 import { money, reasonText, statusText, useI18n } from '../i18n'
 import { compressImage } from '@/lib/compress-image'
 import { currentPosition, requestPosition, uuid, vibrate, watchPosition, type Position, type PositionProblem } from '../lib/device'
 import type { EntryMethod, FailedReason, Parcel, PaymentMethod, RiderAction } from '../types'
+import { BottomSheet } from './bottom-sheet'
 import { addressLine, CodBox, ContactButtons, failedWhy, StatusBadge } from './parcel-parts'
 
 export type UpdateRequest = {
@@ -36,19 +37,11 @@ export function UpdateSheet({ request, onClose, onUpdated, helpLink }: Props) {
   const { t } = useI18n()
 
   return (
-    <Sheet open={request !== null} onOpenChange={(open) => !open && onClose()}>
-      <SheetContent
-        side='bottom'
-        className='glass-strong max-h-[94dvh] gap-0 rounded-t-[32px] p-0'
-        // Don't focus the first control on open: it would ring the close
-        // button, or pop the keyboard up over the parcel details.
-        onOpenAutoFocus={(event) => event.preventDefault()}
-      >
-        <SheetTitle className='sr-only'>{t('what_happened')}</SheetTitle>
-        <SheetDescription className='sr-only'>{request?.code}</SheetDescription>
-        {request && <UpdateBody key={request.id} request={request} onClose={onClose} onUpdated={onUpdated} helpLink={helpLink} />}
-      </SheetContent>
-    </Sheet>
+    <BottomSheet open={request !== null} onClose={onClose} className='glass-strong max-h-[94dvh]'>
+      <SheetTitle className='sr-only'>{t('what_happened')}</SheetTitle>
+      <SheetDescription className='sr-only'>{request?.code}</SheetDescription>
+      {request && <UpdateBody key={request.id} request={request} onClose={onClose} onUpdated={onUpdated} helpLink={helpLink} />}
+    </BottomSheet>
   )
 }
 

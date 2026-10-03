@@ -17,6 +17,7 @@ const en = {
   update: 'Update',
   updating: 'Updating…',
   offline: 'No internet. Try again when you have signal.',
+  exit_confirm: 'Press Back again to close the app',
   too_many: 'Too many tries. Wait a few minutes and try again.',
   something_wrong: 'Something went wrong. Try again.',
 
@@ -52,6 +53,7 @@ const en = {
   range_week: '7 days',
   range_custom: 'Dates',
   dates_title: 'Or pick dates',
+  dates_delivered_title: 'Delivered parcels by date',
   dates_from: 'From',
   dates_to: 'To',
   dates_show: 'Show deliveries',
@@ -99,6 +101,8 @@ const en = {
   app_guide_hint: 'Scan, deliver, cash and help',
 
   // Cash
+  earnings_title: 'Earnings',
+  payable_title: 'Payable',
   cash_title: 'My cash and pay',
   cash_row_hint: 'What you owe, and what KSA Drop pays you',
   cash_section: 'Cash you collected',
@@ -293,6 +297,7 @@ const ar: Record<Key, string> = {
   update: 'تحديث الحالة',
   updating: 'جارٍ التحديث…',
   offline: 'لا يوجد اتصال بالإنترنت. حاول مرة أخرى عند توفر الشبكة.',
+  exit_confirm: 'اضغط رجوع مرة أخرى لإغلاق التطبيق',
   too_many: 'محاولات كثيرة. انتظر بضع دقائق ثم حاول مرة أخرى.',
   something_wrong: 'حدث خطأ. حاول مرة أخرى.',
 
@@ -327,6 +332,7 @@ const ar: Record<Key, string> = {
   range_week: '7 أيام',
   range_custom: 'التاريخ',
   dates_title: 'أو اختر التاريخ',
+  dates_delivered_title: 'الشحنات المسلَّمة حسب التاريخ',
   dates_from: 'من',
   dates_to: 'إلى',
   dates_show: 'عرض الشحنات المسلَّمة',
@@ -373,6 +379,8 @@ const ar: Record<Key, string> = {
   app_guide: 'طريقة استخدام التطبيق',
   app_guide_hint: 'المسح والتسليم والنقد والمساعدة',
 
+  earnings_title: 'أرباحي',
+  payable_title: 'للدفع',
   cash_title: 'نقدي ومستحقاتي',
   cash_row_hint: 'ما عليك، وما لك عند KSA Drop',
   cash_section: 'النقد الذي حصّلته',

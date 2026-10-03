@@ -53,6 +53,8 @@ class RiderParcelController extends Controller
                 'whatsapp' => $support['whatsapp_local'],
                 'whatsapp_digits' => PhoneNumber::forWhatsApp($support['whatsapp']),
             ] : null,
+            // The build now live: an app still running an older one reloads.
+            'build' => RiderAppController::build(),
         ]);
     }
 

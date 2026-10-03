@@ -4,6 +4,8 @@ import { daysBetween, MAX_DAYS, today } from '../lib/days'
 import type { HistoryDates } from '../types'
 
 type Props = {
+  /** What the dates pick. */
+  title: string
   /** The dates on screen now, to start from. */
   initial: HistoryDates
   onApply: (dates: HistoryDates) => void
@@ -13,7 +15,7 @@ type Props = {
  * From and To for the Delivered list, with the phone's own date picker.
  * Either order works: the earlier day is the start.
  */
-export function DateRangeForm({ initial, onApply }: Props) {
+export function DateRangeForm({ title, initial, onApply }: Props) {
   const { t } = useI18n()
   const [from, setFrom] = useState(initial.from)
   const [to, setTo] = useState(initial.to)
@@ -24,7 +26,7 @@ export function DateRangeForm({ initial, onApply }: Props) {
 
   return (
     <div className='mx-5 mt-2 border-t border-foreground/[0.08] pt-4'>
-      <p className='text-[11px] font-semibold uppercase tracking-wider text-muted-foreground'>{t('dates_title')}</p>
+      <p className='text-[11px] font-semibold uppercase tracking-wider text-muted-foreground'>{title}</p>
 
       <div className='mt-2 grid grid-cols-2 gap-2'>
         <DayField label={t('dates_from')} value={from} onChange={setFrom} />

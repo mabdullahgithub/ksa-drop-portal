@@ -1,6 +1,7 @@
 import { Check } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { Sheet, SheetContent, SheetDescription, SheetTitle } from '@/components/ui/sheet'
+import { SheetDescription, SheetTitle } from '@/components/ui/sheet'
+import { BottomSheet } from './bottom-sheet'
 
 export type FilterOption<T extends string> = { value: T; label: string; count?: number }
 
@@ -18,17 +19,13 @@ type Props<T extends string> = {
 /** The search bar's filter button: pick one option, the sheet closes. */
 export function FilterSheet<T extends string>({ open, onClose, title, options, value, onChange, children }: Props<T>) {
   return (
-    <Sheet open={open} onOpenChange={(next) => !next && onClose()}>
-      <SheetContent
-        data-no-pull
-        side='bottom'
-        className='gap-0 rounded-t-[32px] border-0 bg-surface p-0 pb-[calc(env(safe-area-inset-bottom)+16px)]'
-        onOpenAutoFocus={(event) => event.preventDefault()}
-      >
-        <div className='mx-auto mt-2.5 h-1.5 w-10 rounded-full bg-foreground/15' />
-        <SheetTitle className='px-5 pb-2 pt-4 text-[20px] font-bold'>{title}</SheetTitle>
-        <SheetDescription className='sr-only'>{title}</SheetDescription>
+    <BottomSheet open={open} onClose={onClose} className='max-h-[92dvh] border-0 bg-surface'>
+      <div className='mx-auto mt-2.5 h-1.5 w-10 shrink-0 rounded-full bg-foreground/15' />
+      <SheetTitle className='px-5 pb-2 pt-4 text-[20px] font-bold'>{title}</SheetTitle>
+      <SheetDescription className='sr-only'>{title}</SheetDescription>
 
+      {/* Scrolls on a short phone, where the options and the dates don't all fit. */}
+      <div className='overflow-y-auto overscroll-contain pb-[calc(env(safe-area-inset-bottom)+16px)]'>
         <div className='px-3'>
           {options.map((option) => {
             const selected = option.value === value
@@ -59,7 +56,7 @@ export function FilterSheet<T extends string>({ open, onClose, title, options, v
         </div>
 
         {children}
-      </SheetContent>
-    </Sheet>
+      </div>
+    </BottomSheet>
   )
 }

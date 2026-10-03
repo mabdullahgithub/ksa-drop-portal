@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { CalendarDays, CheckCircle2, ChevronRight, Loader2, Undo2, Wallet } from 'lucide-react'
+import { Banknote, CalendarDays, CheckCircle2, ChevronRight, Loader2, Undo2, Wallet, type LucideIcon } from 'lucide-react'
 import { toast } from 'sonner'
 import { EmptyState } from '@/components/empty-state'
 import { cn } from '@/lib/utils'
 import { api, ApiError } from '../api'
 import { BatchPanel } from '../components/batch-panel'
 import { BottomNav, type Tab } from '../components/bottom-nav'
-import { cashLabel, CashSheet, hasPay, payLabel } from '../components/cash-sheet'
+import { cashLabel, CashSheet, hasPay, payLabel, type MoneySide } from '../components/cash-sheet'
 import { DateRangeForm } from '../components/date-range-form'
 import { FilterSheet } from '../components/filter-sheet'
 import { HomeHeader } from '../components/home-header'
@@ -14,12 +14,13 @@ import { addressLine, failedWhy, StatusBadge } from '../components/parcel-parts'
 import { Scanner } from '../components/scanner'
 import { UpdateSheet, type UpdateRequest } from '../components/update-sheet'
 import { money, reasonText, useI18n, type Lang } from '../i18n'
-import { useBackToClose } from '../lib/back-button'
+import { useBackToClose, useExitGuard } from '../lib/back-button'
 import { datesLabel, periodDates } from '../lib/days'
-import { uuid, vibrate } from '../lib/device'
+import { platform, uuid, vibrate } from '../lib/device'
 import { usePresence } from '../lib/presence'
 import { PullIndicator, usePullToRefresh } from '../lib/pull-to-refresh'
 import { cssColor, useStatusBarColor } from '../lib/status-bar'
+import { reloadForNewBuild } from '../lib/update'
 import type {
   BatchItem,
   ClaimResponse,
@@ -72,6 +73,13 @@ export function AppShell() {
   const [scanning, setScanning] = useState(false)
   const [request, setRequest] = useState<UpdateRequest | null>(null)
   const [cashOpen, setCashOpen] = useState(false)
+  // The account the cash sheet opens on: the one the rider tapped.
+  const [cashFirst, setCashFirst] = useState<MoneySide>('cash')
+
+  const openCash = (side: MoneySide) => {
+    setCashFirst(side)
+    setCashOpen(true)
+  }
 
   // Scanning picks parcels up (POST /rider/api/claim): one by one opens the
   // update sheet after each; batch keeps the camera going and lists them.
@@ -228,9 +236,18 @@ export function AppShell() {
     refresh()
   }
 
+  // Back with nothing open would close the app (Android): ask first.
+  useExitGuard(platform() === 'android', () => toast(t('exit_confirm'), { id: 'exit-confirm', duration: 2500 }))
   useBackToClose(scanning, closeScanner)
   useBackToClose(request !== null, () => setRequest(null))
   useBackToClose(cashOpen, () => setCashOpen(false))
+
+  // After a deploy this phone is still running the old build. Reload into
+  // the new one — from Home with nothing open, so no update is lost.
+  const liveBuild = me?.build
+  useEffect(() => {
+    if (tab === 'home' && !scanning && request === null && !cashOpen) reloadForNewBuild(liveBuild)
+  }, [liveBuild, tab, scanning, request, cashOpen])
 
   // Pull down on Home or Profile to reload; not while the camera or a parcel is open.
   const pull = usePullToRefresh(refresh, !scanning && request === null)
@@ -264,13 +281,13 @@ export function AppShell() {
           onRefresh={refresh}
           onOpen={open}
           onProfile={() => setTab('profile')}
-          onCash={() => setCashOpen(true)}
+          onCash={openCash}
         />
       ) : (
         <ProfileView
           me={me}
           onPhotoChanged={(photoUrl) => setMe((m) => (m ? { ...m, rider: { ...m.rider, photo_url: photoUrl } } : m))}
-          onCash={() => setCashOpen(true)}
+          onCash={() => openCash('cash')}
         />
       )}
 
@@ -312,6 +329,7 @@ export function AppShell() {
       <CashSheet
         open={cashOpen}
         onClose={() => setCashOpen(false)}
+        first={cashFirst}
         cash={me?.cash ?? null}
         pay={me?.pay ?? null}
         onLoaded={(balances) => setMe((m) => (m ? { ...m, ...balances } : m))}
@@ -335,7 +353,7 @@ type HomeProps = {
   onRefresh: () => void
   onOpen: (code: string, entry: EntryMethod, preview?: Parcel) => void
   onProfile: () => void
-  onCash: () => void
+  onCash: (side: MoneySide) => void
 }
 
 type ParcelFilter = 'all' | 'out_for_delivery' | 'attempt_fail' | 'to_return' | 'cod'
@@ -390,6 +408,14 @@ function HomeView({ me, parcels, delivered, list, onList, range, onRange, dates,
     onList('delivered')
     onRange('today')
     setCashOnly(cash)
+    window.scrollTo(0, 0)
+  }
+
+  const showDeliveredBetween = (next: HistoryDates) => {
+    onList('delivered')
+    onDates(next)
+    setCashOnly(false)
+    setFiltering(false)
     window.scrollTo(0, 0)
   }
 
@@ -513,7 +539,9 @@ function HomeView({ me, parcels, delivered, list, onList, range, onRange, dates,
             label: t(`filter_${value}`),
             count: parcels?.filter((parcel) => passesFilter(parcel, value)).length,
           }))}
-        />
+        >
+          <DateRangeForm title={t('dates_delivered_title')} initial={shownDates} onApply={showDeliveredBetween} />
+        </FilterSheet>
       ) : (
         <FilterSheet
           open={filtering}
@@ -524,6 +552,7 @@ function HomeView({ me, parcels, delivered, list, onList, range, onRange, dates,
           options={RANGES.map((value) => ({ value, label: t(`range_${value}`) }))}
         >
           <DateRangeForm
+            title={t('dates_title')}
             initial={shownDates}
             onApply={(next) => {
               onDates(next)
@@ -534,7 +563,7 @@ function HomeView({ me, parcels, delivered, list, onList, range, onRange, dates,
       )}
 
       <main className='px-4 pb-[calc(env(safe-area-inset-bottom)+96px)] pt-1'>
-        {me && <CashCard cash={me.cash} pay={me.pay} onClick={onCash} />}
+        {me && <MoneyTiles cash={me.cash} pay={me.pay} onOpen={onCash} />}
 
         {error && (
           <div className='glass-tint mt-3 rounded-2xl p-3.5 text-sm' style={{ '--tint': '#dc2626' } as React.CSSProperties}>
@@ -823,38 +852,79 @@ function Stat({
 }
 
 /**
- * The rider's money above the lists: what they owe KSA Drop and, once pay is
- * set up, what KSA Drop owes them. Opens the cash sheet.
+ * The rider's money above the lists, a tile each way: what KSA Drop owes them
+ * (once pay is set up) and the cash they owe KSA Drop. Never netted. Each
+ * opens the cash sheet on its own account.
  */
-function CashCard({ cash, pay, onClick }: { cash: RiderCash; pay: RiderPay; onClick: () => void }) {
+function MoneyTiles({ cash, pay, onOpen }: { cash: RiderCash; pay: RiderPay; onOpen: (side: MoneySide) => void }) {
   const { t } = useI18n()
+  const earning = hasPay(pay)
 
   return (
-    <button type='button' onClick={onClick} className='glass-lite glass-press flex w-full items-center gap-3 rounded-2xl px-3.5 py-3 text-start'>
-      <span className='flex h-9 w-9 shrink-0 items-center justify-center rounded-[11px] bg-brand text-white'>
-        <Wallet className='h-[18px] w-[18px]' />
-      </span>
-      <span className='min-w-0 flex-1 space-y-1.5'>
-        <MoneyRow label={t(cashLabel(cash.balance))} amount={cash.balance} tone={cash.balance > 0 ? 'text-brand' : 'text-green-700 dark:text-green-400'} />
-        {hasPay(pay) && (
-          <MoneyRow label={t(payLabel(pay.balance))} amount={pay.balance} tone={pay.balance > 0 ? 'text-green-700 dark:text-green-400' : 'text-muted-foreground'} />
-        )}
-      </span>
-      <ChevronRight className='h-4 w-4 shrink-0 text-muted-foreground rtl:rotate-180' />
-    </button>
+    <div className={cn('grid gap-2', earning && 'grid-cols-2')}>
+      {earning && (
+        <MoneyTile
+          icon={Banknote}
+          color='#16a34a'
+          title={t('earnings_title')}
+          amount={pay.balance}
+          status={t(payLabel(pay.balance))}
+          tone={pay.balance > 0 ? 'text-green-700 dark:text-green-400' : 'text-muted-foreground'}
+          onClick={() => onOpen('pay')}
+        />
+      )}
+      <MoneyTile
+        icon={Wallet}
+        color='var(--brand)'
+        title={t('payable_title')}
+        amount={cash.balance}
+        status={t(cashLabel(cash.balance))}
+        tone={cash.balance > 0 ? 'text-brand' : 'text-green-700 dark:text-green-400'}
+        onClick={() => onOpen('cash')}
+      />
+    </div>
   )
 }
 
-function MoneyRow({ label, amount, tone }: { label: string; amount: number; tone: string }) {
+/** One balance: what it is, the amount (always shown, zero too), and how it stands. */
+function MoneyTile({
+  icon: Icon,
+  color,
+  title,
+  amount,
+  status,
+  tone,
+  onClick,
+}: {
+  icon: LucideIcon
+  color: string
+  title: string
+  amount: number
+  status: string
+  tone: string
+  onClick: () => void
+}) {
+  // A minus when it runs the other way: paid extra, or paid in advance.
+  const figure = `${amount < 0 ? '−' : ''}${money(Math.abs(amount), '').trim()}`
+
   return (
-    <span className='flex items-baseline justify-between gap-3'>
-      <span className='min-w-0 text-[15px] font-semibold leading-tight'>{label}</span>
-      {amount !== 0 && (
-        <span className={cn('shrink-0 text-[15px] font-bold tabular-nums', tone)} dir='ltr'>
-          {money(Math.abs(amount), 'SAR')}
+    <button type='button' onClick={onClick} className='glass-lite glass-press min-w-0 rounded-2xl px-3.5 py-3 text-start'>
+      <span className='flex items-center gap-2'>
+        <span className='flex h-7 w-7 shrink-0 items-center justify-center rounded-[9px] text-white' style={{ background: color }}>
+          <Icon className='h-4 w-4' />
         </span>
-      )}
-    </span>
+        <span className='min-w-0 flex-1 truncate text-[13px] font-semibold'>{title}</span>
+        <ChevronRight className='h-4 w-4 shrink-0 text-muted-foreground rtl:rotate-180' />
+      </span>
+      <span className='mt-2 flex'>
+        <span className={cn('flex items-baseline gap-1 font-bold leading-tight tabular-nums', tone)} dir='ltr'>
+          <span className='text-[11px] font-semibold'>SAR</span>
+          {/* Two tiles share a small phone's width: long amounts step down. */}
+          <span className={figure.length > 8 ? 'text-[clamp(15px,4.6vw,18px)]' : 'text-[clamp(18px,5.6vw,22px)]'}>{figure}</span>
+        </span>
+      </span>
+      <span className='mt-0.5 block text-xs leading-snug text-muted-foreground'>{status}</span>
+    </button>
   )
 }
 

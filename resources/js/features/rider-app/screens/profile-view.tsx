@@ -2,9 +2,10 @@ import { useRef, useState } from 'react'
 import { BookOpen, Camera, ChevronRight, Languages, LifeBuoy, Loader2, LogOut, MessageCircle, Wallet, type LucideIcon } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
-import { Sheet, SheetContent, SheetDescription, SheetTitle } from '@/components/ui/sheet'
+import { SheetDescription, SheetTitle } from '@/components/ui/sheet'
 import { compressImage } from '@/lib/compress-image'
 import { api, ApiError } from '../api'
+import { BottomSheet } from '../components/bottom-sheet'
 import { RiderPhoto } from '../components/rider-photo'
 import { reasonText, useI18n, type Lang } from '../i18n'
 import { useBackToClose } from '../lib/back-button'
@@ -202,41 +203,34 @@ function LogoutSheet({ open, onClose }: { open: boolean; onClose: () => void }) 
   }
 
   return (
-    <Sheet open={open} onOpenChange={(next) => !next && !busy && onClose()}>
-      <SheetContent
-        data-no-pull
-        side='bottom'
-        className='gap-0 rounded-t-[32px] border-0 bg-surface p-0 px-5 pb-[calc(env(safe-area-inset-bottom)+16px)]'
-        onOpenAutoFocus={(event) => event.preventDefault()}
-      >
-        <div className='mx-auto mt-2.5 h-1.5 w-10 rounded-full bg-foreground/15' />
-        <span className='mx-auto mt-6 flex h-14 w-14 items-center justify-center rounded-full bg-red-600 text-white'>
-          <LogOut className='h-6 w-6 rtl:rotate-180' />
-        </span>
-        <SheetTitle className='mt-4 text-center text-[20px] font-bold'>{t('log_out_title')}</SheetTitle>
-        <SheetDescription className='mx-auto mt-2 max-w-[20rem] text-center text-[15px] leading-snug text-muted-foreground'>
-          {t('log_out_text')}
-        </SheetDescription>
+    <BottomSheet open={open} onClose={onClose} locked={busy} className='border-0 bg-surface px-5 pb-[calc(env(safe-area-inset-bottom)+16px)]'>
+      <div className='mx-auto mt-2.5 h-1.5 w-10 rounded-full bg-foreground/15' />
+      <span className='mx-auto mt-6 flex h-14 w-14 items-center justify-center rounded-full bg-red-600 text-white'>
+        <LogOut className='h-6 w-6 rtl:rotate-180' />
+      </span>
+      <SheetTitle className='mt-4 text-center text-[20px] font-bold'>{t('log_out_title')}</SheetTitle>
+      <SheetDescription className='mx-auto mt-2 max-w-[20rem] text-center text-[15px] leading-snug text-muted-foreground'>
+        {t('log_out_text')}
+      </SheetDescription>
 
-        <button
-          type='button'
-          onClick={logOut}
-          disabled={busy}
-          className='mt-6 flex h-14 w-full items-center justify-center gap-2 rounded-full bg-red-600 text-[16px] font-semibold text-white transition-transform active:scale-[0.98] disabled:opacity-70'
-        >
-          {busy && <Loader2 className='h-5 w-5 animate-spin' />}
-          {busy ? t('logging_out') : t('log_out')}
-        </button>
-        <button
-          type='button'
-          onClick={onClose}
-          disabled={busy}
-          className='mt-2 h-14 w-full rounded-full text-[16px] font-semibold text-muted-foreground active:bg-foreground/5'
-        >
-          {t('cancel')}
-        </button>
-      </SheetContent>
-    </Sheet>
+      <button
+        type='button'
+        onClick={logOut}
+        disabled={busy}
+        className='mt-6 flex h-14 w-full items-center justify-center gap-2 rounded-full bg-red-600 text-[16px] font-semibold text-white transition-transform active:scale-[0.98] disabled:opacity-70'
+      >
+        {busy && <Loader2 className='h-5 w-5 animate-spin' />}
+        {busy ? t('logging_out') : t('log_out')}
+      </button>
+      <button
+        type='button'
+        onClick={onClose}
+        disabled={busy}
+        className='mt-2 h-14 w-full rounded-full text-[16px] font-semibold text-muted-foreground active:bg-foreground/5'
+      >
+        {t('cancel')}
+      </button>
+    </BottomSheet>
   )
 }
 

@@ -39,7 +39,7 @@ type Props = {
 /**
  * One rider's orders, straight from their card: everything they handled
  * between two dates, or only what they delivered, what failed, and so on —
- * each with the rider's updates, the reason an attempt failed, and its photo
+ * each with its status, the rider's latest update and note, and its photo
  * and location. The same list Top performers opens, with its own dates: a
  * shortcut, or any range picked from the calendar.
  */

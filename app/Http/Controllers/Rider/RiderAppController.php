@@ -73,6 +73,17 @@ class RiderAppController extends Controller
     }
 
     /**
+     * Changes with every build. An installed app can stay open for days, so
+     * it compares the build it runs with this one and reloads into the new.
+     */
+    public static function build(): ?string
+    {
+        $manifest = public_path('build/manifest.json');
+
+        return is_file($manifest) ? substr(md5_file($manifest), 0, 12) : null;
+    }
+
+    /**
      * Same app, but starting on the activation link: on iPhone a home screen
      * app has its own cookie jar, separate from Safari's, so it has to use the
      * link itself on first launch.
@@ -87,7 +98,7 @@ class RiderAppController extends Controller
     private function shell(array $boot, string $manifestUrl): Response
     {
         return response()
-            ->view('rider', ['boot' => $boot, 'manifestUrl' => $manifestUrl])
+            ->view('rider', ['boot' => $boot + ['build' => self::build()], 'manifestUrl' => $manifestUrl])
             ->header('Cache-Control', 'no-store')
             ->header('Referrer-Policy', 'no-referrer');
     }

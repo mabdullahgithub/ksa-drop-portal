@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Http\Controllers\Rider\RiderAppController;
 use App\Models\Rider;
 use App\Services\Riders\RiderAuthService;
 use App\Services\Riders\RiderSignInRefused;
@@ -160,6 +161,23 @@ class RiderSignInTest extends TestCase
             ->assertOk()
             ->assertSee('"mode":"app"', false)
             ->assertCookie(RiderAuthService::COOKIE, $cookie);
+    }
+
+    /**
+     * An app left open keeps running the build it started with. The page and
+     * /me both say which build is live, so the app can tell and reload.
+     */
+    public function test_the_app_is_told_which_build_is_live(): void
+    {
+        $build = RiderAppController::build();
+        $this->assertMatchesRegularExpression('/^[0-9a-f]{12}$/', (string) $build);
+
+        $this->get('/rider/app')->assertOk()->assertSee('"build":"' . $build . '"', false);
+
+        $this->asRider($this->signedInDevice($this->makeRider()))
+            ->getJson('/rider/api/me')
+            ->assertOk()
+            ->assertJsonPath('build', $build);
     }
 
     public function test_the_app_asks_for_sign_in_without_a_cookie(): void
