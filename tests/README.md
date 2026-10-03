@@ -8,12 +8,6 @@ This folder contains all testing files for the application.
 tests/
 ├── Feature/               # Feature tests (HTTP, integration tests)
 ├── Unit/                  # Unit tests (individual class/method tests)
-├── Scripts/              # Utility scripts for manual testing
-│   ├── README.md         # Scripts documentation
-│   ├── setup_email_test.php
-│   ├── test_email.php
-│   ├── create_sample_notifications.php
-│   └── create_many_notifications.php
 └── TestCase.php          # Base test case class
 ```
 
@@ -44,22 +38,6 @@ php artisan test tests/Feature/ExampleTest.php
 ```bash
 php artisan test --coverage
 ```
-
----
-
-## 📜 Manual Testing Scripts
-
-The `Scripts/` folder contains utility scripts for manual testing:
-
-### Email Testing
-- **[setup_email_test.php](Scripts/setup_email_test.php)** - Configure email settings
-- **[test_email.php](Scripts/test_email.php)** - Send test email with diagnostics
-
-### Notification Testing
-- **[create_sample_notifications.php](Scripts/create_sample_notifications.php)** - Create sample notifications (7)
-- **[create_many_notifications.php](Scripts/create_many_notifications.php)** - Create many notifications (50)
-
-📖 **[View Scripts Documentation](Scripts/README.md)** for detailed usage instructions.
 
 ---
 
@@ -171,23 +149,12 @@ php artisan migrate --env=testing
 php artisan test
 ```
 
-### 3. Manual Testing
-```bash
-# Email system
-php artisan tinker < tests/Scripts/setup_email_test.php
-
-# Notifications
-php artisan tinker < tests/Scripts/create_sample_notifications.php
-```
-
 ---
 
 ## 📊 Test Coverage
 
 ### Current Coverage Areas:
 - ✅ Basic authentication tests (Laravel default)
-- ✅ Manual email testing scripts
-- ✅ Manual notification testing scripts
 
 ### Areas to Add Tests:
 - [ ] Email sending workflows
@@ -220,7 +187,6 @@ php artisan tinker < tests/Scripts/create_sample_notifications.php
 ### Project Documentation:
 - **[Email Testing Guide](../docs/QUICK_START.md)** - Email system testing
 - **[Notification Testing](../docs/QUICKSTART_NOTIFICATIONS.md)** - Notification testing
-- **[Scripts Documentation](Scripts/README.md)** - Manual testing scripts
 
 ---
 

@@ -196,26 +196,6 @@ php artisan test --testsuite=Unit
 
 See **[tests/README.md](./tests/README.md)** for detailed testing documentation.
 
-### Manual Testing Scripts
-
-Quick test scripts are available in [`tests/Scripts/`](./tests/Scripts):
-
-```bash
-# Setup email testing
-php artisan tinker < tests/Scripts/setup_email_test.php
-
-# Send test email with diagnostics
-php artisan tinker < tests/Scripts/test_email.php
-
-# Create sample notifications
-php artisan tinker < tests/Scripts/create_sample_notifications.php
-
-# Create many notifications (pagination testing)
-php artisan tinker < tests/Scripts/create_many_notifications.php
-```
-
-📖 **[View Scripts Documentation](./tests/Scripts/README.md)**
-
 ### Email Testing with Mailtrap
 
 1. Sign up at [Mailtrap.io](https://mailtrap.io) (free)
