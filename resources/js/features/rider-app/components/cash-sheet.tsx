@@ -13,8 +13,8 @@ export type MoneySide = 'cash' | 'pay'
 type Props = {
   open: boolean
   onClose: () => void
-  /** The account the rider tapped: it goes on top. */
-  first: MoneySide
+  /** The one account to show: the tile the rider tapped on Home. Both when absent. */
+  only?: MoneySide
   /** Shown straight away while the payments load (from /rider/api/me). */
   cash: RiderCash | null
   pay: RiderPay | null
@@ -47,9 +47,10 @@ const when = (lang: Lang, iso: string) =>
  * The rider's money, both ways. What they owe KSA Drop: the COD cash they
  * collected, minus what they handed in. What KSA Drop owes them: their pay
  * per delivery and per attempt, minus what it has paid. Each with its
- * payments underneath; the two are never netted.
+ * payments underneath; the two are never netted. Opened from one of Home's
+ * tiles it shows that account alone.
  */
-export function CashSheet({ open, onClose, first, cash: initialCash, pay: initialPay, onLoaded }: Props) {
+export function CashSheet({ open, onClose, only, cash: initialCash, pay: initialPay, onLoaded }: Props) {
   const { t } = useI18n()
   const [data, setData] = useState<CashResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -74,46 +75,15 @@ export function CashSheet({ open, onClose, first, cash: initialCash, pay: initia
   const cash = data?.cash ?? initialCash
   const pay = data?.pay ?? initialPay
 
-  // What I owe KSA Drop
-  const cashSection = cash && (
-    <section>
-      {pay && hasPay(pay) && <Heading>{t('cash_section')}</Heading>}
-      <Figure label={t(cashLabel(cash.balance))} amount={cash.balance} tint={cash.balance > 0 ? undefined : '#16a34a'} />
-      <dl className='mt-3 divide-y divide-foreground/[0.06] rounded-2xl bg-canvas px-3.5'>
-        <Line label={t('cash_collected')} amount={cash.collected} />
-        <Line label={t('cash_paid')} amount={cash.paid} tone='text-green-700 dark:text-green-400' />
-      </dl>
-      {cash.direct > 0 && <Note>{t('cash_direct', { amount: money(cash.direct, 'SAR') })}</Note>}
-
-      <Heading className='mt-5'>{t('cash_payments')}</Heading>
-      <Payments payments={data?.payments} empty={t('cash_no_payments')} loading={!error} />
-      <Note>{t('cash_hint')}</Note>
-    </section>
-  )
-
-  // What KSA Drop owes me
-  const paySection = pay && hasPay(pay) && (
-    <section>
-      <Heading>{t('pay_section')}</Heading>
-      <Figure label={t(payLabel(pay.balance))} amount={pay.balance} tint={pay.balance > 0 ? '#16a34a' : '#52525b'} />
-      <dl className='mt-3 divide-y divide-foreground/[0.06] rounded-2xl bg-canvas px-3.5'>
-        <Line label={t('pay_earned')} amount={pay.earned} hint={t('pay_visits', { delivered: pay.delivered, attempted: pay.attempted })} />
-        <Line label={t('pay_paid')} amount={pay.paid} tone='text-green-700 dark:text-green-400' />
-      </dl>
-      <Note>{t('pay_rates', { delivery: amount(pay.rates.delivery), attempt: amount(pay.rates.attempt) })}</Note>
-
-      <Heading className='mt-5'>{t('pay_payouts')}</Heading>
-      <Payments payments={data?.payouts} empty={t('pay_no_payouts')} loading={!error} />
-      <Note>{t('pay_rule')}</Note>
-    </section>
-  )
-
-  const [top, bottom] = first === 'pay' && paySection ? [paySection, cashSection] : [cashSection, paySection]
+  const showCash = only !== 'pay' && cash !== null
+  // Asked for by its tile, pay shows whatever it holds; beside the cash, only once there is some.
+  const showPay = pay !== null && (only ? only === 'pay' : hasPay(pay))
+  const title = only === 'pay' ? t('earnings_title') : only === 'cash' ? t('payable_title') : t('cash_title')
 
   return (
     <BottomSheet open={open} onClose={onClose} className='max-h-[92dvh] border-0 bg-surface'>
       <div className='mx-auto mt-2.5 h-1.5 w-10 shrink-0 rounded-full bg-foreground/15' />
-      <SheetTitle className='px-5 pb-3 pt-4 text-[20px] font-bold'>{t('cash_title')}</SheetTitle>
+      <SheetTitle className='px-5 pb-3 pt-4 text-[20px] font-bold'>{title}</SheetTitle>
       <SheetDescription className='sr-only'>{t('cash_row_hint')}</SheetDescription>
 
       <div className='overflow-y-auto overscroll-contain px-4 pb-[calc(env(safe-area-inset-bottom)+20px)]'>
@@ -126,8 +96,39 @@ export function CashSheet({ open, onClose, first, cash: initialCash, pay: initia
           </div>
         )}
 
-        {top}
-        {bottom && <div className='mt-7 border-t border-foreground/[0.08] pt-5'>{bottom}</div>}
+        {/* What I owe KSA Drop */}
+        {showCash && (
+          <section>
+            {showPay && <Heading>{t('cash_section')}</Heading>}
+            <Figure label={t(cashLabel(cash.balance))} amount={cash.balance} tint={cash.balance > 0 ? undefined : '#16a34a'} />
+            <dl className='mt-3 divide-y divide-foreground/[0.06] rounded-2xl bg-canvas px-3.5'>
+              <Line label={t('cash_collected')} amount={cash.collected} />
+              <Line label={t('cash_paid')} amount={cash.paid} tone='text-green-700 dark:text-green-400' />
+            </dl>
+            {cash.direct > 0 && <Note>{t('cash_direct', { amount: money(cash.direct, 'SAR') })}</Note>}
+
+            <Heading className='mt-5'>{t('cash_payments')}</Heading>
+            <Payments payments={data?.payments} empty={t('cash_no_payments')} loading={!error} />
+            <Note>{t('cash_hint')}</Note>
+          </section>
+        )}
+
+        {/* What KSA Drop owes me */}
+        {showPay && (
+          <section className={cn(showCash && 'mt-7 border-t border-foreground/[0.08] pt-5')}>
+            {showCash && <Heading>{t('pay_section')}</Heading>}
+            <Figure label={t(payLabel(pay.balance))} amount={pay.balance} tint={pay.balance > 0 ? '#16a34a' : '#52525b'} />
+            <dl className='mt-3 divide-y divide-foreground/[0.06] rounded-2xl bg-canvas px-3.5'>
+              <Line label={t('pay_earned')} amount={pay.earned} hint={t('pay_visits', { delivered: pay.delivered, attempted: pay.attempted })} />
+              <Line label={t('pay_paid')} amount={pay.paid} tone='text-green-700 dark:text-green-400' />
+            </dl>
+            <Note>{t('pay_rates', { delivery: amount(pay.rates.delivery), attempt: amount(pay.rates.attempt) })}</Note>
+
+            <Heading className='mt-5'>{t('pay_payouts')}</Heading>
+            <Payments payments={data?.payouts} empty={t('pay_no_payouts')} loading={!error} />
+            <Note>{t('pay_rule')}</Note>
+          </section>
+        )}
       </div>
     </BottomSheet>
   )

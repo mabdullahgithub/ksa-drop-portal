@@ -73,11 +73,11 @@ export function AppShell() {
   const [scanning, setScanning] = useState(false)
   const [request, setRequest] = useState<UpdateRequest | null>(null)
   const [cashOpen, setCashOpen] = useState(false)
-  // The account the cash sheet opens on: the one the rider tapped.
-  const [cashFirst, setCashFirst] = useState<MoneySide>('cash')
+  // The one account the cash sheet shows: the tile tapped on Home. Both from Profile.
+  const [cashSide, setCashSide] = useState<MoneySide>()
 
-  const openCash = (side: MoneySide) => {
-    setCashFirst(side)
+  const openCash = (side?: MoneySide) => {
+    setCashSide(side)
     setCashOpen(true)
   }
 
@@ -287,7 +287,7 @@ export function AppShell() {
         <ProfileView
           me={me}
           onPhotoChanged={(photoUrl) => setMe((m) => (m ? { ...m, rider: { ...m.rider, photo_url: photoUrl } } : m))}
-          onCash={() => openCash('cash')}
+          onCash={() => openCash()}
         />
       )}
 
@@ -329,7 +329,7 @@ export function AppShell() {
       <CashSheet
         open={cashOpen}
         onClose={() => setCashOpen(false)}
-        first={cashFirst}
+        only={cashSide}
         cash={me?.cash ?? null}
         pay={me?.pay ?? null}
         onLoaded={(balances) => setMe((m) => (m ? { ...m, ...balances } : m))}
@@ -854,7 +854,7 @@ function Stat({
 /**
  * The rider's money above the lists, a tile each way: what KSA Drop owes them
  * (once pay is set up) and the cash they owe KSA Drop. Never netted. Each
- * opens the cash sheet on its own account.
+ * opens the cash sheet with its own account alone.
  */
 function MoneyTiles({ cash, pay, onOpen }: { cash: RiderCash; pay: RiderPay; onOpen: (side: MoneySide) => void }) {
   const { t } = useI18n()
