@@ -4,11 +4,16 @@ namespace Tests\Feature;
 
 use App\Jobs\SendWhatsAppOrderMessageJob;
 use App\Models\Order;
+use App\Models\User;
 use App\Services\WhatsApp\MetaWhatsAppService;
+use App\Support\WhatsAppMessaging;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Queue;
+use Spatie\Permission\Models\Permission;
+use Spatie\Permission\Models\Role;
+use Spatie\Permission\PermissionRegistrar;
 use Tests\TestCase;
 
 /**
@@ -31,6 +36,10 @@ class WhatsAppOrderConfirmationTest extends TestCase
             'template_name_order_pending' => 'order_pending',
             'template_name_followup' => 'followup',
         ]);
+
+        // These tests are about the flow itself, so switch messaging on; it
+        // ships off (WhatsAppMessaging). The switched-off tests turn it back off.
+        WhatsAppMessaging::set(true);
 
         // No real Graph calls from the send path.
         Http::fake([
@@ -117,6 +126,94 @@ class WhatsAppOrderConfirmationTest extends TestCase
         $order->update(['call_status' => Order::CALL_CONFIRMED]);
 
         $this->assertSame(Order::WHATSAPP_CONFIRMED, $order->fresh()->whatsapp_status);
+    }
+
+    // ── Messaging switched off ──────────────────────────────────────────
+
+    public function test_with_messaging_off_no_answer_sends_nothing(): void
+    {
+        WhatsAppMessaging::set(false);
+        Queue::fake();
+
+        $order = $this->makeOrder();
+        $order->update(['call_status' => Order::CALL_NO_ANSWER]);
+
+        Queue::assertNothingPushed();
+        $this->assertNull($order->fresh()->whatsapp_status);
+    }
+
+    /**
+     * Through the endpoints the order screens use: the single call-outcome
+     * save and the bulk "mark as no answer".
+     */
+    public function test_with_messaging_off_the_order_screens_send_nothing(): void
+    {
+        WhatsAppMessaging::set(false);
+        Queue::fake();
+
+        app(PermissionRegistrar::class)->forgetCachedPermissions();
+        $role = Role::create(['name' => 'agent-' . uniqid()]);
+        $role->givePermissionTo(Permission::findOrCreate('edit orders'));
+        $agent = User::factory()->create();
+        $agent->assignRole($role);
+
+        $single = $this->makeOrder();
+        $bulk = [$this->makeOrder(), $this->makeOrder()];
+
+        $this->actingAs($agent)
+            ->postJson("/api/orders/{$single->id}/call-status", ['call_status' => Order::CALL_NO_ANSWER])
+            ->assertOk();
+        $this->actingAs($agent)
+            ->postJson('/api/orders/bulk-update', [
+                'order_ids' => collect($bulk)->pluck('id')->all(),
+                'action' => 'update_call_status',
+                'call_status' => Order::CALL_NO_ANSWER,
+            ])
+            ->assertOk();
+
+        Queue::assertNothingPushed();
+        foreach ([$single, ...$bulk] as $order) {
+            $this->assertSame(Order::CALL_NO_ANSWER, $order->fresh()->call_status);
+            $this->assertNull($order->fresh()->whatsapp_status);
+        }
+    }
+
+    /**
+     * A job queued before the switch was turned off must not send either.
+     */
+    public function test_with_messaging_off_an_already_queued_job_sends_nothing(): void
+    {
+        $order = $this->makeOrder(['call_status' => Order::CALL_NO_ANSWER]);
+        WhatsAppMessaging::set(false);
+
+        (new SendWhatsAppOrderMessageJob($order->id))->handle(app(MetaWhatsAppService::class));
+
+        Http::assertNothingSent();
+        $this->assertNull($order->fresh()->whatsapp_status);
+    }
+
+    public function test_with_messaging_off_the_sweep_does_nothing(): void
+    {
+        WhatsAppMessaging::set(false);
+        Queue::fake();
+
+        $pinged = $this->makeOrder([
+            'call_status' => Order::CALL_NO_ANSWER,
+            'whatsapp_status' => Order::WHATSAPP_SENT,
+            'whatsapp_sent_at' => now()->subHours(25),
+        ]);
+        $followedUp = $this->makeOrder([
+            'call_status' => Order::CALL_NO_ANSWER,
+            'whatsapp_status' => Order::WHATSAPP_FOLLOWUP_SENT,
+            'whatsapp_sent_at' => now()->subHours(50),
+            'whatsapp_followup_sent_at' => now()->subHours(25),
+        ]);
+
+        $this->artisan('whatsapp:process-followups')->assertSuccessful();
+
+        Queue::assertNothingPushed();
+        $this->assertSame(Order::WHATSAPP_SENT, $pinged->fresh()->whatsapp_status);
+        $this->assertSame(Order::WHATSAPP_FOLLOWUP_SENT, $followedUp->fresh()->whatsapp_status);
     }
 
     public function test_the_sweep_sends_a_follow_up_after_24h_of_silence(): void

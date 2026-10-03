@@ -10,6 +10,7 @@ import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
 import { usePermissions } from '@/hooks/use-permissions'
+import { useWhatsAppMessaging } from '@/hooks/use-whatsapp-messaging'
 import { SearchBeam } from '@/components/search-beam'
 import { useConnectors, type Connector } from '@/hooks/useConnectors'
 import { IconShopify, IconJnt, IconImile, IconLogesTechs, IconKsaExpress, IconWhatsapp } from '@/assets/brand-icons'
@@ -46,9 +47,13 @@ export function Apps() {
   const [searchTerm, setSearchTerm] = useState('')
   const { can } = usePermissions()
   const { connectors, loading } = useConnectors()
+  const whatsappMessaging = useWhatsAppMessaging()
 
   const filteredConnectors = [...connectors]
     .filter((c) => c.key !== 'coming_soon' && c.key !== 'buyease')
+    // Hidden while messaging is switched off; its settings stay reachable
+    // from the WhatsApp page.
+    .filter((c) => c.key !== 'whatsapp' || whatsappMessaging)
     .sort((a, b) => (displayOrder[a.key] ?? 99) - (displayOrder[b.key] ?? 99))
     .filter((c) => c.name.toLowerCase().includes(searchTerm.toLowerCase()))
 

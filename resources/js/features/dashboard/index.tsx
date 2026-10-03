@@ -27,6 +27,7 @@ import { ShipmentStatusCardsView } from '@/features/orders/components/shipment-s
 import { TagStatCardsView } from '@/features/orders/components/tag-stat-cards'
 import { InboxStats } from '@/features/whatsapp/components/inbox-stats'
 import { useDashboard } from '@/hooks/useDashboard'
+import { useWhatsAppMessaging } from '@/hooks/use-whatsapp-messaging'
 
 
 function formatCurrency(value: number) {
@@ -92,6 +93,7 @@ const STAT_GRID = 'grid grid-cols-2 gap-x-2 gap-y-0.5 sm:grid-cols-3 lg:grid-col
 export function Dashboard() {
   const { data, loading } = useDashboard()
   const { orders, whatsapp, clients } = data
+  const whatsappMessaging = useWhatsAppMessaging()
 
   return (
     <>
@@ -205,8 +207,8 @@ export function Dashboard() {
             </StatSection>
           )}
 
-          {/* ── WhatsApp ── */}
-          {(loading || whatsapp) && (
+          {/* ── WhatsApp ── (none while messaging is switched off) */}
+          {whatsappMessaging && (loading || whatsapp) && (
             <StatSection
               title='WhatsApp confirmations'
               description='Order confirmations opened when a call goes unanswered'

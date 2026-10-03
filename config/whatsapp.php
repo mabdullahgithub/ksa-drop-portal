@@ -2,6 +2,9 @@
 
 return [
     /*
+     * Whether messaging is on is not set here: it is the toggle on the WhatsApp
+     * page, stored in the database. See App\Support\WhatsAppMessaging.
+     *
      * The inbox is unlocked with the recycle bin's PIN (config('recyclebin.pin'),
      * RECYCLE_BIN_PIN in .env); there is no separate WhatsApp PIN.
      *

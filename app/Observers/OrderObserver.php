@@ -6,6 +6,7 @@ use App\Jobs\SendWhatsAppOrderMessageJob;
 use App\Models\Order;
 use App\Observers\Concerns\RecordsDeletionAudit;
 use App\Services\WhatsApp\MetaWhatsAppService;
+use App\Support\WhatsAppMessaging;
 use Illuminate\Support\Facades\Storage;
 
 /**
@@ -49,6 +50,11 @@ class OrderObserver
 
     private function startConfirmationFlow(Order $order): void
     {
+        // The messaging toggle on the WhatsApp page; see WhatsAppMessaging.
+        if (! WhatsAppMessaging::enabled()) {
+            return;
+        }
+
         // Already messaged on a previous no-answer attempt — the existing
         // conversation and its 24h clock stand; don't restart it.
         if ($order->whatsapp_status !== null && $order->whatsapp_status !== Order::WHATSAPP_FAILED) {

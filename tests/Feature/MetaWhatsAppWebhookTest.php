@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\Order;
 use App\Models\WhatsAppMessage;
+use App\Support\WhatsAppMessaging;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
@@ -39,6 +40,10 @@ class MetaWhatsAppWebhookTest extends TestCase
             'template_name_order_pending' => 'order_pending',
             'template_name_followup' => 'followup',
         ]);
+
+        // These tests are about the flow itself, so switch messaging on; it
+        // ships off (WhatsAppMessaging).
+        WhatsAppMessaging::set(true);
 
         // The controller marks inbound messages as read, which is a Graph call.
         Http::fake([
@@ -244,6 +249,25 @@ class MetaWhatsAppWebhookTest extends TestCase
         $this->signedPost($payload)->assertSuccessful();
 
         $this->assertSame(Order::WHATSAPP_CONFIRMED, $order->fresh()->whatsapp_status);
+    }
+
+    public function test_with_messaging_off_a_reply_is_kept_but_does_not_change_the_order(): void
+    {
+        WhatsAppMessaging::set(false);
+        $order = $this->makeOrder();
+
+        $this->signedPost($this->inboundPayload('1'))->assertSuccessful();
+
+        $this->assertDatabaseHas('whatsapp_messages', [
+            'order_id' => $order->id,
+            'direction' => WhatsAppMessage::DIRECTION_INBOUND,
+            'body' => '1',
+        ]);
+
+        $order->refresh();
+        $this->assertSame(Order::WHATSAPP_SENT, $order->whatsapp_status);
+        $this->assertSame(Order::CALL_NO_ANSWER, $order->call_status);
+        $this->assertEmpty($order->tags ?? []);
     }
 
     public function test_a_reply_is_recorded_in_the_conversation_log(): void

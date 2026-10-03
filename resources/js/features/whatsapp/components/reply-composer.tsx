@@ -6,6 +6,7 @@ import { Send, Loader2, Lock } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { usePermissions } from '@/hooks/use-permissions'
+import { useWhatsAppMessaging } from '@/hooks/use-whatsapp-messaging'
 import { isWhatsAppLocked } from '../api'
 import type { ThreadMessage } from '../types'
 
@@ -35,8 +36,18 @@ export function ReplyComposer({
   const { can } = usePermissions()
   const [body, setBody] = useState('')
   const [sending, setSending] = useState(false)
+  const messagingEnabled = useWhatsAppMessaging()
 
   if (!can('reply whatsapp')) return null
+
+  if (!messagingEnabled) {
+    return (
+      <div className='flex items-start gap-2 border-t bg-muted/40 px-4 py-3 text-xs text-muted-foreground'>
+        <Lock className='mt-0.5 h-3.5 w-3.5 shrink-0' />
+        <p>WhatsApp messaging is switched off. Turn it on at the top of this page to reply.</p>
+      </div>
+    )
+  }
 
   const send = async () => {
     const text = body.trim()

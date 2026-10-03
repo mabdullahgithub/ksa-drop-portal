@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { usePermissions } from '@/hooks/use-permissions'
+import { useWhatsAppMessaging } from '@/hooks/use-whatsapp-messaging'
 import type { InboxStats } from '@/features/whatsapp/types'
 
 export interface OrderStats {
@@ -62,6 +63,8 @@ export function useDashboard() {
   const { can } = usePermissions()
   const canOrders = can('view orders')
   const canClients = can('view client')
+  // No WhatsApp section while messaging is switched off.
+  const showWhatsApp = useWhatsAppMessaging() && can('view whatsapp')
 
   const [data, setData] = useState<DashboardData>(EMPTY)
   const [loading, setLoading] = useState(true)
@@ -84,9 +87,7 @@ export function useDashboard() {
       const [stats, todayStats, waStats, clientStats, ordersPage] = await Promise.all([
         canOrders ? getJson<Record<string, unknown>>('/api/orders/statistics') : null,
         canOrders ? getJson<Record<string, unknown>>(`/api/orders/statistics?${dayRange}`) : null,
-        // The inbox lives behind order permissions: a conversation is just an
-        // order's message thread.
-        canOrders ? getJson<InboxStats>('/api/whatsapp/stats') : null,
+        showWhatsApp ? getJson<InboxStats>('/api/whatsapp/stats') : null,
         canClients ? getJson<ClientStats>('/api/clients/statistics') : null,
         canOrders ? getJson<{ data?: RecentOrder[] }>('/api/orders?per_page=8&sort_by=created_at&sort_order=desc') : null,
       ])
@@ -118,7 +119,7 @@ export function useDashboard() {
     return () => {
       cancelled = true
     }
-  }, [canOrders, canClients])
+  }, [canOrders, canClients, showWhatsApp])
 
   return { data, loading }
 }

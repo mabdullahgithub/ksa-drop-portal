@@ -6,6 +6,7 @@ use App\Http\Middleware\EnsureWhatsAppUnlocked;
 use App\Models\Order;
 use App\Models\User;
 use App\Models\WhatsAppMessage;
+use App\Support\WhatsAppMessaging;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
@@ -48,6 +49,10 @@ class WhatsAppInboxTest extends TestCase
         // what the inbox does once open, so unlock by default. The lock itself
         // is covered by WhatsAppInboxLockTest.
         $this->withSession([EnsureWhatsAppUnlocked::SESSION_KEY => now()]);
+
+        // Replying sends a message, which only happens with messaging on; it
+        // ships off. Off is covered by WhatsAppMessagingToggleTest.
+        WhatsAppMessaging::set(true);
     }
 
     private function actingAsAgent(): User

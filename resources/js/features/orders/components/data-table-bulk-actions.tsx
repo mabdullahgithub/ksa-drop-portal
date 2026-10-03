@@ -29,6 +29,7 @@ import { DataTableBulkActions as BulkActionsToolbar } from '@/components/data-ta
 import { type Order } from '@/types/order'
 import { useOrderMutations } from '@/hooks/useOrders'
 import { usePermissions } from '@/hooks/use-permissions'
+import { useWhatsAppMessaging } from '@/hooks/use-whatsapp-messaging'
 import { useOrdersContext } from './orders-provider'
 import { CALL_STATUS_OPTIONS } from '../data/call-status'
 import { OrderTagsDialog } from './order-tags-dialog'
@@ -71,6 +72,7 @@ export function DataTableBulkActions<TData>({
   const { bulkUpdate, bulkDelete } = useOrderMutations()
   const { can } = usePermissions()
   const { refresh } = useOrdersContext()
+  const whatsappMessaging = useWhatsAppMessaging()
   const [showTagDialog, setShowTagDialog] = useState(false)
   const [isSavingTags, setIsSavingTags] = useState(false)
   const [showCancelDialog, setShowCancelDialog] = useState(false)
@@ -303,34 +305,37 @@ export function DataTableBulkActions<TData>({
   return (
     <>
       <BulkActionsToolbar table={table} entityName='order'>
-        <DropdownMenu>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant='outline'
-                  size='icon'
-                  className='size-8'
-                  aria-label='Update call status'
-                  title='Update call status'
-                >
-                  <PhoneCall className='h-4 w-4' />
-                  <span className='sr-only'>Update call status</span>
-                </Button>
-              </DropdownMenuTrigger>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>Update call status</p>
-            </TooltipContent>
-          </Tooltip>
-          <DropdownMenuContent sideOffset={14}>
-            {CALL_STATUS_OPTIONS.filter((o) => o.value !== 'not_called').map((option) => (
-              <DropdownMenuItem key={option.value} onClick={() => handleBulkCallStatusChange(option.value)}>
-                {option.label}
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
+        {/* Call outcomes drive the WhatsApp flow, so they go with it. */}
+        {whatsappMessaging && (
+          <DropdownMenu>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant='outline'
+                    size='icon'
+                    className='size-8'
+                    aria-label='Update call status'
+                    title='Update call status'
+                  >
+                    <PhoneCall className='h-4 w-4' />
+                    <span className='sr-only'>Update call status</span>
+                  </Button>
+                </DropdownMenuTrigger>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Update call status</p>
+              </TooltipContent>
+            </Tooltip>
+            <DropdownMenuContent sideOffset={14}>
+              {CALL_STATUS_OPTIONS.filter((o) => o.value !== 'not_called').map((option) => (
+                <DropdownMenuItem key={option.value} onClick={() => handleBulkCallStatusChange(option.value)}>
+                  {option.label}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
 
         <Tooltip>
           <TooltipTrigger asChild>

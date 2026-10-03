@@ -9,6 +9,7 @@ use App\Models\WhatsAppMessage;
 use App\Services\WhatsApp\MetaWhatsAppService;
 use App\Services\WhatsApp\ReplyIntent;
 use App\Support\PhoneNumber;
+use App\Support\WhatsAppMessaging;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Log;
@@ -160,7 +161,11 @@ class MetaWhatsAppWebhookController extends Controller
             ]
         );
 
-        $this->applyReply($order, $body);
+        // With messaging switched off the reply is still kept for the inbox,
+        // but it does not confirm or tag the order.
+        if (WhatsAppMessaging::enabled()) {
+            $this->applyReply($order, $body);
+        }
 
         // Blue ticks for the customer: someone is actually reading this.
         $this->whatsapp->markAsRead($providerId);

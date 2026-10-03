@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import {
   type ColumnFiltersState,
   type SortingState,
@@ -19,10 +19,14 @@ import {
 } from '@/components/ui/table'
 import { type Order } from '@/types/order'
 import { DataTableBulkActions } from './data-table-bulk-actions'
-import { ordersColumns as columns } from './orders-columns'
+import { ordersColumns } from './orders-columns'
+import { useWhatsAppMessaging } from '@/hooks/use-whatsapp-messaging'
 import { Pagination } from '@/components/data-table'
 import { OrdersTableSkeleton } from './orders-skeleton'
 import { EmptyState } from '@/components/empty-state'
+
+// Added with WhatsApp; hidden while messaging is switched off.
+const WHATSAPP_COLUMNS = ['call_status', 'whatsapp_status']
 
 type OrdersTableProps = {
   data: Order[]
@@ -51,6 +55,16 @@ export function OrdersTable({
   onSortChange,
   onTableReady,
 }: OrdersTableProps) {
+  const whatsappMessaging = useWhatsAppMessaging()
+  const columns = useMemo(
+    () =>
+      whatsappMessaging
+        ? ordersColumns
+        : ordersColumns.filter(
+            (column) => !WHATSAPP_COLUMNS.includes((column as { accessorKey?: string }).accessorKey ?? '')
+          ),
+    [whatsappMessaging]
+  )
   const [rowSelection, setRowSelection] = useState({})
   const [sorting, setSorting] = useState<SortingState>([])
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({

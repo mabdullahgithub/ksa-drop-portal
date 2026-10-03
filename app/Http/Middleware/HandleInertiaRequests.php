@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Http\Concerns\ResolvesNotifiableUser;
+use App\Support\WhatsAppMessaging;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 
@@ -111,6 +112,10 @@ class HandleInertiaRequests extends Middleware
             'unreadNotificationsCount' => fn () => $user
                 ? $this->cachedUnreadCount($this->resolveNotifiableUser($request) ?? $user)
                 : 0,
+            // The messaging toggle on the WhatsApp page. While off, the screens
+            // hide everything WhatsApp added (call/WhatsApp columns, the
+            // call-outcome panel, the dashboard section). Only staff see it.
+            'whatsappMessaging' => fn () => $user && ! $user->hasRole('client') && WhatsAppMessaging::enabled(),
         ];
     }
 }

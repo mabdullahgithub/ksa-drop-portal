@@ -23,6 +23,7 @@ import { CallDispositionPanel } from './call-disposition-panel'
 import { useState, useEffect, useCallback } from 'react'
 import axios from 'axios'
 import { usePermissions } from '@/hooks/use-permissions'
+import { useWhatsAppMessaging } from '@/hooks/use-whatsapp-messaging'
 import { useOrderMutations } from '@/hooks/useOrders'
 import { toast } from 'sonner'
 import { toBusinessTime } from '@/lib/business-time'
@@ -66,6 +67,7 @@ export function OrderDetailsDialog({ order, open, onOpenChange, onSaved, startIn
   const [form, setForm] = useState<FormState | null>(order ? buildForm(order) : null)
 
   const { can } = usePermissions()
+  const whatsappMessaging = useWhatsAppMessaging()
   const { updateOrder } = useOrderMutations()
   const canEdit = can('edit orders')
 
@@ -357,9 +359,14 @@ export function OrderDetailsDialog({ order, open, onOpenChange, onSaved, startIn
 
           <Separator />
 
-          <CallDispositionPanel order={order} onSaved={onSaved} />
+          {/* Call outcomes drive the WhatsApp flow, so they go with it. */}
+          {whatsappMessaging && (
+            <>
+              <CallDispositionPanel order={order} onSaved={onSaved} />
 
-          <Separator />
+              <Separator />
+            </>
+          )}
 
           {/* Customer Information */}
           <div>

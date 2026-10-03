@@ -26,6 +26,7 @@ import { WHATSAPP_STATUS_META } from '@/features/orders/data/call-status'
 import { isWhatsAppLocked, lockWhatsApp, unlockWhatsApp } from './api'
 import { ConversationList } from './components/conversation-list'
 import { InboxStats } from './components/inbox-stats'
+import { MessagingToggle } from './components/messaging-toggle'
 import { MessageThread } from './components/message-thread'
 import { OrderContextPanel } from './components/order-context-panel'
 import { ReplyComposer } from './components/reply-composer'
@@ -172,6 +173,8 @@ export function WhatsAppInbox() {
             data behind the prompt. */}
         {unlocked && (
           <>
+            <MessagingToggle onLocked={handleLocked} />
+
             <InboxStats stats={stats} />
 
             <section className='flex min-h-0 flex-1 overflow-hidden rounded-lg border bg-background'>

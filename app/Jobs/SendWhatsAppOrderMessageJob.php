@@ -5,6 +5,7 @@ namespace App\Jobs;
 use App\Models\Order;
 use App\Services\WhatsApp\MetaWhatsAppService;
 use App\Support\PhoneNumber;
+use App\Support\WhatsAppMessaging;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -37,7 +38,18 @@ class SendWhatsAppOrderMessageJob implements ShouldQueue
 
     public function handle(MetaWhatsAppService $whatsapp): void
     {
-        $order = Order::withoutGlobalScope('shopify_visible')->with('client')->find($this->orderId);
+        // Checked here as well as at dispatch, so a job queued before
+        // messaging was switched off still sends nothing.
+        if (! WhatsAppMessaging::enabled()) {
+            Log::channel('whatsapp')->info('Skipping WhatsApp send — messaging is switched off', [
+                'order_id' => $this->orderId,
+                'template' => $this->templateKey,
+            ]);
+
+            return;
+        }
+
+        $order =Order::withoutGlobalScope('shopify_visible')->with('client')->find($this->orderId);
 
         if (! $order) {
             return;

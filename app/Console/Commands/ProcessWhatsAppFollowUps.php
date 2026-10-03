@@ -7,6 +7,7 @@ use App\Models\Order;
 use App\Models\Tag;
 use App\Models\WhatsAppMessage;
 use App\Services\WhatsApp\MetaWhatsAppService;
+use App\Support\WhatsAppMessaging;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Log;
 
@@ -28,7 +29,15 @@ class ProcessWhatsAppFollowUps extends Command
 
     public function handle(): int
     {
-        $hours = (int) $this->option('hours');
+        // Neither follow-ups nor the graveyard move: both belong to the flow
+        // that is switched off. See WhatsAppMessaging.
+        if (! WhatsAppMessaging::enabled()) {
+            $this->info('WhatsApp messaging is switched off (toggle on the WhatsApp page); nothing to do.');
+
+            return self::SUCCESS;
+        }
+
+        $hours =(int) $this->option('hours');
         $limit = (int) $this->option('limit');
         $threshold = now()->subHours($hours);
 

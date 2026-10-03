@@ -213,6 +213,10 @@ Route::middleware(['auth', 'verified', 'role:!client'])->group(function () {
             Route::get('/conversations', [WhatsAppConversationController::class, 'index'])->name('api.whatsapp.conversations');
             Route::get('/conversations/{order}', [WhatsAppConversationController::class, 'show'])->name('api.whatsapp.conversation');
             Route::post('/conversations/{order}/reply', [WhatsAppConversationController::class, 'reply'])->middleware('permission:reply whatsapp')->name('api.whatsapp.reply');
+
+            // The messaging on/off switch. 'edit apps', the same permission as
+            // the WhatsApp connector settings.
+            Route::put('/messaging', [WhatsAppConversationController::class, 'messaging'])->middleware('permission:edit apps')->name('api.whatsapp.messaging');
         });
     });
 

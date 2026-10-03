@@ -44,4 +44,6 @@ export type PageProps<
         error?: string;
     };
     unreadNotificationsCount: number;
+    /** The WhatsApp messaging toggle; see useWhatsAppMessaging. Always false for clients. */
+    whatsappMessaging?: boolean;
 };

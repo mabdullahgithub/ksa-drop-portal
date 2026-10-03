@@ -7,6 +7,7 @@ use App\Http\Middleware\EnsureWhatsAppUnlocked;
 use App\Models\Order;
 use App\Models\WhatsAppMessage;
 use App\Services\WhatsApp\MetaWhatsAppService;
+use App\Support\WhatsAppMessaging;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 use Illuminate\Http\JsonResponse;
@@ -56,6 +57,22 @@ class WhatsAppConversationController extends Controller
         $request->session()->forget(EnsureWhatsAppUnlocked::SESSION_KEY);
 
         return response()->json(['message' => 'WhatsApp inbox locked']);
+    }
+
+    /**
+     * The messaging toggle on the WhatsApp page; see WhatsAppMessaging.
+     */
+    public function messaging(Request $request): JsonResponse
+    {
+        $validated = $request->validate(['enabled' => 'required|boolean']);
+
+        WhatsAppMessaging::set($validated['enabled']);
+
+        Log::channel('whatsapp')->info('WhatsApp messaging switched ' . ($validated['enabled'] ? 'on' : 'off'), [
+            'user_id' => $request->user()?->id,
+        ]);
+
+        return response()->json(['enabled' => WhatsAppMessaging::enabled()]);
     }
 
     /**
@@ -196,6 +213,12 @@ class WhatsAppConversationController extends Controller
     public function reply(Request $request, Order $order, MetaWhatsAppService $whatsapp)
     {
         abort_unless($order->whatsapp_status !== null, 404);
+
+        if (! WhatsAppMessaging::enabled()) {
+            return response()->json([
+                'message' => 'WhatsApp messaging is switched off. Turn it on at the top of the WhatsApp page to reply.',
+            ], 409);
+        }
 
         $validated = $request->validate([
             'body' => 'required|string|max:1500',
