@@ -18,6 +18,16 @@ export function platform(): 'android' | 'ios' | 'other' {
   return 'other'
 }
 
+/**
+ * Whether the glass should be solid (rider.css, "Solid glass"): the phone's
+ * owner asked for less transparency, or it's Android — Chrome there doesn't
+ * blur what's behind an element on every phone, and a see-through sheet with
+ * nothing blurred behind it can't be read.
+ */
+export function wantsSolidGlass(): boolean {
+  return platform() === 'android' || window.matchMedia('(prefers-reduced-transparency: reduce)').matches
+}
+
 /** Safari's engine: every iPhone browser, and Safari on a Mac. */
 export function isWebKit(): boolean {
   const ua = navigator.userAgent

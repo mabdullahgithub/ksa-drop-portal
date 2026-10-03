@@ -479,7 +479,7 @@ function HomeView({ me, parcels, delivered, list, onList, range, onRange, dates,
         <div
           aria-hidden
           className={cn(
-            'absolute inset-0 -z-10 bg-canvas/20 backdrop-blur-[10px] backdrop-saturate-150 transition-shadow',
+            'absolute inset-0 -z-10 bg-canvas/20 backdrop-blur-[10px] backdrop-saturate-150 transition-shadow solid-glass:bg-canvas solid-glass:backdrop-filter-none',
             scrolled && 'shadow-[0_1px_0_rgb(0_0_0/0.06)] dark:shadow-[0_1px_0_rgb(255_255_255/0.06)]'
           )}
         />

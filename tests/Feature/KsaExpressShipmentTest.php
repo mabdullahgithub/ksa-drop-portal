@@ -254,6 +254,55 @@ class KsaExpressShipmentTest extends TestCase
         $this->assertMatchesRegularExpression('#/MediaBox \[0\.0+ 0\.0+ 288\.0+ 432\.0+\]#', $pdf);
     }
 
+    /**
+     * Every page of the bulk PDF is one shipment's own label, so a prepaid
+     * order selected among COD ones is the only page that prints PREPAID.
+     */
+    public function test_bulk_waybill_prints_each_orders_own_payment_type(): void
+    {
+        Storage::fake('local');
+
+        $actor = $this->actor();
+        $orders = [
+            $this->makeOrder('Cash on Delivery (COD)'),
+            $this->makeOrder('Prepaid'),
+            $this->makeOrder('COD'),
+        ];
+        $orderIds = array_map(fn (Order $o) => $o->id, $orders);
+
+        $this->actingAs($actor)->postJson('/api/shipments/bulk', [
+            'order_ids' => $orderIds,
+            'warehouse_id' => $this->warehouse()->id,
+            'courier' => 'ksadrop_express',
+        ])->assertOk();
+
+        $response = $this->actingAs($actor)->postJson('/api/shipments/waybills/bulk', ['order_ids' => $orderIds]);
+        $response->assertOk();
+        $this->assertSame(3, preg_match_all('#/Type\s*/Page[^s]#', $response->getContent()), 'One page per order.');
+
+        $html = view('invoices.ksadrop-express-labels-bulk', [
+            'labels' => array_map(fn (Order $order) => [
+                'invoice' => $order->invoices()->firstOrFail(),
+                'order' => $order,
+                'shipment' => $order->shipments()->firstOrFail(),
+                'seller' => ['name' => 'KSA Drop', 'phone' => '', 'address' => 'Riyadh', 'city' => 'Riyadh'],
+                'barcode' => '',
+                'orderBarcode' => '',
+                'qr' => '',
+            ], $orders),
+        ])->render();
+
+        // One chunk per label, in the order they were selected.
+        $pages = array_slice(explode('DOMESTIC WAYBILL', $html), 1);
+        $this->assertCount(3, $pages);
+
+        foreach ([['COD', 'SAR 100.00'], ['PPD', 'PREPAID'], ['COD', 'SAR 100.00']] as $i => [$badge, $payment]) {
+            $this->assertStringContainsString($orders[$i]->shipments()->firstOrFail()->tracking_number, $pages[$i]);
+            $this->assertStringContainsString(">{$badge}</td>", $pages[$i]);
+            $this->assertStringContainsString($payment, $pages[$i]);
+        }
+    }
+
     public function test_waybill_is_dated_when_generated_not_when_the_order_was_placed(): void
     {
         Storage::fake('local');

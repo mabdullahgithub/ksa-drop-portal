@@ -10,6 +10,8 @@
 @source '../js/components/empty-state.tsx';
 
 @custom-variant dark (&:is(.dark *));
+/* Glass that can't blur what's behind it: see "Solid glass" below. */
+@custom-variant solid-glass (&:where([data-glass='solid'] *));
 
 :root {
   --brand: #fe6414;
@@ -185,14 +187,30 @@ body {
   transform: scale(0.96);
 }
 
-@media (prefers-reduced-transparency: reduce) {
-  .glass,
-  .glass-strong,
-  .glass-dark {
-    -webkit-backdrop-filter: none;
-    backdrop-filter: none;
-    background: var(--glass-fill-strong);
-  }
+/* Solid glass. Where what's behind isn't blurred, see-through glass only
+   shows it through the text, so the glass turns opaque: for anyone who asked
+   their phone for less transparency, and on Android, where Chrome doesn't
+   draw backdrop-filter on every phone. <html data-glass='solid'> is set at
+   startup (rider-app.tsx); `solid-glass:` is the same switch for utilities. */
+[data-glass='solid'] .glass,
+[data-glass='solid'] .glass-strong,
+[data-glass='solid'] .glass-dark {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+[data-glass='solid'] .glass,
+[data-glass='solid'] .glass-strong {
+  background: var(--surface);
+}
+
+/* Glass on glass (the tab bar's active lens) still has to stand out. */
+[data-glass='solid'] .glass .glass {
+  background: var(--canvas);
+}
+
+[data-glass='solid'] .glass-dark {
+  background: rgb(18 18 22 / 0.78);
 }
 
 /* Sheets: a light dim, so the glass still shows the colour behind it. */
