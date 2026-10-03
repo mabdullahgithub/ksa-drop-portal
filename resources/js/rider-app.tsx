@@ -3,7 +3,7 @@ import '../css/rider.css'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { RiderApp } from '@/features/rider-app/app'
-import { captureInstallPrompt, wantsSolidGlass } from '@/features/rider-app/lib/device'
+import { captureInstallPrompt } from '@/features/rider-app/lib/device'
 import { resetOnboardingOnInstall } from '@/features/rider-app/screens/onboarding'
 import type { RiderBoot } from '@/features/rider-app/types'
 
@@ -21,8 +21,6 @@ declare global {
 
 captureInstallPrompt()
 resetOnboardingOnInstall()
-
-if (wantsSolidGlass()) document.documentElement.dataset.glass = 'solid'
 
 // After a deploy, an open app may try to load a chunk that no longer exists.
 // Reload once to pick up the new build (same guard as the portal's app.tsx).

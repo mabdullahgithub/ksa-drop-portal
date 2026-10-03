@@ -1,5 +1,4 @@
 import { businessToday } from '@/lib/business-time'
-import type { Lang } from '../i18n'
 import type { HistoryDates, HistoryRange } from '../types'
 
 /**
@@ -30,18 +29,4 @@ export function periodDates(range: HistoryRange, custom: HistoryDates | null): H
   const to = today()
   if (range === 'yesterday') return { from: addDays(to, -1), to: addDays(to, -1) }
   return { from: range === 'week' ? addDays(to, -6) : to, to }
-}
-
-/** "28 Sep – 3 Oct": Western digits and the same calendar as the date fields, in both languages. */
-export function datesLabel(lang: Lang, { from, to }: HistoryDates): string {
-  const sameYear = from.slice(0, 4) === to.slice(0, 4) && to.slice(0, 4) === today().slice(0, 4)
-  const day = (value: string) =>
-    new Date(value).toLocaleDateString(lang === 'ar' ? 'ar-SA-u-nu-latn-ca-gregory' : 'en-GB', {
-      timeZone: 'UTC',
-      day: 'numeric',
-      month: 'short',
-      ...(sameYear ? {} : { year: 'numeric' }),
-    })
-
-  return from === to ? day(from) : `${day(from)} – ${day(to)}`
 }

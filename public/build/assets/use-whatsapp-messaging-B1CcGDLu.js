@@ -1,1 +1,0 @@
-import{f as e}from"./app-us0MXUi9.js";function t(){return e().props.whatsappMessaging??!1}export{t};

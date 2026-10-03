@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Banknote, CalendarDays, CheckCircle2, ChevronRight, Loader2, Undo2, Wallet, type LucideIcon } from 'lucide-react'
+import { Banknote, CheckCircle2, ChevronRight, Loader2, Undo2, Wallet, type LucideIcon } from 'lucide-react'
 import { toast } from 'sonner'
 import { EmptyState } from '@/components/empty-state'
 import { cn } from '@/lib/utils'
@@ -15,7 +15,7 @@ import { Scanner } from '../components/scanner'
 import { UpdateSheet, type UpdateRequest } from '../components/update-sheet'
 import { money, reasonText, useI18n, type Lang } from '../i18n'
 import { useBackToClose, useExitGuard } from '../lib/back-button'
-import { datesLabel, periodDates } from '../lib/days'
+import { periodDates } from '../lib/days'
 import { platform, uuid, vibrate } from '../lib/device'
 import { usePresence } from '../lib/presence'
 import { PullIndicator, usePullToRefresh } from '../lib/pull-to-refresh'
@@ -437,19 +437,6 @@ function HomeView({ me, parcels, delivered, list, onList, range, onRange, dates,
   // The period's deliveries, or only the ones paid in cash.
   const periodDelivered = useMemo(() => (delivered && cashOnly ? delivered.events.filter(paidInCash) : (delivered?.events ?? null)), [delivered, cashOnly])
 
-  // Counts the list as filtered; the cash is always cash, matching the tile
-  // above. Counted by the server over the whole period, which can hold more
-  // deliveries than the list shows.
-  const deliveredSummary = useMemo(
-    () =>
-      delivered && {
-        count: cashOnly ? delivered.summary.cash_count : delivered.summary.count,
-        cash: delivered.summary.cash_collected,
-        listed: delivered.summary.count > delivered.events.length ? delivered.events.length : null,
-      },
-    [delivered, cashOnly]
-  )
-
   const shownDates = periodDates(range, dates)
 
   const shownDelivered = useMemo(
@@ -479,7 +466,7 @@ function HomeView({ me, parcels, delivered, list, onList, range, onRange, dates,
         <div
           aria-hidden
           className={cn(
-            'absolute inset-0 -z-10 bg-canvas/20 backdrop-blur-[10px] backdrop-saturate-150 transition-shadow solid-glass:bg-canvas solid-glass:backdrop-filter-none',
+            'absolute inset-0 -z-10 bg-canvas/20 backdrop-blur-[10px] backdrop-saturate-150 transition-shadow',
             scrolled && 'shadow-[0_1px_0_rgb(0_0_0/0.06)] dark:shadow-[0_1px_0_rgb(255_255_255/0.06)]'
           )}
         />
@@ -590,8 +577,10 @@ function HomeView({ me, parcels, delivered, list, onList, range, onRange, dates,
           </button>
         )}
 
-        {list === 'delivered' && (
-          <DeliveredHead range={range} onRange={onRange} dates={dates} onPickDates={() => setFiltering(true)} summary={deliveredSummary} />
+        {/* The period is picked from the filter button, never on the page.
+            Only said here: the period holds more deliveries than the list. */}
+        {list === 'delivered' && delivered && delivered.summary.count > delivered.events.length && (
+          <p className='mt-3 px-1 text-[13px] leading-snug text-muted-foreground'>{t('delivered_newest', { n: delivered.events.length })}</p>
         )}
 
         {list === 'with_me' ? (
@@ -678,75 +667,8 @@ function WithMeList({
   )
 }
 
-const RANGES: HistoryRange[] = ['today', 'yesterday', 'week']
-
-/** The Delivered list's period and totals, above the scrolling list. */
-function DeliveredHead({
-  range,
-  onRange,
-  dates,
-  onPickDates,
-  summary,
-}: {
-  range: HistoryRange
-  onRange: (range: HistoryRange) => void
-  dates: HistoryDates | null
-  /** Opens the period sheet, where the date fields are. */
-  onPickDates: () => void
-  /** `listed`: how many the list holds, when the period has more. */
-  summary: { count: number; cash: number; listed: number | null } | null
-}) {
-  const { t, lang } = useI18n()
-
-  return (
-    <>
-      <div className='mt-3 flex flex-wrap gap-2'>
-        {RANGES.map((option) => (
-          <button
-            key={option}
-            type='button'
-            onClick={() => onRange(option)}
-            aria-pressed={range === option}
-            className={cn(
-              'glass-press h-8 rounded-full px-3.5 text-[13px] font-semibold',
-              range === option ? 'glass-tint' : 'glass-lite'
-            )}
-          >
-            {t(`range_${option}`)}
-          </button>
-        ))}
-        <button
-          type='button'
-          onClick={onPickDates}
-          aria-pressed={range === 'custom'}
-          className={cn(
-            'glass-press flex h-8 items-center gap-1.5 rounded-full px-3.5 text-[13px] font-semibold',
-            range === 'custom' ? 'glass-tint' : 'glass-lite'
-          )}
-        >
-          <CalendarDays className='h-3.5 w-3.5 shrink-0' />
-          {range === 'custom' && dates ? datesLabel(lang, dates) : t('range_custom')}
-        </button>
-      </div>
-
-      {summary && (
-        <div className='glass mt-3 flex items-center justify-between rounded-2xl px-3.5 py-3 text-sm'>
-          <span className='font-semibold text-green-700 dark:text-green-400'>{t('delivered_summary', { n: summary.count })}</span>
-          <span className='text-muted-foreground'>
-            {t('cash_label')}{' '}
-            <span className='font-semibold text-foreground' dir='ltr'>
-              {money(summary.cash, 'SAR')}
-            </span>
-          </span>
-        </div>
-      )}
-
-      {summary?.listed != null && (
-        <p className='mt-2 px-1 text-[13px] leading-snug text-muted-foreground'>{t('delivered_newest', { n: summary.listed })}</p>
-      )}
-    </>
-  )
-}
+/** The ready-made periods; the rider's own dates are the filter sheet's date fields. */
+const RANGES: Exclude<HistoryRange, 'custom'>[] = ['today', 'yesterday', 'week']
 
 function DeliveredList({
   events,
