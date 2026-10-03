@@ -22,6 +22,8 @@ interface DateRangeFilterProps {
   /** End date as `yyyy-MM-dd`. */
   to?: string
   onChange: (range: { from?: string; to?: string }) => void
+  /** Longest range that can be picked, both ends counted. A later click starts a new range. */
+  maxDays?: number
   className?: string
 }
 
@@ -40,6 +42,7 @@ export function DateRangeFilter({
   from,
   to,
   onChange,
+  maxDays,
   className,
 }: DateRangeFilterProps) {
   const [open, setOpen] = useState(false)
@@ -106,11 +109,14 @@ export function DateRangeFilter({
           selected={range}
           onSelect={handleSelect}
           numberOfMonths={1}
+          max={maxDays ? maxDays - 1 : undefined}
           today={businessToday()}
           disabled={{ after: businessToday() }}
         />
         <div className='flex items-center justify-between gap-2 border-t px-3 py-2'>
-          <span className='text-xs text-muted-foreground'>Dates in {BUSINESS_TIMEZONE_LABEL}</span>
+          <span className='text-xs text-muted-foreground'>
+            {maxDays ? `Up to ${maxDays} days · ${BUSINESS_TIMEZONE_LABEL}` : `Dates in ${BUSINESS_TIMEZONE_LABEL}`}
+          </span>
           {hasValue && (
             <Button variant='ghost' size='sm' className='h-7 text-xs' onClick={clear}>
               Clear dates

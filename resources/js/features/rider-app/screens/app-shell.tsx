@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { CheckCircle2, ChevronRight, Loader2, Undo2, Wallet } from 'lucide-react'
+import { CalendarDays, CheckCircle2, ChevronRight, Loader2, Undo2, Wallet } from 'lucide-react'
 import { toast } from 'sonner'
 import { EmptyState } from '@/components/empty-state'
 import { cn } from '@/lib/utils'
@@ -7,6 +7,7 @@ import { api, ApiError } from '../api'
 import { BatchPanel } from '../components/batch-panel'
 import { BottomNav, type Tab } from '../components/bottom-nav'
 import { cashLabel, CashSheet, hasPay, payLabel } from '../components/cash-sheet'
+import { DateRangeForm } from '../components/date-range-form'
 import { FilterSheet } from '../components/filter-sheet'
 import { HomeHeader } from '../components/home-header'
 import { addressLine, failedWhy, StatusBadge } from '../components/parcel-parts'
@@ -14,11 +15,25 @@ import { Scanner } from '../components/scanner'
 import { UpdateSheet, type UpdateRequest } from '../components/update-sheet'
 import { money, reasonText, useI18n, type Lang } from '../i18n'
 import { useBackToClose } from '../lib/back-button'
+import { datesLabel, periodDates } from '../lib/days'
 import { uuid, vibrate } from '../lib/device'
 import { usePresence } from '../lib/presence'
 import { PullIndicator, usePullToRefresh } from '../lib/pull-to-refresh'
 import { cssColor, useStatusBarColor } from '../lib/status-bar'
-import type { BatchItem, ClaimResponse, EntryMethod, HistoryEvent, HistoryRange, HistoryResponse, Me, Parcel, RiderCash, RiderPay, ScanMode } from '../types'
+import type {
+  BatchItem,
+  ClaimResponse,
+  EntryMethod,
+  HistoryDates,
+  HistoryEvent,
+  HistoryRange,
+  HistoryResponse,
+  Me,
+  Parcel,
+  RiderCash,
+  RiderPay,
+  ScanMode,
+} from '../types'
 import { ProfileView, supportLink } from './profile-view'
 
 type List = 'with_me' | 'delivered'
@@ -45,10 +60,13 @@ export function AppShell() {
   const [tab, setTab] = useState<Tab>('home')
   const [list, setList] = useState<List>('with_me')
   const [range, setRange] = useState<HistoryRange>('today')
+  // The rider's own dates, shown while the range is 'custom'.
+  const [dates, setDates] = useState<HistoryDates | null>(null)
 
   const [me, setMe] = useState<Me | null>(null)
   const [parcels, setParcels] = useState<Parcel[] | null>(null)
   const [delivered, setDelivered] = useState<HistoryResponse | null>(null)
+  const deliveredRequest = useRef(0)
   const [error, setError] = useState<string | null>(null)
 
   const [scanning, setScanning] = useState(false)
@@ -90,17 +108,21 @@ export function AppShell() {
     }
   }, [t])
 
-  const loadDelivered = useCallback(async (which: HistoryRange) => {
+  const loadDelivered = useCallback(async (which: HistoryRange, between: HistoryDates | null) => {
+    const request = ++deliveredRequest.current
+    const period = which === 'custom' && between ? `from=${between.from}&to=${between.to}` : `range=${which}`
     try {
-      setDelivered(await api.get<HistoryResponse>(`/rider/api/history?action=delivered&range=${which}`))
+      const response = await api.get<HistoryResponse>(`/rider/api/history?action=delivered&${period}`)
+      // A slow answer for a period the rider has since left must not replace the one on screen.
+      if (request === deliveredRequest.current) setDelivered(response)
     } catch (e) {
-      setError(reasonText(t, (e as ApiError).code) ?? t('something_wrong'))
+      if (request === deliveredRequest.current) setError(reasonText(t, (e as ApiError).code) ?? t('something_wrong'))
     }
   }, [t])
 
   const refresh = useCallback(
-    () => Promise.all([load(), list === 'delivered' ? loadDelivered(range) : undefined]),
-    [load, loadDelivered, list, range]
+    () => Promise.all([load(), list === 'delivered' ? loadDelivered(range, dates) : undefined]),
+    [load, loadDelivered, list, range, dates]
   )
 
   useEffect(() => {
@@ -110,9 +132,9 @@ export function AppShell() {
   useEffect(() => {
     if (list === 'delivered') {
       setDelivered(null)
-      loadDelivered(range)
+      loadDelivered(range, dates)
     }
-  }, [list, range, loadDelivered])
+  }, [list, range, dates, loadDelivered])
 
   // Back from the dialer, maps or WhatsApp: refresh.
   useEffect(() => {
@@ -233,6 +255,11 @@ export function AppShell() {
           onList={setList}
           range={range}
           onRange={setRange}
+          dates={dates}
+          onDates={(next) => {
+            setDates(next)
+            setRange('custom')
+          }}
           error={error}
           onRefresh={refresh}
           onOpen={open}
@@ -301,6 +328,9 @@ type HomeProps = {
   onList: (list: List) => void
   range: HistoryRange
   onRange: (range: HistoryRange) => void
+  dates: HistoryDates | null
+  /** The rider picked their own dates: the range becomes 'custom'. */
+  onDates: (dates: HistoryDates) => void
   error: string | null
   onRefresh: () => void
   onOpen: (code: string, entry: EntryMethod, preview?: Parcel) => void
@@ -337,7 +367,7 @@ function matchesSearch(query: string, fields: (string | null | undefined)[]): bo
   })
 }
 
-function HomeView({ me, parcels, delivered, list, onList, range, onRange, error, onRefresh, onOpen, onProfile, onCash }: HomeProps) {
+function HomeView({ me, parcels, delivered, list, onList, range, onRange, dates, onDates, error, onRefresh, onOpen, onProfile, onCash }: HomeProps) {
   const { t, lang } = useI18n()
   const today = me?.today
 
@@ -381,15 +411,20 @@ function HomeView({ me, parcels, delivered, list, onList, range, onRange, error,
   // The period's deliveries, or only the ones paid in cash.
   const periodDelivered = useMemo(() => (delivered && cashOnly ? delivered.events.filter(paidInCash) : (delivered?.events ?? null)), [delivered, cashOnly])
 
-  // Counts the list as filtered; the cash is always cash, matching the tile above.
+  // Counts the list as filtered; the cash is always cash, matching the tile
+  // above. Counted by the server over the whole period, which can hold more
+  // deliveries than the list shows.
   const deliveredSummary = useMemo(
     () =>
-      periodDelivered && {
-        count: periodDelivered.length,
-        cash: periodDelivered.filter(paidInCash).reduce((sum, event) => sum + (event.cod_amount ?? 0), 0),
+      delivered && {
+        count: cashOnly ? delivered.summary.cash_count : delivered.summary.count,
+        cash: delivered.summary.cash_collected,
+        listed: delivered.summary.count > delivered.events.length ? delivered.events.length : null,
       },
-    [periodDelivered]
+    [delivered, cashOnly]
   )
+
+  const shownDates = periodDates(range, dates)
 
   const shownDelivered = useMemo(
     () =>
@@ -487,7 +522,15 @@ function HomeView({ me, parcels, delivered, list, onList, range, onRange, error,
           value={range}
           onChange={onRange}
           options={RANGES.map((value) => ({ value, label: t(`range_${value}`) }))}
-        />
+        >
+          <DateRangeForm
+            initial={shownDates}
+            onApply={(next) => {
+              onDates(next)
+              setFiltering(false)
+            }}
+          />
+        </FilterSheet>
       )}
 
       <main className='px-4 pb-[calc(env(safe-area-inset-bottom)+96px)] pt-1'>
@@ -518,7 +561,9 @@ function HomeView({ me, parcels, delivered, list, onList, range, onRange, error,
           </button>
         )}
 
-        {list === 'delivered' && <DeliveredHead range={range} onRange={onRange} summary={deliveredSummary} />}
+        {list === 'delivered' && (
+          <DeliveredHead range={range} onRange={onRange} dates={dates} onPickDates={() => setFiltering(true)} summary={deliveredSummary} />
+        )}
 
         {list === 'with_me' ? (
           <WithMeList
@@ -530,7 +575,7 @@ function HomeView({ me, parcels, delivered, list, onList, range, onRange, error,
         ) : (
           <DeliveredList
             events={shownDelivered}
-            range={range}
+            showDay={shownDates.from !== shownDates.to}
             lang={lang}
             empty={searching || cashOnly ? { text: t('no_match'), matching: true } : { text: t('no_delivered'), matching: false }}
             onOpen={onOpen}
@@ -610,17 +655,23 @@ const RANGES: HistoryRange[] = ['today', 'yesterday', 'week']
 function DeliveredHead({
   range,
   onRange,
+  dates,
+  onPickDates,
   summary,
 }: {
   range: HistoryRange
   onRange: (range: HistoryRange) => void
-  summary: { count: number; cash: number } | null
+  dates: HistoryDates | null
+  /** Opens the period sheet, where the date fields are. */
+  onPickDates: () => void
+  /** `listed`: how many the list holds, when the period has more. */
+  summary: { count: number; cash: number; listed: number | null } | null
 }) {
-  const { t } = useI18n()
+  const { t, lang } = useI18n()
 
   return (
     <>
-      <div className='mt-3 flex gap-2'>
+      <div className='mt-3 flex flex-wrap gap-2'>
         {RANGES.map((option) => (
           <button
             key={option}
@@ -635,6 +686,18 @@ function DeliveredHead({
             {t(`range_${option}`)}
           </button>
         ))}
+        <button
+          type='button'
+          onClick={onPickDates}
+          aria-pressed={range === 'custom'}
+          className={cn(
+            'glass-press flex h-8 items-center gap-1.5 rounded-full px-3.5 text-[13px] font-semibold',
+            range === 'custom' ? 'glass-tint' : 'glass-lite'
+          )}
+        >
+          <CalendarDays className='h-3.5 w-3.5 shrink-0' />
+          {range === 'custom' && dates ? datesLabel(lang, dates) : t('range_custom')}
+        </button>
       </div>
 
       {summary && (
@@ -648,19 +711,24 @@ function DeliveredHead({
           </span>
         </div>
       )}
+
+      {summary?.listed != null && (
+        <p className='mt-2 px-1 text-[13px] leading-snug text-muted-foreground'>{t('delivered_newest', { n: summary.listed })}</p>
+      )}
     </>
   )
 }
 
 function DeliveredList({
   events,
-  range,
+  showDay,
   lang,
   empty,
   onOpen,
 }: {
   events: HistoryEvent[] | null
-  range: HistoryRange
+  /** The period is longer than a day, so each row says which day. */
+  showDay: boolean
   lang: Lang
   empty: EmptyInfo
   onOpen: HomeProps['onOpen']
@@ -673,7 +741,7 @@ function DeliveredList({
       timeZone: 'Asia/Riyadh',
       hour: '2-digit',
       minute: '2-digit',
-      ...(range === 'week' ? { day: 'numeric', month: 'short' } : {}),
+      ...(showDay ? { day: 'numeric', month: 'short' } : {}),
     })
 
   if (events === null) {

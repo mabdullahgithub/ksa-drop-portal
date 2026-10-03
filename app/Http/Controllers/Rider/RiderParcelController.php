@@ -10,6 +10,7 @@ use App\Models\ShipmentEvent;
 use App\Services\Riders\RiderCash;
 use App\Services\Riders\RiderDayStats;
 use App\Services\Riders\RiderPay;
+use App\Services\Riders\RiderPerformance;
 use App\Services\Riders\RiderPhoto;
 use App\Services\Riders\RiderSupport;
 use App\Services\Riders\RiderParcelPresenter;
@@ -21,7 +22,9 @@ use App\Services\Shipping\ShipmentEventRecorder;
 use App\Support\PhoneNumber;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 class RiderParcelController extends Controller
 {
@@ -110,7 +113,11 @@ class RiderParcelController extends Controller
      * ?action=delivered) and the total they check their cash against.
      *
      * range: today (default), yesterday, or week (the last 7 days incl. today),
-     * in the business timezone.
+     * in the business timezone. Or from + to: any two dates the rider picks
+     * (KSA days, both inclusive), which win over range.
+     *
+     * The list stops at the newest 500; the summary counts the whole period,
+     * so the totals stay right however long it is.
      */
     public function history(Request $request): JsonResponse
     {
@@ -118,20 +125,36 @@ class RiderParcelController extends Controller
         $validated = $request->validate([
             'action' => ['nullable', Rule::enum(RiderAction::class)],
             'range' => 'nullable|in:today,yesterday,week',
+            'from' => 'nullable|required_with:to|date_format:Y-m-d',
+            'to' => 'nullable|required_with:from|date_format:Y-m-d|after_or_equal:from',
         ]);
 
         $today = RiderDayStats::startOfToday();
-        [$from, $until] = match ($validated['range'] ?? 'today') {
-            'yesterday' => [$today->copy()->subDay(), $today],
-            'week' => [$today->copy()->subDays(6), null],
-            default => [$today, null],
-        };
+        [$from, $until] = isset($validated['from'])
+            ? $this->dayBounds($validated['from'], $validated['to'])
+            : match ($validated['range'] ?? 'today') {
+                'yesterday' => [$today->copy()->subDay(), $today],
+                'week' => [$today->copy()->subDays(6), null],
+                default => [$today, null],
+            };
 
-        $events = ShipmentEvent::with('shipment.order')
-            ->where('rider_id', $rider->id)
+        $inPeriod = ShipmentEvent::where('rider_id', $rider->id)
             ->where('occurred_at', '>=', $from)
             ->when($until, fn ($q) => $q->where('occurred_at', '<', $until))
-            ->when($validated['action'] ?? null, fn ($q, $action) => $q->where('action', $action))
+            ->when($validated['action'] ?? null, fn ($q, $action) => $q->where('action', $action));
+
+        $totals = (clone $inPeriod)
+            ->selectRaw(
+                'COUNT(*) as total, COALESCE(SUM(cod_amount), 0) as cod, '
+                . 'COALESCE(SUM(CASE WHEN payment_method = ? AND cod_amount > 0 THEN 1 ELSE 0 END), 0) as cash_total, '
+                . 'COALESCE(SUM(CASE WHEN payment_method = ? THEN cod_amount END), 0) as cash',
+                [RiderCash::OWED_METHOD, RiderCash::OWED_METHOD]
+            )
+            ->toBase()
+            ->first();
+
+        $events = $inPeriod
+            ->with('shipment.order')
             ->orderByDesc('occurred_at')
             ->orderByDesc('id')
             ->limit(500)
@@ -139,8 +162,11 @@ class RiderParcelController extends Controller
 
         return response()->json([
             'summary' => [
-                'count' => $events->count(),
-                'cod_collected' => round((float) $events->sum('cod_amount'), 2),
+                'count' => (int) $totals->total,
+                'cod_collected' => round((float) $totals->cod, 2),
+                // Paid in cash: what the rider has to hand in.
+                'cash_count' => (int) $totals->cash_total,
+                'cash_collected' => round((float) $totals->cash, 2),
             ],
             'events' => $events->map(fn (ShipmentEvent $event) => [
                 'id' => $event->id,
@@ -301,6 +327,27 @@ class RiderParcelController extends Controller
     private function rider(Request $request): Rider
     {
         return $request->attributes->get('rider');
+    }
+
+    /**
+     * Two KSA days, both inclusive, as the instants the period starts and
+     * stops. No longer than the portal's own rider lists go.
+     *
+     * @return array{0: Carbon, 1: Carbon}
+     */
+    private function dayBounds(string $from, string $to): array
+    {
+        $days = (int) Carbon::parse($from)->diffInDays(Carbon::parse($to)) + 1;
+        if ($days > RiderPerformance::MAX_DAYS) {
+            throw ValidationException::withMessages(['to' => 'Pick a range of '.RiderPerformance::MAX_DAYS.' days or less.']);
+        }
+
+        $timezone = config('app.business_timezone', 'Asia/Riyadh');
+
+        return [
+            Carbon::createFromFormat('Y-m-d', $from, $timezone)->startOfDay()->utc(),
+            Carbon::createFromFormat('Y-m-d', $to, $timezone)->addDay()->startOfDay()->utc(),
+        ];
     }
 
     /**

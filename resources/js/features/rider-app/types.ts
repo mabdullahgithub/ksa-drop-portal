@@ -145,10 +145,15 @@ export type HistoryEvent = {
   currency: string
 }
 
-export type HistoryRange = 'today' | 'yesterday' | 'week'
+/** A ready-made period, or 'custom': two dates the rider picked. */
+export type HistoryRange = 'today' | 'yesterday' | 'week' | 'custom'
+
+/** KSA days as yyyy-MM-dd, both included. */
+export type HistoryDates = { from: string; to: string }
 
 export type HistoryResponse = {
-  summary: { count: number; cod_collected: number }
+  /** The whole period; `events` stops at the newest 500. The cash figures are what was paid in cash. */
+  summary: { count: number; cod_collected: number; cash_count: number; cash_collected: number }
   events: HistoryEvent[]
 }
 

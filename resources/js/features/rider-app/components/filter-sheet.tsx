@@ -11,10 +11,12 @@ type Props<T extends string> = {
   options: FilterOption<T>[]
   value: T
   onChange: (value: T) => void
+  /** More ways to filter, under the options (the Delivered list's date fields). */
+  children?: React.ReactNode
 }
 
 /** The search bar's filter button: pick one option, the sheet closes. */
-export function FilterSheet<T extends string>({ open, onClose, title, options, value, onChange }: Props<T>) {
+export function FilterSheet<T extends string>({ open, onClose, title, options, value, onChange, children }: Props<T>) {
   return (
     <Sheet open={open} onOpenChange={(next) => !next && onClose()}>
       <SheetContent
@@ -55,6 +57,8 @@ export function FilterSheet<T extends string>({ open, onClose, title, options, v
             )
           })}
         </div>
+
+        {children}
       </SheetContent>
     </Sheet>
   )

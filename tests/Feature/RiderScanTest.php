@@ -343,6 +343,58 @@ class RiderScanTest extends TestCase
         $this->asRider($token)->getJson('/rider/api/history?range=forever')->assertStatus(422);
     }
 
+    public function test_the_delivered_list_takes_any_two_dates(): void
+    {
+        $token = $this->signedInDevice($this->makeRider());
+        $day = fn (int $ago) => now(config('app.business_timezone'))->subDays($ago)->toDateString();
+        $deliver = fn (string $method) => $this->update($token, $this->ksaShipment(), [
+            'action' => 'delivered', 'photo' => $this->photo(), 'cod_amount' => 100, 'payment_method' => $method,
+        ])->assertOk();
+
+        $this->travel(-10)->days();
+        $deliver('cash');
+        $this->travelBack();
+
+        $this->travel(-3)->days();
+        $deliver('card');
+        $this->travelBack();
+
+        $deliver('cash');
+
+        // Both dates are whole KSA days, and both are included. The totals
+        // say how much of it was cash: what the rider has to hand in.
+        $this->asRider($token)->getJson("/rider/api/history?action=delivered&from={$day(10)}&to={$day(3)}")
+            ->assertOk()
+            ->assertJsonCount(2, 'events')
+            ->assertJsonPath('events.0.payment_method', 'card')
+            ->assertJsonPath('summary.count', 2)
+            ->assertJsonPath('summary.cod_collected', 200)
+            ->assertJsonPath('summary.cash_count', 1)
+            ->assertJsonPath('summary.cash_collected', 100);
+
+        $this->asRider($token)->getJson("/rider/api/history?action=delivered&from={$day(9)}&to={$day(4)}")
+            ->assertOk()
+            ->assertJsonCount(0, 'events')
+            ->assertJsonPath('summary.count', 0)
+            ->assertJsonPath('summary.cash_collected', 0);
+
+        $this->asRider($token)->getJson("/rider/api/history?action=delivered&from={$day(0)}&to={$day(0)}")
+            ->assertOk()
+            ->assertJsonCount(1, 'events');
+
+        // The dates win over a range sent with them.
+        $this->asRider($token)->getJson("/rider/api/history?range=today&from={$day(10)}&to={$day(10)}")
+            ->assertOk()
+            ->assertJsonCount(1, 'events')
+            ->assertJsonPath('summary.cash_collected', 100);
+
+        // Both dates, in order, and no more than a quarter.
+        $this->asRider($token)->getJson("/rider/api/history?from={$day(3)}")->assertStatus(422);
+        $this->asRider($token)->getJson("/rider/api/history?from={$day(3)}&to={$day(10)}")->assertStatus(422);
+        $this->asRider($token)->getJson("/rider/api/history?from={$day(92)}&to={$day(0)}")->assertStatus(422);
+        $this->asRider($token)->getJson("/rider/api/history?from={$day(91)}&to={$day(0)}")->assertOk()->assertJsonCount(3, 'events');
+    }
+
     public function test_tracking_sync_leaves_ksa_express_alone(): void
     {
         $this->ksaShipment(['status' => ShipmentStatus::OUT_FOR_DELIVERY->value]);
