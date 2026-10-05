@@ -49,7 +49,8 @@ export function ClientTable({
   onRefresh,
 }: ClientTableProps) {
   const [rowSelection, setRowSelection] = useState({})
-  const [sorting, setSorting] = useState<SortingState>([])
+  // Mirrors the API's default sort so the Orders header shows the arrow on load.
+  const [sorting, setSorting] = useState<SortingState>([{ id: 'orders_count', desc: true }])
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
 

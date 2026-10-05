@@ -109,14 +109,14 @@ export const clientColumns: ColumnDef<Client>[] = [
     enableSorting: true,
   },
   {
-    id: 'orders_count',
+    accessorKey: 'orders_count',
     header: ({ column }) => (
       <DataTableColumnHeader column={column} title='Orders' />
     ),
     cell: ({ row }) => (
       <span className='text-sm'>{row.original.orders_count ?? 0}</span>
     ),
-    enableSorting: false,
+    enableSorting: true,
   },
   {
     accessorKey: 'created_at',

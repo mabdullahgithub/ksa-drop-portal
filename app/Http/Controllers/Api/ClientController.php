@@ -27,7 +27,7 @@ class ClientController extends Controller
 {
     public function index(Request $request)
     {
-        $query = Client::with('user');
+        $query = Client::with('user')->withCount('orders');
 
         if ($request->has('search') && $request->search) {
             $query->search($request->search);
@@ -41,9 +41,11 @@ class ClientController extends Controller
             $query->withType($request->type);
         }
 
-        $sortBy = $request->get('sort_by', 'created_at');
+        $sortBy = $request->get('sort_by', 'orders_count');
         $sortOrder = $request->get('sort_order', 'desc');
-        $query->orderBy($sortBy, $sortOrder);
+        // client_id is an accessor over the short_id column.
+        $query->orderBy($sortBy === 'client_id' ? 'short_id' : $sortBy, $sortOrder)
+            ->orderBy('created_at', 'desc');
 
         $perPage = $request->get('per_page', 20);
         $clients = $query->paginate($perPage);
