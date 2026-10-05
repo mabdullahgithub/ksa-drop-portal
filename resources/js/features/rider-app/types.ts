@@ -1,11 +1,18 @@
 export type RiderBootMode = 'activate' | 'app' | 'sign_in'
 
+/**
+ * Who the app is for. A rider takes parcels out and delivers them; an
+ * inventory manager stays at the warehouse and scans parcels OUT and IN.
+ */
+export type RiderRole = 'rider' | 'inventory_manager'
+
 /** window.__RIDER__, written by resources/views/rider.blade.php. */
 export type RiderBoot = {
   mode: RiderBootMode
   reason?: string | null
   token?: string | null
-  rider?: { name: string } | null
+  /** `role` is there once signed in: it picks which app to show. */
+  rider?: { name: string; role?: RiderRole } | null
   /** The build this page was served with (RiderAppController::build()). */
   build?: string | null
 }
@@ -120,7 +127,7 @@ export type RiderPay = {
 export type CashResponse = { cash: RiderCash; payments: CashPayment[]; pay: RiderPay; payouts: CashPayment[] }
 
 export type Me = {
-  rider: { name: string; phone: string; hub: string | null; photo_url: string | null }
+  rider: { name: string; role: RiderRole; phone: string; hub: string | null; photo_url: string | null }
   today: TodayStats
   cash: RiderCash
   pay: RiderPay
@@ -178,4 +185,65 @@ export type BatchItem = {
   code: string
   state: 'working' | 'error' | ClaimResult
   parcel?: Parcel
+}
+
+/** OUT: the parcel leaves the warehouse and its items come off stock. IN: it comes back and they go back on. */
+export type StockDirection = 'out' | 'in'
+
+/** The parcel a stock scan was made on, whichever courier carries it. */
+export type StockParcel = {
+  id: number
+  tracking_number: string | null
+  order_number: string | null
+  courier: string
+  courier_label: string
+  status: string
+  status_label: string
+  receiver_name: string | null
+  city: string | null
+}
+
+/** One item in the parcel. Not matched: it is linked to no product, so no stock changed for it. */
+export type StockItem = { name: string; sku: string | null; quantity: number; matched: boolean; stock_after: number | null }
+
+/** One parcel scanned OUT or IN (POST /rider/api/stock/scan, GET /rider/api/stock). */
+export type StockScan = {
+  id: number
+  direction: StockDirection
+  occurred_at: string
+  /** Units in the parcel. */
+  pieces: number
+  /** Items that matched no product. */
+  unmatched: number
+  scanned_by: string | null
+  /** The rider who had the parcel when it was scanned. */
+  parcel_rider: string | null
+  items: StockItem[]
+  parcel: StockParcel | null
+}
+
+/** The direction itself: stock moved. Anything else changed nothing. */
+export type StockScanResult = StockDirection | 'already_out' | 'already_in' | 'finished' | 'not_found'
+
+export type StockScanResponse = {
+  result: StockScanResult
+  scan?: StockScan
+  parcel?: StockParcel
+  message?: string
+}
+
+/** GET /rider/api/stock: what I scanned today, each way. */
+export type StockHome = {
+  today: Record<StockDirection, { parcels: number; pieces: number }>
+}
+
+/** GET /rider/api/stock/scans: one page of my scans, newest first. `next_page` is null on the last one. */
+export type StockScansPage = { scans: StockScan[]; next_page: number | null }
+
+/** A row in the live list over the camera. */
+export type StockSessionItem = {
+  code: string
+  state: 'working' | 'error' | StockScanResult
+  scan?: StockScan
+  parcel?: StockParcel
 }

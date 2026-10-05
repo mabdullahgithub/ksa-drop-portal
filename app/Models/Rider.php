@@ -11,10 +11,20 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 /**
  * A KSA Express rider. Signs in to the rider app only — see
  * App\Services\Riders\RiderAuthService.
+ *
+ * An inventory manager is one of these too, with a different role: same
+ * sign-in, but their app only scans parcels OUT of and IN to the warehouse
+ * (App\Services\Inventory\StockScanRecorder) and they never hold a parcel.
  */
 class Rider extends Model
 {
     use SoftDeletes;
+
+    public const ROLE_RIDER = 'rider';
+
+    public const ROLE_INVENTORY_MANAGER = 'inventory_manager';
+
+    public const ROLES = [self::ROLE_RIDER, self::ROLE_INVENTORY_MANAGER];
 
     public const STATUS_ACTIVE = 'active';
 
@@ -26,6 +36,7 @@ class Rider extends Model
     protected $fillable = [
         'name',
         'phone',
+        'role',
         'name_ar',
         'national_id',
         'nationality',
@@ -44,6 +55,10 @@ class Rider extends Model
         'notes',
         'status',
         'created_by',
+    ];
+
+    protected $attributes = [
+        'role' => self::ROLE_RIDER,
     ];
 
     protected $casts = [
@@ -116,9 +131,22 @@ class Rider extends Model
         return $this->hasMany(RiderPayment::class);
     }
 
+    /**
+     * Parcels this inventory manager scanned OUT or IN at the warehouse.
+     */
+    public function stockScans(): HasMany
+    {
+        return $this->hasMany(StockScan::class);
+    }
+
     public function isActive(): bool
     {
         return $this->status === self::STATUS_ACTIVE;
+    }
+
+    public function isInventoryManager(): bool
+    {
+        return $this->role === self::ROLE_INVENTORY_MANAGER;
     }
 
     public function hasPin(): bool

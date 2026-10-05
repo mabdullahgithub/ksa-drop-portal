@@ -31,7 +31,8 @@ class RiderAppController extends Controller
         $response = $this->shell([
             'mode' => $problem ? 'sign_in' : 'app',
             'reason' => $problem === 'signed_out' ? null : $problem,
-            'rider' => $problem ? null : ['name' => $device->rider->name],
+            // The role picks the app: a rider's, or an inventory manager's.
+            'rider' => $problem ? null : ['name' => $device->rider->name, 'role' => $device->rider->role],
         ], route('rider.manifest'));
 
         if (! $problem) {

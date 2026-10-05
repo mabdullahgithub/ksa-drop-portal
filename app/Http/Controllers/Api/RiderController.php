@@ -7,6 +7,7 @@ use App\Http\Controllers\Rider\RiderAppController;
 use App\Models\Rider;
 use App\Models\RiderDevice;
 use App\Models\Warehouse;
+use App\Services\Inventory\StockDayStats;
 use App\Services\Riders\RiderAuthService;
 use App\Services\Riders\RiderCash;
 use App\Services\Riders\RiderDayStats;
@@ -355,6 +356,8 @@ class RiderController extends Controller
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'phone' => 'required|string|max:30',
+            // Rider (the default) or inventory manager: which app they get.
+            'role' => ['nullable', Rule::in(Rider::ROLES)],
             'name_ar' => 'nullable|string|max:255',
             'national_id' => 'nullable|string|max:30',
             'nationality' => 'nullable|string|max:100',
@@ -394,6 +397,18 @@ class RiderController extends Controller
 
         $validated['phone'] = $phone;
 
+        if (! filled($validated['role'] ?? null)) {
+            unset($validated['role']);
+        }
+
+        // An inventory manager never holds parcels, and can't update the ones
+        // a rider still has.
+        if ($rider && ! $rider->isInventoryManager() && ($validated['role'] ?? null) === Rider::ROLE_INVENTORY_MANAGER && ($held = $rider->heldShipments()->count()) > 0) {
+            throw ValidationException::withMessages([
+                'role' => "{$rider->name} still has {$held} parcel(s). Finish or unassign them before making them an inventory manager.",
+            ]);
+        }
+
         if (isset($validated['iban'])) {
             $validated['iban'] = strtoupper(preg_replace('/\s+/', '', $validated['iban']));
         }
@@ -416,11 +431,12 @@ class RiderController extends Controller
         $cash = RiderCash::forRiders($ids);
         $pay = RiderPay::forRiders($ids);
         $online = array_flip(RiderPresence::online($ids));
+        $stock = StockDayStats::forManagers($riders->filter->isInventoryManager()->pluck('id')->all());
 
-        return $riders->map(fn (Rider $rider) => $this->row($rider, $request, $stats[$rider->id], isset($online[$rider->id]), $cash[$rider->id], $pay[$rider->id]))->all();
+        return $riders->map(fn (Rider $rider) => $this->row($rider, $request, $stats[$rider->id], isset($online[$rider->id]), $cash[$rider->id], $pay[$rider->id], $stock[$rider->id] ?? null))->all();
     }
 
-    private function row(Rider $rider, Request $request, ?array $stats = null, ?bool $online = null, ?array $cash = null, ?array $pay = null): array
+    private function row(Rider $rider, Request $request, ?array $stats = null, ?bool $online = null, ?array $cash = null, ?array $pay = null, ?array $stock = null): array
     {
         $rider->loadMissing(['warehouse:id,name', 'activeDevice']);
         $device = $rider->activeDevice;
@@ -431,6 +447,7 @@ class RiderController extends Controller
         return [
             'id' => $rider->id,
             'name' => $rider->name,
+            'role' => $rider->role,
             'name_ar' => $rider->name_ar,
             'photo_url' => $this->photoUrl($rider),
             'phone' => $rider->phone,
@@ -472,6 +489,8 @@ class RiderController extends Controller
             'cash' => $cash ?? RiderCash::forRider($rider->id),
             // Earned per order, paid out, and still owed to the rider (RiderPay).
             'pay' => $pay ?? RiderPay::forRider($rider->id),
+            // An inventory manager's scans today, each way; null for a rider.
+            'stock_today' => $rider->isInventoryManager() ? ($stock ?? StockDayStats::forManager($rider->id)) : null,
             'created_at' => $rider->created_at?->toIso8601String(),
         ];
     }

@@ -14,7 +14,7 @@ use App\Services\Riders\RiderPerformance;
 use App\Services\Riders\RiderPhoto;
 use App\Services\Riders\RiderSupport;
 use App\Services\Riders\RiderParcelPresenter;
-use App\Services\Shipping\Drivers\KsaDropExpressDriver;
+use App\Services\Riders\ParcelLookup;
 use App\Services\Shipping\Enums\FailedAttemptReason;
 use App\Services\Shipping\Enums\RiderAction;
 use App\Services\Shipping\RiderActionRefused;
@@ -40,6 +40,7 @@ class RiderParcelController extends Controller
         return response()->json([
             'rider' => [
                 'name' => $rider->name,
+                'role' => $rider->role,
                 'phone' => PhoneNumber::local($rider->phone),
                 'hub' => $rider->warehouse?->name,
                 'photo_url' => $rider->hasPhoto() ? route('rider.api.photo', ['v' => RiderPhoto::version($rider)]) : null,
@@ -205,8 +206,8 @@ class RiderParcelController extends Controller
             'occurred_at' => 'nullable|date',
         ]);
 
-        $code = $this->normalizeCode($validated['code']);
-        $shipment = $code === '' ? null : $this->findShipment($code);
+        $code = ParcelLookup::normalize($validated['code']);
+        $shipment = $code === '' ? null : ParcelLookup::forRider($code);
 
         if (! $shipment) {
             return response()->json(['result' => 'not_found', 'message' => "No parcel found for {$code}.", 'code' => 'not_found'], 404);
@@ -255,13 +256,13 @@ class RiderParcelController extends Controller
     public function scan(Request $request): JsonResponse
     {
         $rider = $this->rider($request);
-        $code = $this->normalizeCode((string) $request->query('code', ''));
+        $code = ParcelLookup::normalize((string) $request->query('code', ''));
 
         if ($code === '') {
             return response()->json(['message' => 'Scan or type a tracking number.', 'code' => 'not_found'], 404);
         }
 
-        $shipment = $this->findShipment($code);
+        $shipment = ParcelLookup::forRider($code);
 
         if (! $shipment) {
             return response()->json(['message' => "No parcel found for {$code}.", 'code' => 'not_found'], 404);
@@ -350,45 +351,5 @@ class RiderParcelController extends Controller
             Carbon::createFromFormat('Y-m-d', $from, $timezone)->startOfDay()->utc(),
             Carbon::createFromFormat('Y-m-d', $to, $timezone)->addDay()->startOfDay()->utc(),
         ];
-    }
-
-    /**
-     * The label's QR code holds a tracking URL (…/track?q=KSD…); take the
-     * number out of it. Hardware scanners may add whitespace.
-     */
-    private function normalizeCode(string $raw): string
-    {
-        $code = trim($raw);
-
-        if (preg_match('#^https?://#i', $code)) {
-            parse_str((string) parse_url($code, PHP_URL_QUERY), $query);
-            $code = trim((string) ($query['q'] ?? ''));
-        }
-
-        return mb_substr($code, 0, 100);
-    }
-
-    private function findShipment(string $code): ?Shipment
-    {
-        $upper = strtoupper($code);
-
-        $shipment = Shipment::where('courier', KsaDropExpressDriver::KEY)
-            ->where('tracking_number', $upper)
-            ->first();
-
-        if ($shipment) {
-            return $shipment;
-        }
-
-        $orderNumber = ltrim($code, '#');
-
-        $shipment = Shipment::where('courier', KsaDropExpressDriver::KEY)
-            ->whereHas('order', fn ($q) => $q->whereIn('order_number', [$orderNumber, '#' . $orderNumber]))
-            ->latest('id')
-            ->first();
-
-        // Another courier's waybill: return it so the app can say so, rather
-        // than "not found".
-        return $shipment ?? Shipment::where('tracking_number', $code)->first();
     }
 }

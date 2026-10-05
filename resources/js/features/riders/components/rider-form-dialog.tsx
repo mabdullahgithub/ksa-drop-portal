@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import axios from 'axios'
-import { Camera, ChevronDown, Loader2, Trash2 } from 'lucide-react'
+import { Bike, Camera, ChevronDown, Loader2, PackageSearch, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
@@ -18,7 +18,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea'
 import { compressImage } from '@/lib/compress-image'
 import { cn } from '@/lib/utils'
-import { EMPLOYMENT_TYPES, VEHICLE_TYPES, type RiderRow, type WarehouseOption } from '../data/types'
+import { EMPLOYMENT_TYPES, RIDER_ROLES, VEHICLE_TYPES, type RiderRow, type WarehouseOption } from '../data/types'
 import { RiderAvatar } from './rider-parts'
 
 type Props = {
@@ -30,7 +30,7 @@ type Props = {
 }
 
 type FormState = Record<
-  | 'name' | 'phone' | 'name_ar' | 'national_id' | 'nationality' | 'vehicle_type' | 'vehicle_plate'
+  | 'name' | 'phone' | 'role' | 'name_ar' | 'national_id' | 'nationality' | 'vehicle_type' | 'vehicle_plate'
   | 'license_number' | 'license_expiry' | 'warehouse_id' | 'city' | 'employment_type' | 'iban' | 'delivery_rate' | 'attempt_rate'
   | 'emergency_contact_name' | 'emergency_contact_phone' | 'notes',
   string
@@ -42,6 +42,7 @@ function initialState(rider?: RiderRow | null): FormState {
   return {
     name: rider?.name ?? '',
     phone: rider?.phone_local ?? '',
+    role: rider?.role ?? 'rider',
     name_ar: rider?.name_ar ?? '',
     national_id: rider?.national_id ?? '',
     nationality: rider?.nationality ?? '',
@@ -61,9 +62,11 @@ function initialState(rider?: RiderRow | null): FormState {
   }
 }
 
+const ROLE_ICONS = { rider: Bike, inventory_manager: PackageSearch } as const
+
 /**
- * Add / edit a rider. Only name and phone are required; everything else
- * sits under "More details".
+ * Add / edit a rider or an inventory manager. Only name and phone are
+ * required; everything else sits under "More details".
  */
 export function RiderFormDialog({ open, onOpenChange, rider, warehouses, onSaved }: Props) {
   const isEdit = !!rider
@@ -99,6 +102,10 @@ export function RiderFormDialog({ open, onOpenChange, rider, warehouses, onSaved
   }
 
   const shownPhoto = photo?.url ?? (removePhoto ? null : rider?.photo_url ?? null)
+
+  // Pay, vehicle and licence are a rider's; an inventory manager has none.
+  const isManager = form.role === 'inventory_manager'
+  const role = RIDER_ROLES.find((option) => option.value === form.role)
 
   const set = (key: keyof FormState) => (value: string) => setForm((f) => ({ ...f, [key]: value }))
   const input = (key: keyof FormState) => ({
@@ -139,7 +146,7 @@ export function RiderFormDialog({ open, onOpenChange, rider, warehouses, onSaved
       const fieldErrors = err.response?.data?.errors ?? {}
       setErrors(Object.fromEntries(Object.entries(fieldErrors).map(([k, v]) => [k, (v as string[])[0]])))
       // Surface errors hidden under the collapsed section.
-      if (Object.keys(fieldErrors).some((k) => !['name', 'phone', 'delivery_rate', 'attempt_rate'].includes(k))) setMoreOpen(true)
+      if (Object.keys(fieldErrors).some((k) => !['name', 'phone', 'role', 'delivery_rate', 'attempt_rate'].includes(k))) setMoreOpen(true)
       if (!Object.keys(fieldErrors).length) toast.error(err.response?.data?.message || 'Could not save the rider.')
     } finally {
       setSaving(false)
@@ -150,9 +157,9 @@ export function RiderFormDialog({ open, onOpenChange, rider, warehouses, onSaved
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className='max-h-[90dvh] overflow-y-auto sm:max-w-lg'>
         <DialogHeader>
-          <DialogTitle>{isEdit ? 'Edit rider' : 'Add rider'}</DialogTitle>
+          <DialogTitle>{isEdit ? `Edit ${isManager ? 'inventory manager' : 'rider'}` : `Add ${isManager ? 'inventory manager' : 'rider'}`}</DialogTitle>
           <DialogDescription>
-            {isEdit ? 'Update the rider’s details.' : 'Name and phone are enough. You can add the rest any time.'}
+            {isEdit ? 'Update their details.' : 'Name and phone are enough. You can add the rest any time.'}
           </DialogDescription>
         </DialogHeader>
 
@@ -181,9 +188,34 @@ export function RiderFormDialog({ open, onOpenChange, rider, warehouses, onSaved
                   </Button>
                 )}
               </div>
-              <p className='text-xs text-muted-foreground'>Optional. The rider can also set it from the app.</p>
+              <p className='text-xs text-muted-foreground'>Optional. They can also set it from the app.</p>
             </div>
           </div>
+
+          <Field label='Role' error={errors.role} hint={role?.hint}>
+            <div role='radiogroup' aria-label='Role' className='grid grid-cols-2 gap-1 rounded-lg bg-muted p-1'>
+              {RIDER_ROLES.map((option) => {
+                const Icon = ROLE_ICONS[option.value]
+                const selected = form.role === option.value
+                return (
+                  <button
+                    key={option.value}
+                    type='button'
+                    role='radio'
+                    aria-checked={selected}
+                    onClick={() => set('role')(option.value)}
+                    className={cn(
+                      'flex h-9 items-center justify-center gap-1.5 rounded-md text-sm font-medium transition-colors',
+                      selected ? 'bg-background shadow-xs' : 'text-muted-foreground hover:text-foreground'
+                    )}
+                  >
+                    <Icon className='h-4 w-4' />
+                    {option.label}
+                  </button>
+                )
+              })}
+            </div>
+          </Field>
 
           <Field label='Full name' error={errors.name} required>
             <Input {...input('name')} autoFocus autoComplete='off' placeholder='e.g. Ahmed Khan' />
@@ -192,26 +224,28 @@ export function RiderFormDialog({ open, onOpenChange, rider, warehouses, onSaved
             label='Mobile number'
             error={errors.phone}
             required
-            hint='Saudi (05…) or Pakistani (03…) mobile. The rider signs in with this number.'
+            hint='Saudi (05…) or Pakistani (03…) mobile. They sign in to the app with this number.'
           >
             <Input {...input('phone')} inputMode='tel' autoComplete='off' placeholder='05XXXXXXXX or 03XXXXXXXXX' dir='ltr' />
           </Field>
 
           {/* What KSA Drop pays this rider. Agreed rider by rider. */}
-          <div className='space-y-1.5'>
-            <div className='grid grid-cols-2 gap-4'>
-              <Field label='Pay per delivery (SAR)' error={errors.delivery_rate}>
-                <Input {...input('delivery_rate')} type='number' inputMode='decimal' min='0' step='0.01' placeholder='0.00' dir='ltr' />
-              </Field>
-              <Field label='Pay per attempt (SAR)' error={errors.attempt_rate}>
-                <Input {...input('attempt_rate')} type='number' inputMode='decimal' min='0' step='0.01' placeholder='0.00' dir='ltr' />
-              </Field>
+          {!isManager && (
+            <div className='space-y-1.5'>
+              <div className='grid grid-cols-2 gap-4'>
+                <Field label='Pay per delivery (SAR)' error={errors.delivery_rate}>
+                  <Input {...input('delivery_rate')} type='number' inputMode='decimal' min='0' step='0.01' placeholder='0.00' dir='ltr' />
+                </Field>
+                <Field label='Pay per attempt (SAR)' error={errors.attempt_rate}>
+                  <Input {...input('attempt_rate')} type='number' inputMode='decimal' min='0' step='0.01' placeholder='0.00' dir='ltr' />
+                </Field>
+              </div>
+              <p className='text-xs text-muted-foreground'>
+                What KSA Drop pays this rider: for each delivered order, and for each visit the customer did not take the parcel on
+                (the rider takes a photo of the place). Orders marked Cancelled are not paid. A new rate applies from the next order.
+              </p>
             </div>
-            <p className='text-xs text-muted-foreground'>
-              What KSA Drop pays this rider: for each delivered order, and for each visit the customer did not take the parcel on
-              (the rider takes a photo of the place). Orders marked Cancelled are not paid. A new rate applies from the next order.
-            </p>
-          </div>
+          )}
 
           <Collapsible open={moreOpen} onOpenChange={setMoreOpen}>
             <CollapsibleTrigger asChild>
@@ -253,21 +287,25 @@ export function RiderFormDialog({ open, onOpenChange, rider, warehouses, onSaved
                 <Field label='Employment' error={errors.employment_type}>
                   <OptionalSelect value={form.employment_type} onChange={set('employment_type')} options={EMPLOYMENT_TYPES} />
                 </Field>
-                <Field label='Vehicle' error={errors.vehicle_type}>
-                  <OptionalSelect value={form.vehicle_type} onChange={set('vehicle_type')} options={VEHICLE_TYPES} />
-                </Field>
-                <Field label='Plate number' error={errors.vehicle_plate}>
-                  <Input {...input('vehicle_plate')} />
-                </Field>
-                <Field label='Driving licence number' error={errors.license_number}>
-                  <Input {...input('license_number')} dir='ltr' />
-                </Field>
-                <Field label='Licence expiry' error={errors.license_expiry}>
-                  <Input {...input('license_expiry')} type='date' />
-                </Field>
-                <Field label='IBAN' error={errors.iban} hint='For freelancer payouts. Stored encrypted.' className='sm:col-span-2'>
-                  <Input {...input('iban')} placeholder='SA…' dir='ltr' />
-                </Field>
+                {!isManager && (
+                  <>
+                    <Field label='Vehicle' error={errors.vehicle_type}>
+                      <OptionalSelect value={form.vehicle_type} onChange={set('vehicle_type')} options={VEHICLE_TYPES} />
+                    </Field>
+                    <Field label='Plate number' error={errors.vehicle_plate}>
+                      <Input {...input('vehicle_plate')} />
+                    </Field>
+                    <Field label='Driving licence number' error={errors.license_number}>
+                      <Input {...input('license_number')} dir='ltr' />
+                    </Field>
+                    <Field label='Licence expiry' error={errors.license_expiry}>
+                      <Input {...input('license_expiry')} type='date' />
+                    </Field>
+                    <Field label='IBAN' error={errors.iban} hint='For freelancer payouts. Stored encrypted.' className='sm:col-span-2'>
+                      <Input {...input('iban')} placeholder='SA…' dir='ltr' />
+                    </Field>
+                  </>
+                )}
                 <Field label='Emergency contact' error={errors.emergency_contact_name}>
                   <Input {...input('emergency_contact_name')} />
                 </Field>
@@ -287,7 +325,7 @@ export function RiderFormDialog({ open, onOpenChange, rider, warehouses, onSaved
             Cancel
           </Button>
           <Button type='submit' form='rider-form' disabled={saving}>
-            {saving ? 'Saving…' : isEdit ? 'Save changes' : 'Add rider'}
+            {saving ? 'Saving…' : isEdit ? 'Save changes' : isManager ? 'Add inventory manager' : 'Add rider'}
           </Button>
         </DialogFooter>
       </DialogContent>

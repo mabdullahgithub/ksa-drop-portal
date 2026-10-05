@@ -171,14 +171,19 @@ export function RowActions({ rider, onPick }: { rider: RiderRow; onPick: (dialog
             </DropdownMenuItem>
           </>
         )}
-        <DropdownMenuItem onClick={() => onPick({ type: 'orders', rider })}>
-          Orders
-          <DropdownMenuShortcut><ListChecks size={16} /></DropdownMenuShortcut>
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => onPick({ type: 'payments', rider })}>
-          Cash &amp; pay
-          <DropdownMenuShortcut><Wallet size={16} /></DropdownMenuShortcut>
-        </DropdownMenuItem>
+        {/* An inventory manager has no parcels, cash or pay of their own. */}
+        {rider.role === 'rider' && (
+          <>
+            <DropdownMenuItem onClick={() => onPick({ type: 'orders', rider })}>
+              Orders
+              <DropdownMenuShortcut><ListChecks size={16} /></DropdownMenuShortcut>
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => onPick({ type: 'payments', rider })}>
+              Cash &amp; pay
+              <DropdownMenuShortcut><Wallet size={16} /></DropdownMenuShortcut>
+            </DropdownMenuItem>
+          </>
+        )}
         <DropdownMenuItem onClick={() => onPick({ type: 'edit', rider })}>
           Edit details
           <DropdownMenuShortcut><Pencil size={16} /></DropdownMenuShortcut>

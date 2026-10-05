@@ -121,7 +121,7 @@ class ShipmentEventRecorder
                 }
 
                 $reason = $action->needsReason() ? FailedAttemptReason::tryFrom((string) ($input['reason'] ?? '')) : null;
-                $occurredAt = $this->occurredAt($input['occurred_at'] ?? null);
+                $occurredAt = self::occurredAt($input['occurred_at'] ?? null);
                 $statusBefore = $shipment->status;
                 $target = $action->targetStatus($shipment->status_enum);
 
@@ -304,7 +304,7 @@ class ShipmentEventRecorder
      * The phone's clock, trusted within reason: a phone set to the wrong day
      * shouldn't backdate a delivery by a month or date it in the future.
      */
-    private function occurredAt(?string $value): Carbon
+    public static function occurredAt(?string $value): Carbon
     {
         $now = now();
 

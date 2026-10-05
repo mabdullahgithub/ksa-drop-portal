@@ -1,9 +1,10 @@
-import { Download, RefreshCw, Upload } from 'lucide-react'
+import { Download, RefreshCw, ScanLine, Upload } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Can } from '@/components/can'
 import { useProductMutations } from '@/hooks/useProducts'
 import { useState } from 'react'
 import { InventoryImportDialog } from './inventory-import-dialog'
+import { StockScansSheet } from './stock-scans-sheet'
 
 interface InventoryPrimaryButtonsProps {
   onImportSuccess?: () => void
@@ -13,6 +14,7 @@ export function InventoryPrimaryButtons({ onImportSuccess }: InventoryPrimaryBut
   const { exportProducts } = useProductMutations()
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [importOpen, setImportOpen] = useState(false)
+  const [scansOpen, setScansOpen] = useState(false)
 
   const handleRefresh = () => {
     setIsRefreshing(true)
@@ -26,6 +28,13 @@ export function InventoryPrimaryButtons({ onImportSuccess }: InventoryPrimaryBut
           <RefreshCw className={`mr-2 h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
           Refresh
         </Button>
+        {/* Why a product's stock changed: the warehouse's OUT and IN scans. */}
+        <Can permission='view inventory'>
+          <Button variant='outline' size='sm' onClick={() => setScansOpen(true)}>
+            <ScanLine className='mr-2 h-4 w-4' />
+            Scan log
+          </Button>
+        </Can>
         <Can permission='edit inventory'>
           <Button variant='outline' size='sm' onClick={() => setImportOpen(true)}>
             <Upload className='mr-2 h-4 w-4' />
@@ -41,6 +50,7 @@ export function InventoryPrimaryButtons({ onImportSuccess }: InventoryPrimaryBut
       </div>
 
       <InventoryImportDialog open={importOpen} onOpenChange={setImportOpen} onSuccess={onImportSuccess} />
+      <StockScansSheet open={scansOpen} onOpenChange={setScansOpen} />
     </>
   )
 }

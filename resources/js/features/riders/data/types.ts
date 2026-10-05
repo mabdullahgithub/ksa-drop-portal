@@ -1,6 +1,26 @@
+/**
+ * What the person does with the app. A rider takes parcels out and delivers
+ * them; an inventory manager stays at the warehouse and scans parcels OUT
+ * and IN, which moves stock.
+ */
+export const RIDER_ROLES = [
+  { value: 'rider', label: 'Rider', hint: 'Takes parcels out, delivers them and collects the cash.' },
+  {
+    value: 'inventory_manager',
+    label: 'Inventory manager',
+    hint: 'Stays at the warehouse and scans parcels OUT and IN, which moves stock. Cannot take or deliver parcels.',
+  },
+] as const
+
+export type RiderRole = (typeof RIDER_ROLES)[number]['value']
+
+/** What an inventory manager scanned today, each way. */
+export type StockToday = Record<'out' | 'in', { parcels: number; pieces: number }>
+
 export type RiderRow = {
   id: number
   name: string
+  role: RiderRole
   name_ar: string | null
   photo_url: string | null
   phone: string
@@ -46,6 +66,8 @@ export type RiderRow = {
   stats: { held: number; delivered: number; failed: number; to_return: number; cod_collected: number; cash_collected: number }
   cash: RiderCash
   pay: RiderPay
+  /** An inventory manager's scans today; null for a rider. */
+  stock_today: StockToday | null
   created_at: string | null
 }
 

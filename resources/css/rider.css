@@ -190,6 +190,27 @@ body {
    left without its blur is see-through: the page behind shows through the
    text. */
 
+/* The inventory manager's scanner: a line of light sweeping the camera frame. */
+@keyframes scan-sweep {
+  from {
+    top: 14%;
+  }
+  to {
+    top: 86%;
+  }
+}
+
+.scan-sweep {
+  top: 34%;
+  animation: scan-sweep 2.2s ease-in-out infinite alternate;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scan-sweep {
+    animation: none;
+  }
+}
+
 /* Sheets: a light dim, so the glass still shows the colour behind it. */
 [data-slot='sheet-overlay'] {
   background: rgb(0 0 0 / 0.22);

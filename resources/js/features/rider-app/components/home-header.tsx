@@ -11,15 +11,19 @@ type Props = {
   /** Dot on the filter button: the list isn't showing its default. */
   filterActive: boolean
   onFilter: () => void
+  /** Instead of the rider's own (the inventory manager's home). */
+  headline?: string
+  searchPlaceholder?: string
 }
 
 /**
  * Home's orange header: greeting, the rider's photo, and the search bar
  * sitting half over its bottom edge.
  */
-export function HomeHeader({ me, onProfile, query, onQuery, filterActive, onFilter }: Props) {
+export function HomeHeader({ me, onProfile, query, onQuery, filterActive, onFilter, headline, searchPlaceholder }: Props) {
   const { t } = useI18n()
   const firstName = me?.rider.name.split(' ')[0] ?? ''
+  const placeholder = searchPlaceholder ?? t('search_placeholder')
 
   return (
     <header>
@@ -29,7 +33,7 @@ export function HomeHeader({ me, onProfile, query, onQuery, filterActive, onFilt
         <div className='relative flex items-center gap-4'>
           <div className='min-w-0 flex-1'>
             <p className='truncate text-[15px] font-semibold text-white/90'>{me ? t('hello', { name: firstName }) : ' '}</p>
-            <h1 className='mt-2.5 whitespace-pre-line text-[clamp(23px,7vw,28px)] font-bold leading-[1.15]'>{t('home_headline')}</h1>
+            <h1 className='mt-2.5 whitespace-pre-line text-[clamp(23px,7vw,28px)] font-bold leading-[1.15]'>{headline ?? t('home_headline')}</h1>
           </div>
 
           <button type='button' onClick={onProfile} aria-label={t('nav_profile')} className='relative shrink-0 transition-transform active:scale-95'>
@@ -53,8 +57,8 @@ export function HomeHeader({ me, onProfile, query, onQuery, filterActive, onFilt
             type='search'
             enterKeyHint='search'
             autoComplete='off'
-            placeholder={t('search_placeholder')}
-            aria-label={t('search_placeholder')}
+            placeholder={placeholder}
+            aria-label={placeholder}
             className='h-full min-w-0 flex-1 appearance-none bg-transparent px-1 outline-none placeholder:text-muted-foreground/70 [&::-webkit-search-cancel-button]:hidden'
           />
           {query && (

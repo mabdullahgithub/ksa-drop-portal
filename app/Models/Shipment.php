@@ -100,6 +100,15 @@ class Shipment extends Model
     }
 
     /**
+     * Times the parcel crossed the warehouse door, newest first: the first
+     * one says whether it is out or in now.
+     */
+    public function stockScans()
+    {
+        return $this->hasMany(StockScan::class)->latest('id');
+    }
+
+    /**
      * Who to deliver to: the receiver the admin confirmed when booking a KSA
      * Express parcel (KsaDropExpressDriver::bookingRecord), falling back to the
      * order's shipping address. Same resolution the printed label uses.

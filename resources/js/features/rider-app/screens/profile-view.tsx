@@ -15,7 +15,8 @@ import { Onboarding } from './onboarding'
 type Props = {
   me: Me | null
   onPhotoChanged: (photoUrl: string) => void
-  onCash: () => void
+  /** A rider's cash and pay. An inventory manager has neither. */
+  onCash?: () => void
 }
 
 /** wa.me link that opens a chat with the message already typed. */
@@ -70,6 +71,9 @@ export function ProfileView({ me, onPhotoChanged, onCash }: Props) {
     )
   }
 
+  // The guide is about delivering, and the cash is a rider's.
+  const isManager = me.rider.role === 'inventory_manager'
+
   return (
     <div className='space-y-4 px-4 pb-36 pt-[calc(env(safe-area-inset-top)+16px)]'>
       <h1 className='px-1 pb-1 text-[32px] font-extrabold leading-tight tracking-tight rtl:tracking-normal'>{t('nav_profile')}</h1>
@@ -87,7 +91,7 @@ export function ProfileView({ me, onPhotoChanged, onCash }: Props) {
         <p className='mt-4 text-[24px] font-bold leading-tight'>{me.rider.name}</p>
         <p className='mt-2 inline-flex items-center gap-1.5 rounded-full bg-brand/10 px-3 py-1 text-[13px] font-semibold text-orange-700 dark:text-orange-300'>
           <span className='h-1.5 w-1.5 rounded-full bg-brand' />
-          {t('rider_role')}
+          {t(isManager ? 'manager_role' : 'rider_role')}
         </p>
 
         <dl className={cn('mt-6 grid border-t border-foreground/[0.08] pt-4', me.rider.hub ? 'grid-cols-2' : 'grid-cols-1')}>
@@ -111,8 +115,8 @@ export function ProfileView({ me, onPhotoChanged, onCash }: Props) {
           busy={uploading}
           onClick={pickPhoto}
         />
-        <Row icon={Wallet} color='#16a34a' label={t('cash_title')} hint={t('cash_row_hint')} onClick={onCash} />
-        <Row icon={BookOpen} color='#2563eb' label={t('app_guide')} hint={t('app_guide_hint')} onClick={() => setGuide(true)} />
+        {onCash && <Row icon={Wallet} color='#16a34a' label={t('cash_title')} hint={t('cash_row_hint')} onClick={onCash} />}
+        {!isManager && <Row icon={BookOpen} color='#2563eb' label={t('app_guide')} hint={t('app_guide_hint')} onClick={() => setGuide(true)} />}
       </section>
 
       <section className='rounded-[24px] bg-surface p-4'>
@@ -148,7 +152,10 @@ export function ProfileView({ me, onPhotoChanged, onCash }: Props) {
             </div>
           </div>
           <a
-            href={supportLink(me.support.whatsapp_digits, t('support_message', { name: me.rider.name, phone: me.rider.phone }))}
+            href={supportLink(
+              me.support.whatsapp_digits,
+              t(isManager ? 'support_message_manager' : 'support_message', { name: me.rider.name, phone: me.rider.phone })
+            )}
             target='_blank'
             rel='noopener noreferrer'
             className='mt-4 flex h-14 w-full items-center justify-center gap-2 rounded-full bg-[#15803d] text-[16px] font-semibold text-white transition-transform active:scale-[0.98]'

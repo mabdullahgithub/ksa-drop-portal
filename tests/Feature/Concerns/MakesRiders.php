@@ -21,7 +21,7 @@ trait MakesRiders
     {
         app(PermissionRegistrar::class)->forgetCachedPermissions();
 
-        foreach (['view riders', 'manage riders', 'manage rider payments', 'view orders', 'edit orders'] as $name) {
+        foreach (['view riders', 'manage riders', 'manage rider payments', 'view orders', 'edit orders', 'view inventory'] as $name) {
             Permission::findOrCreate($name);
         }
     }
@@ -44,6 +44,14 @@ trait MakesRiders
             'phone' => '+9665' . random_int(10000000, 99999999),
             'status' => Rider::STATUS_ACTIVE,
         ]);
+    }
+
+    /**
+     * Someone who scans parcels OUT of and IN to the warehouse.
+     */
+    protected function makeInventoryManager(array $attributes = []): Rider
+    {
+        return $this->makeRider($attributes + ['name' => 'Khalid Stock', 'role' => Rider::ROLE_INVENTORY_MANAGER]);
     }
 
     /**

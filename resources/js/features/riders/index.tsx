@@ -1,6 +1,24 @@
 import { useEffect, useMemo, useState } from 'react'
 import axios from 'axios'
-import { Activity, LayoutGrid, Plus, Search as SearchIcon, Smartphone, Table2, Trophy, Warehouse, X } from 'lucide-react'
+import {
+  Activity,
+  Banknote,
+  Bike,
+  HandCoins,
+  LayoutGrid,
+  Package,
+  PackageCheck,
+  Plus,
+  Radio,
+  Search as SearchIcon,
+  Smartphone,
+  Table2,
+  Trophy,
+  UsersRound,
+  Wallet,
+  Warehouse,
+  X,
+} from 'lucide-react'
 import { toast } from 'sonner'
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
@@ -13,12 +31,12 @@ import { ConfirmDialog } from '@/components/confirm-dialog'
 import { EmptyState } from '@/components/empty-state'
 import { MultiSelectFilter } from '@/components/multi-select-filter'
 import { SearchBeam } from '@/components/search-beam'
+import { StatCard } from '@/components/stat-card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { usePermissions } from '@/hooks/use-permissions'
-import { cn } from '@/lib/utils'
 import { RiderAccessDialog } from './components/rider-access-dialog'
 import { RiderCard } from './components/rider-card'
 import { RiderFormDialog } from './components/rider-form-dialog'
@@ -27,7 +45,7 @@ import { RiderPaymentsSheet } from './components/rider-payments-sheet'
 import { RiderSupportButton } from './components/rider-support-button'
 import { AppState, appStateOf, CashDue, PayDue, RiderAvatar, RowActions, sar, type RiderDialog } from './components/rider-parts'
 import { TopPerformers } from './components/top-performers'
-import type { RiderRow, RiderSupportContact, WarehouseOption } from './data/types'
+import { RIDER_ROLES, type RiderRow, type RiderSupportContact, type WarehouseOption } from './data/types'
 
 const STATUS_OPTIONS = [
   { value: 'active', label: 'Active' },
@@ -42,7 +60,12 @@ const APP_OPTIONS = [
   { value: 'pin_locked', label: 'PIN locked' },
 ]
 
+const ROLE_OPTIONS = RIDER_ROLES.map(({ value, label }) => ({ value, label }))
+
 const NO_HUB = 'none'
+
+/** The stat cards show the currency as a small unit ahead of the figure. */
+const amount = (n: number) => sar(n).replace('SAR ', '')
 
 export function Riders({
   riders: initial,
@@ -61,6 +84,7 @@ export function Riders({
   const [view, setView] = useState<'cards' | 'table'>('cards')
   const [query, setQuery] = useState('')
   const [statuses, setStatuses] = useState<string[]>([])
+  const [roles, setRoles] = useState<string[]>([])
   const [appStates, setAppStates] = useState<string[]>([])
   const [hubs, setHubs] = useState<string[]>([])
   const [dialog, setDialog] = useState<RiderDialog | null>(null)
@@ -84,6 +108,7 @@ export function Riders({
     const q = query.trim().toLowerCase()
     return riders.filter((r) => {
       if (statuses.length && !statuses.includes(r.status)) return false
+      if (roles.length && !roles.includes(r.role)) return false
       if (appStates.length && !appStates.some((s) => (s === 'online' ? r.online : s === appStateOf(r)))) return false
       if (hubs.length && !hubs.includes(r.warehouse_id ? String(r.warehouse_id) : NO_HUB)) return false
       if (!q) return true
@@ -91,19 +116,21 @@ export function Riders({
         .filter(Boolean)
         .some((v) => String(v).toLowerCase().includes(q))
     })
-  }, [riders, query, statuses, appStates, hubs])
+  }, [riders, query, statuses, roles, appStates, hubs])
 
-  const filtering = query.trim() !== '' || statuses.length > 0 || appStates.length > 0 || hubs.length > 0
+  const filtering = query.trim() !== '' || statuses.length > 0 || roles.length > 0 || appStates.length > 0 || hubs.length > 0
   const clearFilters = () => {
     setQuery('')
     setStatuses([])
+    setRoles([])
     setAppStates([])
     setHubs([])
   }
 
   const totals = useMemo(
     () => ({
-      active: riders.filter((r) => r.status === 'active').length,
+      // Inventory managers are on the page, but they aren't riders.
+      active: riders.filter((r) => r.status === 'active' && r.role === 'rider').length,
       signedIn: riders.filter((r) => r.device).length,
       online: riders.filter((r) => r.online).length,
       held: riders.reduce((sum, r) => sum + r.stats.held, 0),
@@ -166,7 +193,7 @@ export function Riders({
         <div className='flex flex-wrap items-end justify-between gap-2'>
           <div className='space-y-1'>
             <h2 className='text-3xl font-bold tracking-tight'>Riders</h2>
-            <p className='text-muted-foreground'>KSA Express riders and the app on their phones.</p>
+            <p className='text-muted-foreground'>KSA Express riders, inventory managers and the app on their phones.</p>
           </div>
           <div className='flex items-center gap-2'>
             {!showPerformers && riders.length > 0 && (
@@ -185,17 +212,73 @@ export function Riders({
           </div>
         </div>
 
-        {/* Never more than four across: the page is capped at 1280px, and an
-            amount like "SAR 12,345.00" needs the width. */}
-        <div className='grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-4'>
-          <Summary label='Active riders' value={totals.active} />
-          <Summary label='Online now' value={totals.online} dot />
-          <Summary label='Signed in to the app' value={totals.signedIn} />
-          <Summary label='Parcels with riders' value={totals.held} />
-          <Summary label='Delivered today' value={totals.delivered} />
-          <Summary label='Cash collected today' value={sar(totals.cash)} />
-          <Summary label='Cash riders owe' value={sar(totals.owed)} />
-          <Summary label='Pay owed to riders' value={sar(totals.pay)} />
+        {/* The dashboard's stat cards. Never more than four across: the page is
+            capped at 1280px, and an amount like "SAR 12,345.00" needs the width.
+
+            Eight cards, so the tones are not the dashboard's row of six. This
+            order was computed so that every card differs from the ones beside,
+            above and below it, two across and four across alike (worst
+            neighbours: ΔE 9.1 colour-blind, 21.9 normal vision). Moving a
+            card, or changing the column counts, means working it out again. */}
+        <div className='grid grid-cols-2 gap-x-2 gap-y-0.5 lg:grid-cols-4'>
+          <StatCard
+            icon={<Bike className='h-3.5 w-3.5' />}
+            label='Active riders'
+            value={totals.active}
+            tone='blue'
+            hint='Riders who are not suspended. Inventory managers are not counted.'
+          />
+          <StatCard
+            icon={<Radio className='h-3.5 w-3.5' />}
+            label='Online now'
+            value={totals.online}
+            tone='emerald'
+            hint='Have the app open on their phone right now.'
+          />
+          <StatCard
+            icon={<Smartphone className='h-3.5 w-3.5' />}
+            label='Signed in to the app'
+            value={totals.signedIn}
+            tone='fuchsia'
+            hint='Have the app signed in on a phone, open or not.'
+          />
+          <StatCard
+            icon={<Package className='h-3.5 w-3.5' />}
+            label='Parcels with riders'
+            value={totals.held}
+            tone='orange'
+            hint='Every parcel in a rider’s hands, including ones to hand back at the hub.'
+          />
+          <StatCard
+            icon={<PackageCheck className='h-3.5 w-3.5' />}
+            label='Delivered today'
+            value={totals.delivered}
+            tone='teal'
+          />
+          <StatCard
+            icon={<Banknote className='h-3.5 w-3.5' />}
+            label='Cash collected today'
+            value={amount(totals.cash)}
+            pre='SAR'
+            tone='violet'
+            hint='Cash taken on today’s deliveries. Card and transfer payments are not counted.'
+          />
+          <StatCard
+            icon={<HandCoins className='h-3.5 w-3.5' />}
+            label='Cash riders owe'
+            value={amount(totals.owed)}
+            pre='SAR'
+            tone='rose'
+            hint='Cash still to hand in. Riders in credit don’t reduce it.'
+          />
+          <StatCard
+            icon={<Wallet className='h-3.5 w-3.5' />}
+            label='Pay owed to riders'
+            value={amount(totals.pay)}
+            pre='SAR'
+            tone='sky'
+            hint='What KSA Drop still owes riders for their visits. Overpaid riders don’t reduce it.'
+          />
         </div>
 
         {showPerformers && riders.length > 0 && <TopPerformers onClose={() => setShowPerformers(false)} />}
@@ -231,6 +314,9 @@ export function Riders({
                 </SearchBeam>
               </div>
               <MultiSelectFilter label='Status' icon={Activity} options={STATUS_OPTIONS} selected={statuses} onChange={setStatuses} />
+              {riders.some((r) => r.role === 'inventory_manager') && (
+                <MultiSelectFilter label='Role' icon={UsersRound} options={ROLE_OPTIONS} selected={roles} onChange={setRoles} />
+              )}
               <MultiSelectFilter label='App' icon={Smartphone} options={APP_OPTIONS} selected={appStates} onChange={setAppStates} />
               {warehouses.length > 0 && (
                 <MultiSelectFilter label='Hub' icon={Warehouse} options={hubOptions} selected={hubs} onChange={setHubs} />
@@ -310,7 +396,14 @@ export function Riders({
                           <div className='flex items-center gap-3'>
                             <RiderAvatar name={rider.name} photoUrl={rider.photo_url} online={rider.online} className='size-8 text-xs' />
                             <div>
-                              <div className='font-medium'>{rider.name}</div>
+                              <div className='flex items-center gap-2 font-medium'>
+                                {rider.name}
+                                {rider.role === 'inventory_manager' && (
+                                  <Badge variant='outline' className='border-blue-300 text-blue-700 dark:text-blue-400'>
+                                    Inventory manager
+                                  </Badge>
+                                )}
+                              </div>
                               <div className='text-xs text-muted-foreground' dir='ltr'>
                                 {rider.phone_local}
                                 {rider.warehouse_name && <span dir='auto'> · {rider.warehouse_name}</span>}
@@ -321,6 +414,13 @@ export function Riders({
                         <TableCell>
                           <AppState rider={rider} />
                         </TableCell>
+                        {rider.role === 'inventory_manager' ? (
+                          // No parcels, cash or pay of their own: what they scanned today instead.
+                          <TableCell colSpan={5} className='text-end text-sm tabular-nums text-muted-foreground'>
+                            {rider.stock_today?.out.parcels ?? 0} out · {rider.stock_today?.in.parcels ?? 0} in today
+                          </TableCell>
+                        ) : (
+                        <>
                         <TableCell className='text-end tabular-nums'>
                           <button
                             type='button'
@@ -375,6 +475,8 @@ export function Riders({
                             <PayDue pay={rider.pay} />
                           </button>
                         </TableCell>
+                        </>
+                        )}
                         <TableCell>
                           {rider.status === 'active' ? (
                             <Badge variant='outline' className='border-green-300 text-green-700 dark:text-green-400'>Active</Badge>
@@ -484,17 +586,5 @@ export function Riders({
         </>
       )}
     </>
-  )
-}
-
-function Summary({ label, value, dot, className }: { label: string; value: number | string; dot?: boolean; className?: string }) {
-  return (
-    <div className={cn('rounded-lg border p-3', className)}>
-      <p className='flex items-center gap-1.5 text-xs text-muted-foreground'>
-        {dot && <span className='size-2 rounded-full bg-green-500' />}
-        {label}
-      </p>
-      <p className='mt-1 text-lg font-semibold whitespace-nowrap tabular-nums sm:text-xl'>{value}</p>
-    </div>
   )
 }

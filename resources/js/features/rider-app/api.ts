@@ -29,6 +29,26 @@ export class ApiError extends Error {
 /** Codes that mean this phone is no longer signed in. */
 const SIGNED_OUT_CODES = ['signed_out', 'replaced', 'revoked', 'suspended']
 
+const ROLE_RELOAD_KEY = 'rider_role_reload_at'
+
+/**
+ * The office changed this person between rider and inventory manager while
+ * the app was open: reload into the other app. Once, so a phone that keeps
+ * getting the answer can't loop.
+ */
+function reloadForNewRole() {
+  try {
+    const last = Number(sessionStorage.getItem(ROLE_RELOAD_KEY) || 0)
+    if (Date.now() - last < 10_000) return
+    sessionStorage.setItem(ROLE_RELOAD_KEY, String(Date.now()))
+  } catch {
+    // Storage blocked: stay put rather than risk a reload loop.
+    return
+  }
+
+  window.location.reload()
+}
+
 async function request<T>(method: 'GET' | 'POST', url: string, body?: FormData | object): Promise<T> {
   const headers: Record<string, string> = { Accept: 'application/json' }
   const init: RequestInit = { method, headers, credentials: 'same-origin' }
@@ -55,6 +75,8 @@ async function request<T>(method: 'GET' | 'POST', url: string, body?: FormData |
     if (code && SIGNED_OUT_CODES.includes(code)) {
       window.dispatchEvent(new CustomEvent('rider:signed-out', { detail: code }))
     }
+
+    if (code === 'wrong_role') reloadForNewRole()
 
     throw new ApiError(response.status, data?.message || `HTTP ${response.status}`, code, data?.errors, data)
   }

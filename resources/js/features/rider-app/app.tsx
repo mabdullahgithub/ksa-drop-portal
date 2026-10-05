@@ -5,14 +5,18 @@ import { ActivateScreen } from './screens/activate-screen'
 import { AppShell } from './screens/app-shell'
 import { Onboarding, onboardingSeen } from './screens/onboarding'
 import { SignInScreen } from './screens/sign-in-screen'
+import { StockShell } from './screens/stock-shell'
 import type { RiderBoot } from './types'
 
 export function RiderApp({ boot }: { boot: RiderBoot }) {
   const [mode, setMode] = useState(boot.mode)
   const [reason, setReason] = useState<string | null>(boot.reason ?? null)
+  // An inventory manager gets their own app: scanning parcels OUT and IN.
+  const isManager = boot.rider?.role === 'inventory_manager'
   // First open after installing: the welcome and the guide, once. Not on the
-  // activation page — in a browser tab that only helps the rider install.
-  const [welcome, setWelcome] = useState(() => boot.mode !== 'activate' && !onboardingSeen())
+  // activation page — in a browser tab that only helps the rider install —
+  // and not for an inventory manager: the guide is about delivering.
+  const [welcome, setWelcome] = useState(() => boot.mode !== 'activate' && !isManager && !onboardingSeen())
 
   // Suspended, signed out by the admin, or signed in on another phone.
   useEffect(() => {
@@ -32,7 +36,7 @@ export function RiderApp({ boot }: { boot: RiderBoot }) {
         <>
           {mode === 'activate' && boot.token && <ActivateScreen token={boot.token} name={boot.rider?.name} />}
           {mode === 'sign_in' && <SignInScreen reason={reason} />}
-          {mode === 'app' && <AppShell />}
+          {mode === 'app' && (isManager ? <StockShell /> : <AppShell />)}
         </>
       )}
       <Toaster position='top-center' richColors closeButton={false} toastOptions={{ className: 'text-sm' }} />

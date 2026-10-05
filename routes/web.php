@@ -10,6 +10,7 @@ use App\Http\Controllers\Api\InvoiceController;
 use App\Http\Controllers\Api\OrderController;
 use App\Http\Controllers\Api\RiderController;
 use App\Http\Controllers\Api\RiderPaymentController;
+use App\Http\Controllers\Api\StockScanController;
 use App\Http\Controllers\Api\ShipmentController;
 use App\Http\Controllers\Api\ShipmentEventController;
 use App\Http\Controllers\Api\MetaWhatsAppWebhookController;
@@ -248,6 +249,9 @@ Route::middleware(['auth', 'verified', 'role:!client'])->group(function () {
         Route::post('/{client}/payments', [ClientPaymentController::class, 'store'])->middleware('permission:edit client')->name('api.clients.payments.store');
         Route::delete('/{client}/payments/{payment}', [ClientPaymentController::class, 'destroy'])->middleware('permission:edit client')->name('api.clients.payments.destroy');
     });
+
+    // Parcels the inventory managers scanned OUT and IN, and what it did to stock.
+    Route::get('/api/stock-scans', [StockScanController::class, 'index'])->middleware('permission:view inventory')->name('api.stock-scans.index');
 
     // Inventory / Products API
     Route::prefix('api/products')->group(function () {

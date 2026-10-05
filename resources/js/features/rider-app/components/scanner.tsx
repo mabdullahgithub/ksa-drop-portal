@@ -1,9 +1,9 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { Flashlight, Keyboard, Loader2, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useI18n } from '../i18n'
-import { createDetector, normalizeScannedCode, type Detector } from '../lib/barcode'
-import { vibrate } from '../lib/device'
+import { normalizeScannedCode } from '../lib/barcode'
+import { useBarcodeCamera } from '../lib/use-barcode-camera'
 import type { EntryMethod, ScanMode } from '../types'
 
 type Props = {
@@ -21,136 +21,23 @@ type Props = {
   panel?: ReactNode
 }
 
-/** Ignore the label still in view for this long after the update screen closes. */
-const SAME_CODE_COOLDOWN_MS = 3000
-const SCAN_INTERVAL_MS = 150
-
-type CameraState = 'starting' | 'running' | 'denied' | 'unavailable'
-
 export function Scanner({ paused, onDetected, onClose, mode, onModeChange, busy, flash, panel }: Props) {
   const { t } = useI18n()
-  const videoRef = useRef<HTMLVideoElement>(null)
-  const streamRef = useRef<MediaStream | null>(null)
-  const pausedRef = useRef(paused)
-  const lastRef = useRef<{ code: string; at: number }>({ code: '', at: 0 })
-  const onDetectedRef = useRef(onDetected)
-
-  const [camera, setCamera] = useState<CameraState>('starting')
   const [typing, setTyping] = useState(false)
   const [typed, setTyped] = useState('')
-  const [torchAvailable, setTorchAvailable] = useState(false)
-  const [torchOn, setTorchOn] = useState(false)
 
-  onDetectedRef.current = onDetected
+  const { videoRef, camera, torchAvailable, torchOn, toggleTorch, handled } = useBarcodeCamera(paused, (code) => onDetected(code, 'camera'))
 
-  // Coming back from the update screen: restart the cooldown so the label
-  // that was just handled isn't read again straight away.
+  // No camera to read: the number is typed instead.
   useEffect(() => {
-    if (pausedRef.current && !paused) {
-      lastRef.current = { ...lastRef.current, at: Date.now() }
-    }
-    pausedRef.current = paused
-  }, [paused])
-
-  useEffect(() => {
-    let cancelled = false
-    let timer: number | undefined
-    let detector: Detector | null = null
-
-    const loop = async () => {
-      const video = videoRef.current
-      if (cancelled) return
-
-      if (detector && video && !pausedRef.current && video.readyState >= 2) {
-        try {
-          const found = await detector.detect(video)
-          const raw = found.find((b) => b.rawValue?.trim())?.rawValue
-
-          if (raw && !pausedRef.current) {
-            const code = normalizeScannedCode(raw)
-            const last = lastRef.current
-            const repeat = code === last.code && Date.now() - last.at < SAME_CODE_COOLDOWN_MS
-
-            if (!repeat) {
-              lastRef.current = { code, at: Date.now() }
-              vibrate(80)
-              onDetectedRef.current(code, 'camera')
-            }
-          }
-        } catch {
-          // A frame that can't be read — try the next one.
-        }
-      }
-
-      timer = window.setTimeout(loop, SCAN_INTERVAL_MS)
-    }
-
-    const start = async () => {
-      if (!navigator.mediaDevices?.getUserMedia) {
-        setCamera('unavailable')
-        setTyping(true)
-        return
-      }
-
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          audio: false,
-          video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } },
-        })
-
-        if (cancelled) {
-          stream.getTracks().forEach((track) => track.stop())
-          return
-        }
-
-        streamRef.current = stream
-        const video = videoRef.current!
-        video.srcObject = stream
-        await video.play().catch(() => {})
-
-        const track = stream.getVideoTracks()[0]
-        const capabilities = (track.getCapabilities?.() ?? {}) as { torch?: boolean }
-        setTorchAvailable(!!capabilities.torch)
-
-        detector = await createDetector()
-        if (cancelled) return
-
-        setCamera('running')
-        loop()
-      } catch (error) {
-        if (cancelled) return
-        const name = (error as DOMException)?.name
-        setCamera(name === 'NotAllowedError' || name === 'SecurityError' ? 'denied' : 'unavailable')
-        setTyping(true)
-      }
-    }
-
-    start()
-
-    return () => {
-      cancelled = true
-      window.clearTimeout(timer)
-      streamRef.current?.getTracks().forEach((track) => track.stop())
-      streamRef.current = null
-    }
-  }, [])
-
-  const toggleTorch = async () => {
-    const track = streamRef.current?.getVideoTracks()[0]
-    if (!track) return
-    try {
-      await track.applyConstraints({ advanced: [{ torch: !torchOn } as MediaTrackConstraintSet] })
-      setTorchOn(!torchOn)
-    } catch {
-      setTorchAvailable(false)
-    }
-  }
+    if (camera === 'denied' || camera === 'unavailable') setTyping(true)
+  }, [camera])
 
   const submitTyped = (event: React.FormEvent) => {
     event.preventDefault()
     const code = normalizeScannedCode(typed)
     if (!code) return
-    lastRef.current = { code, at: Date.now() }
+    handled(code)
     setTyped('')
     onDetected(code, 'manual')
   }

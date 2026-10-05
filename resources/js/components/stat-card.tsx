@@ -17,6 +17,15 @@ import { cn } from '@/lib/utils'
  *  - As a set the fills pass CVD separation (worst ΔE 12.0) and the
  *    normal-vision floor (25.4), so the cards stay tellable apart.
  * Each card also carries an icon and a label, so colour is never the only cue.
+ *
+ * That separation is between neighbours, in the order listed — it is not true
+ * of every pair (teal and emerald are close; blue and violet merge for a
+ * deuteranope). So a row of six uses the first six in this order.
+ *
+ * Fuchsia and sky are for a page with more than six cards. White text clears
+ * AA on both (6.3 and 5.9:1), but fuchsia sits near violet and sky near blue
+ * and teal, so a page using them has to check its own neighbours — see the
+ * Riders page for an order worked out for eight.
  */
 const TONES = {
   teal: { fill: 'bg-teal-700', badge: 'bg-teal-900' },
@@ -25,6 +34,8 @@ const TONES = {
   emerald: { fill: 'bg-emerald-700', badge: 'bg-emerald-900' },
   violet: { fill: 'bg-violet-600', badge: 'bg-violet-800' },
   rose: { fill: 'bg-rose-600', badge: 'bg-rose-800' },
+  fuchsia: { fill: 'bg-fuchsia-700', badge: 'bg-fuchsia-900' },
+  sky: { fill: 'bg-sky-700', badge: 'bg-sky-900' },
 } as const
 
 export type StatCardTone = keyof typeof TONES
