@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Listeners\EnforceEmailGraveyard;
 use App\Listeners\LogMailActivity;
 use App\Models\Client;
 use App\Models\ClientProduct;
@@ -15,6 +16,7 @@ use App\Observers\OrderObserver;
 use App\Observers\ProductObserver;
 use App\Observers\RiderObserver;
 use App\Observers\UserObserver;
+use App\Services\Mail\GraveyardMailManager;
 use App\Support\PhoneNumber;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
@@ -33,7 +35,10 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        // Swap in the mail manager that notices when a mail server refuses a
+        // recipient as unknown. extend() rather than a binding of our own: the
+        // framework's mail provider is deferred and would overwrite one.
+        $this->app->extend('mail.manager', fn ($manager, $app) => new GraveyardMailManager($app));
     }
 
     /**
@@ -49,6 +54,10 @@ class AppServiceProvider extends ServiceProvider
         if (str_starts_with((string) config('app.url'), 'https://')) {
             URL::forceScheme('https');
         }
+
+        // Never mail an address in the email graveyard. Registered ahead of
+        // the logger so a message it cancels is not logged as "Mail sending".
+        Event::listen(MessageSending::class, [EnforceEmailGraveyard::class, 'sending']);
 
         // Trace every outbound email into storage/logs/mail-*.log.
         Event::listen(MessageSending::class, [LogMailActivity::class, 'sending']);

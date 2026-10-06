@@ -4,24 +4,35 @@ import { cn } from '@/lib/utils'
 import { useI18n, type TFunction } from '../i18n'
 import { isWebKit } from '../lib/device'
 import { cssColor, useStatusBarColor } from '../lib/status-bar'
+import type { RiderRole } from '../types'
 
 type Key = Parameters<TFunction>[0]
 
-const SEEN_KEY = 'rider_onboarded'
-const MEDIA = '/rider-icons/rider-welcome-animated-icon'
+// Each app's welcome is remembered on its own: someone the office moves from
+// rider to inventory manager, or back, hasn't seen the other one.
+const SEEN_KEYS: Record<RiderRole, string> = {
+  rider: 'rider_onboarded',
+  inventory_manager: 'manager_onboarded',
+}
 
-/** Whether this phone has seen the welcome. Storage blocked: don't show it on every open. */
-export function onboardingSeen(): boolean {
+/** Each app's welcome clip: its `.webm`, `-hevc.mov` and `-poster.webp` start with this. */
+const MEDIA: Record<RiderRole, string> = {
+  rider: '/rider-icons/rider-welcome-animated-icon/rider-welcome',
+  inventory_manager: '/rider-icons/manager-animated-icon/manager-welcome',
+}
+
+/** Whether this phone has seen that app's welcome. Storage blocked: don't show it on every open. */
+export function onboardingSeen(role: RiderRole): boolean {
   try {
-    return localStorage.getItem(SEEN_KEY) === '1'
+    return localStorage.getItem(SEEN_KEYS[role]) === '1'
   } catch {
     return true
   }
 }
 
-function markSeen() {
+function markSeen(role: RiderRole) {
   try {
-    localStorage.setItem(SEEN_KEY, '1')
+    localStorage.setItem(SEEN_KEYS[role], '1')
   } catch {
     // Not remembered; it shows again next open.
   }
@@ -37,7 +48,7 @@ function markSeen() {
 export function resetOnboardingOnInstall() {
   window.addEventListener('appinstalled', () => {
     try {
-      localStorage.removeItem(SEEN_KEY)
+      Object.values(SEEN_KEYS).forEach((key) => localStorage.removeItem(key))
     } catch {
       // Storage blocked: onboardingSeen() already treats that as seen.
     }
@@ -58,18 +69,21 @@ type Props = {
   onDone: () => void
   /** 'guide' skips the welcome — for opening the steps again from Profile. */
   startAt?: 'welcome' | 'guide'
+  /** Whose app this is. */
+  role?: RiderRole
 }
 
 /**
- * First open on a phone: a welcome screen with the rider video, then four
- * short steps on how the app works. Shown once per install; Profile opens the
- * steps again.
+ * First open on a phone: a welcome screen with that app's video, then for a
+ * rider four short steps on how the app works. An inventory manager goes
+ * straight in after the welcome — the steps are about delivering. Shown once
+ * per install; Profile opens the steps again.
  */
-export function Onboarding({ onDone, startAt = 'welcome' }: Props) {
+export function Onboarding({ onDone, startAt = 'welcome', role = 'rider' }: Props) {
   const [page, setPage] = useState(startAt === 'welcome' ? -1 : 0)
 
   const finish = () => {
-    markSeen()
+    markSeen(role)
     onDone()
   }
 
@@ -86,13 +100,18 @@ export function Onboarding({ onDone, startAt = 'welcome' }: Props) {
 
   return (
     <div data-no-pull className='fixed inset-0 z-50'>
-      {page < 0 ? <Welcome onStart={() => setPage(0)} /> : <Guide page={page} onPage={setPage} onDone={finish} />}
+      {page < 0 ? (
+        <Welcome role={role} onStart={role === 'rider' ? () => setPage(0) : finish} />
+      ) : (
+        <Guide page={page} onPage={setPage} onDone={finish} />
+      )}
     </div>
   )
 }
 
-function Welcome({ onStart }: { onStart: () => void }) {
+function Welcome({ role, onStart }: { role: RiderRole; onStart: () => void }) {
   const { t, toggle } = useI18n()
+  const isManager = role === 'inventory_manager'
 
   return (
     <div className='flex h-full flex-col bg-brand px-6 pb-[calc(env(safe-area-inset-bottom)+20px)] pt-[calc(env(safe-area-inset-top)+14px)] text-ink'>
@@ -112,12 +131,14 @@ function Welcome({ onStart }: { onStart: () => void }) {
       </div>
 
       <h1 className='mt-10 shrink-0 whitespace-pre-line text-[46px] font-extrabold leading-[1.02] tracking-tight duration-500 animate-in fade-in slide-in-from-bottom-3 motion-reduce:animate-none rtl:leading-[1.2] rtl:tracking-normal'>
-        {t('welcome_title')}
+        {t(isManager ? 'welcome_title_manager' : 'welcome_title')}
       </h1>
-      <p className='mt-4 max-w-[19rem] shrink-0 text-balance text-[16px] leading-snug text-ink/75'>{t('welcome_text')}</p>
+      <p className='mt-4 max-w-[19rem] shrink-0 text-balance text-[16px] leading-snug text-ink/75'>
+        {t(isManager ? 'welcome_text_manager' : 'welcome_text')}
+      </p>
 
       <div className='flex min-h-0 flex-1 items-center justify-center py-4'>
-        <RiderVideo className='aspect-square h-full max-h-[400px] max-w-full object-contain' />
+        <WelcomeVideo media={MEDIA[role]} className='aspect-square h-full max-h-[400px] max-w-full object-contain' />
       </div>
 
       <button
@@ -133,11 +154,12 @@ function Welcome({ onStart }: { onStart: () => void }) {
 }
 
 /**
- * The rider on the moped. Its background is see-through, which survives only
- * in HEVC on Safari and in VP9 WebM elsewhere, so each gets its own file. The
- * still stands in when motion is reduced or the video can't play.
+ * The rider on the moped, or the manager's parcel box. Its background is
+ * see-through, which survives only in HEVC on Safari and in VP9 WebM
+ * elsewhere, so each gets its own file. The still stands in when motion is
+ * reduced or the video can't play.
  */
-function RiderVideo({ className }: { className?: string }) {
+function WelcomeVideo({ media, className }: { media: string; className?: string }) {
   const ref = useRef<HTMLVideoElement>(null)
   const [still] = useState(() => window.matchMedia('(prefers-reduced-motion: reduce)').matches)
   const [failed, setFailed] = useState(false)
@@ -153,14 +175,14 @@ function RiderVideo({ className }: { className?: string }) {
   }, [])
 
   if (still || failed) {
-    return <img src={`${MEDIA}/rider-welcome-poster.webp`} alt='' className={className} />
+    return <img src={`${media}-poster.webp`} alt='' className={className} />
   }
 
   return (
     <video
       ref={ref}
-      src={isWebKit() ? `${MEDIA}/rider-welcome-hevc.mov` : `${MEDIA}/rider-welcome.webm`}
-      poster={`${MEDIA}/rider-welcome-poster.webp`}
+      src={isWebKit() ? `${media}-hevc.mov` : `${media}.webm`}
+      poster={`${media}-poster.webp`}
       autoPlay
       muted
       loop

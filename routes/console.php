@@ -11,6 +11,14 @@ Artisan::command('inspire', function () {
 // Email log cleanup - runs daily at 2:00 AM, keeps logs for 180 days
 Schedule::command('email:cleanup-logs --days=180')->dailyAt('02:00');
 
+// Bury addresses that bounced. Gmail accepts mail for an address that does not
+// exist and reports it afterwards as an "Address not found" email, so nothing
+// fails while sending; this reads those reports out of the sending mailbox.
+// Read-only on the mailbox, and a failed run only delays a burial to the next.
+Schedule::command('mail:process-bounces')
+    ->everyFifteenMinutes()
+    ->withoutOverlapping(10);
+
 // Sync shipment tracking every 10 minutes. iMile has no push/webhook API
 // (pull-only) but client/track/list batches up to 100 orders per call, so
 // polling this often is cheap; J&T shipments are also covered live by

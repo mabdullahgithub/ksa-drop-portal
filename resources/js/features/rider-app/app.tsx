@@ -12,11 +12,13 @@ export function RiderApp({ boot }: { boot: RiderBoot }) {
   const [mode, setMode] = useState(boot.mode)
   const [reason, setReason] = useState<string | null>(boot.reason ?? null)
   // An inventory manager gets their own app: scanning parcels OUT and IN.
-  const isManager = boot.rider?.role === 'inventory_manager'
-  // First open after installing: the welcome and the guide, once. Not on the
-  // activation page — in a browser tab that only helps the rider install —
-  // and not for an inventory manager: the guide is about delivering.
-  const [welcome, setWelcome] = useState(() => boot.mode !== 'activate' && !isManager && !onboardingSeen())
+  // Before sign-in nobody knows who it is, so it's the rider's.
+  const role = boot.rider?.role ?? 'rider'
+  const isManager = role === 'inventory_manager'
+  // First open after installing: that app's welcome, and for a rider the
+  // guide, once. Not on the activation page — in a browser tab that only
+  // helps the rider install.
+  const [welcome, setWelcome] = useState(() => boot.mode !== 'activate' && !onboardingSeen(role))
 
   // Suspended, signed out by the admin, or signed in on another phone.
   useEffect(() => {
@@ -31,7 +33,7 @@ export function RiderApp({ boot }: { boot: RiderBoot }) {
   return (
     <I18nProvider>
       {welcome ? (
-        <Onboarding onDone={() => setWelcome(false)} />
+        <Onboarding role={role} onDone={() => setWelcome(false)} />
       ) : (
         <>
           {mode === 'activate' && boot.token && <ActivateScreen token={boot.token} name={boot.rider?.name} />}

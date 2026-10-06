@@ -17,6 +17,8 @@
 # /public/build
 /public/fonts-manifest.dev.json
 /public/hot
+# The 119 MB ProRes master of the manager welcome clip: over GitHub's 100 MB limit.
+/public/rider-icons/manager-animated-icon/3d-stickle-box-with-stickers.mov
 /public/storage
 /storage/*.key
 /storage/pail

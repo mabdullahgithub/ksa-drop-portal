@@ -133,6 +133,8 @@ const en = {
   // Welcome and guide (first open on a phone; again from Profile)
   welcome_title: 'Scan. Ride.\nDeliver.',
   welcome_text: 'Your parcels, your customers and your cash — all in one app.',
+  welcome_title_manager: 'Scan out.\nScan in.',
+  welcome_text_manager: 'Every parcel leaving the warehouse or coming back — counted in stock as you scan.',
   get_started: 'Get started',
   guide_skip: 'Skip',
   guide_next: 'Next',
@@ -434,6 +436,8 @@ const ar: Record<Key, string> = {
 
   welcome_title: 'امسح. انطلق.\nسلّم.',
   welcome_text: 'شحناتك وعملاؤك ونقدك — كلها في تطبيق واحد.',
+  welcome_title_manager: 'امسح الخارج.\nامسح الداخل.',
+  welcome_text_manager: 'كل طرد يغادر المستودع أو يعود إليه يُحتسب في المخزون فور مسحه.',
   get_started: 'ابدأ الآن',
   guide_skip: 'تخطي',
   guide_next: 'التالي',

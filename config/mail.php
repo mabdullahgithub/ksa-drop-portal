@@ -115,4 +115,26 @@ return [
         'name' => env('MAIL_FROM_NAME', env('APP_NAME', 'Laravel')),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Bounce Mailbox
+    |--------------------------------------------------------------------------
+    |
+    | "Address not found" bounces are read out of a mailbox over IMAP by
+    | mail:process-bounces, and the addresses they name are moved to the email
+    | graveyard so nothing is sent to them again. Left unset, the mailbox is
+    | the one mail is sent from: the SMTP username and password, on the SMTP
+    | host with "smtp." swapped for "imap.". Override any of them here.
+    |
+    */
+
+    'bounces' => [
+        'enabled' => env('MAIL_BOUNCE_CHECK', true),
+        'host' => env('MAIL_BOUNCE_IMAP_HOST'),
+        'port' => env('MAIL_BOUNCE_IMAP_PORT', 993),
+        'username' => env('MAIL_BOUNCE_IMAP_USERNAME'),
+        'password' => env('MAIL_BOUNCE_IMAP_PASSWORD'),
+        'folder' => env('MAIL_BOUNCE_IMAP_FOLDER', 'INBOX'),
+    ],
+
 ];

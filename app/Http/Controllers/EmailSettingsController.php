@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\EmailGraveyard;
 use App\Models\EmailLog;
 use App\Models\EmailSetting;
 use App\Services\EmailService;
@@ -40,7 +41,26 @@ class EmailSettingsController extends Controller
                 ->latest()
                 ->take(10)
                 ->get(),
+            'graveyard' => EmailGraveyard::latest()->take(200)->get(),
         ]);
+    }
+
+    /**
+     * Take an address back out of the graveyard so mail reaches it again —
+     * for a mailbox that has since been created or fixed.
+     */
+    public function restoreFromGraveyard(EmailGraveyard $entry): RedirectResponse
+    {
+        abort_unless(auth()->user()->can('manage-email-settings'), 403, 'Unauthorized access to email settings.');
+
+        $entry->delete();
+
+        \Log::channel('mail')->info('Address restored from graveyard', [
+            'user_id' => auth()->id(),
+            'email' => $entry->email,
+        ]);
+
+        return back()->with('success', "{$entry->email} can receive email again.");
     }
 
     public function update(Request $request): RedirectResponse

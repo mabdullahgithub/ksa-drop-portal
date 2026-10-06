@@ -400,6 +400,7 @@ Route::middleware(['auth', 'verified', 'role:!client'])->group(function () {
         Route::post('/email-settings/test', [EmailSettingsController::class, 'test'])->name('admin.email-settings.test');
         Route::get('/email-logs', [EmailSettingsController::class, 'logs'])->name('admin.email-logs');
         Route::get('/email-statistics', [EmailSettingsController::class, 'statistics'])->name('admin.email-statistics');
+        Route::delete('/email-graveyard/{entry}', [EmailSettingsController::class, 'restoreFromGraveyard'])->name('admin.email-graveyard.restore');
     });
 });
 

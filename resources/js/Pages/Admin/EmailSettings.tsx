@@ -1,5 +1,6 @@
 import { Head } from '@inertiajs/react'
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout'
+import { EmailGraveyard } from '@/features/admin/email-settings/email-graveyard'
 import { EmailSettingsForm } from '@/features/admin/email-settings/email-settings-form'
 import { EmailStatistics } from '@/features/admin/email-settings/email-statistics'
 import { RecentEmailLogs } from '@/features/admin/email-settings/recent-email-logs'
@@ -12,7 +13,7 @@ import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
 
-export default function EmailSettings({ settings, recentLogs }: any) {
+export default function EmailSettings({ settings, recentLogs, graveyard }: any) {
   return (
     <AuthenticatedLayout>
       <Head title='Email Settings' />
@@ -38,6 +39,7 @@ export default function EmailSettings({ settings, recentLogs }: any) {
               <TabsTrigger value='settings'>Configuration</TabsTrigger>
               <TabsTrigger value='statistics'>Statistics</TabsTrigger>
               <TabsTrigger value='logs'>Email Logs</TabsTrigger>
+              <TabsTrigger value='graveyard'>Graveyard</TabsTrigger>
             </TabsList>
 
             <TabsContent value='settings' className='space-y-4'>
@@ -58,6 +60,20 @@ export default function EmailSettings({ settings, recentLogs }: any) {
                 </CardHeader>
                 <CardContent>
                   <RecentEmailLogs logs={recentLogs} />
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value='graveyard' className='space-y-4'>
+              <Card>
+                <CardHeader>
+                  <CardTitle>Email Graveyard</CardTitle>
+                  <CardDescription>
+                    Addresses that do not exist. Nothing is sent to them until they are restored
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <EmailGraveyard entries={graveyard} />
                 </CardContent>
               </Card>
             </TabsContent>
