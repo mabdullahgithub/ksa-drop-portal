@@ -8,6 +8,7 @@ use App\Models\Client;
 use App\Models\Order;
 use App\Models\Tag;
 use App\Services\CityDirectory;
+use App\Services\Inventory\StockAlerts;
 use App\Services\OrderExportService;
 use App\Services\Shipping\CourierManager;
 use App\Services\Shipping\Drivers\KsaDropExpressDriver;
@@ -31,6 +32,7 @@ class OrderController extends Controller
     public function __construct(
         protected OrderExportService $orderExport,
         protected CityDirectory $cities,
+        protected StockAlerts $stockAlerts,
     ) {}
 
     /**
@@ -50,6 +52,9 @@ class OrderController extends Controller
         // Pagination
         $perPage = $request->get('per_page', 20);
         $orders = $query->paginate($perPage);
+
+        // Orders the team must hold back: the client has none of the product left.
+        $this->stockAlerts->flagOrders($orders->getCollection());
 
         return response()->json($orders);
     }
@@ -248,6 +253,9 @@ class OrderController extends Controller
             'latestShipment.events.rider:id,name',
             'latestShipment.events.user:id,name',
         ]);
+
+        $this->stockAlerts->flagOrders([$order]);
+
         return response()->json($order);
     }
 

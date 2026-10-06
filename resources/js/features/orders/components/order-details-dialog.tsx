@@ -27,6 +27,7 @@ import { useWhatsAppMessaging } from '@/hooks/use-whatsapp-messaging'
 import { useOrderMutations } from '@/hooks/useOrders'
 import { toast } from 'sonner'
 import { toBusinessTime } from '@/lib/business-time'
+import { NoStockNotice, NoStockTag } from '@/components/no-stock-badge'
 
 interface OrderDetailsDialogProps {
   order: Order | null
@@ -425,13 +426,17 @@ export function OrderDetailsDialog({ order, open, onOpenChange, onSaved, startIn
                   <Package className='h-4 w-4' />
                   Order Items
                 </h3>
+                <NoStockNotice items={order.out_of_stock_items} staff />
                 <div className='space-y-3'>
                   {order.items.map((item) => (
                     <div key={item.id} className='p-3 bg-muted/50 rounded-lg space-y-2'>
                       {/* Item header row */}
                       <div className='flex justify-between items-start gap-3'>
                         <div className='flex-1 min-w-0'>
-                          <div className='font-medium'>{item.lineitem_name}</div>
+                          <div className='flex flex-wrap items-center gap-2 font-medium'>
+                            {item.lineitem_name}
+                            {order.out_of_stock_items?.some((out) => out.item_id === item.id) && <NoStockTag />}
+                          </div>
                           {item.variant_name && (
                             <div className='text-xs text-muted-foreground'>Variant: {item.variant_name}</div>
                           )}

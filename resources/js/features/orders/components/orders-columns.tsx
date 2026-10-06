@@ -8,6 +8,7 @@ import { format } from 'date-fns'
 import { useAvailableTags } from '@/hooks/useTags'
 import { useOrdersContext } from './orders-provider'
 import { toBusinessTime } from '@/lib/business-time'
+import { NoStockBadge } from '@/components/no-stock-badge'
 import { callStatusClass, callStatusLabel, WHATSAPP_STATUS_META } from '../data/call-status'
 
 function hexToRgba(hex: string | null | undefined, alpha: number) {
@@ -21,16 +22,19 @@ function hexToRgba(hex: string | null | undefined, alpha: number) {
 function OrderNumberCell({ order }: { order: Order }) {
   const { setCurrentRow, setOpen } = useOrdersContext()
   return (
-    <button
-      type='button'
-      onClick={() => {
-        setCurrentRow(order)
-        setOpen('view')
-      }}
-      className='w-20 truncate text-left font-medium text-primary hover:underline'
-    >
-      {order.order_number}
-    </button>
+    <div className='flex flex-col items-start gap-1'>
+      <button
+        type='button'
+        onClick={() => {
+          setCurrentRow(order)
+          setOpen('view')
+        }}
+        className='w-20 truncate text-left font-medium text-primary hover:underline'
+      >
+        {order.order_number}
+      </button>
+      <NoStockBadge items={order.out_of_stock_items} />
+    </div>
   )
 }
 

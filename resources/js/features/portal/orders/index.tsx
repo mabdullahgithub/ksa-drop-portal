@@ -55,6 +55,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { cn } from '@/lib/utils'
 import { BUSINESS_TIMEZONE } from '@/lib/business-time'
 import { EmptyState } from '@/components/empty-state'
+import { NoStockBadge } from '@/components/no-stock-badge'
 
 const MAX_FILE_SIZE_MB = 10
 const ALLOWED_MIME = ['text/csv', 'application/vnd.ms-excel', 'application/csv']
@@ -143,13 +144,16 @@ function makeColumns(tagColors: Record<string, string>, onView: (order: any) => 
     accessorKey: 'order_number',
     header: 'Order #',
     cell: ({ row }) => (
-      <button
-        type='button'
-        onClick={() => onView(row.original)}
-        className='font-medium text-primary hover:underline text-left'
-      >
-        {row.getValue('order_number')}
-      </button>
+      <div className='flex flex-col items-start gap-1'>
+        <button
+          type='button'
+          onClick={() => onView(row.original)}
+          className='font-medium text-primary hover:underline text-left'
+        >
+          {row.getValue('order_number')}
+        </button>
+        <NoStockBadge items={row.original.out_of_stock_items} />
+      </div>
     ),
     enableHiding: false,
   },

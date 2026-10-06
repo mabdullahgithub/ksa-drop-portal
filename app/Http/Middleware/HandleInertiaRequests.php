@@ -3,8 +3,11 @@
 namespace App\Http\Middleware;
 
 use App\Http\Concerns\ResolvesNotifiableUser;
+use App\Models\Client;
+use App\Services\Inventory\StockAlerts;
 use App\Support\WhatsAppMessaging;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 use Inertia\Middleware;
 
 class HandleInertiaRequests extends Middleware
@@ -41,7 +44,7 @@ class HandleInertiaRequests extends Middleware
 
         if ($user && session()->has('impersonate.admin_id')) {
             try {
-                $impersonatedClient = \App\Models\Client::find(session('impersonate.client_id'));
+                $impersonatedClient = Client::find(session('impersonate.client_id'));
                 if ($impersonatedClient) {
                     $client = $impersonatedClient;
                     $impersonating = [
@@ -116,6 +119,44 @@ class HandleInertiaRequests extends Middleware
             // hide everything WhatsApp added (call/WhatsApp columns, the
             // call-outcome panel, the dashboard section). Only staff see it.
             'whatsappMessaging' => fn () => $user && ! $user->hasRole('client') && WhatsAppMessaging::enabled(),
+            // The stock warning cards: a fulfilment client's products down to
+            // their last few units, or out. See StockAlerts.
+            'stockAlerts' => fn () => $user ? $this->stockAlerts($request, $client) : null,
+        ];
+    }
+
+    /**
+     * What the stock warning cards show: a client sees their own products, the
+     * team sees every fulfilment client's. Null when there is nothing to warn
+     * about, or nobody here it concerns.
+     */
+    private function stockAlerts(Request $request, ?Client $client): ?array
+    {
+        $user = $request->user();
+        $alerts = app(StockAlerts::class);
+
+        if ($client) {
+            $products = $alerts->forClient($client);
+            $scope = "client-{$client->id}";
+        } elseif (! $user->hasRole('client') && $user->canAny(['view orders', 'view inventory', 'view client'])) {
+            $products = $alerts->forStaff();
+            $scope = 'staff';
+        } else {
+            return null;
+        }
+
+        if ($products === []) {
+            return null;
+        }
+
+        return [
+            'audience' => $client ? 'client' : 'staff',
+            // A card that was closed comes back at the next sign-in: the
+            // session, and this with it, is thrown away on sign-out.
+            'session' => $scope . '-' . ($request->hasSession()
+                ? $request->session()->remember('stock_alerts_seen', fn () => Str::random(12))
+                : ''),
+            'products' => $products,
         ];
     }
 }

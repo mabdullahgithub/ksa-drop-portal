@@ -112,8 +112,17 @@ export interface Order {
   status_color: 'success' | 'warning' | 'info' | 'error' | 'default'
   financial_status_color: 'success' | 'warning' | 'info' | 'error' | 'default'
   items?: OrderItem[]
+  // Items whose product the client has none left of, while the order still
+  // waits to be picked. Not empty = hold the order.
+  out_of_stock_items?: OutOfStockItem[]
   latest_shipment?: Shipment | null
   invoices?: Invoice[]
+}
+
+export interface OutOfStockItem {
+  item_id: number
+  name: string
+  sku: string | null
 }
 
 export interface TrackingEvent {

@@ -7,6 +7,22 @@ export interface User {
     two_factor_enabled: boolean;
 }
 
+/** A fulfilment client's product that is low or out; see StockAlertCards. */
+export interface StockAlertProduct {
+    id: number;
+    name: string;
+    sku: string | null;
+    product_code: string;
+    /** Units left, 0 when out. */
+    left: number;
+    /** Whose product it is — only sent to the team. */
+    client?: {
+        id: number;
+        company_name: string;
+        client_id: string;
+    };
+}
+
 export type PageProps<
     T extends Record<string, unknown> = Record<string, unknown>,
 > = T & {
@@ -46,4 +62,11 @@ export type PageProps<
     unreadNotificationsCount: number;
     /** The WhatsApp messaging toggle; see useWhatsAppMessaging. Always false for clients. */
     whatsappMessaging?: boolean;
+    /** Products running out; null when there is nothing to warn about. */
+    stockAlerts?: {
+        audience: 'client' | 'staff';
+        /** Changes at every sign-in, so a closed card comes back. */
+        session: string;
+        products: StockAlertProduct[];
+    } | null;
 };

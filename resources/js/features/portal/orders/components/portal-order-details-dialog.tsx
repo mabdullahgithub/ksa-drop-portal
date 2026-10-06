@@ -1,3 +1,4 @@
+import { NoStockNotice, NoStockTag } from '@/components/no-stock-badge'
 import { format } from 'date-fns'
 import { Package, DollarSign, MapPin, Phone, Calendar, Tag, Truck, Copy, ExternalLink, FileText, Eye, Download, Receipt } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -132,12 +133,16 @@ export function PortalOrderDetailsDialog({ order, open, onOpenChange }: Props) {
                     <Package className='h-4 w-4' />
                     Order Items
                   </h3>
+                  <NoStockNotice items={o.out_of_stock_items} />
                   <div className='space-y-3'>
                     {o.items.map((item: any) => (
                       <div key={item.id} className='p-3 bg-muted/50 rounded-lg'>
                         <div className='flex justify-between items-start gap-3'>
                           <div className='flex-1 min-w-0'>
-                            <div className='font-medium'>{item.lineitem_name}</div>
+                            <div className='flex flex-wrap items-center gap-2 font-medium'>
+                              {item.lineitem_name}
+                              {o.out_of_stock_items?.some((out: any) => out.item_id === item.id) && <NoStockTag />}
+                            </div>
                             {item.variant_name && (
                               <div className='text-xs text-muted-foreground'>Variant: {item.variant_name}</div>
                             )}

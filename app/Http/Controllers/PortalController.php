@@ -10,6 +10,7 @@ use App\Models\Tag;
 use App\Models\User;
 use App\Notifications\ProductSubmittedNotification;
 use App\Services\CityDirectory;
+use App\Services\Inventory\StockAlerts;
 use App\Services\OrderExportService;
 use App\Services\Shipping\Enums\ShipmentStatus;
 use Illuminate\Http\Request;
@@ -23,6 +24,7 @@ class PortalController extends Controller
     public function __construct(
         protected OrderExportService $orderExport,
         protected CityDirectory $cities,
+        protected StockAlerts $stockAlerts,
     ) {}
 
     /**
@@ -249,8 +251,12 @@ class PortalController extends Controller
         $query->orderBy($sortBy, $sortOrder);
 
         $perPage = $request->get('per_page', 20);
+        $orders = $query->paginate($perPage);
 
-        return response()->json($query->paginate($perPage));
+        // Orders waiting on a product the client has none left of.
+        $this->stockAlerts->flagOrders($orders->getCollection());
+
+        return response()->json($orders);
     }
 
     /**
@@ -332,6 +338,8 @@ class PortalController extends Controller
         $order = $client->orders()
             ->with(['items.clientProduct', 'items.product', 'latestShipment', 'invoices'])
             ->findOrFail($orderId);
+
+        $this->stockAlerts->flagOrders([$order]);
 
         return response()->json($order);
     }
@@ -890,8 +898,12 @@ class PortalController extends Controller
         $query->orderBy($sortBy, $sortOrder);
 
         $perPage = $request->get('per_page', 20);
+        $orders = $query->paginate($perPage);
 
-        return response()->json($query->paginate($perPage));
+        // Orders waiting on a product the client has none left of.
+        $this->stockAlerts->flagOrders($orders->getCollection());
+
+        return response()->json($orders);
     }
 
     public function productShow(Request $request, \App\Models\Product $product)

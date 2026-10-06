@@ -10,6 +10,7 @@ import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
 import { AppSidebar } from '@/components/layout/app-sidebar'
 import { GuideVideoWidget } from '@/components/guide-video-widget'
 import { ImpersonateBanner } from '@/components/layout/impersonate-banner'
+import { StockAlertCards } from '@/components/layout/stock-alert-cards'
 import { SkipToMain } from '@/components/skip-to-main'
 import { usePermissions } from '@/hooks/use-permissions'
 import { Toaster } from '@/components/ui/sonner'
@@ -48,6 +49,7 @@ function LayoutInner({ children }: AuthenticatedLayoutProps) {
         >
           {children}
         </SidebarInset>
+        <StockAlertCards />
         {hasRole('client') && <GuideVideoWidget />}
       </SidebarProvider>
     </div>
