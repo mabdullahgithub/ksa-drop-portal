@@ -360,6 +360,82 @@ class RiderPayTest extends TestCase
             ->assertJsonPath('pay.balance', 20);
     }
 
+    public function test_a_payout_comes_off_the_earnings_it_was_recorded_for(): void
+    {
+        $rider = $this->paidRider();
+        $token = $this->signedInDevice($rider);
+        $this->deliver($token, $this->out($token));
+        $this->update($token, $this->out($token), ['action' => 'attempt_failed', 'reason' => 'no_answer'])->assertOk();
+
+        $payout = fn (array $data) => $this->actingAs($this->staff())->postJson("/api/riders/{$rider->id}/payments", $data + [
+            'direction' => 'out',
+            'method' => 'cash',
+            'client_uuid' => (string) Str::uuid(),
+        ]);
+
+        $payout(['amount' => 3, 'pay_source' => 'attempt'])
+            ->assertCreated()
+            ->assertJsonPath('payment.pay_source', 'attempt')
+            ->assertJsonPath('pay.owed_by.attempt', 1)
+            ->assertJsonPath('pay.owed_by.cash', 10)
+            ->assertJsonPath('pay.balance', 11);
+
+        // A payout recorded for nothing in particular comes off them in order.
+        $payout(['amount' => 4])
+            ->assertCreated()
+            ->assertJsonPath('pay.owed_by.cash', 6)
+            ->assertJsonPath('pay.owed_by.attempt', 1)
+            ->assertJsonPath('pay.balance', 7);
+
+        $payout(['amount' => 1, 'pay_source' => 'tips'])->assertStatus(422)->assertJsonValidationErrors('pay_source');
+    }
+
+    public function test_one_day_shows_its_own_earnings_cash_and_the_payments_recorded_for_it(): void
+    {
+        $rider = $this->paidRider();
+        $token = $this->signedInDevice($rider);
+        $admin = $this->staff();
+        $today = now('Asia/Riyadh')->toDateString();
+        $yesterday = now('Asia/Riyadh')->subDay()->toDateString();
+
+        // Yesterday: one delivery. Today: one delivery and one attempt.
+        $this->travelTo(now()->subDay(), fn () => $this->deliver($token, $this->out($token)));
+        $this->deliver($token, $this->out($token));
+        $this->update($token, $this->out($token), ['action' => 'attempt_failed', 'reason' => 'no_answer'])->assertOk();
+
+        $record = fn (array $data) => $this->actingAs($admin)->postJson("/api/riders/{$rider->id}/payments", $data + [
+            'method' => 'cash',
+            'client_uuid' => (string) Str::uuid(),
+        ])->assertCreated();
+
+        $record(['direction' => 'out', 'amount' => 10, 'pay_source' => 'cash', 'for_date' => $today]);
+        $record(['direction' => 'in', 'amount' => 60, 'cod_method' => 'cash', 'for_date' => $today]);
+
+        $this->actingAs($admin)->getJson("/api/riders/{$rider->id}/payments?direction=out&date={$today}")
+            ->assertOk()
+            ->assertJsonCount(1, 'payments')
+            ->assertJsonPath('payments.0.for_date', $today)
+            ->assertJsonPath('day.pay.earned', 14)
+            ->assertJsonPath('day.pay.paid', 10)
+            ->assertJsonPath('day.pay.owed_by.cash', 0)
+            ->assertJsonPath('day.pay.owed_by.attempt', 4)
+            ->assertJsonPath('day.cash.owed.cash', 40)
+            ->assertJsonPath('day.cash.balance', 40)
+            // The running balance still counts every day.
+            ->assertJsonPath('pay.earned', 24)
+            ->assertJsonPath('pay.balance', 14)
+            ->assertJsonPath('cash.balance', 140);
+
+        $this->actingAs($admin)->getJson("/api/riders/{$rider->id}/payments?direction=out&date={$yesterday}")
+            ->assertOk()
+            ->assertJsonCount(0, 'payments')
+            ->assertJsonPath('day.pay.earned', 10)
+            ->assertJsonPath('day.pay.balance', 10)
+            ->assertJsonPath('day.cash.balance', 100);
+
+        $this->actingAs($admin)->getJson("/api/riders/{$rider->id}/payments")->assertOk()->assertJsonPath('day', null);
+    }
+
     public function test_a_retried_update_does_not_pay_twice(): void
     {
         $token = $this->signedInDevice($this->paidRider());

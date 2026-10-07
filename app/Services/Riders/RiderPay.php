@@ -79,12 +79,17 @@ class RiderPay
     /**
      * A balance above zero is what KSA Drop still owes the rider. Earnings
      * are also split by what earned them (self::SOURCES), and payouts by how
-     * they were paid.
+     * they were paid. `owed_by` is what is left to pay of each source: a
+     * payout comes off the one staff recorded it for, and one recorded for
+     * none comes off them in order.
+     *
+     * With a KSA day (`Y-m-d`), only that day: what was earned on it, and the
+     * payments staff recorded for it.
      *
      * @param  array<int>  $riderIds
-     * @return array<int, array{earned: float, earned_delivered: float, earned_attempted: float, earned_by: array<string, array{amount: float, count: int}>, paid: float, paid_by: array{cash: float, bank_transfer: float, other: float}, balance: float, delivered: int, attempted: int}>
+     * @return array<int, array{earned: float, earned_delivered: float, earned_attempted: float, earned_by: array<string, array{amount: float, count: int}>, owed_by: array<string, float>, paid: float, paid_by: array{cash: float, bank_transfer: float, other: float}, balance: float, delivered: int, attempted: int}>
      */
-    public static function forRiders(array $riderIds): array
+    public static function forRiders(array $riderIds, ?string $day = null): array
     {
         $pay = [];
         foreach ($riderIds as $id) {
@@ -103,6 +108,7 @@ class RiderPay
         $earned = RiderEarning::query()
             ->leftJoin('shipment_events', 'shipment_events.id', '=', 'rider_earnings.shipment_event_id')
             ->whereIn('rider_earnings.rider_id', $riderIds)
+            ->when($day, fn ($query) => $query->where('rider_earnings.earned_at', '>=', RiderCash::dayBounds($day)[0])->where('rider_earnings.earned_at', '<', RiderCash::dayBounds($day)[1]))
             ->selectRaw('rider_earnings.rider_id, rider_earnings.type, shipment_events.payment_method, COUNT(*) as visits, COALESCE(SUM(rider_earnings.amount), 0) as total')
             ->groupBy('rider_earnings.rider_id', 'rider_earnings.type', 'shipment_events.payment_method')
             ->get();
@@ -124,14 +130,36 @@ class RiderPay
 
         $paid = RiderPayment::counted()
             ->paidOut()
+            ->forDay($day)
             ->whereIn('rider_id', $riderIds)
-            ->selectRaw('rider_id, method, COALESCE(SUM(amount), 0) as total')
-            ->groupBy('rider_id', 'method')
+            ->selectRaw('rider_id, method, pay_source, COALESCE(SUM(amount), 0) as total')
+            ->groupBy('rider_id', 'method', 'pay_source')
             ->get();
+
+        $unassigned = [];
+        foreach ($pay as $riderId => $row) {
+            $pay[$riderId]['owed_by'] = array_map(fn (array $source) => $source['amount'], $row['earned_by']);
+        }
 
         foreach ($paid as $row) {
             $pay[$row->rider_id]['paid'] += (float) $row->total;
-            $pay[$row->rider_id]['paid_by'][$row->method] = (float) $row->total;
+            $pay[$row->rider_id]['paid_by'][$row->method] += (float) $row->total;
+
+            if (in_array($row->pay_source, self::SOURCES, true)) {
+                $pay[$row->rider_id]['owed_by'][$row->pay_source] -= (float) $row->total;
+            } else {
+                $unassigned[$row->rider_id] = ($unassigned[$row->rider_id] ?? 0.0) + (float) $row->total;
+            }
+        }
+
+        foreach ($unassigned as $riderId => $left) {
+            foreach (self::SOURCES as $source) {
+                $taken = min($left, max($pay[$riderId]['owed_by'][$source], 0.0));
+                $pay[$riderId]['owed_by'][$source] -= $taken;
+                $left -= $taken;
+            }
+            // More than everything earned: an advance, shown against the last.
+            $pay[$riderId]['owed_by'][self::SOURCES[count(self::SOURCES) - 1]] -= $left;
         }
 
         return array_map(fn (array $row) => [
@@ -139,6 +167,7 @@ class RiderPay
             'earned_delivered' => round($row['earned_delivered'], 2),
             'earned_attempted' => round($row['earned_attempted'], 2),
             'earned_by' => array_map(fn (array $source) => ['amount' => round($source['amount'], 2), 'count' => $source['count']], $row['earned_by']),
+            'owed_by' => array_map(fn (float $amount) => round($amount, 2), $row['owed_by']),
             'paid' => round($row['paid'], 2),
             'paid_by' => array_map(fn (float $amount) => round($amount, 2), $row['paid_by']),
             'balance' => round($row['earned'] - $row['paid'], 2),
@@ -148,10 +177,10 @@ class RiderPay
     }
 
     /**
-     * @return array{earned: float, earned_delivered: float, earned_attempted: float, earned_by: array<string, array{amount: float, count: int}>, paid: float, paid_by: array{cash: float, bank_transfer: float, other: float}, balance: float, delivered: int, attempted: int}
+     * @return array{earned: float, earned_delivered: float, earned_attempted: float, earned_by: array<string, array{amount: float, count: int}>, owed_by: array<string, float>, paid: float, paid_by: array{cash: float, bank_transfer: float, other: float}, balance: float, delivered: int, attempted: int}
      */
-    public static function forRider(int $riderId): array
+    public static function forRider(int $riderId, ?string $day = null): array
     {
-        return self::forRiders([$riderId])[$riderId];
+        return self::forRiders([$riderId], $day)[$riderId];
     }
 }

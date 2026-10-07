@@ -42,9 +42,11 @@ class RiderPayment extends Model
         'amount',
         'method',
         'cod_method',
+        'pay_source',
         'reference',
         'note',
         'received_at',
+        'for_date',
         'recorded_by',
         'voided_at',
         'voided_by',
@@ -55,6 +57,7 @@ class RiderPayment extends Model
     protected $casts = [
         'amount' => 'decimal:2',
         'received_at' => 'datetime',
+        'for_date' => 'date:Y-m-d',
         'voided_at' => 'datetime',
     ];
 
@@ -89,6 +92,14 @@ class RiderPayment extends Model
     public function scopePaidOut($query)
     {
         return $query->where('direction', self::DIRECTION_OUT);
+    }
+
+    /**
+     * Payments recorded for one KSA day (`Y-m-d`); all of them when null.
+     */
+    public function scopeForDay($query, ?string $day)
+    {
+        return $day === null ? $query : $query->whereDate('for_date', $day);
     }
 
     public function isVoided(): bool

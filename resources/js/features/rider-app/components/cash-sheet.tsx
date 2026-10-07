@@ -109,12 +109,12 @@ export function CashSheet({ open, onClose, only, cash: initialCash, pay: initial
               <Line label={t('cash_paid')} amount={cash.paid} tone='text-green-700 dark:text-green-400' />
             </dl>
 
-            {/* Everything my customers paid, by how they paid it */}
+            {/* What is left to pay of what my customers paid, by how they paid it */}
             <Heading className='mt-5'>{t('cod_received')}</Heading>
             <dl className='grid grid-cols-3 gap-2'>
-              <MiniStat label={t('cod_cash')} amount={cash.collected} tone='text-brand' />
-              <MiniStat label={t('cod_card')} amount={cash.card} />
-              <MiniStat label={t('cod_transfer')} amount={cash.transfer} />
+              <MiniStat label={t('cod_cash')} amount={cash.owed.cash} hint={t('cod_received_of', { amount: amount(cash.collected) })} tone='text-brand' />
+              <MiniStat label={t('cod_card')} amount={cash.owed.card} hint={t('cod_received_of', { amount: amount(cash.card) })} />
+              <MiniStat label={t('cod_transfer')} amount={cash.owed.transfer} hint={t('cod_received_of', { amount: amount(cash.transfer) })} />
             </dl>
 
             <Heading className='mt-5'>{t('cash_payments')}</Heading>
@@ -177,13 +177,14 @@ function Figure({ label, amount, tint }: { label: string; amount: number; tint?:
 }
 
 /** One part of a total, as a small card: the amount over what it is. */
-function MiniStat({ label, amount: value, tone }: { label: string; amount: number; tone?: string }) {
+function MiniStat({ label, amount: value, tone, hint }: { label: string; amount: number; tone?: string; hint?: string }) {
   return (
     <div className='min-w-0 rounded-2xl bg-canvas px-1.5 py-3 text-center'>
       <dd className={cn('truncate text-[17px] font-bold leading-tight tabular-nums', tone)} dir='ltr'>
         {amount(value)}
       </dd>
       <dt className='mt-0.5 truncate text-xs text-muted-foreground'>{label}</dt>
+      {hint && <dd className='truncate text-[10.5px] text-muted-foreground/80'>{hint}</dd>}
     </div>
   )
 }

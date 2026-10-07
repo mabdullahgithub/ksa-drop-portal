@@ -127,6 +127,8 @@ export type RiderPay = {
   earned_attempted: number
   /** `earned`, by where it came from: deliveries by how the customer paid (prepaid: nothing to collect), and failed attempts. */
   earned_by: Record<'cash' | 'card' | 'transfer' | 'prepaid' | 'attempt', { amount: number; count: number }>
+  /** What is left to be paid to me of each source. */
+  owed_by: Record<'cash' | 'card' | 'transfer' | 'prepaid' | 'attempt', number>
   paid: number
   /** `paid`, by how KSA Drop paid it. */
   paid_by: Record<CashPaymentMethod, number>

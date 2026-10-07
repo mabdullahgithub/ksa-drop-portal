@@ -5,6 +5,7 @@ namespace App\Services\Riders;
 use App\Models\RiderPayment;
 use App\Models\ShipmentEvent;
 use App\Services\Shipping\Enums\RiderAction;
+use Illuminate\Support\Carbon;
 
 /**
  * What each rider owes KSA Drop: every COD they took from customers —
@@ -24,10 +25,13 @@ class RiderCash
      * A balance above zero is what the rider still owes; below zero, they
      * handed in more than they collected.
      *
+     * With a KSA day (`Y-m-d`), only that day: what was collected on it, and the
+     * payments staff recorded for it.
+     *
      * @param  array<int>  $riderIds
      * @return array<int, array{collected: float, direct: float, card: float, transfer: float, paid: float, owed: array{cash: float, card: float, transfer: float}, balance: float}>
      */
-    public static function forRiders(array $riderIds): array
+    public static function forRiders(array $riderIds, ?string $day = null): array
     {
         $cash = [];
         foreach ($riderIds as $id) {
@@ -43,6 +47,7 @@ class RiderCash
         $collected = ShipmentEvent::whereIn('rider_id', $riderIds)
             ->where('action', RiderAction::DELIVERED->value)
             ->whereNotNull('payment_method')
+            ->when($day, fn ($query) => $query->where('occurred_at', '>=', self::dayBounds($day)[0])->where('occurred_at', '<', self::dayBounds($day)[1]))
             ->selectRaw('rider_id, payment_method, COALESCE(SUM(cod_amount), 0) as total')
             ->groupBy('rider_id', 'payment_method')
             ->get();
@@ -62,6 +67,7 @@ class RiderCash
 
         $paid = RiderPayment::counted()
             ->handedIn()
+            ->forDay($day)
             ->whereIn('rider_id', $riderIds)
             ->selectRaw('rider_id, cod_method, COALESCE(SUM(amount), 0) as total')
             ->groupBy('rider_id', 'cod_method')
@@ -90,8 +96,20 @@ class RiderCash
     /**
      * @return array{collected: float, direct: float, card: float, transfer: float, paid: float, owed: array{cash: float, card: float, transfer: float}, balance: float}
      */
-    public static function forRider(int $riderId): array
+    public static function forRider(int $riderId, ?string $day = null): array
     {
-        return self::forRiders([$riderId])[$riderId];
+        return self::forRiders([$riderId], $day)[$riderId];
+    }
+
+    /**
+     * A KSA day as the instants it starts and stops.
+     *
+     * @return array{0: Carbon, 1: Carbon}
+     */
+    public static function dayBounds(string $day): array
+    {
+        $start = Carbon::createFromFormat('Y-m-d', $day, config('app.business_timezone', 'Asia/Riyadh'))->startOfDay();
+
+        return [$start->copy()->utc(), $start->copy()->addDay()->utc()];
     }
 }

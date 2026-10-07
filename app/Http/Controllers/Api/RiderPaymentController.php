@@ -27,11 +27,15 @@ class RiderPaymentController extends Controller
         $validated = $request->validate([
             'direction' => ['nullable', Rule::in(RiderPayment::DIRECTIONS)],
             'page' => 'nullable|integer|min:1|max:1000',
+            // One KSA day: its figures, and the payments recorded for it.
+            'date' => 'nullable|date_format:Y-m-d',
         ]);
+        $day = $validated['date'] ?? null;
         $page = (int) ($validated['page'] ?? 1);
 
         $payments = $rider->payments()
             ->where('direction', $validated['direction'] ?? RiderPayment::DIRECTION_IN)
+            ->forDay($day)
             ->with(['recordedBy:id,name', 'voidedBy:id,name'])
             ->orderByDesc('received_at')
             ->orderByDesc('id')
@@ -40,6 +44,7 @@ class RiderPaymentController extends Controller
             ->get();
 
         return response()->json($this->balances($rider) + [
+            'day' => $day ? ['cash' => RiderCash::forRider($rider->id, $day), 'pay' => RiderPay::forRider($rider->id, $day)] : null,
             'payments' => $payments->take(self::PER_PAGE)->map(fn (RiderPayment $payment) => $this->row($payment))->values(),
             'next_page' => $payments->count() > self::PER_PAGE ? $page + 1 : null,
         ]);
@@ -53,10 +58,14 @@ class RiderPaymentController extends Controller
             'method' => ['required', Rule::in(RiderPayment::METHODS)],
             // From the rider: which of their COD it settles. Cash unless said.
             'cod_method' => ['nullable', Rule::in(RiderPayment::COD_METHODS)],
+            // To the rider: which of their earnings it settles.
+            'pay_source' => ['nullable', Rule::in(RiderPay::SOURCES)],
             'reference' => 'nullable|string|max:100',
             'note' => 'nullable|string|max:500',
             // Yesterday's hand-in entered today is fine; a date ahead isn't.
             'received_at' => 'nullable|date|before_or_equal:now|after:-1 year',
+            // The KSA day it settles, when recorded while looking at one day.
+            'for_date' => 'nullable|date_format:Y-m-d|before_or_equal:tomorrow|after:-1 year',
             'client_uuid' => 'required|uuid',
         ], [
             'received_at.before_or_equal' => 'The date received can\'t be in the future.',
@@ -71,9 +80,11 @@ class RiderPaymentController extends Controller
                 'amount' => round((float) $validated['amount'], 2),
                 'method' => $validated['method'],
                 'cod_method' => $direction === RiderPayment::DIRECTION_IN ? ($validated['cod_method'] ?? 'cash') : null,
+                'pay_source' => $direction === RiderPayment::DIRECTION_OUT ? ($validated['pay_source'] ?? null) : null,
                 'reference' => filled($validated['reference'] ?? null) ? trim($validated['reference']) : null,
                 'note' => filled($validated['note'] ?? null) ? trim($validated['note']) : null,
                 'received_at' => $validated['received_at'] ?? now(),
+                'for_date' => $validated['for_date'] ?? null,
                 'recorded_by' => $request->user()->id,
                 'client_uuid' => $validated['client_uuid'],
             ]);
@@ -145,9 +156,11 @@ class RiderPaymentController extends Controller
             'amount' => (float) $payment->amount,
             'method' => $payment->method,
             'cod_method' => $payment->cod_method,
+            'pay_source' => $payment->pay_source,
             'reference' => $payment->reference,
             'note' => $payment->note,
             'received_at' => $payment->received_at->toIso8601String(),
+            'for_date' => $payment->for_date?->toDateString(),
             'recorded_by' => $payment->recordedBy?->name,
             'created_at' => $payment->created_at?->toIso8601String(),
             'voided_at' => $payment->voided_at?->toIso8601String(),

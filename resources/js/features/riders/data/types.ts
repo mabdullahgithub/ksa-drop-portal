@@ -82,7 +82,9 @@ export type RiderPay = {
   earned_delivered: number
   earned_attempted: number
   /** `earned`, by where it came from: deliveries by how the customer paid (prepaid: nothing to collect), and failed attempts. */
-  earned_by: Record<'cash' | 'card' | 'transfer' | 'prepaid' | 'attempt', { amount: number; count: number }>
+  earned_by: Record<EarningSource, { amount: number; count: number }>
+  /** What is left to pay of each source. Below zero: paid more than it earned. */
+  owed_by: Record<EarningSource, number>
   paid: number
   /** `paid`, by how KSA Drop paid it. */
   paid_by: Record<RiderPaymentMethod, number>
@@ -92,6 +94,8 @@ export type RiderPay = {
   delivered: number
   attempted: number
 }
+
+export type EarningSource = 'cash' | 'card' | 'transfer' | 'prepaid' | 'attempt'
 
 /** `in`: COD cash the rider hands in. `out`: KSA Drop paying the rider. */
 export type PaymentDirection = 'in' | 'out'
@@ -136,9 +140,13 @@ export type RiderPayment = {
   method: RiderPaymentMethod
   /** From the rider: which COD it settled. Null on a payout. */
   cod_method: CodMethod | null
+  /** To the rider: which earnings it settled. Null on older payouts and on payments from the rider. */
+  pay_source: EarningSource | null
   reference: string | null
   note: string | null
   received_at: string
+  /** The KSA day it settles, `yyyy-MM-dd`; null against the running balance. */
+  for_date: string | null
   recorded_by: string | null
   created_at: string | null
   voided_at: string | null
@@ -148,7 +156,8 @@ export type RiderPayment = {
 
 export type RiderBalances = { cash: RiderCash; pay: RiderPay }
 
-export type RiderPaymentsPage = RiderBalances & { payments: RiderPayment[]; next_page: number | null }
+/** `day`: the same figures for the one day asked for, with the payments recorded for it. */
+export type RiderPaymentsPage = RiderBalances & { day: RiderBalances | null; payments: RiderPayment[]; next_page: number | null }
 
 export type WarehouseOption = { id: number; name: string; is_default: boolean }
 
