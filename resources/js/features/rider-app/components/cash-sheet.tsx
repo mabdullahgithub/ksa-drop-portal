@@ -110,10 +110,10 @@ export function CashSheet({ open, onClose, only, cash: initialCash, pay: initial
 
             {/* Everything my customers paid, by how they paid it */}
             <Heading className='mt-5'>{t('cod_received')}</Heading>
-            <dl className='divide-y divide-foreground/[0.06] rounded-2xl bg-canvas px-3.5'>
-              <Line label={t('cod_cash')} amount={cash.collected} hint={t('cod_with_you')} />
-              <Line label={t('cod_card')} amount={cash.card} hint={t('cod_direct')} />
-              <Line label={t('cod_transfer')} amount={cash.transfer} hint={t('cod_direct')} />
+            <dl className='grid grid-cols-3 gap-2'>
+              <MiniStat label={t('cod_cash')} amount={cash.collected} tone='text-brand' />
+              <MiniStat label={t('cod_card')} amount={cash.card} />
+              <MiniStat label={t('cod_transfer')} amount={cash.transfer} />
             </dl>
             <Note>{t('cash_direct', { amount: money(cash.direct, 'SAR') })}</Note>
 
@@ -134,15 +134,15 @@ export function CashSheet({ open, onClose, only, cash: initialCash, pay: initial
             </dl>
 
             <Heading className='mt-5'>{t('pay_earned_from')}</Heading>
-            <dl className='divide-y divide-foreground/[0.06] rounded-2xl bg-canvas px-3.5'>
-              <Line label={t('pay_from_delivered', { n: pay.delivered })} amount={pay.earned_delivered} />
-              <Line label={t('pay_from_attempts', { n: pay.attempted })} amount={pay.earned_attempted} />
+            <dl className='grid grid-cols-2 gap-2'>
+              <MiniStat label={t('pay_from_delivered', { n: pay.delivered })} amount={pay.earned_delivered} tone='text-green-700 dark:text-green-400' />
+              <MiniStat label={t('pay_from_attempts', { n: pay.attempted })} amount={pay.earned_attempted} />
             </dl>
 
             <Heading className='mt-5'>{t('pay_paid_how')}</Heading>
-            <dl className='divide-y divide-foreground/[0.06] rounded-2xl bg-canvas px-3.5'>
+            <dl className='grid grid-cols-3 gap-2'>
               {PAYOUT_METHODS.map((method) => (
-                <Line key={method} label={t(`method_${method}`)} amount={pay.paid_by[method]} />
+                <MiniStat key={method} label={t(`method_${method}`)} amount={pay.paid_by[method]} />
               ))}
             </dl>
             <Note>{t('pay_rates', { delivery: amount(pay.rates.delivery), attempt: amount(pay.rates.attempt) })}</Note>
@@ -173,6 +173,18 @@ function Figure({ label, amount, tint }: { label: string; amount: number; tint?:
       <p className='mt-1 text-[32px] font-bold leading-tight tabular-nums' dir='ltr'>
         {money(Math.abs(amount), 'SAR')}
       </p>
+    </div>
+  )
+}
+
+/** One part of a total, as a small card: the amount over what it is. */
+function MiniStat({ label, amount: value, tone }: { label: string; amount: number; tone?: string }) {
+  return (
+    <div className='min-w-0 rounded-2xl bg-canvas px-1.5 py-3 text-center'>
+      <dd className={cn('truncate text-[17px] font-bold leading-tight tabular-nums', tone)} dir='ltr'>
+        {amount(value)}
+      </dd>
+      <dt className='mt-0.5 truncate text-xs text-muted-foreground'>{label}</dt>
     </div>
   )
 }
