@@ -1,0 +1,9 @@
+{
+    "extends": "../tsconfig.json",
+    "compilerOptions": {
+        "paths": {
+            "@/*": ["../resources/js/*"]
+        }
+    },
+    "include": ["resources/js/**/*.ts", "resources/js/**/*.tsx", "../resources/js/features/rider-app/**/*.ts", "../resources/js/features/rider-app/**/*.tsx", "../resources/js/**/*.d.ts"]
+}

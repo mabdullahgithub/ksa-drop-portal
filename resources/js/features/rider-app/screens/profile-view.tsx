@@ -9,6 +9,7 @@ import { BottomSheet } from '../components/bottom-sheet'
 import { RiderPhoto } from '../components/rider-photo'
 import { reasonText, useI18n, type Lang } from '../i18n'
 import { useBackToClose } from '../lib/back-button'
+import { host } from '../lib/host'
 import type { Me } from '../types'
 import { Onboarding } from './onboarding'
 
@@ -200,8 +201,7 @@ function LogoutSheet({ open, onClose }: { open: boolean; onClose: () => void }) 
   const logOut = async () => {
     setBusy(true)
     try {
-      const { redirect } = await api.post<{ redirect: string }>('/rider/api/logout')
-      window.location.replace(redirect)
+      await host().signedOut(await api.post<{ redirect: string }>('/rider/api/logout'))
     } catch (error) {
       const e = error as ApiError
       toast.error(e.offline ? t('offline') : (reasonText(t, e.code) ?? t('something_wrong')))

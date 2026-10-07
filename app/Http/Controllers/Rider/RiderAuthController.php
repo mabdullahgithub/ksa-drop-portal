@@ -31,9 +31,7 @@ class RiderAuthController extends Controller
             return response()->json(['message' => $e->getMessage(), 'code' => $e->reason], 422);
         }
 
-        return response()
-            ->json(['redirect' => RiderAppController::START_URL])
-            ->withCookie($this->auth->cookie($plain, $request));
+        return $this->signedIn($plain, $request);
     }
 
     /**
@@ -53,9 +51,7 @@ class RiderAuthController extends Controller
             return response()->json(['message' => $e->getMessage(), 'code' => $e->reason], 422);
         }
 
-        return response()
-            ->json(['redirect' => RiderAppController::START_URL])
-            ->withCookie($this->auth->cookie($plain, $request));
+        return $this->signedIn($plain, $request);
     }
 
     /**
@@ -69,8 +65,23 @@ class RiderAuthController extends Controller
         $device->forceFill(['revoked_at' => now(), 'revoked_reason' => RiderDevice::REVOKED_BY_RIDER])->save();
         RiderPresence::forget($device->rider);
 
+        $response = response()->json(['redirect' => RiderAppController::START_URL]);
+
+        return $this->auth->isNativeClient($request) ? $response : $response->withCookie($this->auth->forgetCookie());
+    }
+
+    /**
+     * The web app gets the device token as an HttpOnly cookie its scripts
+     * can't read. The phone app has no cookie, so it gets the token itself.
+     */
+    private function signedIn(string $plain, Request $request): JsonResponse
+    {
+        if ($this->auth->isNativeClient($request)) {
+            return response()->json(['token' => $plain]);
+        }
+
         return response()
             ->json(['redirect' => RiderAppController::START_URL])
-            ->withCookie($this->auth->forgetCookie());
+            ->withCookie($this->auth->cookie($plain, $request));
     }
 }

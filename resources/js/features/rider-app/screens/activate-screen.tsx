@@ -4,6 +4,7 @@ import { toast } from 'sonner'
 import { api, ApiError } from '../api'
 import { useI18n } from '../i18n'
 import { consumeInstallPrompt, isInAppBrowser, isStandalone, onInstallPrompt, platform, type InstallPromptEvent } from '../lib/device'
+import { assetUrl, host, type SignInAnswer } from '../lib/host'
 import { SignInScreen } from './sign-in-screen'
 
 /**
@@ -20,8 +21,7 @@ export function ActivateScreen({ token, name }: { token: string; name?: string |
 
   const claim = async () => {
     try {
-      const { redirect } = await api.post<{ redirect: string }>('/rider/api/activate', { token, standalone: isStandalone() })
-      window.location.replace(redirect)
+      await host().signedIn(await api.post<SignInAnswer>('/rider/api/activate', { token, standalone: isStandalone() }))
     } catch (e) {
       setFailed((e as ApiError).code ?? 'link_invalid')
     }
@@ -47,7 +47,7 @@ function Signing() {
   const { t } = useI18n()
   return (
     <div className='flex min-h-dvh flex-col items-center justify-center gap-4'>
-      <img src='/rider-icons/icon-192.png' alt='' className='h-20 w-20 rounded-2xl' />
+      <img src={assetUrl('/rider-icons/icon-192.png')} alt='' className='h-20 w-20 rounded-2xl' />
       <Loader2 className='h-8 w-8 animate-spin text-brand' />
       <p className='text-base font-semibold'>{t('signing_in')}</p>
     </div>
@@ -104,7 +104,7 @@ function InstallGuide({ name, onUseInBrowser }: { name?: string | null; onUseInB
       </div>
 
       <div className='mt-4 flex flex-col items-center text-center'>
-        <img src='/rider-icons/icon-512.png' alt='' className='h-20 w-20 rounded-3xl shadow-md' />
+        <img src={assetUrl('/rider-icons/icon-512.png')} alt='' className='h-20 w-20 rounded-3xl shadow-md' />
         <h1 className='mt-4 text-xl font-bold'>{name ? t('welcome', { name }) : t('app_name')}</h1>
         <p className='mt-1.5 text-sm text-muted-foreground'>{t('activate_intro')}</p>
       </div>
@@ -130,7 +130,7 @@ function InstallGuide({ name, onUseInBrowser }: { name?: string | null; onUseInB
             <ol className='space-y-3'>
               <Step n={1} icon={<Share className='h-5 w-5 text-sky-600' />} text={t('ios_step_share')} />
               <Step n={2} icon={<PlusSquare className='h-5 w-5' />} text={t('ios_step_add')} />
-              <Step n={3} icon={<img src='/rider-icons/icon-192.png' alt='' className='h-5 w-5 rounded' />} text={t('ios_step_open')} />
+              <Step n={3} icon={<img src={assetUrl('/rider-icons/icon-192.png')} alt='' className='h-5 w-5 rounded' />} text={t('ios_step_open')} />
             </ol>
             <p className='mt-3 text-xs text-muted-foreground'>{t('ios_open_in_safari')}</p>
           </div>

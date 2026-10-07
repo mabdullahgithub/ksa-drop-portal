@@ -9,7 +9,8 @@ use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
- * Signs the rider app's API requests in from the device cookie.
+ * Signs the rider app's API requests in from the device cookie, or from the
+ * phone app's Bearer token.
  *
  * Checked on every request, so suspending a rider or signing their phone out
  * from the portal takes effect on the very next tap.
@@ -20,7 +21,7 @@ class AuthenticateRider
 
     public function handle(Request $request, Closure $next): Response
     {
-        $device = $this->auth->deviceForToken($request->cookie(RiderAuthService::COOKIE));
+        $device = $this->auth->deviceForToken($this->auth->tokenFrom($request));
 
         if ($problem = $this->auth->deviceProblem($device)) {
             $response = response()->json([
@@ -30,7 +31,9 @@ class AuthenticateRider
 
             // Keep a suspended rider's cookie: reactivating them should just
             // work, without a new link.
-            return $problem === 'suspended' ? $response : $response->withCookie($this->auth->forgetCookie());
+            return $problem === 'suspended' || $this->auth->isNativeClient($request)
+                ? $response
+                : $response->withCookie($this->auth->forgetCookie());
         }
 
         $this->touch($device, $request);

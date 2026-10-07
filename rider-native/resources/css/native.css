@@ -1,0 +1,5 @@
+/* The phone app wears the portal's rider stylesheet as it is; this only adds
+   the app's own entry to what Tailwind scans. */
+@import '../../../resources/css/rider.css';
+
+@source '../js';

@@ -3,8 +3,12 @@
  * location, ids.
  */
 
+import { host } from './host'
+
+/** Installed: the home screen web app, or the phone app. */
 export function isStandalone(): boolean {
   return (
+    host().native ||
     window.matchMedia('(display-mode: standalone)').matches ||
     (navigator as unknown as { standalone?: boolean }).standalone === true
   )

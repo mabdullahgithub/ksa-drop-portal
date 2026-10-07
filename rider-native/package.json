@@ -1,0 +1,14 @@
+{
+    "$schema": "https://www.schemastore.org/package.json",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "assets": "node scripts/sync-assets.mjs",
+        "build": "node scripts/sync-assets.mjs && vite build",
+        "dev": "node scripts/sync-assets.mjs && vite",
+        "typecheck": "tsc --noEmit -p tsconfig.json"
+    },
+    "dependencies": {
+        "axios": "^1.15.0"
+    }
+}

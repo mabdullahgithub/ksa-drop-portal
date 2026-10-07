@@ -1,8 +1,11 @@
 /**
- * Tiny fetch client for /rider/api/*. The device cookie rides along on its
- * own (same origin, HttpOnly); the server checks Origin on writes instead of
- * a CSRF token.
+ * Tiny fetch client for /rider/api/*. On the portal the device cookie rides
+ * along on its own (same origin, HttpOnly) and the server checks Origin on
+ * writes instead of a CSRF token. The phone app (lib/host.ts) calls the
+ * portal from its own origin and sends its token instead.
  */
+
+import { host } from './lib/host'
 
 export class ApiError extends Error {
   constructor(
@@ -50,8 +53,15 @@ function reloadForNewRole() {
 }
 
 async function request<T>(method: 'GET' | 'POST', url: string, body?: FormData | object): Promise<T> {
+  const { native, apiBase, token } = host()
   const headers: Record<string, string> = { Accept: 'application/json' }
-  const init: RequestInit = { method, headers, credentials: 'same-origin' }
+  const init: RequestInit = { method, headers, credentials: native ? 'omit' : 'same-origin' }
+
+  if (native) {
+    headers['X-Rider-Client'] = 'native'
+    const bearer = token()
+    if (bearer) headers.Authorization = `Bearer ${bearer}`
+  }
 
   if (body instanceof FormData) {
     init.body = body
@@ -62,7 +72,7 @@ async function request<T>(method: 'GET' | 'POST', url: string, body?: FormData |
 
   let response: Response
   try {
-    response = await fetch(url, init)
+    response = await fetch(apiBase + url, init)
   } catch {
     throw new ApiError(0, 'offline', 'offline')
   }

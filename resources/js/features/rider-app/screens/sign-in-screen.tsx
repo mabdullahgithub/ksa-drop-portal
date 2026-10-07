@@ -3,6 +3,7 @@ import { KeyRound, Languages, Loader2 } from 'lucide-react'
 import { api, ApiError } from '../api'
 import { reasonText, useI18n } from '../i18n'
 import { isStandalone } from '../lib/device'
+import { assetUrl, host, type SignInAnswer } from '../lib/host'
 
 /**
  * Phone + PIN — the fallback when the activation link can't be used. The
@@ -24,12 +25,12 @@ export function SignInScreen({ reason }: { reason: string | null }) {
     setSubmitting(true)
     setError(null)
     try {
-      const { redirect } = await api.post<{ redirect: string }>('/rider/api/login', {
+      const answer = await api.post<SignInAnswer>('/rider/api/login', {
         phone,
         pin: pin.replace(/[٠-٩]/g, (d) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d))),
         standalone: isStandalone(),
       })
-      window.location.replace(redirect)
+      await host().signedIn(answer)
     } catch (e) {
       const err = e as ApiError
       setError(reasonText(t, err.code) ?? err.firstMessage)
@@ -47,7 +48,7 @@ export function SignInScreen({ reason }: { reason: string | null }) {
       </div>
 
       <div className='mt-6 flex flex-col items-center text-center'>
-        <img src='/rider-icons/icon-192.png' alt='' className='h-16 w-16 rounded-[20px] shadow-lg' />
+        <img src={assetUrl('/rider-icons/icon-192.png')} alt='' className='h-16 w-16 rounded-[20px] shadow-lg' />
         <h1 className='mt-3 text-xl font-bold'>{t('app_name')}</h1>
         <p className='mt-1.5 text-sm text-muted-foreground'>{t('sign_in_intro')}</p>
       </div>

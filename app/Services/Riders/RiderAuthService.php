@@ -34,6 +34,15 @@ class RiderAuthService
 
     public const COOKIE_MINUTES = 400 * 24 * 60;
 
+    /**
+     * Sent by the phone app (rider-native/). It runs on its own origin, so it
+     * has no cookie: it gets the device token in the sign-in answer, keeps it
+     * itself and sends it back as a Bearer token.
+     */
+    public const CLIENT_HEADER = 'X-Rider-Client';
+
+    public const CLIENT_NATIVE = 'native';
+
     public const ACTIVATION_DAYS = 7;
 
     private const ACTIVATION_TOKEN_LENGTH = 48;
@@ -179,8 +188,23 @@ class RiderAuthService
         return $rider->devices()->active()->update(['revoked_at' => now(), 'revoked_reason' => $reason]);
     }
 
+    public function isNativeClient(Request $request): bool
+    {
+        return $request->headers->get(self::CLIENT_HEADER) === self::CLIENT_NATIVE;
+    }
+
     /**
-     * The device a cookie token belongs to, revoked or not.
+     * The device token this request carries. The phone app's cookie is never
+     * read: its writes skip the Origin check (VerifyRiderOrigin), so they must
+     * not be able to ride on a browser's cookie.
+     */
+    public function tokenFrom(Request $request): ?string
+    {
+        return $this->isNativeClient($request) ? $request->bearerToken() : $request->cookie(self::COOKIE);
+    }
+
+    /**
+     * The device a token belongs to, revoked or not.
      */
     public function deviceForToken(?string $plain): ?RiderDevice
     {

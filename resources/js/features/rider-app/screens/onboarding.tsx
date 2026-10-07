@@ -3,6 +3,7 @@ import { ArrowLeft, ArrowRight, Box, House, Languages, Lightbulb, PackageCheck, 
 import { cn } from '@/lib/utils'
 import { useI18n, type TFunction } from '../i18n'
 import { isWebKit } from '../lib/device'
+import { assetUrl } from '../lib/host'
 import { cssColor, useStatusBarColor } from '../lib/status-bar'
 import type { RiderRole } from '../types'
 
@@ -138,7 +139,7 @@ function Welcome({ role, onStart }: { role: RiderRole; onStart: () => void }) {
       </p>
 
       <div className='flex min-h-0 flex-1 items-center justify-center py-4'>
-        <WelcomeVideo media={MEDIA[role]} className='aspect-square h-full max-h-[400px] max-w-full object-contain' />
+        <WelcomeVideo media={assetUrl(MEDIA[role])} className='aspect-square h-full max-h-[400px] max-w-full object-contain' />
       </div>
 
       <button
