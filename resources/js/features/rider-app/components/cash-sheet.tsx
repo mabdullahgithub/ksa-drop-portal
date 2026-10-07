@@ -5,7 +5,7 @@ import { SheetDescription, SheetTitle } from '@/components/ui/sheet'
 import { api, ApiError } from '../api'
 import { money, reasonText, useI18n, type Lang } from '../i18n'
 import { BottomSheet } from './bottom-sheet'
-import type { CashPayment, CashPaymentMethod, CashResponse, RiderCash, RiderPay } from '../types'
+import type { CashPayment, CashResponse, RiderCash, RiderPay } from '../types'
 
 /** The sheet's two accounts: the cash the rider owes, and the pay they are owed. */
 export type MoneySide = 'cash' | 'pay'
@@ -31,7 +31,8 @@ export const payLabel = (balance: number) => (balance > 0 ? 'pay_owed' : balance
 /** Nothing to show about pay until KSA Drop has set a rate or the rider has earned something. */
 export const hasPay = (pay: RiderPay) => pay.rates.delivery > 0 || pay.rates.attempt > 0 || pay.earned > 0 || pay.paid > 0
 
-const PAYOUT_METHODS: CashPaymentMethod[] = ['cash', 'bank_transfer', 'other']
+/** Deliveries by how the customer paid, then failed attempts. Prepaid shows only when there is some. */
+const EARNING_SOURCES = ['cash', 'card', 'transfer', 'prepaid', 'attempt'] as const
 
 const amount = (n: number) => n.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
 
@@ -135,14 +136,13 @@ export function CashSheet({ open, onClose, only, cash: initialCash, pay: initial
 
             <Heading className='mt-5'>{t('pay_earned_from')}</Heading>
             <dl className='grid grid-cols-2 gap-2'>
-              <MiniStat label={t('pay_from_delivered', { n: pay.delivered })} amount={pay.earned_delivered} tone='text-green-700 dark:text-green-400' />
-              <MiniStat label={t('pay_from_attempts', { n: pay.attempted })} amount={pay.earned_attempted} />
-            </dl>
-
-            <Heading className='mt-5'>{t('pay_paid_how')}</Heading>
-            <dl className='grid grid-cols-3 gap-2'>
-              {PAYOUT_METHODS.map((method) => (
-                <MiniStat key={method} label={t(`method_${method}`)} amount={pay.paid_by[method]} />
+              {EARNING_SOURCES.filter((source) => source !== 'prepaid' || pay.earned_by.prepaid.count > 0).map((source) => (
+                <MiniStat
+                  key={source}
+                  label={t(`pay_from_${source}`, { n: pay.earned_by[source].count })}
+                  amount={pay.earned_by[source].amount}
+                  tone={source === 'attempt' ? 'text-red-600 dark:text-red-400' : 'text-green-700 dark:text-green-400'}
+                />
               ))}
             </dl>
             <Note>{t('pay_rates', { delivery: amount(pay.rates.delivery), attempt: amount(pay.rates.attempt) })}</Note>

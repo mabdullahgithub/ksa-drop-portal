@@ -130,6 +130,9 @@ class RiderPayTest extends TestCase
             ->assertJsonPath('pay.earned', 14)
             ->assertJsonPath('pay.earned_delivered', 10)
             ->assertJsonPath('pay.earned_attempted', 4)
+            ->assertJsonPath('pay.earned_by.cash', ['amount' => 10, 'count' => 1])
+            ->assertJsonPath('pay.earned_by.card.count', 0)
+            ->assertJsonPath('pay.earned_by.attempt', ['amount' => 4, 'count' => 1])
             ->assertJsonPath('pay.delivered', 1)
             ->assertJsonPath('pay.attempted', 1);
     }

@@ -28,6 +28,12 @@ use App\Services\Shipping\Enums\RiderAction;
 class RiderPay
 {
     /**
+     * Where earnings come from: deliveries by how the customer paid the COD
+     * (prepaid when there was none to collect), and failed attempts.
+     */
+    public const SOURCES = ['cash', 'card', 'transfer', 'prepaid', 'attempt'];
+
+    /**
      * What a delivery and an attempt pay this rider. Each rider has their
      * own, set by the admin in their details; nothing until then.
      *
@@ -72,10 +78,11 @@ class RiderPay
 
     /**
      * A balance above zero is what KSA Drop still owes the rider. Earnings
-     * are also split by what earned them, and payouts by how they were paid.
+     * are also split by what earned them (self::SOURCES), and payouts by how
+     * they were paid.
      *
      * @param  array<int>  $riderIds
-     * @return array<int, array{earned: float, earned_delivered: float, earned_attempted: float, paid: float, paid_by: array{cash: float, bank_transfer: float, other: float}, balance: float, delivered: int, attempted: int}>
+     * @return array<int, array{earned: float, earned_delivered: float, earned_attempted: float, earned_by: array<string, array{amount: float, count: int}>, paid: float, paid_by: array{cash: float, bank_transfer: float, other: float}, balance: float, delivered: int, attempted: int}>
      */
     public static function forRiders(array $riderIds): array
     {
@@ -83,6 +90,7 @@ class RiderPay
         foreach ($riderIds as $id) {
             $pay[$id] = [
                 'earned' => 0.0, 'earned_delivered' => 0.0, 'earned_attempted' => 0.0,
+                'earned_by' => array_fill_keys(self::SOURCES, ['amount' => 0.0, 'count' => 0]),
                 'paid' => 0.0, 'paid_by' => array_fill_keys(RiderPayment::METHODS, 0.0),
                 'balance' => 0.0, 'delivered' => 0, 'attempted' => 0,
             ];
@@ -92,9 +100,11 @@ class RiderPay
             return $pay;
         }
 
-        $earned = RiderEarning::whereIn('rider_id', $riderIds)
-            ->selectRaw('rider_id, type, COUNT(*) as visits, COALESCE(SUM(amount), 0) as total')
-            ->groupBy('rider_id', 'type')
+        $earned = RiderEarning::query()
+            ->leftJoin('shipment_events', 'shipment_events.id', '=', 'rider_earnings.shipment_event_id')
+            ->whereIn('rider_earnings.rider_id', $riderIds)
+            ->selectRaw('rider_earnings.rider_id, rider_earnings.type, shipment_events.payment_method, COUNT(*) as visits, COALESCE(SUM(rider_earnings.amount), 0) as total')
+            ->groupBy('rider_earnings.rider_id', 'rider_earnings.type', 'shipment_events.payment_method')
             ->get();
 
         foreach ($earned as $row) {
@@ -102,6 +112,14 @@ class RiderPay
             $pay[$row->rider_id]['earned'] += (float) $row->total;
             $pay[$row->rider_id]["earned_{$kind}"] += (float) $row->total;
             $pay[$row->rider_id][$kind] += (int) $row->visits;
+
+            $source = match (true) {
+                $kind === 'attempted' => 'attempt',
+                in_array($row->payment_method, ['cash', 'card', 'transfer'], true) => $row->payment_method,
+                default => 'prepaid',
+            };
+            $pay[$row->rider_id]['earned_by'][$source]['amount'] += (float) $row->total;
+            $pay[$row->rider_id]['earned_by'][$source]['count'] += (int) $row->visits;
         }
 
         $paid = RiderPayment::counted()
@@ -120,6 +138,7 @@ class RiderPay
             'earned' => round($row['earned'], 2),
             'earned_delivered' => round($row['earned_delivered'], 2),
             'earned_attempted' => round($row['earned_attempted'], 2),
+            'earned_by' => array_map(fn (array $source) => ['amount' => round($source['amount'], 2), 'count' => $source['count']], $row['earned_by']),
             'paid' => round($row['paid'], 2),
             'paid_by' => array_map(fn (float $amount) => round($amount, 2), $row['paid_by']),
             'balance' => round($row['earned'] - $row['paid'], 2),
@@ -129,7 +148,7 @@ class RiderPay
     }
 
     /**
-     * @return array{earned: float, earned_delivered: float, earned_attempted: float, paid: float, paid_by: array{cash: float, bank_transfer: float, other: float}, balance: float, delivered: int, attempted: int}
+     * @return array{earned: float, earned_delivered: float, earned_attempted: float, earned_by: array<string, array{amount: float, count: int}>, paid: float, paid_by: array{cash: float, bank_transfer: float, other: float}, balance: float, delivered: int, attempted: int}
      */
     public static function forRider(int $riderId): array
     {

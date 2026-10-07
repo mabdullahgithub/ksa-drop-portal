@@ -37,6 +37,15 @@ const when = (iso: string) => format(toBusinessTime(iso), 'MMM d, yyyy · HH:mm'
 const methodLabel = (method: string) => PAYMENT_METHODS.find((m) => m.value === method)?.label ?? method
 const today = () => format(businessToday(), 'yyyy-MM-dd')
 
+/** Where a rider's earnings come from: deliveries by how the customer paid, and failed attempts. */
+const EARNING_SOURCES = [
+  { key: 'cash', label: 'Cash orders', unit: 'delivered' },
+  { key: 'card', label: 'Card orders', unit: 'delivered' },
+  { key: 'transfer', label: 'Transfer orders', unit: 'delivered' },
+  { key: 'prepaid', label: 'Prepaid orders', unit: 'delivered' },
+  { key: 'attempt', label: 'Failed attempts', unit: 'paid' },
+] as const
+
 /** What each side of the sheet calls things. */
 const WORDING = {
   in: {
@@ -186,10 +195,11 @@ export function RiderPaymentsSheet({ rider, onEditRates, initialDirection = 'in'
               </p>
               <Breakdown
                 title={`Earned: ${sar(pay.earned)}`}
-                parts={[
-                  { label: 'Deliveries', value: pay.earned_delivered, hint: `${pay.delivered} delivered` },
-                  { label: 'Attempts', value: pay.earned_attempted, hint: `${pay.attempted} paid attempt${pay.attempted === 1 ? '' : 's'}` },
-                ]}
+                parts={EARNING_SOURCES.filter((s) => s.key !== 'prepaid' || pay.earned_by.prepaid.count > 0).map((s) => ({
+                  label: s.label,
+                  value: pay.earned_by[s.key].amount,
+                  hint: `${pay.earned_by[s.key].count} ${s.unit}`,
+                }))}
               />
               <Breakdown
                 title={`Paid to rider: ${sar(pay.paid)}`}
