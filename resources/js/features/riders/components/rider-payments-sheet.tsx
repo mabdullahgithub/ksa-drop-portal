@@ -23,7 +23,9 @@ import { businessToday, toBusinessTime } from '@/lib/business-time'
 import { cn } from '@/lib/utils'
 import { uuid } from '@/lib/uuid'
 import {
+  COD_METHODS,
   PAYMENT_METHODS,
+  type CodMethod,
   type PaymentDirection,
   type RiderBalances,
   type RiderPayment,
@@ -35,6 +37,9 @@ import { sar } from './rider-parts'
 
 const when = (iso: string) => format(toBusinessTime(iso), 'MMM d, yyyy · HH:mm')
 const methodLabel = (method: string) => PAYMENT_METHODS.find((m) => m.value === method)?.label ?? method
+const codLabel = (method: string) => COD_METHODS.find((m) => m.value === method)?.label ?? method
+/** rider_payments.method for a payment from the rider, by the COD it settles. */
+const FROM_RIDER_METHOD: Record<CodMethod, RiderPaymentMethod> = { cash: 'cash', card: 'other', transfer: 'bank_transfer' }
 const today = () => format(businessToday(), 'yyyy-MM-dd')
 
 const COLORS = {
@@ -170,17 +175,9 @@ export function RiderPaymentsSheet({ rider, onEditRates, initialDirection = 'in'
             <>
               <CodBreakdown cash={cash} className='mt-2' />
               <p className='text-xs text-muted-foreground'>
-                Handed in <span className='font-semibold text-green-700 tabular-nums dark:text-green-400'>{sar(cash.paid)}</span>
+                Collected <span className='font-semibold text-foreground tabular-nums'>{sar(cash.collected + cash.direct)}</span>
                 {' · '}
-                {cash.balance < 0 ? 'In credit' : 'Still owes'}{' '}
-                <span
-                  className={cn(
-                    'font-semibold tabular-nums',
-                    cash.balance > 0 ? 'text-amber-700 dark:text-amber-400' : cash.balance < 0 ? 'text-green-700 dark:text-green-400' : 'text-foreground'
-                  )}
-                >
-                  {sar(Math.abs(cash.balance))}
-                </span>
+                Handed in <span className='font-semibold text-green-700 tabular-nums dark:text-green-400'>{sar(cash.paid)}</span>
               </p>
             </>
           ) : (
@@ -224,6 +221,7 @@ export function RiderPaymentsSheet({ rider, onEditRates, initialDirection = 'in'
               riderName={firstName}
               direction={direction}
               balance={direction === 'in' ? cash.balance : pay.balance}
+              owed={direction === 'in' ? cash.owed : undefined}
               onRecorded={(next) => {
                 applyBalances(next)
                 // A back-dated payment doesn't belong at the top: read the list again.
@@ -295,18 +293,18 @@ function Figure({ label, value, tone, strong }: { label: string; value: string; 
 }
 
 /**
- * Every COD the rider's customers paid, by how they paid it, and the total —
- * which is what the rider owes.
+ * What the rider still owes of the COD customers paid in cash, by card and
+ * by transfer, and in total. A payment recorded for one of them comes off it.
  */
 function CodBreakdown({ cash, className }: { cash: RiderBalances['cash']; className?: string }) {
   return (
     <ColorBoxes
       className={className}
       boxes={[
-        { label: 'Cash', value: cash.collected, color: COLORS.green },
-        { label: 'Card', value: cash.card, color: COLORS.blue },
-        { label: 'Transfer', value: cash.transfer, color: COLORS.violet },
-        { label: 'Total', value: cash.collected + cash.direct, color: COLORS.amber },
+        { label: 'Cash owed', value: cash.owed.cash, color: COLORS.green },
+        { label: 'Card owed', value: cash.owed.card, color: COLORS.blue },
+        { label: 'Transfer owed', value: cash.owed.transfer, color: COLORS.violet },
+        { label: 'Total owed', value: cash.balance, color: COLORS.amber },
       ]}
     />
   )
@@ -332,7 +330,8 @@ function RecordPayment({
   riderId,
   riderName,
   direction,
-  balance,
+  balance: sideBalance,
+  owed,
   onRecorded,
 }: {
   riderId: number
@@ -340,11 +339,16 @@ function RecordPayment({
   direction: PaymentDirection
   /** What is still owed on this side. */
   balance: number
+  /** From the rider: what is still owed of each COD. */
+  owed?: Record<CodMethod, number>
   onRecorded: (balances: RiderBalances) => void
 }) {
   const words = WORDING[direction]
   const [amount, setAmount] = useState('')
   const [method, setMethod] = useState<RiderPaymentMethod>('cash')
+  const [codMethod, setCodMethod] = useState<CodMethod>('cash')
+  // A payment from the rider settles one COD: that one's balance is what counts.
+  const balance = owed ? owed[codMethod] : sideBalance
   const [receivedOn, setReceivedOn] = useState(today)
   const [reference, setReference] = useState('')
   const [note, setNote] = useState('')
@@ -368,7 +372,9 @@ function RecordPayment({
       const { data } = await axios.post(`/api/riders/${riderId}/payments`, {
         direction,
         amount: value.toFixed(2),
-        method,
+        // How the rider paid follows what they are paying for.
+        method: owed ? FROM_RIDER_METHOD[codMethod] : method,
+        cod_method: owed ? codMethod : null,
         reference: reference.trim() || null,
         note: note.trim() || null,
         // Today: the server's clock. An earlier day: midday, KSA time.
@@ -417,13 +423,13 @@ function RecordPayment({
             )}
           </div>
         </Field>
-        <Field label='Paid by' error={errors.method}>
-          <Select value={method} onValueChange={(v) => setMethod(v as RiderPaymentMethod)}>
+        <Field label={owed ? 'Payment for' : 'Paid by'} error={errors.method}>
+          <Select value={owed ? codMethod : method} onValueChange={(v) => (owed ? setCodMethod(v as CodMethod) : setMethod(v as RiderPaymentMethod))}>
             <SelectTrigger className='w-full'>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {PAYMENT_METHODS.map((m) => (
+              {(owed ? COD_METHODS : PAYMENT_METHODS).map((m) => (
                 <SelectItem key={m.value} value={m.value}>
                   {m.label}
                 </SelectItem>
@@ -452,8 +458,8 @@ function RecordPayment({
         <p className='text-xs text-amber-700 dark:text-amber-400'>
           {direction === 'in'
             ? balance > 0
-              ? `That is more than the ${sar(balance)} the rider owes. The extra is kept as credit.`
-              : 'The rider owes nothing right now. This is kept as credit.'
+              ? `That is more than the ${sar(balance)} the rider owes for ${codLabel(codMethod).toLowerCase()}. The extra is kept as credit.`
+              : `The rider owes nothing for ${codLabel(codMethod).toLowerCase()} right now. This is kept as credit.`
             : balance > 0
               ? `That is more than the ${sar(balance)} owed to the rider. The extra counts against what they earn next.`
               : 'Nothing is owed to the rider right now. This counts against what they earn next.'}
@@ -499,7 +505,7 @@ function PaymentItem({ payment, onVoid }: { payment: RiderPayment; onVoid?: () =
     <li className='flex items-start justify-between gap-3 px-4 py-3'>
       <div className='min-w-0 text-xs text-muted-foreground'>
         <p className={cn('text-sm font-medium text-foreground', voided && 'line-through opacity-60')}>
-          {methodLabel(payment.method)}
+          {payment.cod_method ? codLabel(payment.cod_method) : methodLabel(payment.method)}
           {payment.reference && <span className='font-normal text-muted-foreground'> · {payment.reference}</span>}
         </p>
         <p className='tabular-nums'>

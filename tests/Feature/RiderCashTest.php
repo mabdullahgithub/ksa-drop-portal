@@ -80,6 +80,37 @@ class RiderCashTest extends TestCase
             ->assertJsonPath('riders.0.stats.cash_collected', 400.5);
     }
 
+    public function test_a_payment_comes_off_the_cod_it_was_recorded_for(): void
+    {
+        $rider = $this->makeRider();
+        $token = $this->signedInDevice($rider);
+
+        $this->deliver($token, 150);
+        $this->deliver($token, 80, 'card');
+        $this->deliver($token, 20, 'transfer');
+
+        $this->pay($rider, ['amount' => 50, 'cod_method' => 'card', 'method' => 'other'])
+            ->assertCreated()
+            ->assertJsonPath('payment.cod_method', 'card')
+            ->assertJsonPath('cash.owed', ['cash' => 150, 'card' => 30, 'transfer' => 20])
+            ->assertJsonPath('cash.paid', 50)
+            ->assertJsonPath('cash.balance', 200);
+
+        // Cash unless said otherwise.
+        $this->pay($rider, ['amount' => 150])
+            ->assertCreated()
+            ->assertJsonPath('payment.cod_method', 'cash')
+            ->assertJsonPath('cash.owed.cash', 0)
+            ->assertJsonPath('cash.balance', 50);
+
+        $this->pay($rider, ['cod_method' => 'cheque'])->assertStatus(422)->assertJsonValidationErrors('cod_method');
+
+        $this->asRider($token)->getJson('/rider/api/cash')
+            ->assertOk()
+            ->assertJsonPath('cash.owed.transfer', 20)
+            ->assertJsonPath('payments.1.cod_method', 'card');
+    }
+
     public function test_recording_a_payment_brings_down_what_the_rider_owes(): void
     {
         $rider = $this->makeRider(['name' => 'Ahmed Khan']);

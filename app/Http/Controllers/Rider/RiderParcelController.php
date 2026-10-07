@@ -80,6 +80,7 @@ class RiderParcelController extends Controller
             'id' => $payment->id,
             'amount' => (float) $payment->amount,
             'method' => $payment->method,
+            'cod_method' => $payment->cod_method,
             'reference' => $payment->reference,
             'received_at' => $payment->received_at->toIso8601String(),
         ])->values();

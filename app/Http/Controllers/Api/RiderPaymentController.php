@@ -51,6 +51,8 @@ class RiderPaymentController extends Controller
             'direction' => ['nullable', Rule::in(RiderPayment::DIRECTIONS)],
             'amount' => 'required|numeric|min:0.01|max:999999.99',
             'method' => ['required', Rule::in(RiderPayment::METHODS)],
+            // From the rider: which of their COD it settles. Cash unless said.
+            'cod_method' => ['nullable', Rule::in(RiderPayment::COD_METHODS)],
             'reference' => 'nullable|string|max:100',
             'note' => 'nullable|string|max:500',
             // Yesterday's hand-in entered today is fine; a date ahead isn't.
@@ -61,11 +63,14 @@ class RiderPaymentController extends Controller
             'received_at.after' => 'The date received is too far back.',
         ]);
 
+        $direction = $validated['direction'] ?? RiderPayment::DIRECTION_IN;
+
         try {
             $payment = $this->alreadyRecorded($rider, $validated['client_uuid']) ?? $rider->payments()->create([
-                'direction' => $validated['direction'] ?? RiderPayment::DIRECTION_IN,
+                'direction' => $direction,
                 'amount' => round((float) $validated['amount'], 2),
                 'method' => $validated['method'],
+                'cod_method' => $direction === RiderPayment::DIRECTION_IN ? ($validated['cod_method'] ?? 'cash') : null,
                 'reference' => filled($validated['reference'] ?? null) ? trim($validated['reference']) : null,
                 'note' => filled($validated['note'] ?? null) ? trim($validated['note']) : null,
                 'received_at' => $validated['received_at'] ?? now(),
@@ -139,6 +144,7 @@ class RiderPaymentController extends Controller
             'direction' => $payment->direction,
             'amount' => (float) $payment->amount,
             'method' => $payment->method,
+            'cod_method' => $payment->cod_method,
             'reference' => $payment->reference,
             'note' => $payment->note,
             'received_at' => $payment->received_at->toIso8601String(),

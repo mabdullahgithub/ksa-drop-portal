@@ -30,11 +30,18 @@ class RiderPayment extends Model
 
     public const METHODS = [self::METHOD_CASH, self::METHOD_BANK_TRANSFER, self::METHOD_OTHER];
 
+    /**
+     * Which COD a payment from the rider settles, by how the customer paid
+     * it (shipment_events.payment_method). Each is owed on its own.
+     */
+    public const COD_METHODS = ['cash', 'card', 'transfer'];
+
     protected $fillable = [
         'rider_id',
         'direction',
         'amount',
         'method',
+        'cod_method',
         'reference',
         'note',
         'received_at',

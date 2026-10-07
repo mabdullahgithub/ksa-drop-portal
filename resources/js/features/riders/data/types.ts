@@ -105,9 +105,20 @@ export type RiderCash = {
   card: number
   transfer: number
   paid: number
+  /** What is left to hand in of each: the COD customers paid in cash, by card and by transfer. Below zero: handed in more. */
+  owed: Record<CodMethod, number>
   /** Above zero: still owed. Below zero: handed in more than collected. */
   balance: number
 }
+
+/** Which COD a payment from the rider settles, by how the customer paid it. */
+export const COD_METHODS = [
+  { value: 'cash', label: 'Cash' },
+  { value: 'card', label: 'Card' },
+  { value: 'transfer', label: 'Transfer' },
+] as const
+
+export type CodMethod = (typeof COD_METHODS)[number]['value']
 
 export const PAYMENT_METHODS = [
   { value: 'cash', label: 'Cash' },
@@ -123,6 +134,8 @@ export type RiderPayment = {
   direction: PaymentDirection
   amount: number
   method: RiderPaymentMethod
+  /** From the rider: which COD it settled. Null on a payout. */
+  cod_method: CodMethod | null
   reference: string | null
   note: string | null
   received_at: string

@@ -96,6 +96,8 @@ export type RiderCash = {
   card: number
   transfer: number
   paid: number
+  /** What is left to hand in of each. */
+  owed: Record<PaymentMethod, number>
   /** Above zero: still to pay. Below zero: paid more than collected. */
   balance: number
 }
@@ -107,6 +109,8 @@ export type CashPayment = {
   id: number
   amount: number
   method: CashPaymentMethod
+  /** A payment from me: which COD it settled. Null on a payout. */
+  cod_method: PaymentMethod | null
   reference: string | null
   received_at: string
 }

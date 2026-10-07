@@ -222,7 +222,7 @@ function Payments({ payments, empty, loading }: { payments: CashPayment[] | unde
       {payments.map((payment) => (
         <li key={payment.id} className='flex items-center justify-between gap-3 py-3'>
           <div className='min-w-0'>
-            <p className='text-[15px] font-semibold'>{t(`method_${payment.method}`)}</p>
+            <p className='text-[15px] font-semibold'>{payment.cod_method ? t(`cod_${payment.cod_method}`) : t(`method_${payment.method}`)}</p>
             <p className='truncate text-xs text-muted-foreground'>
               {when(lang, payment.received_at)}
               {payment.reference && <span> · {t('cash_ref', { ref: payment.reference })}</span>}
