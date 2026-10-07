@@ -37,13 +37,22 @@ const when = (iso: string) => format(toBusinessTime(iso), 'MMM d, yyyy · HH:mm'
 const methodLabel = (method: string) => PAYMENT_METHODS.find((m) => m.value === method)?.label ?? method
 const today = () => format(businessToday(), 'yyyy-MM-dd')
 
+const COLORS = {
+  green: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400',
+  blue: 'border-blue-500/30 bg-blue-500/10 text-blue-700 dark:text-blue-400',
+  violet: 'border-violet-500/30 bg-violet-500/10 text-violet-700 dark:text-violet-400',
+  amber: 'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400',
+  red: 'border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-400',
+  slate: 'border-slate-500/30 bg-slate-500/10 text-slate-700 dark:text-slate-300',
+}
+
 /** Where a rider's earnings come from: deliveries by how the customer paid, and failed attempts. */
 const EARNING_SOURCES = [
-  { key: 'cash', label: 'Cash orders', unit: 'delivered' },
-  { key: 'card', label: 'Card orders', unit: 'delivered' },
-  { key: 'transfer', label: 'Transfer orders', unit: 'delivered' },
-  { key: 'prepaid', label: 'Prepaid orders', unit: 'delivered' },
-  { key: 'attempt', label: 'Failed attempts', unit: 'paid' },
+  { key: 'cash', label: 'Cash orders', color: COLORS.green },
+  { key: 'card', label: 'Card orders', color: COLORS.blue },
+  { key: 'transfer', label: 'Transfer orders', color: COLORS.violet },
+  { key: 'prepaid', label: 'Prepaid orders', color: COLORS.slate },
+  { key: 'attempt', label: 'Failed attempts', color: COLORS.red },
 ] as const
 
 /** What each side of the sheet calls things. */
@@ -186,9 +195,16 @@ export function RiderPaymentsSheet({ rider, onEditRates, initialDirection = 'in'
                   strong
                 />
               </div>
+              <ColorBoxes
+                boxes={EARNING_SOURCES.filter((source) => source.key !== 'prepaid' || pay.earned_by.prepaid.count > 0).map((source) => ({
+                  label: `${source.label} (${pay.earned_by[source.key].count})`,
+                  value: pay.earned_by[source.key].amount,
+                  color: source.color,
+                }))}
+              />
               <p className={cn('text-xs', hasRates ? 'text-muted-foreground' : 'text-amber-700 dark:text-amber-400')}>
                 {hasRates
-                  ? `${pay.delivered} ${pay.delivered === 1 ? 'delivery' : 'deliveries'} and ${pay.attempted} paid attempt${pay.attempted === 1 ? '' : 's'} so far. ${firstName} is paid ${sar(rider.delivery_rate ?? 0)} per delivery and ${sar(rider.attempt_rate ?? 0)} per attempt.`
+                  ? `${sar(rider.delivery_rate ?? 0)} per delivery · ${sar(rider.attempt_rate ?? 0)} per failed attempt.`
                   : `No pay rates set for ${firstName} yet, so their orders earn nothing.`}{' '}
                 {onEditRates && (
                   <button type='button' onClick={onEditRates} className='font-medium text-primary underline-offset-2 hover:underline'>
@@ -196,19 +212,6 @@ export function RiderPaymentsSheet({ rider, onEditRates, initialDirection = 'in'
                   </button>
                 )}
               </p>
-              <Breakdown
-                title={`Earned: ${sar(pay.earned)}`}
-                parts={EARNING_SOURCES.filter((s) => s.key !== 'prepaid' || pay.earned_by.prepaid.count > 0).map((s) => ({
-                  label: s.label,
-                  value: pay.earned_by[s.key].amount,
-                  hint: `${pay.earned_by[s.key].count} ${s.unit}`,
-                }))}
-              />
-              <Breakdown
-                title={`Paid to rider: ${sar(pay.paid)}`}
-                parts={PAYMENT_METHODS.map((m) => ({ label: m.label, value: pay.paid_by[m.value] }))}
-              />
-              <CodBreakdown cash={cash} />
             </>
           )}
         </SheetHeader>
@@ -297,39 +300,29 @@ function Figure({ label, value, tone, strong }: { label: string; value: string; 
  * directly.
  */
 function CodBreakdown({ cash, className }: { cash: RiderBalances['cash']; className?: string }) {
-  const boxes = [
-    { label: 'Cash', value: cash.collected, color: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400' },
-    { label: 'Card', value: cash.card, color: 'border-blue-500/30 bg-blue-500/10 text-blue-700 dark:text-blue-400' },
-    { label: 'Transfer', value: cash.transfer, color: 'border-violet-500/30 bg-violet-500/10 text-violet-700 dark:text-violet-400' },
-    { label: 'Total', value: cash.collected + cash.direct, color: 'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400' },
-  ]
+  return (
+    <ColorBoxes
+      className={className}
+      boxes={[
+        { label: 'Cash', value: cash.collected, color: COLORS.green },
+        { label: 'Card', value: cash.card, color: COLORS.blue },
+        { label: 'Transfer', value: cash.transfer, color: COLORS.violet },
+        { label: 'Total', value: cash.collected + cash.direct, color: COLORS.amber },
+      ]}
+    />
+  )
+}
 
+/** Amounts side by side, a coloured box each. */
+function ColorBoxes({ boxes, className }: { boxes: { label: string; value: number; color: string }[]; className?: string }) {
   return (
     <div className={cn('grid grid-cols-2 gap-2 sm:grid-cols-4', className)}>
       {boxes.map((box) => (
         <div key={box.label} className={cn('rounded-lg border p-2.5', box.color)}>
-          <p className='text-xs opacity-80'>{box.label}</p>
+          <p className='truncate text-xs opacity-80'>{box.label}</p>
           <p className='mt-0.5 text-sm font-semibold tabular-nums'>{sar(box.value)}</p>
         </div>
       ))}
-    </div>
-  )
-}
-
-/** One total, split into the amounts that make it up. */
-function Breakdown({ title, parts }: { title: string; parts: { label: string; value: number; hint?: string }[] }) {
-  return (
-    <div className='rounded-lg border p-2.5'>
-      <p className='text-xs text-muted-foreground'>{title}</p>
-      <dl className='mt-1.5 grid grid-cols-3 gap-2'>
-        {parts.map((part) => (
-          <div key={part.label}>
-            <dt className='text-xs text-muted-foreground'>{part.label}</dt>
-            <dd className='text-sm font-semibold tabular-nums'>{sar(part.value)}</dd>
-            {part.hint && <dd className='text-[11px] text-muted-foreground'>{part.hint}</dd>}
-          </div>
-        ))}
-      </dl>
     </div>
   )
 }
