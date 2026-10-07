@@ -159,17 +159,20 @@ export function RiderPaymentsSheet({ rider, onEditRates, initialDirection = 'in'
 
           {direction === 'in' ? (
             <>
-              <div className='mt-2 grid grid-cols-3 gap-2'>
-                <Figure label='Collected in cash' value={sar(cash.collected)} />
-                <Figure label='Handed in' value={sar(cash.paid)} tone='text-green-700 dark:text-green-400' />
-                <Figure
-                  label={cash.balance < 0 ? 'In credit' : 'Still owes'}
-                  value={sar(Math.abs(cash.balance))}
-                  tone={cash.balance > 0 ? 'text-amber-700 dark:text-amber-400' : cash.balance < 0 ? 'text-green-700 dark:text-green-400' : undefined}
-                  strong
-                />
-              </div>
-              <CodBreakdown cash={cash} />
+              <CodBreakdown cash={cash} className='mt-2' />
+              <p className='text-xs text-muted-foreground'>
+                Handed in <span className='font-semibold text-green-700 tabular-nums dark:text-green-400'>{sar(cash.paid)}</span>
+                {' · '}
+                {cash.balance < 0 ? 'In credit' : 'Still owes'}{' '}
+                <span
+                  className={cn(
+                    'font-semibold tabular-nums',
+                    cash.balance > 0 ? 'text-amber-700 dark:text-amber-400' : cash.balance < 0 ? 'text-green-700 dark:text-green-400' : 'text-foreground'
+                  )}
+                >
+                  {sar(Math.abs(cash.balance))}
+                </span>
+              </p>
             </>
           ) : (
             <>
@@ -289,19 +292,27 @@ function Figure({ label, value, tone, strong }: { label: string; value: string; 
 }
 
 /**
- * Every COD the rider's customers paid, by how they paid it. Only the cash is
- * in the rider's pocket; card and transfer reached KSA Drop directly.
+ * Every COD the rider's customers paid, by how they paid it, and the total.
+ * Only the cash is in the rider's pocket; card and transfer reached KSA Drop
+ * directly.
  */
-function CodBreakdown({ cash }: { cash: RiderBalances['cash'] }) {
+function CodBreakdown({ cash, className }: { cash: RiderBalances['cash']; className?: string }) {
+  const boxes = [
+    { label: 'Cash', value: cash.collected, color: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400' },
+    { label: 'Card', value: cash.card, color: 'border-blue-500/30 bg-blue-500/10 text-blue-700 dark:text-blue-400' },
+    { label: 'Transfer', value: cash.transfer, color: 'border-violet-500/30 bg-violet-500/10 text-violet-700 dark:text-violet-400' },
+    { label: 'Total', value: cash.collected + cash.direct, color: 'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400' },
+  ]
+
   return (
-    <Breakdown
-      title={`COD collected from customers: ${sar(cash.collected + cash.direct)}`}
-      parts={[
-        { label: 'Cash', value: cash.collected, hint: 'with the rider' },
-        { label: 'Card', value: cash.card, hint: 'direct to KSA Drop' },
-        { label: 'Transfer', value: cash.transfer, hint: 'direct to KSA Drop' },
-      ]}
-    />
+    <div className={cn('grid grid-cols-2 gap-2 sm:grid-cols-4', className)}>
+      {boxes.map((box) => (
+        <div key={box.label} className={cn('rounded-lg border p-2.5', box.color)}>
+          <p className='text-xs opacity-80'>{box.label}</p>
+          <p className='mt-0.5 text-sm font-semibold tabular-nums'>{sar(box.value)}</p>
+        </div>
+      ))}
+    </div>
   )
 }
 
