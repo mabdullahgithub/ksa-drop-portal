@@ -105,7 +105,7 @@ const formatEventTime = (timestamp: string) =>
 const riderActionLabels: Record<RiderEvent['action'], string> = {
   out_for_delivery: 'Out for delivery',
   delivered: 'Delivered',
-  attempt_failed: 'Delivery failed',
+  attempt_failed: 'Attempt failed',
   returned: 'Marked returned',
   cancelled: 'Marked cancelled',
   returned_to_hub: 'Handed back at the hub',

@@ -497,27 +497,26 @@ function UpdateBody({ request, onClose, onUpdated, helpLink }: { request: Update
         {/* Failed, returned or cancelled: why — and, for a failed attempt, the photo that shows the rider went */}
         {canUpdate && action && needsReason && (
           <div className='mt-5 space-y-4'>
-            <div className='space-y-1.5'>
+            <label className='block space-y-1.5'>
               <span className='text-sm font-semibold'>{t('why_failed')}</span>
-              <div className='grid grid-cols-2 gap-2'>
+              <select
+                value={reason ?? ''}
+                onChange={(e) => setReason((e.target.value || null) as FailedReason | null)}
+                className={cn(
+                  'glass-lite block h-12 w-full rounded-2xl px-3.5 text-[15px] font-semibold outline-none focus:outline-2 focus:outline-brand dark:[color-scheme:dark]',
+                  !reason && 'text-muted-foreground'
+                )}
+              >
+                <option value='' disabled>
+                  {t('choose_reason')}
+                </option>
                 {REASONS.map((option) => (
-                  <button
-                    key={option}
-                    type='button'
-                    onClick={() => setReason(option)}
-                    aria-pressed={reason === option}
-                    className={cn(
-                      'glass-press min-h-10 rounded-2xl px-3.5 py-2 text-start text-[13px] font-semibold',
-                      reason === option ? 'glass-tint' : 'glass-lite',
-                      option === 'other' && 'col-span-2'
-                    )}
-                    style={reason === option ? tint(ACTION_STYLE[action].tint) : undefined}
-                  >
+                  <option key={option} value={option}>
                     {t(`reason_${option}`)}
-                  </button>
+                  </option>
                 ))}
-              </div>
-            </div>
+              </select>
+            </label>
 
             {needsDate && (
               <label className='block space-y-1.5'>
