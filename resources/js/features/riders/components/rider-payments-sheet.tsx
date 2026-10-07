@@ -184,6 +184,17 @@ export function RiderPaymentsSheet({ rider, onEditRates, initialDirection = 'in'
                   </button>
                 )}
               </p>
+              <Breakdown
+                title={`Earned: ${sar(pay.earned)}`}
+                parts={[
+                  { label: 'Deliveries', value: pay.earned_delivered, hint: `${pay.delivered} delivered` },
+                  { label: 'Attempts', value: pay.earned_attempted, hint: `${pay.attempted} paid attempt${pay.attempted === 1 ? '' : 's'}` },
+                ]}
+              />
+              <Breakdown
+                title={`Paid to rider: ${sar(pay.paid)}`}
+                parts={PAYMENT_METHODS.map((m) => ({ label: m.label, value: pay.paid_by[m.value] }))}
+              />
               <CodBreakdown cash={cash} />
             </>
           )}
@@ -272,21 +283,29 @@ function Figure({ label, value, tone, strong }: { label: string; value: string; 
  * in the rider's pocket; card and transfer reached KSA Drop directly.
  */
 function CodBreakdown({ cash }: { cash: RiderBalances['cash'] }) {
-  const parts = [
-    { label: 'Cash', value: cash.collected, hint: 'with the rider' },
-    { label: 'Card', value: cash.card, hint: 'direct to KSA Drop' },
-    { label: 'Transfer', value: cash.transfer, hint: 'direct to KSA Drop' },
-  ]
+  return (
+    <Breakdown
+      title={`COD collected from customers: ${sar(cash.collected + cash.direct)}`}
+      parts={[
+        { label: 'Cash', value: cash.collected, hint: 'with the rider' },
+        { label: 'Card', value: cash.card, hint: 'direct to KSA Drop' },
+        { label: 'Transfer', value: cash.transfer, hint: 'direct to KSA Drop' },
+      ]}
+    />
+  )
+}
 
+/** One total, split into the amounts that make it up. */
+function Breakdown({ title, parts }: { title: string; parts: { label: string; value: number; hint?: string }[] }) {
   return (
     <div className='rounded-lg border p-2.5'>
-      <p className='text-xs text-muted-foreground'>COD collected from customers: {sar(cash.collected + cash.direct)}</p>
+      <p className='text-xs text-muted-foreground'>{title}</p>
       <dl className='mt-1.5 grid grid-cols-3 gap-2'>
         {parts.map((part) => (
           <div key={part.label}>
             <dt className='text-xs text-muted-foreground'>{part.label}</dt>
             <dd className='text-sm font-semibold tabular-nums'>{sar(part.value)}</dd>
-            <dd className='text-[11px] text-muted-foreground'>{part.hint}</dd>
+            {part.hint && <dd className='text-[11px] text-muted-foreground'>{part.hint}</dd>}
           </div>
         ))}
       </dl>

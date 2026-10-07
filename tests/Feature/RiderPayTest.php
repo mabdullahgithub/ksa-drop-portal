@@ -128,6 +128,8 @@ class RiderPayTest extends TestCase
         // The attempt at the attempt rate, the delivery at the delivery rate.
         $this->pay($token)
             ->assertJsonPath('pay.earned', 14)
+            ->assertJsonPath('pay.earned_delivered', 10)
+            ->assertJsonPath('pay.earned_attempted', 4)
             ->assertJsonPath('pay.delivered', 1)
             ->assertJsonPath('pay.attempted', 1);
     }
@@ -314,6 +316,8 @@ class RiderPayTest extends TestCase
             ->assertJsonPath('payment.direction', 'out')
             ->assertJsonPath('pay.earned', 20)
             ->assertJsonPath('pay.paid', 15)
+            ->assertJsonPath('pay.paid_by.bank_transfer', 15)
+            ->assertJsonPath('pay.paid_by.cash', 0)
             ->assertJsonPath('pay.balance', 5)
             // The cash the rider owes is a separate account.
             ->assertJsonPath('cash.collected', 200)

@@ -92,6 +92,9 @@ export type RiderCash = {
   collected: number
   /** COD paid by card or transfer: it reached KSA Drop directly, never owed. */
   direct: number
+  /** `direct`, by how the customer paid. */
+  card: number
+  transfer: number
   paid: number
   /** Above zero: still to pay. Below zero: paid more than collected. */
   balance: number
@@ -115,7 +118,12 @@ export type CashPayment = {
  */
 export type RiderPay = {
   earned: number
+  /** `earned`, by what earned it. */
+  earned_delivered: number
+  earned_attempted: number
   paid: number
+  /** `paid`, by how KSA Drop paid it. */
+  paid_by: Record<CashPaymentMethod, number>
   /** Above zero: still to be paid to me. Below zero: paid more than earned. */
   balance: number
   /** Visits paid as a delivery, and as an attempt. */

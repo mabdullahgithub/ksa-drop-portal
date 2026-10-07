@@ -78,7 +78,12 @@ export type RiderRow = {
  */
 export type RiderPay = {
   earned: number
+  /** `earned`, by what earned it. */
+  earned_delivered: number
+  earned_attempted: number
   paid: number
+  /** `paid`, by how KSA Drop paid it. */
+  paid_by: Record<RiderPaymentMethod, number>
   /** Above zero: still to pay the rider. Below zero: paid more than earned. */
   balance: number
   /** Orders paid as delivered, and as an attempt. */

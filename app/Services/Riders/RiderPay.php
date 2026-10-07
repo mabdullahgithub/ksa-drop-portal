@@ -71,16 +71,21 @@ class RiderPay
     }
 
     /**
-     * A balance above zero is what KSA Drop still owes the rider.
+     * A balance above zero is what KSA Drop still owes the rider. Earnings
+     * are also split by what earned them, and payouts by how they were paid.
      *
      * @param  array<int>  $riderIds
-     * @return array<int, array{earned: float, paid: float, balance: float, delivered: int, attempted: int}>
+     * @return array<int, array{earned: float, earned_delivered: float, earned_attempted: float, paid: float, paid_by: array{cash: float, bank_transfer: float, other: float}, balance: float, delivered: int, attempted: int}>
      */
     public static function forRiders(array $riderIds): array
     {
         $pay = [];
         foreach ($riderIds as $id) {
-            $pay[$id] = ['earned' => 0.0, 'paid' => 0.0, 'balance' => 0.0, 'delivered' => 0, 'attempted' => 0];
+            $pay[$id] = [
+                'earned' => 0.0, 'earned_delivered' => 0.0, 'earned_attempted' => 0.0,
+                'paid' => 0.0, 'paid_by' => array_fill_keys(RiderPayment::METHODS, 0.0),
+                'balance' => 0.0, 'delivered' => 0, 'attempted' => 0,
+            ];
         }
 
         if ($riderIds === []) {
@@ -93,24 +98,30 @@ class RiderPay
             ->get();
 
         foreach ($earned as $row) {
+            $kind = $row->type === RiderEarning::TYPE_DELIVERED ? 'delivered' : 'attempted';
             $pay[$row->rider_id]['earned'] += (float) $row->total;
-            $pay[$row->rider_id][$row->type === RiderEarning::TYPE_DELIVERED ? 'delivered' : 'attempted'] += (int) $row->visits;
+            $pay[$row->rider_id]["earned_{$kind}"] += (float) $row->total;
+            $pay[$row->rider_id][$kind] += (int) $row->visits;
         }
 
         $paid = RiderPayment::counted()
             ->paidOut()
             ->whereIn('rider_id', $riderIds)
-            ->selectRaw('rider_id, COALESCE(SUM(amount), 0) as total')
-            ->groupBy('rider_id')
-            ->pluck('total', 'rider_id');
+            ->selectRaw('rider_id, method, COALESCE(SUM(amount), 0) as total')
+            ->groupBy('rider_id', 'method')
+            ->get();
 
-        foreach ($paid as $riderId => $total) {
-            $pay[$riderId]['paid'] = (float) $total;
+        foreach ($paid as $row) {
+            $pay[$row->rider_id]['paid'] += (float) $row->total;
+            $pay[$row->rider_id]['paid_by'][$row->method] = (float) $row->total;
         }
 
         return array_map(fn (array $row) => [
             'earned' => round($row['earned'], 2),
+            'earned_delivered' => round($row['earned_delivered'], 2),
+            'earned_attempted' => round($row['earned_attempted'], 2),
             'paid' => round($row['paid'], 2),
+            'paid_by' => array_map(fn (float $amount) => round($amount, 2), $row['paid_by']),
             'balance' => round($row['earned'] - $row['paid'], 2),
             'delivered' => $row['delivered'],
             'attempted' => $row['attempted'],
@@ -118,7 +129,7 @@ class RiderPay
     }
 
     /**
-     * @return array{earned: float, paid: float, balance: float, delivered: int, attempted: int}
+     * @return array{earned: float, earned_delivered: float, earned_attempted: float, paid: float, paid_by: array{cash: float, bank_transfer: float, other: float}, balance: float, delivered: int, attempted: int}
      */
     public static function forRider(int $riderId): array
     {

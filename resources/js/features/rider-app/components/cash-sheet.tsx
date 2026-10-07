@@ -5,7 +5,7 @@ import { SheetDescription, SheetTitle } from '@/components/ui/sheet'
 import { api, ApiError } from '../api'
 import { money, reasonText, useI18n, type Lang } from '../i18n'
 import { BottomSheet } from './bottom-sheet'
-import type { CashPayment, CashResponse, RiderCash, RiderPay } from '../types'
+import type { CashPayment, CashPaymentMethod, CashResponse, RiderCash, RiderPay } from '../types'
 
 /** The sheet's two accounts: the cash the rider owes, and the pay they are owed. */
 export type MoneySide = 'cash' | 'pay'
@@ -30,6 +30,8 @@ export const payLabel = (balance: number) => (balance > 0 ? 'pay_owed' : balance
 
 /** Nothing to show about pay until KSA Drop has set a rate or the rider has earned something. */
 export const hasPay = (pay: RiderPay) => pay.rates.delivery > 0 || pay.rates.attempt > 0 || pay.earned > 0 || pay.paid > 0
+
+const PAYOUT_METHODS: CashPaymentMethod[] = ['cash', 'bank_transfer', 'other']
 
 const amount = (n: number) => n.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
 
@@ -105,7 +107,15 @@ export function CashSheet({ open, onClose, only, cash: initialCash, pay: initial
               <Line label={t('cash_collected')} amount={cash.collected} />
               <Line label={t('cash_paid')} amount={cash.paid} tone='text-green-700 dark:text-green-400' />
             </dl>
-            {cash.direct > 0 && <Note>{t('cash_direct', { amount: money(cash.direct, 'SAR') })}</Note>}
+
+            {/* Everything my customers paid, by how they paid it */}
+            <Heading className='mt-5'>{t('cod_received')}</Heading>
+            <dl className='divide-y divide-foreground/[0.06] rounded-2xl bg-canvas px-3.5'>
+              <Line label={t('cod_cash')} amount={cash.collected} hint={t('cod_with_you')} />
+              <Line label={t('cod_card')} amount={cash.card} hint={t('cod_direct')} />
+              <Line label={t('cod_transfer')} amount={cash.transfer} hint={t('cod_direct')} />
+            </dl>
+            <Note>{t('cash_direct', { amount: money(cash.direct, 'SAR') })}</Note>
 
             <Heading className='mt-5'>{t('cash_payments')}</Heading>
             <Payments payments={data?.payments} empty={t('cash_no_payments')} loading={!error} />
@@ -121,6 +131,19 @@ export function CashSheet({ open, onClose, only, cash: initialCash, pay: initial
             <dl className='mt-3 divide-y divide-foreground/[0.06] rounded-2xl bg-canvas px-3.5'>
               <Line label={t('pay_earned')} amount={pay.earned} hint={t('pay_visits', { delivered: pay.delivered, attempted: pay.attempted })} />
               <Line label={t('pay_paid')} amount={pay.paid} tone='text-green-700 dark:text-green-400' />
+            </dl>
+
+            <Heading className='mt-5'>{t('pay_earned_from')}</Heading>
+            <dl className='divide-y divide-foreground/[0.06] rounded-2xl bg-canvas px-3.5'>
+              <Line label={t('pay_from_delivered', { n: pay.delivered })} amount={pay.earned_delivered} />
+              <Line label={t('pay_from_attempts', { n: pay.attempted })} amount={pay.earned_attempted} />
+            </dl>
+
+            <Heading className='mt-5'>{t('pay_paid_how')}</Heading>
+            <dl className='divide-y divide-foreground/[0.06] rounded-2xl bg-canvas px-3.5'>
+              {PAYOUT_METHODS.map((method) => (
+                <Line key={method} label={t(`method_${method}`)} amount={pay.paid_by[method]} />
+              ))}
             </dl>
             <Note>{t('pay_rates', { delivery: amount(pay.rates.delivery), attempt: amount(pay.rates.attempt) })}</Note>
 
