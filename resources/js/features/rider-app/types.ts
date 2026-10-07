@@ -90,7 +90,7 @@ export type TodayStats = {
 /** What I owe KSA Drop: cash collected minus what I handed in. */
 export type RiderCash = {
   collected: number
-  /** COD paid by card or transfer: it reached KSA Drop directly, never owed. */
+  /** COD paid by card or transfer. Owed like the cash. */
   direct: number
   /** `direct`, by how the customer paid. */
   card: number

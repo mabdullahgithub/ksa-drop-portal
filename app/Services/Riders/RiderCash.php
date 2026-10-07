@@ -7,17 +7,16 @@ use App\Models\ShipmentEvent;
 use App\Services\Shipping\Enums\RiderAction;
 
 /**
- * What each rider owes KSA Drop: the COD they collected in cash, minus what
- * they have handed in. Worked out from the records every time, never stored,
- * so it can't drift from them.
+ * What each rider owes KSA Drop: every COD they took from customers —
+ * cash, card or transfer — minus what they have handed in. Worked out from
+ * the records every time, never stored, so it can't drift from them.
  *
- * Only cash is in the rider's pocket. COD paid by card or transfer reaches
- * KSA Drop directly; it's reported as `direct` (and split into `card` and
- * `transfer`) and never owed.
+ * `collected` is the cash part; `direct` is the rest, split into `card` and
+ * `transfer`. All of it is owed.
  */
 class RiderCash
 {
-    /** shipment_events.payment_method the rider has to hand in. */
+    /** shipment_events.payment_method counted as cash in the rider's figures. */
     public const OWED_METHOD = 'cash';
 
     /**
@@ -77,7 +76,7 @@ class RiderCash
             'card' => round($row['card'], 2),
             'transfer' => round($row['transfer'], 2),
             'paid' => round($row['paid'], 2),
-            'balance' => round($row['collected'] - $row['paid'], 2),
+            'balance' => round($row['collected'] + $row['direct'] - $row['paid'], 2),
         ], $cash);
     }
 

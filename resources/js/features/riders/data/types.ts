@@ -96,10 +96,10 @@ export type RiderPay = {
 /** `in`: COD cash the rider hands in. `out`: KSA Drop paying the rider. */
 export type PaymentDirection = 'in' | 'out'
 
-/** What a rider owes: COD collected in cash, minus what they handed in. */
+/** What a rider owes: all the COD they took (cash, card or transfer), minus what they handed in. `collected` is the cash part. */
 export type RiderCash = {
   collected: number
-  /** COD paid by card or transfer: it reached KSA Drop directly, never owed. */
+  /** COD paid by card or transfer. Owed like the cash. */
   direct: number
   /** `direct`, by how the customer paid. */
   card: number

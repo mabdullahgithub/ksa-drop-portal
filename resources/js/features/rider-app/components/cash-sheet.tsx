@@ -116,7 +116,6 @@ export function CashSheet({ open, onClose, only, cash: initialCash, pay: initial
               <MiniStat label={t('cod_card')} amount={cash.card} />
               <MiniStat label={t('cod_transfer')} amount={cash.transfer} />
             </dl>
-            <Note>{t('cash_direct', { amount: money(cash.direct, 'SAR') })}</Note>
 
             <Heading className='mt-5'>{t('cash_payments')}</Heading>
             <Payments payments={data?.payments} empty={t('cash_no_payments')} loading={!error} />

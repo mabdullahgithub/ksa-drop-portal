@@ -13,7 +13,7 @@ use Tests\Feature\Concerns\MakesRiders;
 use Tests\TestCase;
 
 /**
- * What a rider owes KSA Drop: the COD they collected in cash, minus the
+ * What a rider owes KSA Drop: the COD they collected, however it was paid, minus the
  * payments staff recorded as they handed it in.
  */
 class RiderCashTest extends TestCase
@@ -52,7 +52,7 @@ class RiderCashTest extends TestCase
         ]);
     }
 
-    public function test_a_rider_owes_the_cash_they_collected_but_not_card_or_transfer(): void
+    public function test_a_rider_owes_everything_they_collected_cash_card_and_transfer(): void
     {
         $rider = $this->makeRider();
         $token = $this->signedInDevice($rider);
@@ -67,13 +67,13 @@ class RiderCashTest extends TestCase
             ->assertJsonPath('cash.collected', 400.5)
             ->assertJsonPath('cash.direct', 100)
             ->assertJsonPath('cash.paid', 0)
-            ->assertJsonPath('cash.balance', 400.5)
+            ->assertJsonPath('cash.balance', 500.5)
             ->assertJsonPath('today.cod_collected', 500.5)
             ->assertJsonPath('today.cash_collected', 400.5);
 
         $this->actingAs($this->staff(['view riders']))->getJson('/api/riders')
             ->assertOk()
-            ->assertJsonPath('riders.0.cash.balance', 400.5)
+            ->assertJsonPath('riders.0.cash.balance', 500.5)
             ->assertJsonPath('riders.0.cash.collected', 400.5)
             ->assertJsonPath('riders.0.cash.card', 80)
             ->assertJsonPath('riders.0.cash.transfer', 20)

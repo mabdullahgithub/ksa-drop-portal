@@ -145,7 +145,7 @@ export function RiderPaymentsSheet({ rider, onEditRates, initialDirection = 'in'
           <SheetTitle>{rider.name}&rsquo;s cash and pay</SheetTitle>
           <SheetDescription>
             {direction === 'in'
-              ? 'COD the rider collected in cash, minus what they have handed in to KSA Drop.'
+              ? 'COD the rider collected from customers, minus what they have handed in to KSA Drop.'
               : 'What the rider earned per order, minus what KSA Drop has paid them.'}
           </SheetDescription>
 
@@ -295,9 +295,8 @@ function Figure({ label, value, tone, strong }: { label: string; value: string; 
 }
 
 /**
- * Every COD the rider's customers paid, by how they paid it, and the total.
- * Only the cash is in the rider's pocket; card and transfer reached KSA Drop
- * directly.
+ * Every COD the rider's customers paid, by how they paid it, and the total —
+ * which is what the rider owes.
  */
 function CodBreakdown({ cash, className }: { cash: RiderBalances['cash']; className?: string }) {
   return (
