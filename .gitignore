@@ -33,3 +33,7 @@ Thumbs.db
 /imiles
 /whatsapp
 /navix
+# The riders' phone app lives on the mobile-app branch. On main only its
+# untracked leftovers (vendor, node_modules, .env) are on disk. Remove this
+# line when mobile-app is merged, or new files in the folder will be ignored.
+/rider-native
