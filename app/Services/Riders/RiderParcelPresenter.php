@@ -58,6 +58,7 @@ class RiderParcelPresenter
             'last_event' => $lastEvent ? [
                 'action' => $lastEvent->action,
                 'reason' => $lastEvent->reason,
+                'reschedule_date' => $lastEvent->reschedule_date?->toDateString(),
                 'note' => $lastEvent->note,
                 'occurred_at' => $lastEvent->occurred_at?->toIso8601String(),
             ] : null,

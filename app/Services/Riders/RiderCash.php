@@ -12,7 +12,8 @@ use App\Services\Shipping\Enums\RiderAction;
  * so it can't drift from them.
  *
  * Only cash is in the rider's pocket. COD paid by card or transfer reaches
- * KSA Drop directly; it's reported as `direct` and never owed.
+ * KSA Drop directly; it's reported as `direct` (and split into `card` and
+ * `transfer`) and never owed.
  */
 class RiderCash
 {
@@ -24,13 +25,13 @@ class RiderCash
      * handed in more than they collected.
      *
      * @param  array<int>  $riderIds
-     * @return array<int, array{collected: float, direct: float, paid: float, balance: float}>
+     * @return array<int, array{collected: float, direct: float, card: float, transfer: float, paid: float, balance: float}>
      */
     public static function forRiders(array $riderIds): array
     {
         $cash = [];
         foreach ($riderIds as $id) {
-            $cash[$id] = ['collected' => 0.0, 'direct' => 0.0, 'paid' => 0.0, 'balance' => 0.0];
+            $cash[$id] = ['collected' => 0.0, 'direct' => 0.0, 'card' => 0.0, 'transfer' => 0.0, 'paid' => 0.0, 'balance' => 0.0];
         }
 
         if ($riderIds === []) {
@@ -47,8 +48,16 @@ class RiderCash
             ->get();
 
         foreach ($collected as $row) {
-            $key = $row->payment_method === self::OWED_METHOD ? 'collected' : 'direct';
-            $cash[$row->rider_id][$key] += (float) $row->total;
+            if ($row->payment_method === self::OWED_METHOD) {
+                $cash[$row->rider_id]['collected'] += (float) $row->total;
+
+                continue;
+            }
+
+            $cash[$row->rider_id]['direct'] += (float) $row->total;
+            if (in_array($row->payment_method, ['card', 'transfer'], true)) {
+                $cash[$row->rider_id][$row->payment_method] += (float) $row->total;
+            }
         }
 
         $paid = RiderPayment::counted()
@@ -65,13 +74,15 @@ class RiderCash
         return array_map(fn (array $row) => [
             'collected' => round($row['collected'], 2),
             'direct' => round($row['direct'], 2),
+            'card' => round($row['card'], 2),
+            'transfer' => round($row['transfer'], 2),
             'paid' => round($row['paid'], 2),
             'balance' => round($row['collected'] - $row['paid'], 2),
         ], $cash);
     }
 
     /**
-     * @return array{collected: float, direct: float, paid: float, balance: float}
+     * @return array{collected: float, direct: float, card: float, transfer: float, paid: float, balance: float}
      */
     public static function forRider(int $riderId): array
     {

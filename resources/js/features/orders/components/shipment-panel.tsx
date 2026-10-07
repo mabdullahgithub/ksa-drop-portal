@@ -31,6 +31,7 @@ interface RiderEvent {
   id: number
   action: 'out_for_delivery' | 'delivered' | 'attempt_failed' | 'returned' | 'cancelled' | 'returned_to_hub'
   reason: string | null
+  reschedule_date: string | null
   note: string | null
   cod_amount: string | null
   payment_method: string | null
@@ -456,6 +457,7 @@ export function ShipmentPanel({ shipment, orderId, onCreateShipment, onShipmentU
                     {event.rider && <div>By {event.rider.name}</div>}
                     {!event.rider && event.user && <div>By {event.user.name} (staff)</div>}
                     {event.reason && <div>Reason: {failedReasonLabels[event.reason] ?? event.reason}</div>}
+                    {event.reschedule_date && <div>Customer asked for {new Date(`${event.reschedule_date}T00:00:00`).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}</div>}
                     {event.cod_amount && Number(event.cod_amount) > 0 && (
                       <div>Collected SAR {Number(event.cod_amount).toFixed(2)}{event.payment_method && ` · ${event.payment_method}`}</div>
                     )}

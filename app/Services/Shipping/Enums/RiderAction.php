@@ -44,11 +44,12 @@ enum RiderAction: string
     /**
      * The rider went and the customer didn't take the parcel. They take a
      * photo of the place to show it — which is what gets the attempt paid
-     * (App\Services\Riders\RiderPay).
+     * (App\Services\Riders\RiderPay). Returning or cancelling the parcel
+     * afterwards is a separate step: no photo, no pay.
      */
     public function needsProof(): bool
     {
-        return in_array($this, [self::ATTEMPT_FAILED, self::RETURNED], true);
+        return $this === self::ATTEMPT_FAILED;
     }
 
     /**

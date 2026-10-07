@@ -49,6 +49,15 @@ export function CodBox({ parcel, className }: { parcel: Parcel; className?: stri
   )
 }
 
+/** A `yyyy-MM-dd` day as the rider reads it, e.g. "Mon, 12 Oct". */
+export const dayLabel = (day: string) =>
+  new Date(`${day}T00:00:00Z`).toLocaleDateString(document.documentElement.lang || 'en', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    timeZone: 'UTC',
+  })
+
 /**
  * Why the last attempt failed, with the rider's note — for a parcel still
  * waiting for another try. Null once it has moved on.
@@ -56,7 +65,7 @@ export function CodBox({ parcel, className }: { parcel: Parcel; className?: stri
 export function failedWhy(t: TFunction, parcel: Parcel): string | null {
   const last = parcel.last_event
   if (parcel.status !== 'attempt_fail' || last?.action !== 'attempt_failed' || !last.reason) return null
-  return [t(`reason_${last.reason}`), last.note].filter(Boolean).join(' — ')
+  return [t(`reason_${last.reason}`), last.reschedule_date && dayLabel(last.reschedule_date), last.note].filter(Boolean).join(' — ')
 }
 
 export function addressLine(parcel: Parcel): string {

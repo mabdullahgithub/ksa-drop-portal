@@ -59,6 +59,8 @@ export type Parcel = {
   last_event: {
     action: RiderAction
     reason: FailedReason | null
+    /** The day the customer asked for, `yyyy-MM-dd`, when they put the delivery off. */
+    reschedule_date: string | null
     note: string | null
     occurred_at: string | null
   } | null

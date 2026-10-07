@@ -6,6 +6,7 @@ import { SheetDescription, SheetTitle } from '@/components/ui/sheet'
 import { api, ApiError } from '../api'
 import { money, reasonText, statusText, useI18n } from '../i18n'
 import { compressImage } from '@/lib/compress-image'
+import { addDays, today } from '../lib/days'
 import { currentPosition, requestPosition, uuid, vibrate, watchPosition, type Position, type PositionProblem } from '../lib/device'
 import type { EntryMethod, FailedReason, Parcel, PaymentMethod, RiderAction } from '../types'
 import { BottomSheet } from './bottom-sheet'
@@ -64,9 +65,13 @@ const NEEDS_REASON: RiderAction[] = ['attempt_failed', 'returned', 'cancelled']
 /**
  * The rider went and the customer didn't take it. A photo of the place shows
  * they were there — it's what gets the attempt paid — and the phone's
- * location goes with it when there is one.
+ * location goes with it when there is one. Returning or cancelling the
+ * parcel afterwards is a separate step, with no photo and no pay.
  */
-const NEEDS_PROOF: RiderAction[] = ['attempt_failed', 'returned']
+const NEEDS_PROOF: RiderAction[] = ['attempt_failed']
+
+/** How far ahead a customer can put a delivery off (ShipmentEventRecorder::MAX_RESCHEDULE_DAYS). */
+const MAX_RESCHEDULE_DAYS = 60
 
 const tint = (color: string) => ({ '--tint': color }) as React.CSSProperties
 
@@ -94,6 +99,7 @@ function UpdateBody({ request, onClose, onUpdated, helpLink }: { request: Update
   const [payment, setPayment] = useState<PaymentMethod>('cash')
   const [recipient, setRecipient] = useState('')
   const [reason, setReason] = useState<FailedReason | null>(null)
+  const [rescheduleDate, setRescheduleDate] = useState('')
   const [note, setNote] = useState('')
   const [photo, setPhoto] = useState<{ blob: Blob; url: string } | null>(null)
   const [preparingPhoto, setPreparingPhoto] = useState(false)
@@ -166,6 +172,8 @@ function UpdateBody({ request, onClose, onUpdated, helpLink }: { request: Update
   const codValue = toNumber(cod)
   const needsReason = action !== null && NEEDS_REASON.includes(action)
   const needsProof = action !== null && NEEDS_PROOF.includes(action)
+  // The customer asked for another day: the rider says which.
+  const needsDate = action === 'attempt_failed' && reason === 'reschedule'
   const amountDiffers = action === 'delivered' && expected > 0 && !Number.isNaN(codValue) && Math.abs(codValue - expected) >= 0.01
 
   const problem = useMemo(() => {
@@ -178,9 +186,10 @@ function UpdateBody({ request, onClose, onUpdated, helpLink }: { request: Update
       if (!reason) return t('need_reason')
       if (reason === 'other' && !note.trim()) return t('need_note')
     }
+    if (needsDate && (!rescheduleDate || rescheduleDate < today())) return t('need_reschedule_date')
     if (needsProof && !photo) return t('need_photo')
     return null
-  }, [parcel, action, expected, codValue, amountDiffers, needsReason, needsProof, note, photo, reason, t])
+  }, [parcel, action, expected, codValue, amountDiffers, needsReason, needsProof, needsDate, rescheduleDate, note, photo, reason, t])
 
   const takePhoto = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
@@ -218,6 +227,7 @@ function UpdateBody({ request, onClose, onUpdated, helpLink }: { request: Update
       if (photo) form.append('photo', photo.blob, 'delivery.jpg')
     }
     if (needsReason && reason) form.append('reason', reason)
+    if (needsDate) form.append('reschedule_date', rescheduleDate)
     if (needsProof && photo) form.append('photo', photo.blob, 'place.jpg')
 
     setSubmitting(true)
@@ -484,7 +494,7 @@ function UpdateBody({ request, onClose, onUpdated, helpLink }: { request: Update
           </div>
         )}
 
-        {/* Failed, returned or cancelled: why — and, when the rider went, the photo that shows it */}
+        {/* Failed, returned or cancelled: why — and, for a failed attempt, the photo that shows the rider went */}
         {canUpdate && action && needsReason && (
           <div className='mt-5 space-y-4'>
             <div className='space-y-1.5'>
@@ -508,6 +518,21 @@ function UpdateBody({ request, onClose, onUpdated, helpLink }: { request: Update
                 ))}
               </div>
             </div>
+
+            {needsDate && (
+              <label className='block space-y-1.5'>
+                <span className='text-sm font-semibold'>{t('reschedule_date')}</span>
+                {/* iOS draws a date field centred and as wide as it likes unless told otherwise. */}
+                <input
+                  type='date'
+                  value={rescheduleDate}
+                  min={today()}
+                  max={addDays(today(), MAX_RESCHEDULE_DAYS)}
+                  onChange={(e) => setRescheduleDate(e.target.value)}
+                  className='glass-lite block h-12 w-full min-w-0 appearance-none rounded-2xl px-3.5 text-start font-semibold tabular-nums outline-none focus:outline-2 focus:outline-brand dark:[color-scheme:dark] [&::-webkit-date-and-time-value]:text-start'
+                />
+              </label>
+            )}
 
             {needsProof && (
               <>

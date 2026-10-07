@@ -160,11 +160,7 @@ export function RiderPaymentsSheet({ rider, onEditRates, initialDirection = 'in'
                   strong
                 />
               </div>
-              {cash.direct > 0 && (
-                <p className='text-xs text-muted-foreground'>
-                  {sar(cash.direct)} more was paid by card or transfer. That reached KSA Drop directly and is not owed by the rider.
-                </p>
-              )}
+              <CodBreakdown cash={cash} />
             </>
           ) : (
             <>
@@ -188,6 +184,7 @@ export function RiderPaymentsSheet({ rider, onEditRates, initialDirection = 'in'
                   </button>
                 )}
               </p>
+              <CodBreakdown cash={cash} />
             </>
           )}
         </SheetHeader>
@@ -266,6 +263,33 @@ function Figure({ label, value, tone, strong }: { label: string; value: string; 
     <div className={cn('rounded-lg border p-2.5', strong && 'bg-muted/50')}>
       <p className='text-xs text-muted-foreground'>{label}</p>
       <p className={cn('mt-0.5 text-sm font-semibold tabular-nums sm:text-base', tone)}>{value}</p>
+    </div>
+  )
+}
+
+/**
+ * Every COD the rider's customers paid, by how they paid it. Only the cash is
+ * in the rider's pocket; card and transfer reached KSA Drop directly.
+ */
+function CodBreakdown({ cash }: { cash: RiderBalances['cash'] }) {
+  const parts = [
+    { label: 'Cash', value: cash.collected, hint: 'with the rider' },
+    { label: 'Card', value: cash.card, hint: 'direct to KSA Drop' },
+    { label: 'Transfer', value: cash.transfer, hint: 'direct to KSA Drop' },
+  ]
+
+  return (
+    <div className='rounded-lg border p-2.5'>
+      <p className='text-xs text-muted-foreground'>COD collected from customers: {sar(cash.collected + cash.direct)}</p>
+      <dl className='mt-1.5 grid grid-cols-3 gap-2'>
+        {parts.map((part) => (
+          <div key={part.label}>
+            <dt className='text-xs text-muted-foreground'>{part.label}</dt>
+            <dd className='text-sm font-semibold tabular-nums'>{sar(part.value)}</dd>
+            <dd className='text-[11px] text-muted-foreground'>{part.hint}</dd>
+          </div>
+        ))}
+      </dl>
     </div>
   )
 }

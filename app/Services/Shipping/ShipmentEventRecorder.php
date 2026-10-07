@@ -37,6 +37,9 @@ class ShipmentEventRecorder
     /** Private disk; photos are streamed to admins, never public. */
     public const PHOTO_DISK = 'local';
 
+    /** How far ahead a customer can put a delivery off. */
+    public const MAX_RESCHEDULE_DAYS = 60;
+
     /**
      * What the update screen offers for this parcel, first option pre-selected.
      *
@@ -92,7 +95,7 @@ class ShipmentEventRecorder
     }
 
     /**
-     * @param  array{client_uuid: string, reason?: ?string, note?: ?string, cod_amount?: float|string|null, payment_method?: ?string, recipient_name?: ?string, lat?: float|string|null, lng?: float|string|null, accuracy_m?: int|string|null, entry_method?: ?string, occurred_at?: ?string}  $input
+     * @param  array{client_uuid: string, reason?: ?string, reschedule_date?: ?string, note?: ?string, cod_amount?: float|string|null, payment_method?: ?string, recipient_name?: ?string, lat?: float|string|null, lng?: float|string|null, accuracy_m?: int|string|null, entry_method?: ?string, occurred_at?: ?string}  $input
      *
      * @throws RiderActionRefused
      */
@@ -121,6 +124,10 @@ class ShipmentEventRecorder
                 }
 
                 $reason = $action->needsReason() ? FailedAttemptReason::tryFrom((string) ($input['reason'] ?? '')) : null;
+                // Only an attempt the customer put off to another day has one.
+                $rescheduleDate = $action === RiderAction::ATTEMPT_FAILED && $reason === FailedAttemptReason::RESCHEDULE
+                    ? ($input['reschedule_date'] ?? null)
+                    : null;
                 $occurredAt = self::occurredAt($input['occurred_at'] ?? null);
                 $statusBefore = $shipment->status;
                 $target = $action->targetStatus($shipment->status_enum);
@@ -132,6 +139,7 @@ class ShipmentEventRecorder
                     'status_before' => $statusBefore,
                     'status_after' => $target->value,
                     'reason' => $reason?->value,
+                    'reschedule_date' => $rescheduleDate,
                     'note' => $input['note'] ?? null,
                     'cod_amount' => $action === RiderAction::DELIVERED ? ($input['cod_amount'] ?? null) : null,
                     'payment_method' => $action === RiderAction::DELIVERED ? ($input['payment_method'] ?? null) : null,
@@ -146,6 +154,9 @@ class ShipmentEventRecorder
                 ]);
 
                 $description = $action->publicDescription($rider->publicName(), $reason);
+                if ($rescheduleDate !== null) {
+                    $description .= ' to ' . Carbon::parse($rescheduleDate)->format('j M Y');
+                }
 
                 $shipment->addTrackingEvent($this->trackingEvent($shipment, $action, $target, $description, $occurredAt, $rider->publicName()));
 

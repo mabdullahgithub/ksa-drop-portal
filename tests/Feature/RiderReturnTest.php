@@ -40,12 +40,12 @@ class RiderReturnTest extends TestCase
     }
 
     /**
-     * A failed attempt or a return needs a photo of the place; tests that
+     * A failed attempt needs a photo of the place; tests that
      * aren't about that get one unless they pass `photo` themselves.
      */
     private function withProof(array $data): array
     {
-        return in_array($data['action'] ?? null, ['attempt_failed', 'returned'], true)
+        return ($data['action'] ?? null) === 'attempt_failed'
             ? $data + ['photo' => UploadedFile::fake()->image('place.jpg', 800, 600)]
             : $data;
     }

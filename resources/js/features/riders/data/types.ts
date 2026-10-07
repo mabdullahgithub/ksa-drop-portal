@@ -94,6 +94,9 @@ export type RiderCash = {
   collected: number
   /** COD paid by card or transfer: it reached KSA Drop directly, never owed. */
   direct: number
+  /** `direct`, by how the customer paid. */
+  card: number
+  transfer: number
   paid: number
   /** Above zero: still owed. Below zero: handed in more than collected. */
   balance: number
@@ -175,6 +178,8 @@ export type RiderParcelEvent = {
   occurred_at: string | null
   /** Why it failed, was returned or was cancelled, already worded. */
   reason: string | null
+  /** The day the customer asked for, `yyyy-MM-dd`, when they put the delivery off. */
+  reschedule_date: string | null
   note: string | null
   cod_amount: number | null
   payment_method: string | null

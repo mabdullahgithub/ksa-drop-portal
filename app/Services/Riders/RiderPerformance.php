@@ -267,7 +267,7 @@ class RiderPerformance
             ->whereIn('shipment_id', $rows->pluck('id'))
             ->orderBy('occurred_at')
             ->orderBy('id')
-            ->get(['id', 'shipment_id', 'action', 'reason', 'note', 'cod_amount', 'payment_method', 'photo_path', 'lat', 'lng', 'occurred_at'])
+            ->get(['id', 'shipment_id', 'action', 'reason', 'reschedule_date', 'note', 'cod_amount', 'payment_method', 'photo_path', 'lat', 'lng', 'occurred_at'])
             ->groupBy('shipment_id');
 
         $parcels = $rows->map(function (Shipment $shipment) use ($events) {
@@ -298,6 +298,7 @@ class RiderPerformance
                     'action' => $event->action,
                     'occurred_at' => $event->occurred_at?->toIso8601String(),
                     'reason' => FailedAttemptReason::tryFrom((string) $event->reason)?->label(),
+                    'reschedule_date' => $event->reschedule_date?->toDateString(),
                     'note' => $event->note,
                     'cod_amount' => $event->cod_amount !== null ? (float) $event->cod_amount : null,
                     'payment_method' => $event->payment_method,

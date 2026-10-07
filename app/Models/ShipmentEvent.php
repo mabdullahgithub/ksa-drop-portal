@@ -19,6 +19,7 @@ class ShipmentEvent extends Model
         'status_before',
         'status_after',
         'reason',
+        'reschedule_date',
         'note',
         'cod_amount',
         'payment_method',
@@ -33,6 +34,7 @@ class ShipmentEvent extends Model
     ];
 
     protected $casts = [
+        'reschedule_date' => 'date:Y-m-d',
         'cod_amount' => 'decimal:2',
         'lat' => 'decimal:7',
         'lng' => 'decimal:7',

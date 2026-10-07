@@ -12,10 +12,11 @@ use App\Services\Shipping\Enums\RiderAction;
  * What KSA Drop pays its riders, per visit to a customer:
  *
  *  - delivered: the delivery rate;
- *  - the rider went and the customer didn't take it (a failed attempt, or a
- *    return): the attempt rate, every time — proved by the photo of the
- *    place the rider takes there (see RiderAction::needsProof());
- *  - cancelled before the rider went (the customer called it off): nothing.
+ *  - the rider went and the customer didn't take it (a failed attempt): the
+ *    attempt rate, every time — proved by the photo of the place the rider
+ *    takes there (see RiderAction::needsProof());
+ *  - returned or cancelled: nothing. Those close the order after the
+ *    attempts, which were each paid already.
  *
  * So an order that failed twice and was delivered on the third visit earns
  * two attempts and a delivery.

@@ -74,6 +74,9 @@ class RiderCashTest extends TestCase
         $this->actingAs($this->staff(['view riders']))->getJson('/api/riders')
             ->assertOk()
             ->assertJsonPath('riders.0.cash.balance', 400.5)
+            ->assertJsonPath('riders.0.cash.collected', 400.5)
+            ->assertJsonPath('riders.0.cash.card', 80)
+            ->assertJsonPath('riders.0.cash.transfer', 20)
             ->assertJsonPath('riders.0.stats.cash_collected', 400.5);
     }
 

@@ -277,11 +277,18 @@ class RiderParcelController extends Controller
         $action = RiderAction::tryFrom((string) $request->input('action'));
         $expectedCod = $shipment->expectedCodAmount();
         $isDelivery = $action === RiderAction::DELIVERED;
+        // The customer asked for another day: the rider says which.
+        $isReschedule = $action === RiderAction::ATTEMPT_FAILED && $request->input('reason') === FailedAttemptReason::RESCHEDULE->value;
+        $today = now(config('app.business_timezone', 'Asia/Riyadh'))->toDateString();
 
         $validated = $request->validate([
             'action' => ['required', Rule::enum(RiderAction::class)],
             'client_uuid' => 'required|uuid',
             'reason' => [Rule::requiredIf($action?->needsReason() ?? false), 'nullable', Rule::enum(FailedAttemptReason::class)],
+            'reschedule_date' => [
+                Rule::requiredIf($isReschedule), 'nullable', 'date_format:Y-m-d',
+                "after_or_equal:{$today}", 'before_or_equal:'.Carbon::parse($today)->addDays(ShipmentEventRecorder::MAX_RESCHEDULE_DAYS)->toDateString(),
+            ],
             'note' => [
                 Rule::requiredIf(fn () => $request->input('reason') === FailedAttemptReason::OTHER->value
                     || ($isDelivery && $expectedCod > 0 && abs((float) $request->input('cod_amount') - $expectedCod) >= 0.01)),
@@ -304,6 +311,9 @@ class RiderParcelController extends Controller
                 : 'The amount is different from the parcel\'s COD — write why.',
             'cod_amount.required' => 'Enter the amount collected.',
             'photo.required' => 'Take a photo of the place.',
+            'reschedule_date.required' => 'Choose the day the customer asked for.',
+            'reschedule_date.after_or_equal' => 'The day the customer asked for can\'t be in the past.',
+            'reschedule_date.before_or_equal' => 'The day the customer asked for is too far ahead.',
             'reason.required' => $action === RiderAction::ATTEMPT_FAILED ? 'Choose why the delivery failed.' : 'Choose a reason.',
         ]);
 

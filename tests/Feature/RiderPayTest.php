@@ -47,12 +47,12 @@ class RiderPayTest extends TestCase
     }
 
     /**
-     * A failed attempt or a return needs a photo of the place; tests that
+     * A failed attempt needs a photo of the place; tests that
      * aren't about that get one unless they pass `photo` themselves.
      */
     private function withProof(array $data): array
     {
-        return in_array($data['action'] ?? null, ['attempt_failed', 'returned'], true)
+        return ($data['action'] ?? null) === 'attempt_failed'
             ? $data + ['photo' => UploadedFile::fake()->image('place.jpg', 800, 600)]
             : $data;
     }
@@ -103,15 +103,16 @@ class RiderPayTest extends TestCase
         $this->update($token, $shipment, ['action' => 'out_for_delivery'])->assertOk();
         $this->update($token, $shipment, ['action' => 'attempt_failed', 'reason' => 'closed'])->assertOk();
 
-        // Returned at the door is an attempt too.
+        // Returning it afterwards is a separate step and earns nothing more.
+        $this->update($token, $shipment, ['action' => 'returned', 'reason' => 'refused'])->assertOk();
         $this->update($token, $this->out($token), ['action' => 'returned', 'reason' => 'refused'])->assertOk();
 
         $this->pay($token)
-            ->assertJsonPath('pay.earned', 12)
-            ->assertJsonPath('pay.attempted', 3)
+            ->assertJsonPath('pay.earned', 8)
+            ->assertJsonPath('pay.attempted', 2)
             ->assertJsonPath('pay.delivered', 0);
 
-        $this->assertSame(3, RiderEarning::count());
+        $this->assertSame(2, RiderEarning::count());
     }
 
     public function test_an_attempted_order_delivered_on_a_later_visit_earns_the_delivery_rate_as_well(): void
@@ -139,8 +140,6 @@ class RiderPayTest extends TestCase
         $this->update($token, $shipment, ['action' => 'attempt_failed', 'reason' => 'no_answer', 'photo' => null])
             ->assertStatus(422)
             ->assertJsonValidationErrors(['photo' => 'Take a photo of the place.']);
-        $this->update($token, $this->out($token), ['action' => 'returned', 'reason' => 'refused', 'photo' => null])
-            ->assertStatus(422)->assertJsonValidationErrors('photo');
 
         $this->pay($token)->assertJsonPath('pay.earned', 0);
 
@@ -155,6 +154,34 @@ class RiderPayTest extends TestCase
         $this->assertEqualsWithDelta(24.7136, (float) $event->lat, 0.0001);
 
         $this->pay($token)->assertJsonPath('pay.earned', 8)->assertJsonPath('pay.attempted', 2);
+    }
+
+    public function test_an_attempt_the_customer_put_off_needs_the_day_they_asked_for(): void
+    {
+        $token = $this->signedInDevice($this->paidRider());
+        $shipment = $this->out($token);
+        $today = now('Asia/Riyadh');
+
+        $this->update($token, $shipment, ['action' => 'attempt_failed', 'reason' => 'reschedule'])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors(['reschedule_date' => 'Choose the day the customer asked for.']);
+        $this->update($token, $shipment, ['action' => 'attempt_failed', 'reason' => 'reschedule', 'reschedule_date' => $today->copy()->subDay()->toDateString()])
+            ->assertStatus(422)->assertJsonValidationErrors('reschedule_date');
+        $this->update($token, $shipment, ['action' => 'attempt_failed', 'reason' => 'reschedule', 'reschedule_date' => $today->copy()->addYear()->toDateString()])
+            ->assertStatus(422)->assertJsonValidationErrors('reschedule_date');
+
+        $day = $today->copy()->addDays(3)->toDateString();
+        $this->update($token, $shipment, ['action' => 'attempt_failed', 'reason' => 'reschedule', 'reschedule_date' => $day])
+            ->assertOk()
+            ->assertJsonPath('parcel.last_event.reschedule_date', $day);
+
+        $this->assertStringContainsString($today->copy()->addDays(3)->format('j M Y'), $shipment->fresh()->courier_status_description);
+        $this->pay($token)->assertJsonPath('pay.attempted', 1);
+
+        // Any other reason has no day, even when one is sent.
+        $other = $this->out($token);
+        $this->update($token, $other, ['action' => 'attempt_failed', 'reason' => 'no_answer', 'reschedule_date' => $day])->assertOk();
+        $this->assertNull(ShipmentEvent::where('shipment_id', $other->id)->where('action', 'attempt_failed')->firstOrFail()->reschedule_date);
     }
 
     public function test_an_order_cancelled_before_the_rider_went_is_not_paid(): void

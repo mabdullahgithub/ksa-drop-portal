@@ -309,6 +309,9 @@ function Update({ event }: { event: RiderParcelEvent }) {
         {['attempt_failed', 'returned', 'cancelled'].includes(event.action) && (
           <p className='text-muted-foreground'>{event.reason ?? 'No reason given'}</p>
         )}
+        {event.reschedule_date && (
+          <p className='font-medium text-amber-700 dark:text-amber-400'>Customer asked for {format(new Date(`${event.reschedule_date}T00:00:00`), 'EEE, MMM d, yyyy')}</p>
+        )}
         {event.action === 'delivered' && event.cod_amount !== null && event.cod_amount > 0 && (
           <p className='text-muted-foreground'>
             Collected {sar(event.cod_amount)}
