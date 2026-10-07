@@ -2,8 +2,19 @@
     "extends": "../tsconfig.json",
     "compilerOptions": {
         "paths": {
-            "@/*": ["../resources/js/*"]
+            "@/*": [
+                "../resources/js/*"
+            ],
+            "#nativephp": [
+                "./vendor/nativephp/mobile/resources/dist/native.d.ts"
+            ]
         }
     },
-    "include": ["resources/js/**/*.ts", "resources/js/**/*.tsx", "../resources/js/features/rider-app/**/*.ts", "../resources/js/features/rider-app/**/*.tsx", "../resources/js/**/*.d.ts"]
+    "include": [
+        "resources/js/**/*.ts",
+        "resources/js/**/*.tsx",
+        "../resources/js/features/rider-app/**/*.ts",
+        "../resources/js/features/rider-app/**/*.tsx",
+        "../resources/js/**/*.d.ts"
+    ]
 }

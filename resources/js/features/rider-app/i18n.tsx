@@ -158,6 +158,7 @@ const en = {
   find: 'Find',
   light: 'Light',
   camera_denied: 'Camera is blocked. Allow the camera for this app in your phone settings, or type the number.',
+  camera_blocked: 'Camera is blocked. Allow the camera for this app in your phone settings.',
   camera_unavailable: 'Camera is not available. Type the number instead.',
   camera_starting: 'Starting camera…',
 
@@ -460,6 +461,7 @@ const ar: Record<Key, string> = {
   find: 'بحث',
   light: 'الإضاءة',
   camera_denied: 'الكاميرا محظورة. اسمح للتطبيق باستخدام الكاميرا من إعدادات الجوال، أو اكتب الرقم.',
+  camera_blocked: 'الكاميرا محظورة. اسمح للتطبيق باستخدام الكاميرا من إعدادات الجوال.',
   camera_unavailable: 'الكاميرا غير متاحة. اكتب الرقم بدلاً من ذلك.',
   camera_starting: 'جارٍ تشغيل الكاميرا…',
 

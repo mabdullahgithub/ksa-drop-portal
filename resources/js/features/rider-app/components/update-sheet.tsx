@@ -6,6 +6,7 @@ import { SheetDescription, SheetTitle } from '@/components/ui/sheet'
 import { api, ApiError } from '../api'
 import { money, reasonText, statusText, useI18n } from '../i18n'
 import { compressImage } from '@/lib/compress-image'
+import { host } from '../lib/host'
 import { currentPosition, requestPosition, uuid, vibrate, watchPosition, type Position, type PositionProblem } from '../lib/device'
 import type { EntryMethod, FailedReason, Parcel, PaymentMethod, RiderAction } from '../types'
 import { BottomSheet } from './bottom-sheet'
@@ -182,19 +183,34 @@ function UpdateBody({ request, onClose, onUpdated, helpLink }: { request: Update
     return null
   }, [parcel, action, expected, codValue, amountDiffers, needsReason, needsProof, note, photo, reason, t])
 
-  const takePhoto = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    event.target.value = ''
-    if (!file) return
-
+  const usePhoto = async (file: Blob) => {
     setPreparingPhoto(true)
     try {
-      const blob = await compressImage(file)
+      const blob = await compressImage(file as File)
       setPhoto({ blob, url: URL.createObjectURL(blob) })
     } catch {
       setPhoto({ blob: file, url: URL.createObjectURL(file) })
     } finally {
       setPreparingPhoto(false)
+    }
+  }
+
+  const takePhoto = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (file) usePhoto(file)
+  }
+
+  /** The phone app opens its own camera; the web app, the browser's. */
+  const openCamera = async () => {
+    const camera = host().takePhoto
+    if (!camera) return photoInputRef.current?.click()
+
+    try {
+      const taken = await camera()
+      if (taken) usePhoto(taken)
+    } catch {
+      toast.error(t('camera_blocked'))
     }
   }
 
@@ -258,7 +274,7 @@ function UpdateBody({ request, onClose, onUpdated, helpLink }: { request: Update
           <img src={photo.url} alt='' className='h-16 w-16 rounded-2xl object-cover shadow-md' />
           <button
             type='button'
-            onClick={() => photoInputRef.current?.click()}
+            onClick={openCamera}
             className='glass-lite glass-press flex h-10 items-center gap-2 rounded-full px-4 text-sm font-semibold'
           >
             <Camera className='h-5 w-5' />
@@ -269,7 +285,7 @@ function UpdateBody({ request, onClose, onUpdated, helpLink }: { request: Update
       ) : (
         <button
           type='button'
-          onClick={() => photoInputRef.current?.click()}
+          onClick={openCamera}
           disabled={preparingPhoto}
           className='glass-lite glass-press flex h-12 w-full items-center justify-center gap-2 rounded-2xl text-[15px] font-semibold'
         >

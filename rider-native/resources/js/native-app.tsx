@@ -5,6 +5,7 @@ import { createRoot } from 'react-dom/client'
 import { RiderApp } from '@/features/rider-app/app'
 import { setHost } from '@/features/rider-app/lib/host'
 import type { RiderBoot } from '@/features/rider-app/types'
+import { takePhoto } from './camera'
 import { forgetToken, readToken, saveToken, start } from './session'
 
 /**
@@ -47,6 +48,7 @@ setHost({
     forgetToken()
     restart()
   },
+  takePhoto,
 })
 
 // Signed out by the office, or signed in on another phone, while the app was

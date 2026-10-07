@@ -1,5 +1,6 @@
 <?php
 
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -23,6 +24,23 @@ Route::get('/', fn () => $shell());
 // the app here once the portal's address is the app's deep link host.
 Route::get('/rider/activate/{token}', fn (string $token) => $shell($token))
     ->where('token', '[A-Za-z0-9]{48}');
+
+// A photo the phone's camera just took (resources/js/camera.ts). NativePHP
+// saves it in the app's own cache and reports the path; the web view can't
+// read files, so it asks for the bytes here. Only a camera photo is served,
+// and it is removed once handed over — the app keeps the copy it uploads.
+Route::get('/captured-photo', function (Request $request) {
+    $path = realpath((string) $request->query('path')) ?: '';
+
+    abort_unless(
+        $path !== ''
+            && preg_match('/^captured_(photo_)?\d+\.jpe?g$/i', basename($path))
+            && @getimagesize($path) !== false,
+        404,
+    );
+
+    return response()->file($path, ['Cache-Control' => 'no-store'])->deleteFileAfterSend();
+});
 
 // Any other rider link the phone hands over: just open the app.
 Route::redirect('/rider/{any?}', '/')->where('any', '.*');

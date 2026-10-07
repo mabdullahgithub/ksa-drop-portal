@@ -21,6 +21,12 @@ export type Host = {
   signedIn: (answer: SignInAnswer) => void | Promise<void>
   /** After the rider logged out from Profile. */
   signedOut: (answer: { redirect: string }) => void | Promise<void>
+  /**
+   * Open the phone's camera and hand back the photo, or null if the rider
+   * backed out. Only the phone app has one: a web view can't open a file
+   * input, so the browser's <input type='file'> is used when this is missing.
+   */
+  takePhoto?: () => Promise<Blob | null>
 }
 
 /** The web app is sent on to `redirect`; the phone app is handed its `token`. */

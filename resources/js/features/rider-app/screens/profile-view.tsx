@@ -41,16 +41,29 @@ export function ProfileView({ me, onPhotoChanged, onCash }: Props) {
   useBackToClose(guide, () => setGuide(false))
   useBackToClose(confirmingLogout, () => setConfirmingLogout(false))
 
-  const pickPhoto = () => input.current?.click()
+  /** The phone app opens its own camera; the web app, the browser's picker. */
+  const pickPhoto = async () => {
+    const camera = host().takePhoto
+    if (!camera) return input.current?.click()
 
-  const choose = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    try {
+      const taken = await camera()
+      if (taken) upload(taken)
+    } catch {
+      toast.error(t('camera_blocked'))
+    }
+  }
+
+  const choose = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     event.target.value = ''
-    if (!file) return
+    if (file) upload(file)
+  }
 
+  const upload = async (file: Blob) => {
     setUploading(true)
     try {
-      const blob = await compressImage(file, 640, 0.8)
+      const blob = await compressImage(file as File, 640, 0.8)
       const form = new FormData()
       form.append('photo', blob, 'me.jpg')
       const { photo_url } = await api.post<{ photo_url: string }>('/rider/api/me/photo', form)
