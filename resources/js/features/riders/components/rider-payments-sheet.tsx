@@ -453,7 +453,7 @@ function RecordPayment({
               dir='ltr'
               className='tabular-nums'
             />
-            {balance > 0 && (
+            {fromRider && balance > 0 && (
               <Button type='button' variant='outline' className='shrink-0' onClick={() => setAmount(balance.toFixed(2))}>
                 All {sar(balance)}
               </Button>
