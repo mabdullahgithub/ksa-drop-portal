@@ -104,7 +104,7 @@ export function CashSheet({ open, onClose, only, cash: initialCash, pay: initial
             {showPay && <Heading>{t('cash_section')}</Heading>}
             <Figure label={t(cashLabel(cash.balance))} amount={cash.balance} tint={cash.balance > 0 ? undefined : '#16a34a'} />
             <dl className='mt-3 divide-y divide-foreground/[0.06] rounded-2xl bg-canvas px-3.5'>
-              <Line label={t('cash_collected')} amount={cash.collected} />
+              <Line label={t('cod_total')} amount={cash.collected + cash.direct} hint={t('cod_total_hint')} />
               <Line label={t('cash_paid')} amount={cash.paid} tone='text-green-700 dark:text-green-400' />
             </dl>
 
