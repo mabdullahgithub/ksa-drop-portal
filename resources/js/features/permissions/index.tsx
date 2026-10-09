@@ -86,9 +86,12 @@ export function Permissions({ catalog, roles }: PermissionsProps) {
           <p className='py-12 text-center text-sm text-muted-foreground'>No permission matches “{search}”.</p>
         )}
 
-        <div className='grid gap-4 xl:grid-cols-2'>
+        {/* Columns, not a grid: a grid row is as tall as its tallest card, which
+            left a gap under every short one. Here each card starts right
+            where the one above it ends. */}
+        <div className='gap-4 xl:columns-2'>
           {modules.map((module) => (
-            <Card key={module.key}>
+            <Card key={module.key} className='mb-4 break-inside-avoid'>
               <CardHeader className='pb-3'>
                 <CardTitle className='text-base'>{module.label}</CardTitle>
                 <CardDescription>{module.description}</CardDescription>
