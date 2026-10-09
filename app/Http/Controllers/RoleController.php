@@ -101,6 +101,11 @@ class RoleController extends Controller
             return back()->withErrors(['name' => 'You cannot delete a role you belong to.']);
         }
 
+        // Users in the recycle bin do not count: only people who can still sign in.
+        if ($role->users()->exists()) {
+            return back()->withErrors(['name' => 'This role still has users. Move them to another role first.']);
+        }
+
         $role->delete();
 
         return back();

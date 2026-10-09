@@ -8,14 +8,9 @@ import {
 } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
-import { Edit, MoreVertical, Shield, Trash } from 'lucide-react'
+import { Lock } from 'lucide-react'
 import { type Role } from '../data/schema'
+import { RoleRowActions } from './role-row-actions'
 import { useRoles } from './roles-provider'
 import { usePermissions } from '@/hooks/use-permissions'
 
@@ -26,16 +21,6 @@ interface RolesTableProps {
 export function RolesTable({ data }: RolesTableProps) {
   const { setOpen, setCurrentRow } = useRoles()
   const { can } = usePermissions()
-
-  const handleEdit = (role: Role) => {
-    setCurrentRow(role)
-    setOpen('edit')
-  }
-
-  const handleDelete = (role: Role) => {
-    setCurrentRow(role)
-    setOpen('delete')
-  }
 
   const handleViewPermissions = (role: Role) => {
     setCurrentRow(role)
@@ -65,6 +50,11 @@ export function RolesTable({ data }: RolesTableProps) {
               <TableRow key={role.id}>
                 <TableCell className='font-medium'>
                   {role.name}
+                  {role.is_protected && (
+                    <span title='System roles cannot be edited or deleted'>
+                      <Lock className='ml-2 inline-block h-3.5 w-3.5 text-muted-foreground' />
+                    </span>
+                  )}
                   {role.is_super_admin && (
                     <Badge variant='destructive' className='ml-2'>
                       Full access
@@ -89,44 +79,7 @@ export function RolesTable({ data }: RolesTableProps) {
                 </TableCell>
                 <TableCell>{role.users_count} users</TableCell>
                 <TableCell>
-                  {/* No menu when none of its items would show. */}
-                  {(can('view role permissions') ||
-                    (!role.is_protected && can(['edit roles', 'delete roles']))) && (
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant='ghost' size='icon' className='h-8 w-8'>
-                        <MoreVertical className='h-4 w-4' />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align='end'>
-                      {can('view role permissions') && (
-                        <DropdownMenuItem onClick={() => handleViewPermissions(role)}>
-                          <Shield className='mr-2 h-4 w-4' />
-                          View Permissions
-                        </DropdownMenuItem>
-                      )}
-                      {!role.is_protected && (
-                        <>
-                          {can('edit roles') && (
-                            <DropdownMenuItem onClick={() => handleEdit(role)}>
-                              <Edit className='mr-2 h-4 w-4' />
-                              Edit
-                            </DropdownMenuItem>
-                          )}
-                          {can('delete roles') && (
-                            <DropdownMenuItem
-                              onClick={() => handleDelete(role)}
-                              className='text-destructive'
-                            >
-                              <Trash className='mr-2 h-4 w-4' />
-                              Delete
-                            </DropdownMenuItem>
-                          )}
-                        </>
-                      )}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                  )}
+                  <RoleRowActions role={role} />
                 </TableCell>
               </TableRow>
             ))

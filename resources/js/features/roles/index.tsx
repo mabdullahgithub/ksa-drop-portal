@@ -1,10 +1,14 @@
+import { useState } from 'react'
+import { LayoutGrid, Table2 } from 'lucide-react'
 import { Header } from '@/components/layout/header'
 import { NotificationsDropdown } from '@/components/layout/notifications-dropdown'
 import { Main } from '@/components/layout/main'
 import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
+import { Button } from '@/components/ui/button'
 import { RolesDialogs } from './components/roles-dialogs'
+import { RolesGrid } from './components/roles-grid'
 import { RolesPrimaryButtons } from './components/roles-primary-buttons'
 import { RolesProvider } from './components/roles-provider'
 import { RolesTable } from './components/roles-table'
@@ -15,6 +19,8 @@ interface RolesProps {
 }
 
 export function Roles({ roles }: RolesProps) {
+  const [view, setView] = useState<'grid' | 'table'>('grid')
+
   return (
     <RolesProvider>
       <Header fixed>
@@ -32,9 +38,33 @@ export function Roles({ roles }: RolesProps) {
               Create roles and tick exactly what each one may see and do.
             </p>
           </div>
-          <RolesPrimaryButtons />
+          <div className='flex items-center gap-2'>
+            {/* View toggle */}
+            <div className='flex items-center rounded-md border p-0.5'>
+              <Button
+                variant={view === 'grid' ? 'secondary' : 'ghost'}
+                size='icon'
+                className='h-7 w-7'
+                onClick={() => setView('grid')}
+                title='Card view'
+              >
+                <LayoutGrid size={14} />
+              </Button>
+              <Button
+                variant={view === 'table' ? 'secondary' : 'ghost'}
+                size='icon'
+                className='h-7 w-7'
+                onClick={() => setView('table')}
+                title='Table view'
+              >
+                <Table2 size={14} />
+              </Button>
+            </div>
+            <RolesPrimaryButtons />
+          </div>
         </div>
-        <RolesTable data={roles} />
+
+        {view === 'grid' ? <RolesGrid data={roles} /> : <RolesTable data={roles} />}
       </Main>
 
       <RolesDialogs />

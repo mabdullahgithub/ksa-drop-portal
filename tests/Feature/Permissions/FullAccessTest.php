@@ -185,6 +185,27 @@ class FullAccessTest extends TestCase
         $this->assertNotNull(Role::where('name', 'team-lead')->first());
     }
 
+    public function test_a_role_with_users_cannot_be_deleted(): void
+    {
+        $member = $this->staffWith(['view orders'], 'packer');
+        $role = Role::findByName('packer');
+
+        $this->actingAs($this->fullAccessUser())
+            ->delete("/team-management/roles/{$role->id}")
+            ->assertSessionHasErrors('name');
+
+        $this->assertNotNull(Role::where('name', 'packer')->first());
+
+        // Once its only user is in the recycle bin, nobody active holds it.
+        $member->delete();
+
+        $this->actingAs($this->fullAccessUser())
+            ->delete("/team-management/roles/{$role->id}")
+            ->assertSessionHasNoErrors();
+
+        $this->assertNull(Role::where('name', 'packer')->first());
+    }
+
     // ---------------------------------------------------------------- users
 
     public function test_only_full_access_hands_out_the_developer_role_and_nobody_the_superadmin_role(): void
