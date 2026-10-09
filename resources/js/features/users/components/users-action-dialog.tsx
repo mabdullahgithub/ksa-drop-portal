@@ -5,6 +5,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useState } from 'react'
 import { router, usePage } from '@inertiajs/react'
+import { celebrate } from '@/lib/confetti'
 import { showSubmittedData } from '@/lib/show-submitted-data'
 import { Button } from '@/components/ui/button'
 import {
@@ -121,6 +122,7 @@ export function UsersActionDialog({
           onSuccess: () => {
             form.reset()
             onOpenChange(false)
+            celebrate()
           },
           onError: (errors) => {
             setClientError(errors.client_access ?? errors.client_ids)

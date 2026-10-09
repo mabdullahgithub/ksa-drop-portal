@@ -23,15 +23,19 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { DataTablePagination, DataTableToolbar, DEFAULT_PAGE_SIZE } from '@/components/data-table'
+import { EmptyState } from '@/components/empty-state'
 import { DataTableBulkActions } from './data-table-bulk-actions'
+import { UserCard } from './user-card'
 import { usersColumnsSimple } from './users-columns-simple'
 
 type DataTableProps = {
   data: any[]
   availableRoles?: string[]
+  /** Cards or rows: the search, role filter and pages are the same either way. */
+  view?: 'grid' | 'table'
 }
 
-export function UsersTable({ data, availableRoles }: DataTableProps) {
+export function UsersTable({ data, availableRoles, view = 'table' }: DataTableProps) {
   const tableColumns = usersColumnsSimple
   const [rowSelection, setRowSelection] = useState({})
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
@@ -94,6 +98,22 @@ export function UsersTable({ data, availableRoles }: DataTableProps) {
             : []
         }
       />
+      {view === 'grid' ? (
+        table.getRowModel().rows.length ? (
+          <div className='grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'>
+            {table.getRowModel().rows.map((row) => (
+              <UserCard key={row.id} user={row.original} />
+            ))}
+          </div>
+        ) : (
+          <EmptyState
+            bot='clover'
+            state='default'
+            title='No results.'
+            className='flex-1 rounded-xl border border-dashed py-16'
+          />
+        )
+      ) : (
       <div className='overflow-hidden rounded-md border'>
         <Table>
           <TableHeader>
@@ -160,6 +180,7 @@ export function UsersTable({ data, availableRoles }: DataTableProps) {
           </TableBody>
         </Table>
       </div>
+      )}
       <DataTablePagination table={table} className='mt-auto' />
       <DataTableBulkActions table={table} />
     </div>

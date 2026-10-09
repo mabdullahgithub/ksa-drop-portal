@@ -18,15 +18,16 @@ interface Props {
   users: User[]
   roles: string[]
   permissions: string[]
+  online: number[]
 }
 
 export default function TeamManagementUsers() {
-  const { users, roles } = usePage<Props>().props
+  const { users, roles, online } = usePage<Props>().props
 
   return (
     <AuthenticatedLayout>
       <Head title='Users - Team Management' />
-      <UsersFeature users={users} availableRoles={roles} />
+      <UsersFeature users={users} availableRoles={roles} online={online} />
     </AuthenticatedLayout>
   )
 }

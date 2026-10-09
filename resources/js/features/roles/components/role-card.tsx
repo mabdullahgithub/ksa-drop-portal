@@ -1,8 +1,6 @@
-import { type ReactNode } from 'react'
 import { Eye, Lock, Pencil, Shield, ShieldCheck, Trash2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { CardAction } from '@/components/card-action'
 import { usePermissions } from '@/hooks/use-permissions'
 import { cn } from '@/lib/utils'
 import { type Role } from '../data/schema'
@@ -93,38 +91,5 @@ function Stat({ label, value }: { label: string; value: number | string }) {
       <p className='text-lg font-semibold leading-6 tabular-nums'>{value}</p>
       <p className='text-[11px] text-muted-foreground'>{label}</p>
     </div>
-  )
-}
-
-function CardAction({
-  label,
-  onClick,
-  destructive,
-  children,
-}: {
-  label: string
-  onClick: () => void
-  destructive?: boolean
-  children: ReactNode
-}) {
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <Button
-          variant='outline'
-          size='icon'
-          className={cn(
-            'size-8 [&_svg]:size-3.5',
-            destructive &&
-              'border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive'
-          )}
-          onClick={onClick}
-          aria-label={label}
-        >
-          {children}
-        </Button>
-      </TooltipTrigger>
-      <TooltipContent>{label}</TooltipContent>
-    </Tooltip>
   )
 }

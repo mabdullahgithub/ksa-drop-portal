@@ -9,6 +9,7 @@ use App\Notifications\UserUpdatedNotification;
 use App\Notifications\UserCreatedNotification;
 use App\Support\ClientAccess;
 use App\Support\PermissionCatalog;
+use App\Support\UserPresence;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -23,7 +24,8 @@ class UserRoleController extends Controller
     {
         $actor = $request->user();
 
-        $users = User::with(['roles', 'assignedClients:id'])->withExists('client')->get()
+        // Closures, so the page's once-a-minute "who is online" refresh loads nothing else.
+        $users = fn () => User::with(['roles', 'assignedClients:id'])->withExists('client')->get()
             ->map(function ($user) {
                 $fullAccess = $user->hasFullAccess();
 
@@ -47,20 +49,22 @@ class UserRoleController extends Controller
 
         return Inertia::render('TeamManagement/Users', [
             'users' => $users,
+            // The ids of the people using the portal right now.
+            'online' => fn () => UserPresence::online(User::pluck('id')->all()),
             // Only the roles this person may hand out.
-            'roles' => $this->assignableRoles($actor),
+            'roles' => fn () => $this->assignableRoles($actor),
             // For the "Add New Role" dialog inside the user form.
-            'catalog' => $actor->can('create roles') ? PermissionCatalog::modules() : [],
-            'grantable' => $actor->hasFullAccess()
+            'catalog' => fn () => $actor->can('create roles') ? PermissionCatalog::modules() : [],
+            'grantable' => fn () => $actor->hasFullAccess()
                 ? PermissionCatalog::names()
                 : array_values(array_intersect(PermissionCatalog::names(), $actor->getAllPermissions()->pluck('name')->all())),
             // Already limited to the clients this person handles themselves.
-            'clients' => $actor->can('assign client access')
+            'clients' => fn () => $actor->can('assign client access')
                 ? Client::orderBy('company_name')->get(['id', 'company_name', 'short_id'])
                     ->map(fn (Client $client) => ['id' => $client->id, 'name' => $client->company_name, 'code' => $client->short_id])
                 : [],
             // False for someone limited to their own clients: they cannot hand out "all".
-            'canGrantAllClients' => ClientAccess::idsFor($actor) === null,
+            'canGrantAllClients' => fn () => ClientAccess::idsFor($actor) === null,
         ]);
     }
 

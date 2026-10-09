@@ -5,13 +5,14 @@ import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
 import { DataTableColumnHeader } from '@/components/data-table'
 import { DataTableRowActions } from './data-table-row-actions'
+import { OnlineDot } from './online-dot'
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 
-interface SimpleUser {
+export interface SimpleUser {
   id: number
   name: string
   email: string
@@ -74,6 +75,7 @@ export const usersColumnsSimple: ColumnDef<SimpleUser>[] = [
       const isSuperAdmin = row.original.is_super_admin
       return (
         <div className='flex items-center gap-2'>
+          <OnlineDot userId={row.original.id} />
           <span className='font-medium'>{row.getValue('name')}</span>
           {isSuperAdmin && (
             <Tooltip>
