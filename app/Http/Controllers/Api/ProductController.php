@@ -74,6 +74,21 @@ class ProductController extends Controller
             'published' => 'sometimes|boolean',
         ]);
 
+        // One endpoint behind three buttons: the status menu, publish /
+        // unpublish, and the edit form. A field is only checked when it
+        // changes, since the edit form sends status and published along.
+        foreach ($validated as $field => $value) {
+            if ($product->{$field} == $value) {
+                continue;
+            }
+
+            abort_unless($request->user()->can(match ($field) {
+                'status' => 'change product status',
+                'published' => 'publish products',
+                default => 'edit inventory',
+            }), 403, 'You do not have permission to change this.');
+        }
+
         $product->update($validated);
         $product->load('images');
 

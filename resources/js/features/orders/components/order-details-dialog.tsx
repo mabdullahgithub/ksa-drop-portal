@@ -361,7 +361,7 @@ export function OrderDetailsDialog({ order, open, onOpenChange, onSaved, startIn
           <Separator />
 
           {/* Call outcomes drive the WhatsApp flow, so they go with it. */}
-          {whatsappMessaging && (
+          {whatsappMessaging && can(['update order call status', 'view order whatsapp messages']) && (
             <>
               <CallDispositionPanel order={order} onSaved={onSaved} />
 
@@ -641,18 +641,27 @@ export function OrderDetailsDialog({ order, open, onOpenChange, onSaved, startIn
             </>
           )}
 
-          {/* Shipment */}
-          <Separator />
-          <ShipmentPanel
-            shipment={currentOrder.latest_shipment || null}
-            orderId={currentOrder.id}
-            onCreateShipment={() => setCreateShipmentOpen(true)}
-            onShipmentUpdated={refetchOrder}
-          />
+          {/* Shipment — with one already there, seeing it is the permission;
+              with none, the panel is only the Create Shipment button. */}
+          {can(currentOrder.latest_shipment ? 'view shipments' : ['view shipments', 'create shipments']) && (
+            <>
+              <Separator />
+              <ShipmentPanel
+                shipment={currentOrder.latest_shipment || null}
+                orderId={currentOrder.id}
+                onCreateShipment={() => setCreateShipmentOpen(true)}
+                onShipmentUpdated={refetchOrder}
+              />
+            </>
+          )}
 
           {/* Invoices */}
-          <Separator />
-          <InvoicePanel order={currentOrder} onInvoicesChanged={refetchOrder} />
+          {can(['view waybills', 'generate waybills']) && (
+            <>
+              <Separator />
+              <InvoicePanel order={currentOrder} onInvoicesChanged={refetchOrder} />
+            </>
+          )}
           </div>
         )}
       </DialogContent>

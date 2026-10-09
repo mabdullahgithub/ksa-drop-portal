@@ -49,14 +49,14 @@ export function RecycleBin() {
     setLockNotice('Your recycle bin session expired. Enter the PIN again.')
   }, [])
 
-  const canOrders = can('delete orders')
-  const canClients = can('delete client')
-  // The inventory tab spans the catalog ('delete inventory') and per-client
-  // stock, which is gated on 'delete client' everywhere else in the portal.
-  const canInventory = can('delete inventory') || canClients
-  const canUsers = can('delete users')
-  // Riders are removed under 'manage riders'; there is no delete permission.
-  const canRiders = can('manage riders')
+  // Each tab is a permission of its own.
+  const canOrders = can('view deleted orders')
+  const canClients = can('view deleted clients')
+  // The inventory tab holds catalogue products and clients' own products,
+  // each with its own permissions; either one opens the tab.
+  const canInventory = can(['view deleted inventory', 'view deleted client products'])
+  const canUsers = can('view deleted users')
+  const canRiders = can('view deleted riders')
 
   const tabs = useMemo(
     () =>

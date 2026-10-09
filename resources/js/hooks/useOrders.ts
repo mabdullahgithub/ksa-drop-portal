@@ -112,15 +112,18 @@ export function useOrder(orderId: number) {
  * Paging, sorting and the All / Assigned tab don't affect the stats, so they
  * are left out of the request. Previous stats stay visible while refetching.
  */
-export function useOrderStatistics(filters: OrderFilters = {}) {
+export function useOrderStatistics(filters: OrderFilters = {}, enabled = true) {
   const [statistics, setStatistics] = useState<OrderStatistics | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(enabled)
   const latestRequest = useRef(0)
 
   const { page, per_page, sort_by, sort_order, has_shipment, assigned_to, ...statFilters } = filters
   const query = filtersToParams(statFilters).toString()
 
   const fetchStatistics = useCallback(async () => {
+    // Nothing on the page to show them in: the server would refuse anyway.
+    if (!enabled) return
+
     const requestId = ++latestRequest.current
     setLoading(true)
 
@@ -134,7 +137,7 @@ export function useOrderStatistics(filters: OrderFilters = {}) {
     } finally {
       if (requestId === latestRequest.current) setLoading(false)
     }
-  }, [query])
+  }, [query, enabled])
 
   useEffect(() => {
     fetchStatistics()

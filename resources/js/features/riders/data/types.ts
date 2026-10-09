@@ -64,8 +64,9 @@ export type RiderRow = {
    * today's; `cash_collected` is the part of the COD paid in cash.
    */
   stats: { held: number; delivered: number; failed: number; to_return: number; cod_collected: number; cash_collected: number }
-  cash: RiderCash
-  pay: RiderPay
+  /** Null for someone who may not see rider money. */
+  cash: RiderCash | null
+  pay: RiderPay | null
   /** An inventory manager's scans today; null for a rider. */
   stock_today: StockToday | null
   created_at: string | null

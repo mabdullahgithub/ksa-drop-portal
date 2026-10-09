@@ -67,22 +67,31 @@ export function RolesTable({ data }: RolesTableProps) {
                   {role.name}
                   {role.is_super_admin && (
                     <Badge variant='destructive' className='ml-2'>
-                      Super Admin
+                      Full access
                     </Badge>
                   )}
                 </TableCell>
                 <TableCell>
-                  <Button
-                    variant='link'
-                    size='sm'
-                    className='h-auto p-0'
-                    onClick={() => handleViewPermissions(role)}
-                  >
-                    {role.permissions.length} permissions
-                  </Button>
+                  {can('view role permissions') ? (
+                    <Button
+                      variant='link'
+                      size='sm'
+                      className='h-auto p-0'
+                      onClick={() => handleViewPermissions(role)}
+                    >
+                      {role.is_super_admin ? 'Everything' : `${role.permissions.length} permissions`}
+                    </Button>
+                  ) : (
+                    <span className='text-sm text-muted-foreground'>
+                      {role.is_super_admin ? 'Everything' : `${role.permissions.length} permissions`}
+                    </span>
+                  )}
                 </TableCell>
                 <TableCell>{role.users_count} users</TableCell>
                 <TableCell>
+                  {/* No menu when none of its items would show. */}
+                  {(can('view role permissions') ||
+                    (!role.is_protected && can(['edit roles', 'delete roles']))) && (
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button variant='ghost' size='icon' className='h-8 w-8'>
@@ -90,7 +99,7 @@ export function RolesTable({ data }: RolesTableProps) {
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align='end'>
-                      {can('view permissions') && (
+                      {can('view role permissions') && (
                         <DropdownMenuItem onClick={() => handleViewPermissions(role)}>
                           <Shield className='mr-2 h-4 w-4' />
                           View Permissions
@@ -117,6 +126,7 @@ export function RolesTable({ data }: RolesTableProps) {
                       )}
                     </DropdownMenuContent>
                   </DropdownMenu>
+                  )}
                 </TableCell>
               </TableRow>
             ))

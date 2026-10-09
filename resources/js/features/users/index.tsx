@@ -6,6 +6,7 @@ import { Search } from '@/components/search'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ThemeSwitch } from '@/components/theme-switch'
+import { usePermissions } from '@/hooks/use-permissions'
 import { UsersDialogs } from './components/users-dialogs'
 import { UsersPrimaryButtons } from './components/users-primary-buttons'
 import { UsersProvider } from './components/users-provider'
@@ -18,21 +19,24 @@ interface User {
   roles: string[]
   is_super_admin?: boolean
   is_client?: boolean
+  client_access?: 'all' | 'assigned'
+  client_ids?: number[]
   created_at: string
 }
 
 interface UsersProps {
   users: User[]
   availableRoles?: string[]
-  availablePermissions?: string[]
 }
 
-export function Users({ users, availableRoles, availablePermissions }: UsersProps) {
+export function Users({ users, availableRoles }: UsersProps) {
   const team = users.filter((u) => !u.is_client)
   const clients = users.filter((u) => u.is_client)
+  const { can } = usePermissions()
   const tabs = [
     { value: 'team', label: 'Team', rows: team },
-    { value: 'clients', label: 'Clients', rows: clients },
+    // The client sign-in accounts are a permission of their own.
+    ...(can('view client accounts') ? [{ value: 'clients', label: 'Clients', rows: clients }] : []),
   ]
 
   return (
@@ -49,7 +53,7 @@ export function Users({ users, availableRoles, availablePermissions }: UsersProp
           <div className='space-y-1'>
             <h2 className='text-3xl font-bold tracking-tight'>Users</h2>
             <p className='text-muted-foreground'>
-              View and manage user accounts and role assignments.
+              Manage team members, their roles and the clients each one handles.
             </p>
           </div>
           <UsersPrimaryButtons />
@@ -73,7 +77,7 @@ export function Users({ users, availableRoles, availablePermissions }: UsersProp
         </Tabs>
       </Main>
 
-      <UsersDialogs availableRoles={availableRoles} availablePermissions={availablePermissions} />
+      <UsersDialogs availableRoles={availableRoles} />
     </UsersProvider>
   )
 }

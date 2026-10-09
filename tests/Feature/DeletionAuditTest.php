@@ -41,7 +41,7 @@ class DeletionAuditTest extends TestCase
     private function admin(): User
     {
         $role = Role::create(['name' => 'role-' . uniqid()]);
-        $role->givePermissionTo(['delete orders', 'delete client', 'delete inventory', 'view recycle bin', 'restore recycle bin', 'purge recycle bin']);
+        $role->givePermissionTo($this->permissions(['delete orders', 'delete client', 'delete inventory', 'view recycle bin', 'restore recycle bin', 'purge recycle bin']));
 
         $user = User::factory()->create(['name' => 'Ops Admin']);
         $user->assignRole($role);

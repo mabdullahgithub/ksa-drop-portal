@@ -33,7 +33,7 @@ class ConnectorSettingsRevealTest extends TestCase
 
         $editApps = Permission::findOrCreate('edit apps');
         $adminRole = Role::findOrCreate('admin');
-        $adminRole->givePermissionTo($editApps);
+        $adminRole->givePermissionTo($this->permissions($editApps));
     }
 
     private function makeAuthorizedUser(): User

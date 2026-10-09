@@ -61,11 +61,14 @@ export function useClients(initialFilters: ClientFilters = {}) {
   }
 }
 
-export function useClientStatistics() {
+export function useClientStatistics(enabled = true) {
   const [stats, setStats] = useState<ClientStatistics | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(enabled)
 
   const fetchStats = useCallback(async () => {
+    // No cards to fill: the server would refuse anyway.
+    if (!enabled) return
+
     setLoading(true)
     try {
       const response = await fetch('/api/clients/statistics')
@@ -76,7 +79,7 @@ export function useClientStatistics() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [enabled])
 
   useEffect(() => {
     fetchStats()

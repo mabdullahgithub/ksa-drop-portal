@@ -8,6 +8,7 @@ interface Role {
   permissions: string[]
   users_count: number
   is_super_admin: boolean
+  is_protected: boolean
   created_at: string
   updated_at: string
 }
@@ -18,12 +19,12 @@ interface Props {
 }
 
 export default function TeamManagementRoles() {
-  const { roles, permissions } = usePage<Props>().props
+  const { roles } = usePage<Props>().props
 
   return (
     <AuthenticatedLayout>
       <Head title='Roles - Team Management' />
-      <RolesFeature roles={roles} availablePermissions={permissions} />
+      <RolesFeature roles={roles} />
     </AuthenticatedLayout>
   )
 }

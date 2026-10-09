@@ -66,7 +66,10 @@ class ShopifySyncRetryTest extends TestCase
      */
     private function drainQueue(): void
     {
-        $this->artisan('queue:work database --stop-when-empty')->assertSuccessful();
+        // The worker quits (exit 12) once the process holds more than its
+        // memory limit, 128M by default -- and here the process is the whole
+        // test suite, which is past that by the time these tests run.
+        $this->artisan('queue:work database --stop-when-empty --memory=1024')->assertSuccessful();
     }
 
     private function connect(Client $client): ClientShopifyConnection

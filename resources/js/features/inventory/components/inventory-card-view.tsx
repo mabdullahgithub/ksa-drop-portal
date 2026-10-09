@@ -8,6 +8,8 @@ import { InventoryCardsSkeleton } from './inventory-skeleton'
 import { Pagination } from '@/components/data-table'
 import { ProductActions } from './inventory-row-actions'
 import { EmptyState } from '@/components/empty-state'
+import { usePermissions } from '@/hooks/use-permissions'
+import { cn } from '@/lib/utils'
 
 const statusColorMap: Record<string, string> = {
   active: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
@@ -38,6 +40,7 @@ interface InventoryCardViewProps {
 
 export function InventoryCardView({ data, meta, loading, onPageChange, onPageSizeChange }: InventoryCardViewProps) {
   const { setOpen, setCurrentRow } = useInventoryContext()
+  const canView = usePermissions().can('view product details')
 
   if (loading) return <InventoryCardsSkeleton />
 
@@ -50,11 +53,18 @@ export function InventoryCardView({ data, meta, loading, onPageChange, onPageSiz
           {data.map((product) => (
             <Card
               key={product.id}
-              className='group overflow-hidden border-muted/50 hover:border-muted hover:shadow-sm transition-all duration-200 cursor-pointer'
-              onClick={() => {
-                setCurrentRow(product)
-                setOpen('view')
-              }}
+              className={cn(
+                'group overflow-hidden border-muted/50 hover:border-muted hover:shadow-sm transition-all duration-200',
+                canView && 'cursor-pointer'
+              )}
+              onClick={
+                canView
+                  ? () => {
+                      setCurrentRow(product)
+                      setOpen('view')
+                    }
+                  : undefined
+              }
             >
               {/* Image */}
               <div className='relative aspect-square bg-muted/20 overflow-hidden'>
@@ -75,6 +85,8 @@ export function InventoryCardView({ data, meta, loading, onPageChange, onPageSiz
                     {product.status}
                   </Badge>
                 </div>
+                {canView && (
+                <>
                 {/* Quick view button */}
                 <div className='absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100'>
                   <Button
@@ -91,6 +103,8 @@ export function InventoryCardView({ data, meta, loading, onPageChange, onPageSiz
                     View
                   </Button>
                 </div>
+                </>
+                )}
               </div>
 
               <CardContent className='p-3 space-y-1.5'>

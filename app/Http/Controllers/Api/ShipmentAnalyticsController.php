@@ -82,10 +82,10 @@ class ShipmentAnalyticsController extends Controller
             'daily'        => $daily,
             'exceptions'   => $exceptions,
             'returns'      => $returns,
-            'cod'          => [
-                'summary'      => $codSummary,
-                'transactions' => $cod,
-            ],
+            // The COD tab and card are a permission of their own.
+            'cod'          => $request->user()->can('view cod remittances')
+                ? ['summary' => $codSummary, 'transactions' => $cod]
+                : ['summary' => null, 'transactions' => []],
         ]);
     }
 }

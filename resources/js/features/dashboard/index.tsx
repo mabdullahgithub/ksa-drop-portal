@@ -27,6 +27,7 @@ import { ShipmentStatusCardsView } from '@/features/orders/components/shipment-s
 import { TagStatCardsView } from '@/features/orders/components/tag-stat-cards'
 import { InboxStats } from '@/features/whatsapp/components/inbox-stats'
 import { useDashboard } from '@/hooks/useDashboard'
+import { usePermissions } from '@/hooks/use-permissions'
 import { useWhatsAppMessaging } from '@/hooks/use-whatsapp-messaging'
 
 
@@ -94,6 +95,16 @@ export function Dashboard() {
   const { data, loading } = useDashboard()
   const { orders, whatsapp, clients } = data
   const whatsappMessaging = useWhatsAppMessaging()
+  // Each block is a permission of its own, and so is each half of the top row.
+  const { can } = usePermissions()
+  const canCounts = can('view dashboard order stats')
+  const canRevenue = can('view dashboard revenue')
+  const canTagCards = can('view dashboard tag cards')
+  const canStatusCards = can('view dashboard shipment status')
+  // A card only links to a page this person can open.
+  const ordersHref = can('view orders') ? '/orders' : undefined
+  const whatsappHref = can('view whatsapp') ? '/whatsapp' : undefined
+  const clientsHref = can('view client') ? '/client' : undefined
 
   return (
     <>
@@ -123,20 +134,22 @@ export function Dashboard() {
             <StatSection
               title='Orders'
               description='Volume and value across every client'
-              href='/orders'
+              href={ordersHref}
               linkLabel='All orders'
             >
               {loading || !orders ? (
                 <StatRowSkeleton />
-              ) : (
+              ) : (canCounts || canRevenue) && (
                 <div className={STAT_GRID}>
+                  {canCounts && (
+                  <>
                   <StatCard
                     icon={<ShoppingCart className='h-3.5 w-3.5' />}
                     label='Total orders'
                     value={orders.total_orders}
                     texture='dots'
                     tone='teal'
-                    href='/orders'
+                    href={ordersHref}
                     hint='Every order in the portal, across all clients.'
                   />
                   <StatCard
@@ -145,9 +158,13 @@ export function Dashboard() {
                     value={orders.today_orders}
                     texture='dots'
                     tone='blue'
-                    href='/orders'
+                    href={ordersHref}
                     hint='Orders created since midnight, in your timezone.'
                   />
+                  </>
+                  )}
+                  {canRevenue && (
+                  <>
                   <StatCard
                     icon={<TrendingUp className='h-3.5 w-3.5' />}
                     label='Total revenue'
@@ -175,6 +192,9 @@ export function Dashboard() {
                     tone='orange'
                     hint={`Total revenue divided by order count — ${formatCurrency(orders.average_order_value)}.`}
                   />
+                  </>
+                  )}
+                  {canCounts && (
                   <StatCard
                     icon={<PackageSearch className='h-3.5 w-3.5' />}
                     label='Awaiting shipment'
@@ -182,28 +202,33 @@ export function Dashboard() {
                     sub={`/ ${compactNumber(orders.total_orders)}`}
                     texture='dots'
                     tone='rose'
-                    href='/orders'
+                    href={ordersHref}
                     hint={`No courier assigned yet. ${orders.assigned_orders.toLocaleString()} orders have a shipment.`}
                   />
+                  )}
                 </div>
               )}
 
               {/* The orders page's own two card grids, rendered straight from
                   the statistics already loaded above. */}
-              <div className='mt-5'>
-                <TagStatCardsView tags={orders?.by_tag ?? []} loading={loading} />
-              </div>
-
-              <div className='mt-5'>
-                <div className='mb-3 flex items-center gap-1.5'>
-                  <Truck className='h-3.5 w-3.5 text-muted-foreground' />
-                  <h3 className='text-sm font-semibold'>Shipment status distribution</h3>
+              {canTagCards && (
+                <div className='mt-5'>
+                  <TagStatCardsView tags={orders?.by_tag ?? []} loading={loading} />
                 </div>
-                <ShipmentStatusCardsView
-                  byStatus={orders?.by_shipment_status ?? null}
-                  loading={loading}
-                />
-              </div>
+              )}
+
+              {canStatusCards && (
+                <div className='mt-5'>
+                  <div className='mb-3 flex items-center gap-1.5'>
+                    <Truck className='h-3.5 w-3.5 text-muted-foreground' />
+                    <h3 className='text-sm font-semibold'>Shipment status distribution</h3>
+                  </div>
+                  <ShipmentStatusCardsView
+                    byStatus={orders?.by_shipment_status ?? null}
+                    loading={loading}
+                  />
+                </div>
+              )}
             </StatSection>
           )}
 
@@ -212,12 +237,12 @@ export function Dashboard() {
             <StatSection
               title='WhatsApp confirmations'
               description='Order confirmations opened when a call goes unanswered'
-              href='/whatsapp'
+              href={whatsappHref}
               linkLabel='Open inbox'
             >
               {/* Literally the inbox's own KPI row, so the two pages can never
                   drift apart — it just links back to the inbox from here. */}
-              {loading || !whatsapp ? <StatRowSkeleton /> : <InboxStats stats={whatsapp} href='/whatsapp' />}
+              {loading || !whatsapp ? <StatRowSkeleton /> : <InboxStats stats={whatsapp} href={whatsappHref} />}
             </StatSection>
           )}
 
@@ -226,7 +251,7 @@ export function Dashboard() {
             <StatSection
               title='Clients'
               description='Account status and the mix of services they buy'
-              href='/client'
+              href={clientsHref}
               linkLabel='All clients'
             >
               {loading || !clients ? (
@@ -239,7 +264,7 @@ export function Dashboard() {
                     value={clients.total_clients}
                     texture='grid'
                     tone='teal'
-                    href='/client'
+                    href={clientsHref}
                   />
                   <StatCard
                     icon={<UserCheck className='h-3.5 w-3.5' />}
@@ -247,7 +272,7 @@ export function Dashboard() {
                     value={clients.active_clients}
                     texture='grid'
                     tone='emerald'
-                    href='/client'
+                    href={clientsHref}
                     hint='Can sign in and place orders.'
                   />
                   <StatCard
@@ -256,7 +281,7 @@ export function Dashboard() {
                     value={clients.inactive_clients}
                     texture='grid'
                     tone='orange'
-                    href='/client'
+                    href={clientsHref}
                     hint='Dormant accounts — no access until reactivated.'
                   />
                   <StatCard
@@ -265,7 +290,7 @@ export function Dashboard() {
                     value={clients.suspended_clients}
                     texture='grid'
                     tone='rose'
-                    href='/client'
+                    href={clientsHref}
                     hint='Blocked accounts, usually over unpaid balances.'
                   />
                   <StatCard
@@ -274,7 +299,7 @@ export function Dashboard() {
                     value={clients.dropshippers_count}
                     texture='grid'
                     tone='blue'
-                    href='/client'
+                    href={clientsHref}
                     hint='Ship per order, no stock held with us.'
                   />
                   <StatCard
@@ -283,7 +308,7 @@ export function Dashboard() {
                     value={clients.fulfilment_count}
                     texture='grid'
                     tone='violet'
-                    href='/client'
+                    href={clientsHref}
                     hint='Stock stored in our warehouse. A client can be both, so the two do not add up to the total.'
                   />
                 </div>

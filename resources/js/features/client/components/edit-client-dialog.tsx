@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/dialog'
 import { useClientMutations } from '@/hooks/useClients'
 import type { Client } from '@/types/client'
+import { usePermissions } from '@/hooks/use-permissions'
 
 interface EditClientDialogProps {
   client: Client | null
@@ -26,6 +27,8 @@ interface EditClientDialogProps {
 export function EditClientDialog({ client, open, onOpenChange, onSuccess }: EditClientDialogProps) {
   const { updateClient, loading } = useClientMutations()
 
+  // Portal access, charges and notes are each a permission of their own.
+  const { can } = usePermissions()
   const [clientTypes, setClientTypes] = useState<string[]>([])
   const [companyName, setCompanyName] = useState('')
   const [clientId, setClientId] = useState('')
@@ -143,9 +146,10 @@ export function EditClientDialog({ client, open, onOpenChange, onSuccess }: Edit
       postal_code: postalCode || null,
       tax_id: taxId || null,
       commercial_registration: commercialRegistration || null,
-      portal_features: portalFeatures,
-      charges: buildChargesPayload(),
-      notes: notes || null,
+      // Only the sections this person may edit are sent at all.
+      ...(can('edit client portal features') ? { portal_features: portalFeatures } : {}),
+      ...(can('edit client charges') ? { charges: buildChargesPayload() } : {}),
+      ...(can('edit client notes') ? { notes: notes || null } : {}),
     }
 
     const result = await updateClient(client.id, payload)
@@ -186,6 +190,8 @@ export function EditClientDialog({ client, open, onOpenChange, onSuccess }: Edit
             </div>
           </div>
 
+          {can('edit client portal features') && (
+            <>
           <Separator />
 
           {/* Portal Access */}
@@ -224,6 +230,8 @@ export function EditClientDialog({ client, open, onOpenChange, onSuccess }: Edit
               </div>
             </div>
           </div>
+            </>
+          )}
 
           <Separator />
 
@@ -286,6 +294,8 @@ export function EditClientDialog({ client, open, onOpenChange, onSuccess }: Edit
             </div>
           </div>
 
+          {can('edit client charges') && (
+            <>
           <Separator />
 
           {/* Charges */}
@@ -325,7 +335,11 @@ export function EditClientDialog({ client, open, onOpenChange, onSuccess }: Edit
               </div>
             </div>
           </div>
+            </>
+          )}
 
+          {can('edit client notes') && (
+            <>
           <Separator />
 
           {/* Notes */}
@@ -336,6 +350,8 @@ export function EditClientDialog({ client, open, onOpenChange, onSuccess }: Edit
               <Input id='ec-notes' value={notes} onChange={(e) => setNotes(e.target.value)} />
             </div>
           </div>
+            </>
+          )}
         </div>
 
         <DialogFooter>

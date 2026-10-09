@@ -20,6 +20,7 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Password;
 use Illuminate\Validation\Rules\Password as PasswordRule;
 use App\Services\EmailService;
+use App\Support\ClientAccess;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 
@@ -62,8 +63,9 @@ class ClientController extends Controller
         $client->load(['user', 'creator', 'clientProducts']);
 
         $data = $this->formatClient($client);
-        $data['orders_count'] = $client->orders()->count();
-        $data['total_revenue'] = round((float) $client->orders()->sum('total'), 2);
+        $canRevenue = request()->user()->can('view client revenue');
+        $data['orders_count'] = $canRevenue ? $client->orders()->count() : null;
+        $data['total_revenue'] = $canRevenue ? round((float) $client->orders()->sum('total'), 2) : null;
         $data['products_count'] = $client->clientProducts()->count();
         $data['verified_products_count'] = $client->clientProducts()->verified()->count();
 
@@ -136,6 +138,13 @@ class ClientController extends Controller
             'notes' => $validated['notes'] ?? null,
         ]);
 
+        // Someone limited to their own clients keeps the one they just made.
+        $access = app(ClientAccess::class);
+        if ($access->restricted()) {
+            $request->user()->assignedClients()->syncWithoutDetaching([$client->id]);
+            $access->restrictTo([...$access->ids(), $client->id]);
+        }
+
         try {
             $emailService = app(EmailService::class);
             if ($emailService->isEnabled()) {
@@ -192,6 +201,23 @@ class ClientController extends Controller
             'notes' => 'nullable|string',
         ]);
 
+        // The charges, portal features and notes sections of the form are
+        // permissions of their own. The form always sends them, so a section
+        // the person may not edit is only refused when it actually changed.
+        $sections = [
+            'charges' => 'edit client charges',
+            'portal_features' => 'edit client portal features',
+            'notes' => 'edit client notes',
+        ];
+        foreach ($sections as $field => $permission) {
+            if (! array_key_exists($field, $validated) || $request->user()->can($permission)) {
+                continue;
+            }
+
+            abort_if($this->sectionChanged($client->{$field}, $validated[$field]), 403, 'You do not have permission to change this section.');
+            unset($validated[$field]);
+        }
+
         if (isset($validated['client_id'])) {
             $validated['short_id'] = $validated['client_id'];
             unset($validated['client_id']);
@@ -204,6 +230,30 @@ class ClientController extends Controller
             'message' => 'Client updated successfully',
             'client' => $this->formatClient($client),
         ]);
+    }
+
+    /**
+     * Whether a submitted form section differs from what is saved, ignoring
+     * the order of keys and the difference between "5" and 5.
+     */
+    private function sectionChanged(mixed $saved, mixed $submitted): bool
+    {
+        $normalise = function (mixed $value) use (&$normalise) {
+            if ($value === null || $value === '') {
+                return null;
+            }
+
+            if (is_array($value)) {
+                $value = array_filter(array_map($normalise, $value), fn ($item) => $item !== null);
+                array_is_list($value) ? sort($value) : ksort($value);
+
+                return $value === [] ? null : $value;
+            }
+
+            return is_numeric($value) ? (float) $value : $value;
+        };
+
+        return $normalise($saved) != $normalise($submitted);
     }
 
     public function updateStatus(Request $request, Client $client)

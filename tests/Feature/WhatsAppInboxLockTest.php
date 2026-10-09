@@ -43,7 +43,7 @@ class WhatsAppInboxLockTest extends TestCase
     private function agent(array $permissions = ['view whatsapp', 'reply whatsapp']): User
     {
         $role = Role::create(['name' => 'role-' . uniqid()]);
-        $role->givePermissionTo($permissions);
+        $role->givePermissionTo($this->permissions($permissions));
 
         $user = User::factory()->create();
         $user->assignRole($role);

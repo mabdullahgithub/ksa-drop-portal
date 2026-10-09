@@ -7,6 +7,7 @@ use App\Models\Connector;
 use App\Models\ConnectorSetting;
 use App\Services\Shipping\CourierManager;
 use App\Services\WhatsApp\MetaWhatsAppService;
+use App\Support\PermissionCatalog;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 
@@ -19,8 +20,25 @@ class ConnectorSettingsController extends Controller
      */
     private const MASKED_VALUE = '••••••••';
 
+    /**
+     * Each connector's settings are a permission of their own; one without a
+     * settings page is left to the full-access roles.
+     */
+    private function authorizeConnector(Connector $connector): void
+    {
+        $permission = PermissionCatalog::connectorPermission($connector->key);
+
+        abort_unless(
+            $permission ? request()->user()->can($permission) : request()->user()->hasFullAccess(),
+            403,
+            'You do not have permission to manage this connector.',
+        );
+    }
+
     public function show(Connector $connector)
     {
+        $this->authorizeConnector($connector);
+
         $settings = ConnectorSetting::where('connector_id', $connector->id)->get();
 
         $masked = $settings->map(function ($setting) {
@@ -41,6 +59,8 @@ class ConnectorSettingsController extends Controller
 
     public function update(Request $request, Connector $connector)
     {
+        $this->authorizeConnector($connector);
+
         $request->validate([
             'settings' => 'required|array',
             'settings.*.key' => 'required|string',
@@ -71,11 +91,13 @@ class ConnectorSettingsController extends Controller
      * Decrypt and return one encrypted setting's real value on demand — the
      * "reveal" action behind the eye icon on an already-saved secret.
      * Deliberately separate from show(): the real value only ever leaves
-     * the server when someone with `edit apps` explicitly asks for this
+     * the server when someone with `reveal connector secrets` explicitly asks for this
      * one key, not on every settings-page load, and every reveal is logged.
      */
     public function reveal(Request $request, Connector $connector)
     {
+        $this->authorizeConnector($connector);
+
         $request->validate([
             'key' => 'required|string',
         ]);
@@ -101,6 +123,8 @@ class ConnectorSettingsController extends Controller
 
     public function test(Request $request, Connector $connector)
     {
+        $this->authorizeConnector($connector);
+
         // WhatsApp is not a courier — it validates against Meta's Graph API
         // rather than through CourierManager.
         if ($connector->key === 'whatsapp') {

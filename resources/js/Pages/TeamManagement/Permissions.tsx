@@ -1,26 +1,16 @@
 import { Head, usePage } from '@inertiajs/react'
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout'
 import { Permissions as PermissionsFeature } from '@/features/permissions'
-
-interface Permission {
-  id: number
-  name: string
-  roles: string[]
-  created_at: string
-  updated_at: string
-}
-
-interface Props {
-  permissions: Permission[]
-}
+import { type CatalogModule } from '@/features/roles/data/catalog'
+import { type PageProps } from '@/types'
 
 export default function TeamManagementPermissions() {
-  const { permissions } = usePage<Props>().props
+  const { catalog, roles } = usePage<PageProps<{ catalog: CatalogModule[]; roles: Record<string, string[]> }>>().props
 
   return (
     <AuthenticatedLayout>
       <Head title='Permissions - Team Management' />
-      <PermissionsFeature permissions={permissions} />
+      <PermissionsFeature catalog={catalog} roles={roles} />
     </AuthenticatedLayout>
   )
 }

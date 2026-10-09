@@ -12,8 +12,11 @@ import { NotificationsDropdown } from '@/components/layout/notifications-dropdow
 import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
+import { usePermissions } from '@/hooks/use-permissions'
 
 export default function EmailSettings({ settings, recentLogs, graveyard }: any) {
+  // The statistics and the logs are each a permission of their own.
+  const { can } = usePermissions()
   return (
     <AuthenticatedLayout>
       <Head title='Email Settings' />
@@ -37,8 +40,8 @@ export default function EmailSettings({ settings, recentLogs, graveyard }: any) 
           <Tabs defaultValue='settings' className='space-y-4'>
             <TabsList>
               <TabsTrigger value='settings'>Configuration</TabsTrigger>
-              <TabsTrigger value='statistics'>Statistics</TabsTrigger>
-              <TabsTrigger value='logs'>Email Logs</TabsTrigger>
+              {can('view email statistics') && <TabsTrigger value='statistics'>Statistics</TabsTrigger>}
+              {can('view email logs') && <TabsTrigger value='logs'>Email Logs</TabsTrigger>}
               <TabsTrigger value='graveyard'>Graveyard</TabsTrigger>
             </TabsList>
 
@@ -46,23 +49,27 @@ export default function EmailSettings({ settings, recentLogs, graveyard }: any) 
               <EmailSettingsForm settings={settings} />
             </TabsContent>
 
-            <TabsContent value='statistics' className='space-y-4'>
-              <EmailStatistics />
-            </TabsContent>
+            {can('view email statistics') && (
+              <TabsContent value='statistics' className='space-y-4'>
+                <EmailStatistics />
+              </TabsContent>
+            )}
 
-            <TabsContent value='logs' className='space-y-4'>
-              <Card>
-                <CardHeader>
-                  <CardTitle>Recent Email Logs</CardTitle>
-                  <CardDescription>
-                    View recently sent emails and their status
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <RecentEmailLogs logs={recentLogs} />
-                </CardContent>
-              </Card>
-            </TabsContent>
+            {can('view email logs') && (
+              <TabsContent value='logs' className='space-y-4'>
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Recent Email Logs</CardTitle>
+                    <CardDescription>
+                      View recently sent emails and their status
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <RecentEmailLogs logs={recentLogs} />
+                  </CardContent>
+                </Card>
+              </TabsContent>
+            )}
 
             <TabsContent value='graveyard' className='space-y-4'>
               <Card>

@@ -459,7 +459,7 @@ class EmailGraveyardTest extends TestCase
         Permission::findOrCreate('manage-email-settings');
 
         $role = Role::create(['name' => 'role-'.uniqid()]);
-        $role->givePermissionTo($permissions);
+        $role->givePermissionTo($this->permissions($permissions));
 
         $user = User::factory()->create();
         $user->assignRole($role);

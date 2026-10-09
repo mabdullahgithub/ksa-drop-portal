@@ -50,7 +50,7 @@ class ShipmentReassignmentTest extends TestCase
     private function actor(): User
     {
         $role = Role::create(['name' => 'role-' . uniqid()]);
-        $role->givePermissionTo(['edit orders', 'view orders']);
+        $role->givePermissionTo($this->permissions(['edit orders', 'view orders']));
 
         $user = User::factory()->create();
         $user->assignRole($role);

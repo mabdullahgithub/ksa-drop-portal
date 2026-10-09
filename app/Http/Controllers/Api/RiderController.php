@@ -442,7 +442,9 @@ class RiderController extends Controller
         $device = $rider->activeDevice;
 
         // Iqama and IBAN only for people who can edit riders.
-        $canManage = $request->user()?->can('manage riders') ?? false;
+        $canManage = $request->user()?->can('edit riders') ?? false;
+        // What a rider owes and is owed, for people who may see rider money.
+        $canMoney = $request->user()?->canAny(['view rider payments', 'view rider cash stats']) ?? false;
 
         return [
             'id' => $rider->id,
@@ -484,15 +486,21 @@ class RiderController extends Controller
             ] : null,
             'last_seen_at' => $rider->last_seen_at?->toIso8601String(),
             'online' => $online ?? RiderPresence::isOnline($rider),
-            'stats' => $stats ?? RiderDayStats::forRiders([$rider->id])[$rider->id],
+            'stats' => $this->dayStats($stats ?? RiderDayStats::forRiders([$rider->id])[$rider->id], $canMoney),
             // COD cash collected, handed in, and still owed (RiderCash).
-            'cash' => $cash ?? RiderCash::forRider($rider->id),
+            'cash' => $canMoney ? ($cash ?? RiderCash::forRider($rider->id)) : null,
             // Earned per order, paid out, and still owed to the rider (RiderPay).
-            'pay' => $pay ?? RiderPay::forRider($rider->id),
+            'pay' => $canMoney ? ($pay ?? RiderPay::forRider($rider->id)) : null,
             // An inventory manager's scans today, each way; null for a rider.
             'stock_today' => $rider->isInventoryManager() ? ($stock ?? StockDayStats::forManager($rider->id)) : null,
             'created_at' => $rider->created_at?->toIso8601String(),
         ];
+    }
+
+    /** Today's parcel counts, with the money left out for someone who may not see rider money. */
+    private function dayStats(array $stats, bool $canMoney): array
+    {
+        return $canMoney ? $stats : ['cod_collected' => 0, 'cash_collected' => 0] + $stats;
     }
 
     private function photoUrl(Rider $rider): ?string

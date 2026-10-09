@@ -14,6 +14,7 @@ import { InventoryFilters } from './components/inventory-filters'
 import { InventoryStats } from './components/inventory-stats'
 import { useProducts } from '@/hooks/useProducts'
 import { DEFAULT_PAGE_SIZE } from '@/components/data-table'
+import { Can } from '@/components/can'
 
 function InventoryContent() {
   const { products, meta, loading, filters, updateFilters, refresh } = useProducts({
@@ -44,7 +45,9 @@ function InventoryContent() {
           <InventoryPrimaryButtons onImportSuccess={refresh} />
         </div>
 
-        <InventoryStats />
+        <Can permission='view inventory stats'>
+          <InventoryStats />
+        </Can>
 
         <InventoryFilters
           filters={filters}

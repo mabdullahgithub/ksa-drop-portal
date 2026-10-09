@@ -9,6 +9,8 @@ interface User {
   roles: string[]
   is_super_admin: boolean
   is_client: boolean
+  client_access: 'all' | 'assigned'
+  client_ids: number[]
   created_at: string
 }
 
@@ -19,12 +21,12 @@ interface Props {
 }
 
 export default function TeamManagementUsers() {
-  const { users, roles, permissions } = usePage<Props>().props
+  const { users, roles } = usePage<Props>().props
 
   return (
     <AuthenticatedLayout>
       <Head title='Users - Team Management' />
-      <UsersFeature users={users} availableRoles={roles} availablePermissions={permissions} />
+      <UsersFeature users={users} availableRoles={roles} />
     </AuthenticatedLayout>
   )
 }

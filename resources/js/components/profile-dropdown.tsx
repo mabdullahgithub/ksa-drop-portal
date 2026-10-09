@@ -13,10 +13,12 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { SignOutDialog } from '@/components/sign-out-dialog'
+import { usePermissions } from '@/hooks/use-permissions'
 
 export function ProfileDropdown() {
   const [open, setOpen] = useDialogState()
   const { auth } = usePage().props
+  const { can, canOrPortal } = usePermissions()
   const initials = auth.user.name
     .split(' ')
     .map((n) => n[0])
@@ -48,24 +50,30 @@ export function ProfileDropdown() {
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
           <DropdownMenuGroup>
-            <DropdownMenuItem asChild>
-              <Link href='/settings'>
-                <UserCog />
-                Profile
-              </Link>
-            </DropdownMenuItem>
-            <DropdownMenuItem asChild>
-              <Link href='/notifications'>
-                <Bell />
-                Notifications
-              </Link>
-            </DropdownMenuItem>
-            <DropdownMenuItem asChild>
-              <Link href='/settings/security'>
-                <Settings />
-                Settings
-              </Link>
-            </DropdownMenuItem>
+            {can('view settings') && (
+              <DropdownMenuItem asChild>
+                <Link href='/settings'>
+                  <UserCog />
+                  Profile
+                </Link>
+              </DropdownMenuItem>
+            )}
+            {canOrPortal('view notifications') && (
+              <DropdownMenuItem asChild>
+                <Link href='/notifications'>
+                  <Bell />
+                  Notifications
+                </Link>
+              </DropdownMenuItem>
+            )}
+            {can('view settings') && (
+              <DropdownMenuItem asChild>
+                <Link href='/settings/security'>
+                  <Settings />
+                  Settings
+                </Link>
+              </DropdownMenuItem>
+            )}
           </DropdownMenuGroup>
           <DropdownMenuSeparator />
           <DropdownMenuItem variant='destructive' onClick={() => setOpen(true)}>

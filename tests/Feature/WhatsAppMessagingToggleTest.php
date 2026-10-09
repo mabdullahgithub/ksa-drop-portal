@@ -42,7 +42,7 @@ class WhatsAppMessagingToggleTest extends TestCase
     private function staff(array $permissions = ['view whatsapp', 'reply whatsapp', 'edit apps']): User
     {
         $role = Role::create(['name' => 'role-' . uniqid()]);
-        $role->givePermissionTo($permissions);
+        $role->givePermissionTo($this->permissions($permissions));
 
         $user = User::factory()->create();
         $user->assignRole($role);

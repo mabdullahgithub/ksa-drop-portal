@@ -17,6 +17,11 @@ class ClientPaymentController extends Controller
             ->orderBy('paid_at', 'desc')
             ->paginate(15);
 
+        // Opening the proof is a permission of its own.
+        if (! request()->user()->can('view client payment proof')) {
+            $payments->getCollection()->each->makeHidden(['proof_url', 'proof_path']);
+        }
+
         return response()->json($payments);
     }
 

@@ -20,6 +20,7 @@ import { compressImage } from '@/lib/compress-image'
 import { cn } from '@/lib/utils'
 import { EMPLOYMENT_TYPES, RIDER_ROLES, VEHICLE_TYPES, type RiderRow, type WarehouseOption } from '../data/types'
 import { RiderAvatar } from './rider-parts'
+import { usePermissions } from '@/hooks/use-permissions'
 
 type Props = {
   open: boolean
@@ -69,6 +70,8 @@ const ROLE_ICONS = { rider: Bike, inventory_manager: PackageSearch } as const
  * required; everything else sits under "More details".
  */
 export function RiderFormDialog({ open, onOpenChange, rider, warehouses, onSaved }: Props) {
+  // The photo is saved by its own request, under its own permission.
+  const canPhoto = usePermissions().can('change rider photo')
   const isEdit = !!rider
   const [form, setForm] = useState<FormState>(() => initialState(rider))
   const [errors, setErrors] = useState<Record<string, string>>({})
@@ -167,6 +170,8 @@ export function RiderFormDialog({ open, onOpenChange, rider, warehouses, onSaved
           <div className='flex items-center gap-4'>
             <RiderAvatar name={form.name || '?'} photoUrl={shownPhoto} className='size-16 text-lg' />
             <div className='space-y-1'>
+              {canPhoto && (
+                <>
               <div className='flex flex-wrap gap-2'>
                 <input ref={photoInput} type='file' accept='image/*' className='hidden' onChange={pickPhoto} />
                 <Button type='button' variant='outline' size='sm' onClick={() => photoInput.current?.click()} disabled={preparingPhoto}>
@@ -189,6 +194,8 @@ export function RiderFormDialog({ open, onOpenChange, rider, warehouses, onSaved
                 )}
               </div>
               <p className='text-xs text-muted-foreground'>Optional. They can also set it from the app.</p>
+                </>
+              )}
             </div>
           </div>
 

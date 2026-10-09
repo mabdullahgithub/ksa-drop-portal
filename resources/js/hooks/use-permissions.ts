@@ -8,11 +8,14 @@ export function usePermissions() {
   const { auth } = usePage<PageProps>().props
   const permissions = auth?.permissions || []
   const roles = auth?.roles || []
+  // superadmin and developer: nothing is ever checked for them.
+  const fullAccess = !!auth?.full_access
 
   /**
    * Check if user has a specific permission
    */
   const can = (permission: string | string[]): boolean => {
+    if (fullAccess) return true
     if (Array.isArray(permission)) {
       return permission.some((p) => permissions.includes(p))
     }
@@ -23,7 +26,7 @@ export function usePermissions() {
    * Check if user has all specified permissions
    */
   const canAll = (permissionList: string[]): boolean => {
-    return permissionList.every((p) => permissions.includes(p))
+    return fullAccess || permissionList.every((p) => permissions.includes(p))
   }
 
   /**
@@ -43,10 +46,20 @@ export function usePermissions() {
     return roleList.every((r) => roles.includes(r))
   }
 
+  /**
+   * For the few things the client portal shares with the team (the bell, the
+   * profile menu): a client account, or staff looking at a client's portal,
+   * always has them — the portal has no staff permissions.
+   */
+  const isPortal = roles.includes('client') || !!auth?.impersonating
+  const canOrPortal = (permission: string | string[]): boolean => isPortal || can(permission)
+
   return {
     permissions,
     roles,
+    fullAccess,
     can,
+    canOrPortal,
     canAll,
     hasRole,
     hasAllRoles,

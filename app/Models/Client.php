@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\RestrictedByClientAccess;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -11,7 +12,12 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Client extends Model
 {
-    use HasFactory, SoftDeletes;
+    use HasFactory, SoftDeletes, RestrictedByClientAccess;
+
+    protected static function clientAccessColumn(): string
+    {
+        return 'id';
+    }
 
     protected $fillable = [
         'user_id',
@@ -163,7 +169,7 @@ class Client extends Model
         $candidates = array_unique(array_filter($candidates, fn($c) => strlen($c) >= 4 && strlen($c) <= 5));
 
         foreach ($candidates as $candidate) {
-            if (!static::withTrashed()->where('short_id', $candidate)->exists()) {
+            if (!static::acrossClients()->withTrashed()->where('short_id', $candidate)->exists()) {
                 return $candidate;
             }
         }
@@ -173,7 +179,7 @@ class Client extends Model
 
         foreach (range('A', 'Z') as $suffix) {
             $attempt = $base4 . $suffix;
-            if (!static::withTrashed()->where('short_id', $attempt)->exists()) {
+            if (!static::acrossClients()->withTrashed()->where('short_id', $attempt)->exists()) {
                 return $attempt;
             }
         }
@@ -182,7 +188,7 @@ class Client extends Model
         foreach (range('A', 'Z') as $s1) {
             foreach (range('A', 'Z') as $s2) {
                 $attempt = $base3 . $s1 . $s2;
-                if (!static::withTrashed()->where('short_id', $attempt)->exists()) {
+                if (!static::acrossClients()->withTrashed()->where('short_id', $attempt)->exists()) {
                     return $attempt;
                 }
             }

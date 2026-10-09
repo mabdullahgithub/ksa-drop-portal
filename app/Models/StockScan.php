@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\RestrictedByClientAccess;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -12,6 +13,12 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  */
 class StockScan extends Model
 {
+    use RestrictedByClientAccess;
+
+    protected static function clientAccessColumn(): string
+    {
+        return 'order_id';
+    }
     public const OUT = 'out';
 
     public const IN = 'in';

@@ -21,7 +21,7 @@ class AdminUsersSeeder extends Seeder
                 'name' => 'Developer',
                 'email' => 'developer@ksadrop.com',
                 'password' => Hash::make('password'),
-                'role' => 'superadmin',
+                'role' => 'developer',
             ],
         ];
 

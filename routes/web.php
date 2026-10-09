@@ -64,10 +64,10 @@ Route::get('/dashboard', function () {
     return Inertia::render('Dashboard');
 })->middleware(['auth', 'verified'])->name('dashboard');
 
-Route::middleware(['auth', 'verified', 'role:!client'])->group(function () {
+Route::middleware(['auth', 'verified', 'role:!client', 'client.access'])->group(function () {
     // General
     Route::get('/client', fn () => Inertia::render('Client'))->middleware('permission:view client')->name('client');
-    Route::get('/client/{client}', [ClientPageController::class, 'show'])->middleware('permission:view client')->name('client.show');
+    Route::get('/client/{client}', [ClientPageController::class, 'show'])->middleware('permission:view client details')->name('client.show');
     Route::get('/inventory', fn () => Inertia::render('Inventory'))->middleware('permission:view inventory')->name('inventory');
     Route::get('/orders', fn () => Inertia::render('Orders'))->middleware('permission:view orders')->name('orders');
 
@@ -77,119 +77,125 @@ Route::middleware(['auth', 'verified', 'role:!client'])->group(function () {
     Route::get('/apps', fn () => Inertia::render('Apps'))->middleware('permission:view apps')->name('apps');
 
     // Connectors API
-    Route::get('/api/connectors', [ConnectorController::class, 'index'])->middleware('permission:view apps|edit apps')->name('api.connectors.index');
-    Route::patch('/api/connectors/{connector}/toggle', [ConnectorController::class, 'toggle'])->middleware('permission:edit apps')->name('api.connectors.toggle');
-    Route::get('/api/connectors/{connector}/settings', [ConnectorSettingsController::class, 'show'])->middleware('permission:edit apps')->name('api.connectors.settings.show');
-    Route::put('/api/connectors/{connector}/settings', [ConnectorSettingsController::class, 'update'])->middleware('permission:edit apps')->name('api.connectors.settings.update');
-    Route::post('/api/connectors/{connector}/settings/reveal', [ConnectorSettingsController::class, 'reveal'])->middleware('permission:edit apps')->name('api.connectors.settings.reveal');
-    Route::post('/api/connectors/{connector}/test', [ConnectorSettingsController::class, 'test'])->middleware('permission:edit apps')->name('api.connectors.settings.test');
+    Route::get('/api/connectors', [ConnectorController::class, 'index'])->middleware('permission:view apps|toggle connectors|configure jnt connector|configure imile connector|configure logestechs connector|configure whatsapp connector|view warehouses')->name('api.connectors.index');
+    Route::patch('/api/connectors/{connector}/toggle', [ConnectorController::class, 'toggle'])->middleware('permission:toggle connectors')->name('api.connectors.toggle');
+    Route::get('/api/connectors/{connector}/settings', [ConnectorSettingsController::class, 'show'])->middleware('permission:configure jnt connector|configure imile connector|configure logestechs connector|configure whatsapp connector')->name('api.connectors.settings.show');
+    Route::put('/api/connectors/{connector}/settings', [ConnectorSettingsController::class, 'update'])->middleware('permission:configure jnt connector|configure imile connector|configure logestechs connector|configure whatsapp connector')->name('api.connectors.settings.update');
+    Route::post('/api/connectors/{connector}/settings/reveal', [ConnectorSettingsController::class, 'reveal'])->middleware('permission:reveal connector secrets')->name('api.connectors.settings.reveal');
+    Route::post('/api/connectors/{connector}/test', [ConnectorSettingsController::class, 'test'])->middleware('permission:test connector connection')->name('api.connectors.settings.test');
 
     // J&T Express Settings Page
-    Route::get('/apps/jnt-express', fn () => Inertia::render('Apps/JntSettings'))->middleware('permission:edit apps')->name('apps.jnt-express');
+    Route::get('/apps/jnt-express', fn () => Inertia::render('Apps/JntSettings'))->middleware('permission:configure jnt connector|view warehouses')->name('apps.jnt-express');
 
     // iMile Settings Page
-    Route::get('/apps/imile', fn () => Inertia::render('Apps/ImileSettings'))->middleware('permission:edit apps')->name('apps.imile');
+    Route::get('/apps/imile', fn () => Inertia::render('Apps/ImileSettings'))->middleware('permission:configure imile connector')->name('apps.imile');
 
     // LogesTechs (Navix) Settings Page
-    Route::get('/apps/logestechs', fn () => Inertia::render('Apps/LogesTechsSettings'))->middleware('permission:edit apps')->name('apps.logestechs');
+    Route::get('/apps/logestechs', fn () => Inertia::render('Apps/LogesTechsSettings'))->middleware('permission:configure logestechs connector')->name('apps.logestechs');
 
-    Route::get('/apps/whatsapp', fn () => Inertia::render('Apps/WhatsAppSettings'))->middleware('permission:edit apps')->name('apps.whatsapp');
+    Route::get('/apps/whatsapp', fn () => Inertia::render('Apps/WhatsAppSettings'))->middleware('permission:configure whatsapp connector')->name('apps.whatsapp');
 
     // LogesTechs district lookup — feeds the Create Shipment dialog's district
     // picker. Gated on 'edit orders' rather than 'edit apps' since it's used
     // while creating a shipment, not while configuring the connector.
     Route::get('/api/logestechs/villages', [LogesTechsController::class, 'villages'])
-        ->middleware('permission:edit orders')
+        ->middleware('permission:create shipments')
         ->name('api.logestechs.villages');
 
     // Warehouses API
-    Route::prefix('api/warehouses')->middleware('permission:edit apps')->group(function () {
-        Route::get('/', [WarehouseController::class, 'index'])->name('api.warehouses.index');
-        Route::post('/', [WarehouseController::class, 'store'])->name('api.warehouses.store');
-        Route::put('/{warehouse}', [WarehouseController::class, 'update'])->name('api.warehouses.update');
-        Route::delete('/{warehouse}', [WarehouseController::class, 'destroy'])->name('api.warehouses.destroy');
+    Route::prefix('api/warehouses')->group(function () {
+        // Also read by the Create Shipment dialog, to pick the sender address.
+        Route::get('/', [WarehouseController::class, 'index'])->middleware('permission:view warehouses|create shipments')->name('api.warehouses.index');
+        Route::post('/', [WarehouseController::class, 'store'])->middleware('permission:create warehouses')->name('api.warehouses.store');
+        Route::put('/{warehouse}', [WarehouseController::class, 'update'])->middleware('permission:edit warehouses')->name('api.warehouses.update');
+        Route::delete('/{warehouse}', [WarehouseController::class, 'destroy'])->middleware('permission:delete warehouses')->name('api.warehouses.destroy');
     });
 
     // Shipments API
     Route::prefix('api/shipments')->group(function () {
-        Route::get('/', [ShipmentController::class, 'index'])->middleware('permission:view orders')->name('api.shipments.index');
-        Route::post('/', [ShipmentController::class, 'store'])->middleware('permission:edit orders')->name('api.shipments.store');
-        Route::post('/bulk', [ShipmentController::class, 'bulkStore'])->middleware('permission:edit orders')->name('api.shipments.bulk');
-        Route::post('/waybills/bulk', [InvoiceController::class, 'bulkKsaExpressWaybills'])->middleware('permission:edit orders')->name('api.shipments.waybills.bulk');
-        Route::get('/{shipment}', [ShipmentController::class, 'show'])->middleware('permission:view orders')->name('api.shipments.show');
-        Route::put('/{shipment}', [ShipmentController::class, 'update'])->middleware('permission:edit orders')->name('api.shipments.update');
-        Route::post('/{shipment}/track', [ShipmentController::class, 'track'])->middleware('permission:view orders')->name('api.shipments.track');
-        Route::post('/{shipment}/cancel', [ShipmentController::class, 'cancel'])->middleware('permission:edit orders')->name('api.shipments.cancel');
-        Route::post('/{shipment}/escalate', [ShipmentController::class, 'escalate'])->middleware('permission:edit orders')->name('api.shipments.escalate');
-        Route::post('/{shipment}/unassign-rider', [ShipmentController::class, 'unassignRider'])->middleware('permission:edit orders')->name('api.shipments.unassign-rider');
-        Route::post('/{shipment}/return', [ShipmentController::class, 'markReturned'])->middleware('permission:edit orders')->name('api.shipments.return');
-        Route::post('/{shipment}/receive-at-hub', [ShipmentController::class, 'receiveAtHub'])->middleware('permission:edit orders')->name('api.shipments.receive-at-hub');
-        Route::post('/{shipment}/invoice', [InvoiceController::class, 'generateShipping'])->middleware('permission:edit orders')->name('api.shipments.invoice');
+        Route::get('/', [ShipmentController::class, 'index'])->middleware('permission:view shipments')->name('api.shipments.index');
+        Route::post('/', [ShipmentController::class, 'store'])->middleware('permission:create shipments')->name('api.shipments.store');
+        Route::post('/bulk', [ShipmentController::class, 'bulkStore'])->middleware('permission:create shipments')->name('api.shipments.bulk');
+        Route::post('/waybills/bulk', [InvoiceController::class, 'bulkKsaExpressWaybills'])->middleware('permission:generate waybills')->name('api.shipments.waybills.bulk');
+        Route::get('/{shipment}', [ShipmentController::class, 'show'])->middleware('permission:view shipments')->name('api.shipments.show');
+        Route::put('/{shipment}', [ShipmentController::class, 'update'])->middleware('permission:edit shipments')->name('api.shipments.update');
+        Route::post('/{shipment}/track', [ShipmentController::class, 'track'])->middleware('permission:refresh shipment tracking')->name('api.shipments.track');
+        Route::post('/{shipment}/cancel', [ShipmentController::class, 'cancel'])->middleware('permission:cancel shipments')->name('api.shipments.cancel');
+        Route::post('/{shipment}/escalate', [ShipmentController::class, 'escalate'])->middleware('permission:escalate shipments')->name('api.shipments.escalate');
+        Route::post('/{shipment}/unassign-rider', [ShipmentController::class, 'unassignRider'])->middleware('permission:unassign shipment rider')->name('api.shipments.unassign-rider');
+        Route::post('/{shipment}/return', [ShipmentController::class, 'markReturned'])->middleware('permission:mark shipments returned')->name('api.shipments.return');
+        Route::post('/{shipment}/receive-at-hub', [ShipmentController::class, 'receiveAtHub'])->middleware('permission:receive shipments at hub')->name('api.shipments.receive-at-hub');
+        Route::post('/{shipment}/invoice', [InvoiceController::class, 'generateShipping'])->middleware('permission:generate waybills')->name('api.shipments.invoice');
     });
 
     // Rider proof-of-delivery photos (private disk)
-    Route::get('/api/shipment-events/{event}/photo', [ShipmentEventController::class, 'photo'])->middleware('permission:view orders')->name('api.shipment-events.photo');
+    Route::get('/api/shipment-events/{event}/photo', [ShipmentEventController::class, 'photo'])->middleware('permission:view delivery proof photos')->name('api.shipment-events.photo');
 
-    // KSA Express riders
-    Route::get('/riders', [RiderController::class, 'page'])->middleware('permission:view riders|manage riders')->name('riders');
-    Route::get('/api/riders', [RiderController::class, 'index'])->middleware('permission:view riders|manage riders')->name('api.riders.index');
-    Route::get('/api/riders/presence', [RiderController::class, 'presence'])->middleware('permission:view riders|manage riders')->name('api.riders.presence');
-    Route::get('/api/riders/performance', [RiderController::class, 'performance'])->middleware('permission:view riders|manage riders')->name('api.riders.performance');
-    Route::get('/api/riders/{rider}/photo', [RiderController::class, 'photo'])->middleware('permission:view riders|manage riders')->name('api.riders.photo');
-    Route::get('/api/riders/{rider}/performance', [RiderController::class, 'riderPerformance'])->middleware('permission:view riders|manage riders')->name('api.riders.rider-performance');
-    Route::get('/api/riders/{rider}/parcels', [RiderController::class, 'riderParcels'])->middleware('permission:view riders|manage riders')->name('api.riders.parcels');
-    // Cash a rider owes and has handed in. Recording it is its own permission.
-    Route::get('/api/riders/{rider}/payments', [RiderPaymentController::class, 'index'])->middleware('permission:view riders|manage riders|manage rider payments')->name('api.riders.payments.index');
-    Route::prefix('api/riders/{rider}/payments')->middleware('permission:manage rider payments')->scopeBindings()->group(function () {
-        Route::post('/', [RiderPaymentController::class, 'store'])->name('api.riders.payments.store');
-        Route::post('/{payment}/void', [RiderPaymentController::class, 'void'])->name('api.riders.payments.void');
-    });
-    Route::prefix('api/riders')->middleware('permission:manage riders')->group(function () {
-        // Before /{rider}: "support" isn't a rider id.
-        Route::put('/support', [RiderController::class, 'updateSupport'])->name('api.riders.support');
-        Route::post('/', [RiderController::class, 'store'])->name('api.riders.store');
-        Route::put('/{rider}', [RiderController::class, 'update'])->name('api.riders.update');
-        Route::post('/{rider}/status', [RiderController::class, 'status'])->name('api.riders.status');
-        Route::post('/{rider}/activation-link', [RiderController::class, 'activationLink'])->name('api.riders.activation-link');
-        Route::post('/{rider}/pin', [RiderController::class, 'resetPin'])->name('api.riders.pin');
-        Route::post('/{rider}/sign-out', [RiderController::class, 'signOut'])->name('api.riders.sign-out');
-        Route::post('/{rider}/photo', [RiderController::class, 'uploadPhoto'])->name('api.riders.photo.upload');
-        Route::delete('/{rider}/photo', [RiderController::class, 'removePhoto'])->name('api.riders.photo.remove');
-        Route::delete('/{rider}', [RiderController::class, 'destroy'])->name('api.riders.destroy');
+    // KSA Express riders. Outside the client restriction: a rider carries
+    // parcels for every client, and what they hold, owe and earned has to
+    // read the same whoever is looking.
+    Route::withoutMiddleware('client.access')->group(function () {
+        Route::get('/riders', [RiderController::class, 'page'])->middleware('permission:view riders')->name('riders');
+        Route::get('/api/riders', [RiderController::class, 'index'])->middleware('permission:view riders')->name('api.riders.index');
+        Route::get('/api/riders/presence', [RiderController::class, 'presence'])->middleware('permission:view riders')->name('api.riders.presence');
+        Route::get('/api/riders/performance', [RiderController::class, 'performance'])->middleware('permission:view rider performance')->name('api.riders.performance');
+        Route::get('/api/riders/{rider}/photo', [RiderController::class, 'photo'])->middleware('permission:view riders')->name('api.riders.photo');
+        // Also the counts beside the filters on a rider's orders sheet.
+        Route::get('/api/riders/{rider}/performance', [RiderController::class, 'riderPerformance'])->middleware('permission:view rider performance|view rider parcels')->name('api.riders.rider-performance');
+        Route::get('/api/riders/{rider}/parcels', [RiderController::class, 'riderParcels'])->middleware('permission:view rider parcels')->name('api.riders.parcels');
+        // Cash a rider owes and has handed in.
+        Route::prefix('api/riders/{rider}/payments')->scopeBindings()->group(function () {
+            Route::get('/', [RiderPaymentController::class, 'index'])->middleware('permission:view rider payments')->name('api.riders.payments.index');
+            Route::post('/', [RiderPaymentController::class, 'store'])->middleware('permission:record rider payments')->name('api.riders.payments.store');
+            Route::post('/{payment}/void', [RiderPaymentController::class, 'void'])->middleware('permission:void rider payments')->name('api.riders.payments.void');
+        });
+        Route::prefix('api/riders')->group(function () {
+            // Before /{rider}: "support" isn't a rider id.
+            Route::put('/support', [RiderController::class, 'updateSupport'])->middleware('permission:edit rider support contact')->name('api.riders.support');
+            Route::post('/', [RiderController::class, 'store'])->middleware('permission:create riders')->name('api.riders.store');
+            Route::put('/{rider}', [RiderController::class, 'update'])->middleware('permission:edit riders')->name('api.riders.update');
+            Route::post('/{rider}/status', [RiderController::class, 'status'])->middleware('permission:suspend riders')->name('api.riders.status');
+            Route::post('/{rider}/activation-link', [RiderController::class, 'activationLink'])->middleware('permission:send rider app link')->name('api.riders.activation-link');
+            Route::post('/{rider}/pin', [RiderController::class, 'resetPin'])->middleware('permission:set rider pin')->name('api.riders.pin');
+            Route::post('/{rider}/sign-out', [RiderController::class, 'signOut'])->middleware('permission:sign rider out')->name('api.riders.sign-out');
+            Route::post('/{rider}/photo', [RiderController::class, 'uploadPhoto'])->middleware('permission:change rider photo')->name('api.riders.photo.upload');
+            Route::delete('/{rider}/photo', [RiderController::class, 'removePhoto'])->middleware('permission:change rider photo')->name('api.riders.photo.remove');
+            Route::delete('/{rider}', [RiderController::class, 'destroy'])->middleware('permission:delete riders')->name('api.riders.destroy');
+        });
     });
 
     // Shipment analytics
-    Route::get('/api/shipments-analytics', [ShipmentAnalyticsController::class, 'index'])->middleware('permission:view orders')->name('api.shipments.analytics');
+    Route::get('/api/shipments-analytics', [ShipmentAnalyticsController::class, 'index'])->middleware('permission:view shipment analytics')->name('api.shipments.analytics');
 
     // J&T API health check
-    Route::get('/api/jnt/health', [ShipmentController::class, 'health'])->middleware('permission:edit apps')->name('api.jnt.health');
+    Route::get('/api/jnt/health', [ShipmentController::class, 'health'])->middleware('permission:check courier api health')->name('api.jnt.health');
 
     // iMile API health check
-    Route::get('/api/imile/health', [ShipmentController::class, 'health'])->defaults('courier', 'imile')->middleware('permission:edit apps')->name('api.imile.health');
+    Route::get('/api/imile/health', [ShipmentController::class, 'health'])->defaults('courier', 'imile')->middleware('permission:check courier api health')->name('api.imile.health');
 
     // Shipping analytics admin page
-    Route::get('/apps/jnt-express/analytics', fn () => Inertia::render('Apps/ShipmentAnalytics'))->middleware('permission:view orders')->name('apps.jnt-express.analytics');
+    Route::get('/apps/jnt-express/analytics', fn () => Inertia::render('Apps/ShipmentAnalytics'))->middleware('permission:view shipment analytics')->name('apps.jnt-express.analytics');
 
     // Invoices API (waybill only)
-    Route::get('/api/invoices/{invoice}/preview', [InvoiceController::class, 'preview'])->middleware('permission:view orders')->name('api.invoices.preview');
-    Route::get('/api/invoices/{invoice}/download', [InvoiceController::class, 'download'])->middleware('permission:view orders')->name('api.invoices.download');
-    Route::delete('/api/invoices/{invoice}', [InvoiceController::class, 'destroy'])->middleware('permission:edit orders')->name('api.invoices.destroy');
+    Route::get('/api/invoices/{invoice}/preview', [InvoiceController::class, 'preview'])->middleware('permission:view waybills')->name('api.invoices.preview');
+    Route::get('/api/invoices/{invoice}/download', [InvoiceController::class, 'download'])->middleware('permission:download waybills')->name('api.invoices.download');
+    Route::delete('/api/invoices/{invoice}', [InvoiceController::class, 'destroy'])->middleware('permission:delete waybills')->name('api.invoices.destroy');
 
     Route::get('/chats', fn () => Inertia::render('Chats'))->name('chats');
 
     // Orders API
     Route::prefix('api/orders')->group(function () {
         Route::get('/', [OrderController::class, 'index'])->middleware('permission:view orders')->name('api.orders.index');
-        Route::get('/statistics', [OrderController::class, 'statistics'])->middleware('permission:view orders')->name('api.orders.statistics');
+        Route::get('/statistics', [OrderController::class, 'statistics'])->middleware('permission:view order stats|view order tag cards|view order shipment status cards|view dashboard order stats|view dashboard revenue|view dashboard tag cards|view dashboard shipment status')->name('api.orders.statistics');
         Route::get('/filter-options', [OrderController::class, 'filterOptions'])->middleware('permission:view orders')->name('api.orders.filter-options');
-        Route::get('/export', [OrderController::class, 'export'])->middleware('permission:view orders')->name('api.orders.export');
-        Route::get('/{order}', [OrderController::class, 'show'])->middleware('permission:view orders')->name('api.orders.show');
-        Route::put('/{order}', [OrderController::class, 'update'])->middleware('permission:edit orders')->name('api.orders.update');
-        Route::post('/{order}/fulfillment-status', [OrderController::class, 'updateFulfillmentStatus'])->middleware('permission:edit orders')->name('api.orders.fulfillment-status');
-        Route::post('/{order}/financial-status', [OrderController::class, 'updateFinancialStatus'])->middleware('permission:edit orders')->name('api.orders.financial-status');
-        Route::post('/{order}/call-status', [OrderController::class, 'updateCallStatus'])->middleware('permission:edit orders')->name('api.orders.call-status');
-        Route::get('/{order}/whatsapp-messages', [OrderController::class, 'whatsappMessages'])->middleware('permission:view whatsapp')->name('api.orders.whatsapp-messages');
-        Route::post('/bulk-update', [OrderController::class, 'bulkUpdate'])->middleware('permission:edit orders')->name('api.orders.bulk-update');
+        Route::get('/export', [OrderController::class, 'export'])->middleware('permission:export orders')->name('api.orders.export');
+        Route::get('/{order}', [OrderController::class, 'show'])->middleware('permission:view order details')->name('api.orders.show');
+        Route::put('/{order}', [OrderController::class, 'update'])->middleware('permission:edit orders|tag orders')->name('api.orders.update');
+        Route::post('/{order}/fulfillment-status', [OrderController::class, 'updateFulfillmentStatus'])->middleware('permission:update order fulfillment status')->name('api.orders.fulfillment-status');
+        Route::post('/{order}/financial-status', [OrderController::class, 'updateFinancialStatus'])->middleware('permission:update order payment status')->name('api.orders.financial-status');
+        Route::post('/{order}/call-status', [OrderController::class, 'updateCallStatus'])->middleware('permission:update order call status')->name('api.orders.call-status');
+        Route::get('/{order}/whatsapp-messages', [OrderController::class, 'whatsappMessages'])->middleware('permission:view order whatsapp messages')->name('api.orders.whatsapp-messages');
+        Route::post('/bulk-update', [OrderController::class, 'bulkUpdate'])->middleware('permission:update order fulfillment status|update order payment status|update order call status|tag orders|cancel orders')->name('api.orders.bulk-update');
         Route::post('/bulk-delete', [OrderController::class, 'bulkDestroy'])->middleware('permission:delete orders')->name('api.orders.bulk-delete');
         // Takes the id as a plain int, not a bound model: implicit binding applies
         // both SoftDeletingScope and the shopify_visible global scope, so it would
@@ -198,92 +204,93 @@ Route::middleware(['auth', 'verified', 'role:!client'])->group(function () {
     });
 
     // WhatsApp inbox API
-    Route::prefix('api/whatsapp')->middleware('permission:view whatsapp')->group(function () {
+    Route::prefix('api/whatsapp')->group(function () {
         // Unlock sits outside the whatsapp.unlocked gate (it is what opens it)
         // and is throttled so the PIN cannot be brute-forced. The prefix keeps
         // its attempt count apart from the recycle bin's.
         Route::post('/unlock', [WhatsAppConversationController::class, 'unlock'])
-            ->middleware('throttle:5,1,whatsapp-unlock')
+            ->middleware(['permission:view whatsapp conversations', 'throttle:5,1,whatsapp-unlock'])
             ->name('api.whatsapp.unlock');
-        Route::post('/lock', [WhatsAppConversationController::class, 'lock'])->name('api.whatsapp.lock');
+        Route::post('/lock', [WhatsAppConversationController::class, 'lock'])->middleware('permission:view whatsapp conversations')->name('api.whatsapp.lock');
 
         // Counts only, and the dashboard tiles read them, so they stay outside the lock.
-        Route::get('/stats', [WhatsAppConversationController::class, 'stats'])->name('api.whatsapp.stats');
+        Route::get('/stats', [WhatsAppConversationController::class, 'stats'])->middleware('permission:view whatsapp stats|view dashboard whatsapp stats')->name('api.whatsapp.stats');
 
         Route::middleware('whatsapp.unlocked')->group(function () {
-            Route::get('/conversations', [WhatsAppConversationController::class, 'index'])->name('api.whatsapp.conversations');
-            Route::get('/conversations/{order}', [WhatsAppConversationController::class, 'show'])->name('api.whatsapp.conversation');
+            Route::get('/conversations', [WhatsAppConversationController::class, 'index'])->middleware('permission:view whatsapp conversations')->name('api.whatsapp.conversations');
+            Route::get('/conversations/{order}', [WhatsAppConversationController::class, 'show'])->middleware('permission:view whatsapp conversations')->name('api.whatsapp.conversation');
             Route::post('/conversations/{order}/reply', [WhatsAppConversationController::class, 'reply'])->middleware('permission:reply whatsapp')->name('api.whatsapp.reply');
 
-            // The messaging on/off switch. 'edit apps', the same permission as
-            // the WhatsApp connector settings.
-            Route::put('/messaging', [WhatsAppConversationController::class, 'messaging'])->middleware('permission:edit apps')->name('api.whatsapp.messaging');
+            // The messaging on/off switch.
+            Route::put('/messaging', [WhatsAppConversationController::class, 'messaging'])->middleware('permission:toggle whatsapp messaging')->name('api.whatsapp.messaging');
         });
     });
 
     // Clients API
     Route::prefix('api/clients')->group(function () {
         Route::get('/', [ClientController::class, 'index'])->middleware('permission:view client')->name('api.clients.index');
-        Route::get('/statistics', [ClientController::class, 'statistics'])->middleware('permission:view client')->name('api.clients.statistics');
+        Route::get('/statistics', [ClientController::class, 'statistics'])->middleware('permission:view client stats|view dashboard client stats')->name('api.clients.statistics');
         Route::get('/filter-options', [ClientController::class, 'filterOptions'])->middleware('permission:view client')->name('api.clients.filter-options');
-        Route::get('/export', [ClientController::class, 'export'])->middleware('permission:view client')->name('api.clients.export');
+        Route::get('/export', [ClientController::class, 'export'])->middleware('permission:export clients')->name('api.clients.export');
         Route::post('/', [ClientController::class, 'store'])->middleware('permission:create client')->name('api.clients.store');
-        Route::get('/{client}', [ClientController::class, 'show'])->middleware('permission:view client')->name('api.clients.show');
+        Route::get('/{client}', [ClientController::class, 'show'])->middleware('permission:view client details')->name('api.clients.show');
         Route::put('/{client}', [ClientController::class, 'update'])->middleware('permission:edit client')->name('api.clients.update');
-        Route::patch('/{client}/status', [ClientController::class, 'updateStatus'])->middleware('permission:edit client')->name('api.clients.update-status');
-        Route::post('/{client}/reset-password', [ClientController::class, 'resetPassword'])->middleware('permission:edit client')->name('api.clients.reset-password');
-        Route::post('/{client}/send-reset-link', [ClientController::class, 'sendPasswordResetLink'])->middleware('permission:edit client')->name('api.clients.send-reset-link');
-        Route::post('/bulk-update', [ClientController::class, 'bulkUpdate'])->middleware('permission:edit client')->name('api.clients.bulk-update');
+        Route::patch('/{client}/status', [ClientController::class, 'updateStatus'])->middleware('permission:change client status')->name('api.clients.update-status');
+        Route::post('/{client}/reset-password', [ClientController::class, 'resetPassword'])->middleware('permission:change client password')->name('api.clients.reset-password');
+        Route::post('/{client}/send-reset-link', [ClientController::class, 'sendPasswordResetLink'])->middleware('permission:send client reset link')->name('api.clients.send-reset-link');
+        Route::post('/bulk-update', [ClientController::class, 'bulkUpdate'])->middleware('permission:change client status')->name('api.clients.bulk-update');
         Route::post('/bulk-delete', [ClientController::class, 'bulkDestroy'])->middleware('permission:delete client')->name('api.clients.bulk-delete');
         Route::delete('/{client}', [ClientController::class, 'destroy'])->middleware('permission:delete client')->name('api.clients.destroy');
         // Client Products (Inventory)
-        Route::get('/{client}/products', [ClientController::class, 'products'])->middleware('permission:view client')->name('api.clients.products.index');
-        Route::post('/{client}/products', [ClientController::class, 'storeProduct'])->middleware('permission:edit client')->name('api.clients.products.store');
-        Route::put('/{client}/products/{product}', [ClientController::class, 'updateProduct'])->middleware('permission:edit client')->name('api.clients.products.update');
-        Route::patch('/{client}/products/{product}/verify', [ClientController::class, 'verifyProduct'])->middleware('permission:edit client')->name('api.clients.products.verify');
-        Route::patch('/{client}/products/{product}/review', [ClientController::class, 'reviewProduct'])->middleware('permission:edit client')->name('api.clients.products.review');
-        Route::delete('/{client}/products/{product}', [ClientController::class, 'destroyProduct'])->middleware('permission:delete client')->name('api.clients.products.destroy');
-        Route::delete('/{client}/products/{product}/images/{image}', [ClientController::class, 'destroyProductImage'])->middleware('permission:edit client')->name('api.clients.products.images.destroy');
+        Route::get('/{client}/products', [ClientController::class, 'products'])->middleware('permission:view client products')->name('api.clients.products.index');
+        Route::post('/{client}/products', [ClientController::class, 'storeProduct'])->middleware('permission:create client products')->name('api.clients.products.store');
+        Route::put('/{client}/products/{product}', [ClientController::class, 'updateProduct'])->middleware('permission:edit client products')->name('api.clients.products.update');
+        Route::patch('/{client}/products/{product}/verify', [ClientController::class, 'verifyProduct'])->middleware('permission:review client products')->name('api.clients.products.verify');
+        Route::patch('/{client}/products/{product}/review', [ClientController::class, 'reviewProduct'])->middleware('permission:review client products')->name('api.clients.products.review');
+        Route::delete('/{client}/products/{product}', [ClientController::class, 'destroyProduct'])->middleware('permission:delete client products')->name('api.clients.products.destroy');
+        Route::delete('/{client}/products/{product}/images/{image}', [ClientController::class, 'destroyProductImage'])->middleware('permission:delete client product images')->name('api.clients.products.images.destroy');
 
-        Route::get('/{client}/payments', [ClientPaymentController::class, 'index'])->middleware('permission:view client')->name('api.clients.payments.index');
-        Route::post('/{client}/payments', [ClientPaymentController::class, 'store'])->middleware('permission:edit client')->name('api.clients.payments.store');
-        Route::delete('/{client}/payments/{payment}', [ClientPaymentController::class, 'destroy'])->middleware('permission:edit client')->name('api.clients.payments.destroy');
+        Route::get('/{client}/payments', [ClientPaymentController::class, 'index'])->middleware('permission:view client payments')->name('api.clients.payments.index');
+        Route::post('/{client}/payments', [ClientPaymentController::class, 'store'])->middleware('permission:record client payments')->name('api.clients.payments.store');
+        Route::delete('/{client}/payments/{payment}', [ClientPaymentController::class, 'destroy'])->middleware('permission:delete client payments')->name('api.clients.payments.destroy');
     });
 
     // Parcels the inventory managers scanned OUT and IN, and what it did to stock.
-    Route::get('/api/stock-scans', [StockScanController::class, 'index'])->middleware('permission:view inventory')->name('api.stock-scans.index');
+    Route::get('/api/stock-scans', [StockScanController::class, 'index'])->middleware('permission:view stock scans')->name('api.stock-scans.index');
 
     // Inventory / Products API
     Route::prefix('api/products')->group(function () {
         Route::get('/', [ProductController::class, 'index'])->middleware('permission:view inventory')->name('api.products.index');
-        Route::get('/statistics', [ProductController::class, 'statistics'])->middleware('permission:view inventory')->name('api.products.statistics');
+        Route::get('/statistics', [ProductController::class, 'statistics'])->middleware('permission:view inventory stats')->name('api.products.statistics');
         Route::get('/filter-options', [ProductController::class, 'filterOptions'])->middleware('permission:view inventory')->name('api.products.filter-options');
-        Route::get('/export', [ProductController::class, 'export'])->middleware('permission:view inventory')->name('api.products.export');
-        Route::post('/import', [ProductController::class, 'import'])->middleware('permission:edit inventory')->name('api.products.import');
-        Route::get('/{product}', [ProductController::class, 'show'])->middleware('permission:view inventory')->name('api.products.show');
-        Route::put('/{product}', [ProductController::class, 'update'])->middleware('permission:edit inventory')->name('api.products.update');
+        Route::get('/export', [ProductController::class, 'export'])->middleware('permission:export inventory')->name('api.products.export');
+        Route::post('/import', [ProductController::class, 'import'])->middleware('permission:import inventory')->name('api.products.import');
+        Route::get('/{product}', [ProductController::class, 'show'])->middleware('permission:view product details')->name('api.products.show');
+        Route::put('/{product}', [ProductController::class, 'update'])->middleware('permission:edit inventory|change product status|publish products')->name('api.products.update');
         Route::post('/bulk-delete', [ProductController::class, 'bulkDestroy'])->middleware('permission:delete inventory')->name('api.products.bulk-delete');
         Route::delete('/{product}', [ProductController::class, 'destroy'])->middleware('permission:delete inventory')->name('api.products.destroy');
     });
 
-    // Settings
-    Route::get('/settings', [SettingsController::class, 'profile'])->name('settings');
-    Route::post('/settings/profile', [SettingsController::class, 'updateProfile'])->name('settings.profile.update');
-    Route::post('/settings/avatar', [SettingsController::class, 'updateAvatar'])->name('settings.avatar.update');
-    Route::delete('/settings/avatar', [SettingsController::class, 'removeAvatar'])->name('settings.avatar.remove');
-    Route::get('/settings/account', fn () => Inertia::render('Settings/Account'))->name('settings.account');
-    Route::get('/settings/notifications', [SettingsController::class, 'notifications'])->name('settings.notifications');
-    Route::put('/settings/notifications', [SettingsController::class, 'updateNotificationPreferences'])->name('settings.notifications.update');
-    Route::get('/settings/email', [SettingsController::class, 'email'])->name('settings.email');
-    Route::put('/settings/email/preferences', [SettingsController::class, 'updateEmailPreferences'])->name('settings.email.preferences.update');
-    Route::put('/settings/email/smtp', [SettingsController::class, 'updateEmailSettings'])->name('settings.email.smtp.update');
-    Route::get('/settings/security', [SettingsController::class, 'security'])->name('settings.security');
-    Route::put('/settings/password', [SettingsController::class, 'updatePassword'])->name('settings.password.update');
-    Route::post('/settings/two-factor/enable', [SettingsController::class, 'enableTwoFactor'])->name('settings.two-factor.enable');
-    Route::post('/settings/two-factor/confirm', [SettingsController::class, 'confirmTwoFactor'])->name('settings.two-factor.confirm');
-    Route::delete('/settings/two-factor', [SettingsController::class, 'disableTwoFactor'])->name('settings.two-factor.disable');
-    Route::get('/settings/two-factor/recovery-codes', [SettingsController::class, 'showRecoveryCodes'])->name('settings.two-factor.recovery-codes');
-    Route::post('/settings/two-factor/recovery-codes', [SettingsController::class, 'regenerateRecoveryCodes'])->name('settings.two-factor.recovery-codes.regenerate');
+    // Settings — a person's own account.
+    Route::get('/settings', [SettingsController::class, 'profile'])->middleware('permission:view settings')->name('settings');
+    Route::post('/settings/profile', [SettingsController::class, 'updateProfile'])->middleware('permission:edit profile')->name('settings.profile.update');
+    Route::post('/settings/avatar', [SettingsController::class, 'updateAvatar'])->middleware('permission:change avatar')->name('settings.avatar.update');
+    Route::delete('/settings/avatar', [SettingsController::class, 'removeAvatar'])->middleware('permission:change avatar')->name('settings.avatar.remove');
+    Route::get('/settings/account', fn () => Inertia::render('Settings/Account'))->middleware('permission:view settings')->name('settings.account');
+    Route::get('/settings/notifications', [SettingsController::class, 'notifications'])->middleware('permission:view settings')->name('settings.notifications');
+    Route::put('/settings/notifications', [SettingsController::class, 'updateNotificationPreferences'])->middleware('permission:edit notification preferences')->name('settings.notifications.update');
+    Route::get('/settings/email', [SettingsController::class, 'email'])->middleware('permission:view settings')->name('settings.email');
+    Route::put('/settings/email/preferences', [SettingsController::class, 'updateEmailPreferences'])->middleware('permission:edit email preferences')->name('settings.email.preferences.update');
+    Route::put('/settings/email/smtp', [SettingsController::class, 'updateEmailSettings'])->middleware('permission:edit email settings')->name('settings.email.smtp.update');
+    Route::get('/settings/security', [SettingsController::class, 'security'])->middleware('permission:view settings')->name('settings.security');
+    Route::put('/settings/password', [SettingsController::class, 'updatePassword'])->middleware('permission:change password')->name('settings.password.update');
+    Route::middleware('permission:manage two-factor')->group(function () {
+        Route::post('/settings/two-factor/enable', [SettingsController::class, 'enableTwoFactor'])->name('settings.two-factor.enable');
+        Route::post('/settings/two-factor/confirm', [SettingsController::class, 'confirmTwoFactor'])->name('settings.two-factor.confirm');
+        Route::delete('/settings/two-factor', [SettingsController::class, 'disableTwoFactor'])->name('settings.two-factor.disable');
+        Route::get('/settings/two-factor/recovery-codes', [SettingsController::class, 'showRecoveryCodes'])->name('settings.two-factor.recovery-codes');
+        Route::post('/settings/two-factor/recovery-codes', [SettingsController::class, 'regenerateRecoveryCodes'])->name('settings.two-factor.recovery-codes.regenerate');
+    });
 
     // Team Management
     Route::get('/team-management/roles', [RoleController::class, 'index'])->middleware('permission:view roles')->name('team-management.roles');
@@ -291,10 +298,8 @@ Route::middleware(['auth', 'verified', 'role:!client'])->group(function () {
     Route::put('/team-management/roles/{role}', [RoleController::class, 'update'])->middleware('permission:edit roles')->name('team-management.roles.update');
     Route::delete('/team-management/roles/{role}', [RoleController::class, 'destroy'])->middleware('permission:delete roles')->name('team-management.roles.destroy');
 
+    // Read-only: the permissions are the catalog (App\Support\PermissionCatalog).
     Route::get('/team-management/permissions', [PermissionController::class, 'index'])->middleware('permission:view permissions')->name('team-management.permissions');
-    Route::post('/team-management/permissions', [PermissionController::class, 'store'])->middleware('permission:create permissions')->name('team-management.permissions.store');
-    Route::put('/team-management/permissions/{permission}', [PermissionController::class, 'update'])->middleware('permission:edit permissions')->name('team-management.permissions.update');
-    Route::delete('/team-management/permissions/{permission}', [PermissionController::class, 'destroy'])->middleware('permission:delete permissions')->name('team-management.permissions.destroy');
 
     Route::get('/team-management/teams', [TeamController::class, 'index'])->middleware('permission:view teams')->name('team-management.teams');
     Route::post('/team-management/teams', [TeamController::class, 'store'])->middleware('permission:create teams')->name('team-management.teams.store');
@@ -308,13 +313,10 @@ Route::middleware(['auth', 'verified', 'role:!client'])->group(function () {
     Route::delete('/team-management/users/{user}', [UserRoleController::class, 'destroy'])->middleware('permission:delete users')->name('team-management.users.destroy');
 
     // Recycle Bin
-    // Two gates stack on every data route: the bin's own permission for the
-    // action (view / restore / purge), then the entity's delete permission, so
-    // a tab only opens for records the user could have deleted. Each entity is
-    // gated separately rather than on one shared canAny -- CheckPermission
-    // takes a static string, so a polymorphic {type} route could not
-    // distinguish them. Note the separator is a PIPE: CheckPermission splits
-    // on '|', not ','.
+    // Each tab has its own three permissions (see, restore, delete forever),
+    // and emptying a tab needs 'empty recycle bin' on top of that tab's delete
+    // forever. Note the separator inside one middleware is a PIPE and means
+    // "any of": two permissions that must both hold are two middlewares.
     Route::get('/recycle-bin', [RecycleBinController::class, 'page'])
         ->middleware('permission:view recycle bin')->name('recycle-bin');
 
@@ -331,87 +333,59 @@ Route::middleware(['auth', 'verified', 'role:!client'])->group(function () {
         Route::get('/counts', [RecycleBinController::class, 'counts'])
             ->middleware('recyclebin.unlocked')->middleware('permission:view recycle bin')->name('api.recycle-bin.counts');
 
-        Route::get('/orders', [RecycleBinController::class, 'orders'])
-            ->middleware('recyclebin.unlocked')->middleware('permission:view recycle bin')->middleware('permission:delete orders')->name('api.recycle-bin.orders');
-        Route::post('/orders/restore', [RecycleBinController::class, 'restoreOrders'])
-            ->middleware('recyclebin.unlocked')->middleware('permission:restore recycle bin')->middleware('permission:delete orders')->name('api.recycle-bin.orders.restore');
-        Route::post('/orders/purge', [RecycleBinController::class, 'purgeOrders'])
-            ->middleware('recyclebin.unlocked')->middleware('permission:purge recycle bin')->middleware('permission:delete orders')->name('api.recycle-bin.orders.purge');
-        Route::post('/orders/purge-all', [RecycleBinController::class, 'purgeAllOrders'])
-            ->middleware('recyclebin.unlocked')->middleware('permission:purge recycle bin')->middleware('permission:delete orders')->name('api.recycle-bin.orders.purge-all');
+        foreach (['orders' => 'Orders', 'clients' => 'Clients', 'users' => 'Users', 'riders' => 'Riders', 'inventory' => 'Inventory'] as $tab => $suffix) {
+            // The inventory tab holds two kinds of row, catalogue products and
+            // clients' own, each with its own permissions: either opens the
+            // tab and the controller keeps to the kind the person may touch.
+            $any = fn (string $action) => $tab === 'inventory'
+                ? "permission:{$action} deleted inventory|{$action} deleted client products"
+                : "permission:{$action} deleted {$tab}";
 
-        Route::get('/clients', [RecycleBinController::class, 'clients'])
-            ->middleware('recyclebin.unlocked')->middleware('permission:view recycle bin')->middleware('permission:delete client')->name('api.recycle-bin.clients');
-        Route::post('/clients/restore', [RecycleBinController::class, 'restoreClients'])
-            ->middleware('recyclebin.unlocked')->middleware('permission:restore recycle bin')->middleware('permission:delete client')->name('api.recycle-bin.clients.restore');
-        Route::post('/clients/purge', [RecycleBinController::class, 'purgeClients'])
-            ->middleware('recyclebin.unlocked')->middleware('permission:purge recycle bin')->middleware('permission:delete client')->name('api.recycle-bin.clients.purge');
-        Route::post('/clients/purge-all', [RecycleBinController::class, 'purgeAllClients'])
-            ->middleware('recyclebin.unlocked')->middleware('permission:purge recycle bin')->middleware('permission:delete client')->name('api.recycle-bin.clients.purge-all');
-
-        Route::get('/users', [RecycleBinController::class, 'users'])
-            ->middleware('recyclebin.unlocked')->middleware('permission:view recycle bin')->middleware('permission:delete users')->name('api.recycle-bin.users');
-        Route::post('/users/restore', [RecycleBinController::class, 'restoreUsers'])
-            ->middleware('recyclebin.unlocked')->middleware('permission:restore recycle bin')->middleware('permission:delete users')->name('api.recycle-bin.users.restore');
-        Route::post('/users/purge', [RecycleBinController::class, 'purgeUsers'])
-            ->middleware('recyclebin.unlocked')->middleware('permission:purge recycle bin')->middleware('permission:delete users')->name('api.recycle-bin.users.purge');
-        Route::post('/users/purge-all', [RecycleBinController::class, 'purgeAllUsers'])
-            ->middleware('recyclebin.unlocked')->middleware('permission:purge recycle bin')->middleware('permission:delete users')->name('api.recycle-bin.users.purge-all');
-
-        // Riders are removed under 'manage riders' (there is no separate
-        // delete permission), so the bin gates them the same way.
-        Route::get('/riders', [RecycleBinController::class, 'riders'])
-            ->middleware('recyclebin.unlocked')->middleware('permission:view recycle bin')->middleware('permission:manage riders')->name('api.recycle-bin.riders');
-        Route::post('/riders/restore', [RecycleBinController::class, 'restoreRiders'])
-            ->middleware('recyclebin.unlocked')->middleware('permission:restore recycle bin')->middleware('permission:manage riders')->name('api.recycle-bin.riders.restore');
-        Route::post('/riders/purge', [RecycleBinController::class, 'purgeRiders'])
-            ->middleware('recyclebin.unlocked')->middleware('permission:purge recycle bin')->middleware('permission:manage riders')->name('api.recycle-bin.riders.purge');
-        Route::post('/riders/purge-all', [RecycleBinController::class, 'purgeAllRiders'])
-            ->middleware('recyclebin.unlocked')->middleware('permission:purge recycle bin')->middleware('permission:manage riders')->name('api.recycle-bin.riders.purge-all');
-
-        // The inventory tab spans two models: the catalog (delete inventory)
-        // and per-client stock, which is gated on 'delete client' everywhere
-        // else in this file. Rows of each kind are filtered by permission
-        // inside the controller.
-        Route::get('/inventory', [RecycleBinController::class, 'inventory'])
-            ->middleware('recyclebin.unlocked')->middleware('permission:view recycle bin')->middleware('permission:delete inventory|delete client')->name('api.recycle-bin.inventory');
-        Route::post('/inventory/restore', [RecycleBinController::class, 'restoreInventory'])
-            ->middleware('recyclebin.unlocked')->middleware('permission:restore recycle bin')->middleware('permission:delete inventory|delete client')->name('api.recycle-bin.inventory.restore');
-        Route::post('/inventory/purge', [RecycleBinController::class, 'purgeInventory'])
-            ->middleware('recyclebin.unlocked')->middleware('permission:purge recycle bin')->middleware('permission:delete inventory|delete client')->name('api.recycle-bin.inventory.purge');
-        Route::post('/inventory/purge-all', [RecycleBinController::class, 'purgeAllInventory'])
-            ->middleware('recyclebin.unlocked')->middleware('permission:purge recycle bin')->middleware('permission:delete inventory|delete client')->name('api.recycle-bin.inventory.purge-all');
+            // Riders sit outside the client restriction, here as on their own
+            // page: deleting one for good has to reach every parcel they carried.
+            Route::withoutMiddleware($tab === 'riders' ? ['client.access'] : [])->group(function () use ($tab, $suffix, $any) {
+                Route::get("/{$tab}", [RecycleBinController::class, $tab])
+                    ->middleware('recyclebin.unlocked')->middleware($any('view'))->name("api.recycle-bin.{$tab}");
+                Route::post("/{$tab}/restore", [RecycleBinController::class, "restore{$suffix}"])
+                    ->middleware('recyclebin.unlocked')->middleware($any('restore'))->name("api.recycle-bin.{$tab}.restore");
+                Route::post("/{$tab}/purge", [RecycleBinController::class, "purge{$suffix}"])
+                    ->middleware('recyclebin.unlocked')->middleware($any('purge'))->name("api.recycle-bin.{$tab}.purge");
+                Route::post("/{$tab}/purge-all", [RecycleBinController::class, "purgeAll{$suffix}"])
+                    ->middleware('recyclebin.unlocked')->middleware('permission:empty recycle bin')->middleware($any('purge'))->name("api.recycle-bin.{$tab}.purge-all");
+            });
+        }
     });
 
     // Tags
     Route::get('/tags', [TagController::class, 'index'])->middleware('permission:view tags')->name('tags');
-    Route::get('/api/tags', [TagController::class, 'list'])->middleware('permission:view tags')->name('api.tags.index');
+    // Also read by the orders list, which shows each order's tag in its colour.
+    Route::get('/api/tags', [TagController::class, 'list'])->middleware('permission:view tags|tag orders|view orders')->name('api.tags.index');
     Route::post('/tags', [TagController::class, 'store'])->middleware('permission:create tags')->name('tags.store');
     Route::put('/tags/{tag}', [TagController::class, 'update'])->middleware('permission:edit tags')->name('tags.update');
     Route::delete('/tags/{tag}', [TagController::class, 'destroy'])->middleware('permission:delete tags')->name('tags.destroy');
 
     // Help
-    Route::get('/help-center', fn () => Inertia::render('HelpCenter'))->name('help-center');
+    Route::get('/help-center', fn () => Inertia::render('HelpCenter'))->middleware('permission:view help center')->name('help-center');
 
     // Admin Email Settings
-    Route::prefix('admin')->middleware('permission:manage-email-settings')->group(function () {
-        Route::get('/email-settings', [EmailSettingsController::class, 'index'])->name('admin.email-settings');
-        Route::put('/email-settings', [EmailSettingsController::class, 'update'])->name('admin.email-settings.update');
-        Route::post('/email-settings/test', [EmailSettingsController::class, 'test'])->name('admin.email-settings.test');
-        Route::get('/email-logs', [EmailSettingsController::class, 'logs'])->name('admin.email-logs');
-        Route::get('/email-statistics', [EmailSettingsController::class, 'statistics'])->name('admin.email-statistics');
-        Route::delete('/email-graveyard/{entry}', [EmailSettingsController::class, 'restoreFromGraveyard'])->name('admin.email-graveyard.restore');
+    Route::prefix('admin')->group(function () {
+        Route::get('/email-settings', [EmailSettingsController::class, 'index'])->middleware('permission:view email settings')->name('admin.email-settings');
+        Route::put('/email-settings', [EmailSettingsController::class, 'update'])->middleware('permission:edit email settings')->name('admin.email-settings.update');
+        Route::post('/email-settings/test', [EmailSettingsController::class, 'test'])->middleware('permission:send test email')->name('admin.email-settings.test');
+        Route::get('/email-logs', [EmailSettingsController::class, 'logs'])->middleware('permission:view email logs')->name('admin.email-logs');
+        Route::get('/email-statistics', [EmailSettingsController::class, 'statistics'])->middleware('permission:view email statistics')->name('admin.email-statistics');
+        Route::delete('/email-graveyard/{entry}', [EmailSettingsController::class, 'restoreFromGraveyard'])->middleware('permission:restore graveyard emails')->name('admin.email-graveyard.restore');
     });
 });
 
 // Impersonate
-Route::middleware(['auth', 'verified'])->group(function () {
+Route::middleware(['auth', 'verified', 'client.access'])->group(function () {
     Route::post('/impersonate/leave', [ImpersonateController::class, 'leave'])->name('impersonate.leave');
     Route::post('/impersonate/{client}', [ImpersonateController::class, 'impersonate'])->name('impersonate.start');
 });
 
 // Shared API endpoints
-Route::middleware(['auth', 'verified'])->group(function () {
+Route::middleware(['auth', 'verified', 'client.access'])->group(function () {
     Route::get('/api/connectors/enabled', [ConnectorController::class, 'enabledWithComingSoon'])->name('api.connectors.enabled');
 
     // Notifications — every role, clients included: the header bell polls these
@@ -438,7 +412,7 @@ Route::get('/shopify/callback', [ShopifyController::class, 'callback'])->name('s
 Route::middleware(['auth', 'verified'])->get('/portal/suspended', fn () => Inertia::render('Portal/Suspended'))->name('portal.suspended');
 
 // Client Portal
-Route::prefix('portal')->middleware(['auth', 'verified', 'role:client'])->group(function () {
+Route::prefix('portal')->middleware(['auth', 'verified', 'role:client', 'client.access'])->group(function () {
     Route::get('/', fn () => Inertia::render('Portal/Dashboard'))->name('portal.dashboard');
     Route::get('/orders', fn () => Inertia::render('Portal/Orders'))->name('portal.orders');
     Route::get('/inventory', fn () => Inertia::render('Portal/Inventory'))->name('portal.inventory');

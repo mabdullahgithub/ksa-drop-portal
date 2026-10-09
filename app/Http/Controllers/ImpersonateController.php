@@ -9,7 +9,7 @@ class ImpersonateController extends Controller
 {
     public function impersonate(Client $client)
     {
-        if (!auth()->user()->hasPermissionTo('impersonate client')) {
+        if (!auth()->user()->can('impersonate client')) {
             abort(403);
         }
 

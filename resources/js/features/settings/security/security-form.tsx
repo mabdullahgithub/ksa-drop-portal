@@ -18,8 +18,11 @@ import { useState, useRef, useEffect } from 'react'
 import { QRCodeSVG } from 'qrcode.react'
 import { checkPasswordStrength, generateStrongPassword, isDefaultPassword, type PasswordStrength } from '@/lib/password-utils'
 import { PasswordGeneratorModal } from '@/components/password-generator-modal'
+import { usePermissions } from '@/hooks/use-permissions'
 
 export function SecurityForm() {
+  // Changing the password and two-factor are each a permission of their own.
+  const { can } = usePermissions()
   const { auth, twoFactorQrCodeUrl, twoFactorSecret, recoveryCodes } = usePage().props as any
   const user = auth.user
   const [showQrCode, setShowQrCode] = useState(false)
@@ -341,9 +344,11 @@ export function SecurityForm() {
             </div>
           </div>
 
-          <Button type='submit' disabled={passwordForm.processing}>
-            Update Password
-          </Button>
+          {can('change password') && (
+            <Button type='submit' disabled={passwordForm.processing}>
+              Update Password
+            </Button>
+          )}
         </form>
       </div>
 
@@ -364,7 +369,7 @@ export function SecurityForm() {
           password.
         </p>
 
-        {!user.two_factor_enabled && !showQrCode && (
+        {!user.two_factor_enabled && !showQrCode && can('manage two-factor') && (
           <Button onClick={handleEnableTwoFactor} disabled={confirmForm.processing}>
             Enable Two-Factor Authentication
           </Button>
@@ -456,23 +461,27 @@ export function SecurityForm() {
                   Your account is protected with 2FA.
                 </p>
               </div>
-              <Button
-                variant='destructive'
-                size='sm'
-                onClick={() => setShowDisableDialog(true)}
-              >
-                Disable
-              </Button>
+              {can('manage two-factor') && (
+                <Button
+                  variant='destructive'
+                  size='sm'
+                  onClick={() => setShowDisableDialog(true)}
+                >
+                  Disable
+                </Button>
+              )}
             </div>
 
-            <Button
-              variant='outline'
-              onClick={handleRegenerateRecoveryCodes}
-              disabled={confirmForm.processing}
-            >
-              <RefreshCw size={16} className='mr-2' />
-              Generate New Recovery Codes
-            </Button>
+            {can('manage two-factor') && (
+              <Button
+                variant='outline'
+                onClick={handleRegenerateRecoveryCodes}
+                disabled={confirmForm.processing}
+              >
+                <RefreshCw size={16} className='mr-2' />
+                Generate New Recovery Codes
+              </Button>
+            )}
           </div>
         )}
 

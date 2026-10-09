@@ -13,6 +13,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { EmptyState } from '@/components/empty-state'
+import { usePermissions } from '@/hooks/use-permissions'
 
 interface GraveyardEntry {
   id: number
@@ -30,6 +31,7 @@ const sourceLabels: Record<GraveyardEntry['source'], string> = {
 }
 
 export function EmailGraveyard({ entries }: { entries: GraveyardEntry[] }) {
+  const canRestore = usePermissions().can('restore graveyard emails')
   const [restoringId, setRestoringId] = useState<number | null>(null)
 
   const restore = (entry: GraveyardEntry) => {
@@ -90,15 +92,17 @@ export function EmailGraveyard({ entries }: { entries: GraveyardEntry[] }) {
               <TableCell>{entry.blocked_count}</TableCell>
               <TableCell className='text-muted-foreground'>{formatDate(entry.created_at)}</TableCell>
               <TableCell className='text-right'>
-                <Button
-                  variant='outline'
-                  size='sm'
-                  disabled={restoringId === entry.id}
-                  onClick={() => restore(entry)}
-                >
-                  <RotateCcw className='mr-1 h-3 w-3' />
-                  Restore
-                </Button>
+                {canRestore && (
+                  <Button
+                    variant='outline'
+                    size='sm'
+                    disabled={restoringId === entry.id}
+                    onClick={() => restore(entry)}
+                  >
+                    <RotateCcw className='mr-1 h-3 w-3' />
+                    Restore
+                  </Button>
+                )}
               </TableCell>
             </TableRow>
           ))}

@@ -14,8 +14,11 @@ import {
 } from '@/components/ui/select'
 import { AlertCircle, CheckCircle2, Loader2, Mail } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { usePermissions } from '@/hooks/use-permissions'
 
 export function EmailSmtpForm() {
+  // Saving the mail server and sending a test are each a permission of their own.
+  const { can } = usePermissions()
   const pageProps = usePage().props as any
   const emailSettings = pageProps.emailSettings
 
@@ -251,11 +254,13 @@ export function EmailSmtpForm() {
 
       {/* Action Buttons */}
       <div className='flex gap-2'>
-        <Button type='submit' disabled={processing}>
-          {processing ? 'Saving...' : 'Save Configuration'}
-        </Button>
+        {can('edit email settings') && (
+          <Button type='submit' disabled={processing}>
+            {processing ? 'Saving...' : 'Save Configuration'}
+          </Button>
+        )}
 
-        {emailSettings?.id && (
+        {emailSettings?.id && can('send test email') && (
           <Button
             type='button'
             variant='outline'

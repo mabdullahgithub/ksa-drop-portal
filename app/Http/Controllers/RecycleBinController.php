@@ -13,6 +13,7 @@ use App\Models\Rider;
 use App\Models\Shipment;
 use App\Models\ShipmentEvent;
 use App\Models\User;
+use App\Support\ClientAccess;
 use App\Support\PhoneNumber;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -87,12 +88,12 @@ class RecycleBinController extends Controller
         $user = $request->user();
 
         return response()->json([
-            'orders' => $user->can('delete orders') ? Order::trashedForBin()->count() : 0,
-            'clients' => $user->can('delete client') ? Client::onlyTrashed()->count() : 0,
-            'inventory' => ($user->can('delete inventory') ? Product::onlyTrashed()->count() : 0)
-                + ($user->can('delete client') ? ClientProduct::onlyTrashed()->count() : 0),
-            'users' => $user->can('delete users') ? User::onlyTrashed()->count() : 0,
-            'riders' => $user->can('manage riders') ? Rider::onlyTrashed()->count() : 0,
+            'orders' => $user->can('view deleted orders') ? Order::trashedForBin()->count() : 0,
+            'clients' => $user->can('view deleted clients') ? Client::onlyTrashed()->count() : 0,
+            'inventory' => ($user->can('view deleted inventory') ? Product::onlyTrashed()->count() : 0)
+                + ($user->can('view deleted client products') ? ClientProduct::onlyTrashed()->count() : 0),
+            'users' => $user->can('view deleted users') ? User::onlyTrashed()->count() : 0,
+            'riders' => $user->can('view deleted riders') ? Rider::onlyTrashed()->count() : 0,
         ]);
     }
 
@@ -331,8 +332,8 @@ class RecycleBinController extends Controller
         $purgeable = [];
 
         foreach ($users as $user) {
-            if ($user->hasRole('superadmin')) {
-                $blocked[] = ['name' => $user->name, 'reason' => 'Super admin accounts cannot be permanently deleted.'];
+            if ($user->hasFullAccess()) {
+                $blocked[] = ['name' => $user->name, 'reason' => 'Super admin and developer accounts cannot be permanently deleted.'];
             } elseif (in_array($user->id, $clientUserIds, true)) {
                 $blocked[] = ['name' => $user->name, 'reason' => "It is a client's login. Delete the client instead."];
             } elseif (in_array($user->id, $payerIds, true)) {
@@ -476,8 +477,8 @@ class RecycleBinController extends Controller
     public function inventory(Request $request)
     {
         $user = $request->user();
-        $canCatalog = $user->can('delete inventory');
-        $canClientStock = $user->can('delete client');
+        $canCatalog = $user->can('view deleted inventory');
+        $canClientStock = $user->can('view deleted client products');
 
         if (! $canCatalog && ! $canClientStock) {
             return response()->json([
@@ -506,7 +507,9 @@ class RecycleBinController extends Controller
         }
 
         if ($canClientStock) {
-            $stock = DB::table('client_products')
+            // Read straight from the table, so the client restriction the
+            // model applies by itself is applied here by hand.
+            $stock = app(ClientAccess::class)->scopeOrders(DB::table('client_products'))
                 ->selectRaw("'client_product' as item_type, id, name, sku, product_code as code, deleted_at")
                 ->whereNotNull('deleted_at');
 
@@ -608,7 +611,7 @@ class RecycleBinController extends Controller
      *
      * @return array{product: array<int, int>, client_product: array<int, int>}
      */
-    private function splitInventoryIds(Request $request): array
+    private function splitInventoryIds(Request $request, string $action): array
     {
         $validated = $request->validate([
             'ids' => 'required|array|min:1',
@@ -625,9 +628,9 @@ class RecycleBinController extends Controller
                 continue;
             }
 
-            if ($type === 'product' && $user->can('delete inventory')) {
+            if ($type === 'product' && $user->can("{$action} deleted inventory")) {
                 $split['product'][] = (int) $id;
-            } elseif ($type === 'client_product' && $user->can('delete client')) {
+            } elseif ($type === 'client_product' && $user->can("{$action} deleted client products")) {
                 $split['client_product'][] = (int) $id;
             }
         }
@@ -637,7 +640,7 @@ class RecycleBinController extends Controller
 
     public function restoreInventory(Request $request)
     {
-        $split = $this->splitInventoryIds($request);
+        $split = $this->splitInventoryIds($request, 'restore');
         $requested = count($split['product']) + count($split['client_product']);
 
         $restored = 0;
@@ -697,7 +700,7 @@ class RecycleBinController extends Controller
 
     public function purgeInventory(Request $request)
     {
-        $split = $this->splitInventoryIds($request);
+        $split = $this->splitInventoryIds($request, 'purge');
 
         $purged = $this->purgeTrashed(Product::onlyTrashed()->whereIn('id', $split['product']))
             + $this->purgeTrashed(ClientProduct::onlyTrashed()->whereIn('id', $split['client_product']));
@@ -713,11 +716,11 @@ class RecycleBinController extends Controller
         $user = $request->user();
         $purged = 0;
 
-        if ($user->can('delete inventory')) {
+        if ($user->can('purge deleted inventory')) {
             $purged += $this->purgeTrashed(Product::onlyTrashed());
         }
 
-        if ($user->can('delete client')) {
+        if ($user->can('purge deleted client products')) {
             $purged += $this->purgeTrashed(ClientProduct::onlyTrashed());
         }
 

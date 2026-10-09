@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\RestrictedByClientAccess;
 use App\Services\Shipping\DTOs\TrackingEvent;
 use App\Services\Shipping\Enums\ShipmentStatus;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -9,7 +10,12 @@ use Illuminate\Database\Eloquent\Model;
 
 class Shipment extends Model
 {
-    use HasFactory;
+    use HasFactory, RestrictedByClientAccess;
+
+    protected static function clientAccessColumn(): string
+    {
+        return 'order_id';
+    }
 
     protected $fillable = [
         'order_id',

@@ -35,9 +35,20 @@ export function DataTableRowActions<TData>({ row }: DataTableRowActionsProps<TDa
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const [deleting, setDeleting] = useState(false)
 
-  const canView = can('view orders')
-  const canEdit = can('edit orders')
+  // Every item in this menu is a permission of its own.
+  const canView = can('view order details')
+  const canEdit = canView && can('edit orders')
+  const canTag = can('tag orders')
+  const canShipment = order.latest_shipment
+    ? canView && can('view shipments')
+    : can('create shipments')
+  const canTrack = !!order.latest_shipment && can('view shipments')
+  const canFulfillment = can('update order fulfillment status')
+  const canPayment = can('update order payment status')
   const canDelete = can('delete orders')
+
+  const hasEditGroup = canEdit || canTag || canShipment || canTrack
+  const hasStatusGroup = canFulfillment || canPayment
 
   const handleStatusUpdate = async (status: string) => {
     const success = await updateFulfillmentStatus(order.id, status)
@@ -87,7 +98,8 @@ export function DataTableRowActions<TData>({ row }: DataTableRowActionsProps<TDa
     }
   }
 
-  if (!canView) return null
+  // Nothing to offer: no menu at all.
+  if (!canView && !hasEditGroup && !hasStatusGroup && !canDelete) return null
 
   return (
     <>
@@ -99,46 +111,54 @@ export function DataTableRowActions<TData>({ row }: DataTableRowActionsProps<TDa
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align='end' className='w-48'>
-          <DropdownMenuItem
-            onClick={() => {
-              setCurrentRow(order)
-              setOpen('view')
-            }}
-          >
-            <Eye className='mr-2 h-4 w-4' />
-            View Details
-          </DropdownMenuItem>
+          {canView && (
+            <DropdownMenuItem
+              onClick={() => {
+                setCurrentRow(order)
+                setOpen('view')
+              }}
+            >
+              <Eye className='mr-2 h-4 w-4' />
+              View Details
+            </DropdownMenuItem>
+          )}
 
-          {canEdit && (
+          {hasEditGroup && (
             <>
-              <DropdownMenuSeparator />
+              {canView && <DropdownMenuSeparator />}
 
-              <DropdownMenuItem
-                onClick={() => {
-                  setCurrentRow(order)
-                  setOpen('edit')
-                }}
-              >
-                <Pencil className='mr-2 h-4 w-4' />
-                Edit Order
-              </DropdownMenuItem>
+              {canEdit && (
+                <DropdownMenuItem
+                  onClick={() => {
+                    setCurrentRow(order)
+                    setOpen('edit')
+                  }}
+                >
+                  <Pencil className='mr-2 h-4 w-4' />
+                  Edit Order
+                </DropdownMenuItem>
+              )}
 
-              <DropdownMenuItem onClick={() => setShowTagDialog(true)}>
-                <Tag className='mr-2 h-4 w-4' />
-                Manage Tag
-              </DropdownMenuItem>
+              {canTag && (
+                <DropdownMenuItem onClick={() => setShowTagDialog(true)}>
+                  <Tag className='mr-2 h-4 w-4' />
+                  Manage Tag
+                </DropdownMenuItem>
+              )}
 
-              <DropdownMenuItem
-                onClick={() => {
-                  setCurrentRow(order)
-                  setOpen(order.latest_shipment ? 'view' : 'shipment')
-                }}
-              >
-                <Truck className='mr-2 h-4 w-4' />
-                {order.latest_shipment ? 'View Shipment' : 'Create Shipment'}
-              </DropdownMenuItem>
+              {canShipment && (
+                <DropdownMenuItem
+                  onClick={() => {
+                    setCurrentRow(order)
+                    setOpen(order.latest_shipment ? 'view' : 'shipment')
+                  }}
+                >
+                  <Truck className='mr-2 h-4 w-4' />
+                  {order.latest_shipment ? 'View Shipment' : 'Create Shipment'}
+                </DropdownMenuItem>
+              )}
 
-              {order.latest_shipment && (
+              {canTrack && (
                 <DropdownMenuItem
                   onClick={() => window.open('/track', '_blank')}
                 >
@@ -146,40 +166,48 @@ export function DataTableRowActions<TData>({ row }: DataTableRowActionsProps<TDa
                   Track Shipment
                 </DropdownMenuItem>
               )}
+            </>
+          )}
 
-              <DropdownMenuSeparator />
+          {hasStatusGroup && (
+            <>
+              {(canView || hasEditGroup) && <DropdownMenuSeparator />}
 
-              <DropdownMenuSub>
-                <DropdownMenuSubTrigger>
-                  <Package className='mr-2 h-4 w-4' />
-                  Fulfillment Status
-                </DropdownMenuSubTrigger>
-                <DropdownMenuSubContent>
-                  <DropdownMenuItem onClick={() => handleStatusUpdate('pending')}>Pending</DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => handleStatusUpdate('unfulfilled')}>Unfulfilled</DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => handleStatusUpdate('fulfilled')}>Fulfilled</DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => handleStatusUpdate('cancelled')}>Cancelled</DropdownMenuItem>
-                </DropdownMenuSubContent>
-              </DropdownMenuSub>
+              {canFulfillment && (
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger>
+                    <Package className='mr-2 h-4 w-4' />
+                    Fulfillment Status
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent>
+                    <DropdownMenuItem onClick={() => handleStatusUpdate('pending')}>Pending</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleStatusUpdate('unfulfilled')}>Unfulfilled</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleStatusUpdate('fulfilled')}>Fulfilled</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleStatusUpdate('cancelled')}>Cancelled</DropdownMenuItem>
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
+              )}
 
-              <DropdownMenuSub>
-                <DropdownMenuSubTrigger>
-                  <DollarSign className='mr-2 h-4 w-4' />
-                  Payment Status
-                </DropdownMenuSubTrigger>
-                <DropdownMenuSubContent>
-                  <DropdownMenuItem onClick={() => handleFinancialUpdate('pending')}>Pending</DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => handleFinancialUpdate('paid')}>Paid</DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => handleFinancialUpdate('partially_refunded')}>Partially Refunded</DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => handleFinancialUpdate('refunded')}>Refunded</DropdownMenuItem>
-                </DropdownMenuSubContent>
-              </DropdownMenuSub>
+              {canPayment && (
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger>
+                    <DollarSign className='mr-2 h-4 w-4' />
+                    Payment Status
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent>
+                    <DropdownMenuItem onClick={() => handleFinancialUpdate('pending')}>Pending</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleFinancialUpdate('paid')}>Paid</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleFinancialUpdate('partially_refunded')}>Partially Refunded</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleFinancialUpdate('refunded')}>Refunded</DropdownMenuItem>
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
+              )}
             </>
           )}
 
           {canDelete && (
             <>
-              <DropdownMenuSeparator />
+              {(canView || hasEditGroup || hasStatusGroup) && <DropdownMenuSeparator />}
               <DropdownMenuItem
                 onClick={() => setShowDeleteDialog(true)}
                 className='text-destructive focus:text-destructive'

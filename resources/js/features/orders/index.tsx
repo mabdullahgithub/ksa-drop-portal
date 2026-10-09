@@ -16,6 +16,7 @@ import { ShipmentStatusCards } from './components/shipment-status-cards'
 import { TagStatCards } from './components/tag-stat-cards'
 import { ShipmentStatusInfoModal } from './components/shipment-status-info-modal'
 import { useOrders, useOrderStatistics } from '@/hooks/useOrders'
+import { usePermissions } from '@/hooks/use-permissions'
 import { DEFAULT_PAGE_SIZE } from '@/components/data-table'
 
 export function Orders() {
@@ -28,7 +29,14 @@ export function Orders() {
   const [tableInstance, setTableInstance] = useState<any>(null)
   const [statusInfoModalOpen, setStatusInfoModalOpen] = useState(false)
   // Every stat card and tab count on the page follows the current filters.
-  const { statistics: stats, loading: statsLoading, refresh: refreshStats } = useOrderStatistics(filters)
+  // The tab counts and the two rows of cards are each a permission of their own.
+  const { can } = usePermissions()
+  const canTagCards = can('view order tag cards')
+  const canStatusCards = can('view order shipment status cards')
+  const { statistics: stats, loading: statsLoading, refresh: refreshStats } = useOrderStatistics(
+    filters,
+    canTagCards || canStatusCards || can('view order stats')
+  )
 
   // Order changes (bulk actions, edits, shipments) move the numbers too.
   const refreshAll = useCallback(async () => {
@@ -74,16 +82,19 @@ export function Orders() {
           <OrdersPrimaryButtons filters={filters} table={tableInstance} />
         </div>
 
-        <TagStatCards
-          statistics={stats}
-          loading={statsLoading}
-          activeTag={filters.tags?.[0] ?? null}
-          onTagClick={(tagName) => {
-            const isActive = filters.tags?.[0] === tagName
-            updateFilters({ tags: isActive ? [] : [tagName], page: 1 })
-          }}
-        />
+        {canTagCards && (
+          <TagStatCards
+            statistics={stats}
+            loading={statsLoading}
+            activeTag={filters.tags?.[0] ?? null}
+            onTagClick={(tagName) => {
+              const isActive = filters.tags?.[0] === tagName
+              updateFilters({ tags: isActive ? [] : [tagName], page: 1 })
+            }}
+          />
+        )}
 
+        {canStatusCards && (
         <div>
           <div className='flex items-center justify-between mb-3'>
             <h3 className='text-sm font-semibold'>Shipment Status Distribution</h3>
@@ -103,6 +114,7 @@ export function Orders() {
             }}
           />
         </div>
+        )}
 
         {/* Tabs for All Orders / Other Couriers / KSA Express */}
         <div className='flex gap-2 border-b border-muted/50'>

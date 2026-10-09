@@ -42,7 +42,7 @@ class LogesTechsBulkShipmentTest extends TestCase
     private function actor(): User
     {
         $role = Role::create(['name' => 'role-' . uniqid()]);
-        $role->givePermissionTo(['edit orders']);
+        $role->givePermissionTo($this->permissions(['edit orders']));
 
         $user = User::factory()->create();
         $user->assignRole($role);

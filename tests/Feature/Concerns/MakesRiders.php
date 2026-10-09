@@ -29,7 +29,7 @@ trait MakesRiders
     protected function staff(array $permissions = ['view riders', 'manage riders', 'manage rider payments', 'view orders', 'edit orders']): User
     {
         $role = Role::create(['name' => 'role-' . uniqid()]);
-        $role->givePermissionTo($permissions);
+        $role->givePermissionTo($this->permissions($permissions));
 
         $user = User::factory()->create();
         $user->assignRole($role);

@@ -42,8 +42,13 @@ interface ClientInventoryTabProps {
 
 export function ClientInventoryTab({ client }: ClientInventoryTabProps) {
   const { can } = usePermissions()
-  // Client product routes are gated on 'edit client' / 'delete client' — match that here
-  const canEdit = can('edit client')
+  // Add, review, edit and delete are each a permission of their own.
+  const canCreate = can('create client products')
+  const canReview = can('review client products')
+  const canEditProduct = can('edit client products')
+  const canDelete = can('delete client products')
+  // The actions column only exists when its menu has something in it.
+  const canEdit = canReview || canEditProduct || canDelete
   const { products, loading, error, refresh } = useClientProducts(client.id)
   const { loading: mutating, reviewProduct, deleteProduct } = useClientProductMutations()
 
@@ -106,7 +111,7 @@ export function ClientInventoryTab({ client }: ClientInventoryTabProps) {
         <p className='text-sm text-muted-foreground'>
           {loading ? 'Loading...' : `${products.length} product${products.length !== 1 ? 's' : ''} in inventory`}
         </p>
-        {canEdit && (
+        {canCreate && (
           <Button size='sm' onClick={openAdd}>
             <Plus className='mr-2 h-4 w-4' />
             Add Product
@@ -146,7 +151,7 @@ export function ClientInventoryTab({ client }: ClientInventoryTabProps) {
                     state='sleeping'
                     title='No products in inventory.'
                     action={
-                      canEdit && (
+                      canCreate && (
                         <Button variant='outline' size='sm' onClick={openAdd}>
                           <Plus className='mr-2 h-4 w-4' />
                           Add Product
@@ -209,22 +214,30 @@ export function ClientInventoryTab({ client }: ClientInventoryTabProps) {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align='end' className='w-44'>
-                          <DropdownMenuItem onClick={() => setVerifyTarget(product)}>
-                            <ShieldCheck className='mr-2 h-4 w-4' />
-                            Review &amp; Verify
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => openEdit(product)}>
-                            <Pencil className='mr-2 h-4 w-4' />
-                            Edit
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem
-                            className='text-destructive'
-                            onClick={() => setDeleteTarget(product)}
-                          >
-                            <Trash2 className='mr-2 h-4 w-4' />
-                            Delete
-                          </DropdownMenuItem>
+                          {canReview && (
+                            <DropdownMenuItem onClick={() => setVerifyTarget(product)}>
+                              <ShieldCheck className='mr-2 h-4 w-4' />
+                              Review &amp; Verify
+                            </DropdownMenuItem>
+                          )}
+                          {canEditProduct && (
+                            <DropdownMenuItem onClick={() => openEdit(product)}>
+                              <Pencil className='mr-2 h-4 w-4' />
+                              Edit
+                            </DropdownMenuItem>
+                          )}
+                          {canDelete && (
+                            <>
+                              {(canReview || canEditProduct) && <DropdownMenuSeparator />}
+                              <DropdownMenuItem
+                                className='text-destructive'
+                                onClick={() => setDeleteTarget(product)}
+                              >
+                                <Trash2 className='mr-2 h-4 w-4' />
+                                Delete
+                              </DropdownMenuItem>
+                            </>
+                          )}
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </TableCell>

@@ -25,8 +25,8 @@ class OrderStatisticsFilterTest extends TestCase
 
         app(PermissionRegistrar::class)->forgetCachedPermissions();
 
-        $viewOrders = Permission::findOrCreate('view orders');
-        Role::findOrCreate('admin')->givePermissionTo($viewOrders);
+        // Revenue is a dashboard block, so the role has the dashboard too.
+        Role::findOrCreate('admin')->givePermissionTo($this->permissions(['view orders', 'view dashboard']));
 
         Tag::create(['name' => 'VIP', 'color' => '#ff0000']);
         Tag::create(['name' => 'عاجل', 'color' => '#00ff00']);

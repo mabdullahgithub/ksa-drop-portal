@@ -28,7 +28,7 @@ class ClientProductReviewTest extends TestCase
         // Seed basic Spatie role/permission
         $editClientPermission = Permission::findOrCreate('edit client');
         $adminRole = Role::findOrCreate('admin');
-        $adminRole->givePermissionTo($editClientPermission);
+        $adminRole->givePermissionTo($this->permissions($editClientPermission));
     }
 
     public function test_admin_can_review_product_to_verify(): void

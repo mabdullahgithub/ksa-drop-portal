@@ -5,6 +5,7 @@ namespace App\Http\Middleware;
 use App\Http\Concerns\ResolvesNotifiableUser;
 use App\Models\Client;
 use App\Services\Inventory\StockAlerts;
+use App\Support\PermissionCatalog;
 use App\Support\WhatsAppMessaging;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -67,7 +68,14 @@ class HandleInertiaRequests extends Middleware
             ...parent::share($request),
             'auth' => [
                 'user' => $user,
-                'permissions' => $user ? $user->getAllPermissions()->pluck('name') : [],
+                // superadmin and developer are sent the whole list: for them
+                // nothing is ever checked (see the Gate::before).
+                'permissions' => match (true) {
+                    ! $user => [],
+                    $user->hasFullAccess() => PermissionCatalog::names(),
+                    default => $user->getAllPermissions()->pluck('name'),
+                },
+                'full_access' => (bool) $user?->hasFullAccess(),
                 'roles' => $user ? $user->getRoleNames() : [],
                 'portal_features' => $client?->portal_features,
                 'impersonating' => $impersonating,
@@ -138,7 +146,7 @@ class HandleInertiaRequests extends Middleware
         if ($client) {
             $products = $alerts->forClient($client);
             $scope = "client-{$client->id}";
-        } elseif (! $user->hasRole('client') && $user->canAny(['view orders', 'view inventory', 'view client'])) {
+        } elseif (! $user->hasRole('client') && $user->can('view stock alerts')) {
             $products = $alerts->forStaff();
             $scope = 'staff';
         } else {

@@ -19,6 +19,7 @@ import { JntProvinceSelect, JntCitySelect } from '@/components/jnt-location-sele
 import { Info } from 'lucide-react'
 import { toast } from 'sonner'
 import axios from 'axios'
+import { usePermissions } from '@/hooks/use-permissions'
 
 // Mini info icon + popover explaining how to obtain a given credential and where
 // to add it. Used next to each J&T API credential field.
@@ -59,6 +60,13 @@ interface Warehouse {
 }
 
 export default function JntSettings() {
+  // Testing the connection is a permission of its own.
+  const { can } = usePermissions()
+  const canTest = can('test connector connection')
+  // The page opens for the credentials or for the warehouses: each tab, and
+  // each warehouse button, is a permission of its own.
+  const canConfigure = can('configure jnt connector')
+  const canWarehouses = can('view warehouses')
   const [settings, setSettings] = useState({
     api_account: '',
     private_key: '',
@@ -89,8 +97,9 @@ export default function JntSettings() {
   const [editingWarehouse, setEditingWarehouse] = useState<number | null>(null)
 
   useEffect(() => {
-    loadSettings()
-    loadWarehouses()
+    if (canConfigure) loadSettings()
+    else setLoading(false)
+    if (canWarehouses) loadWarehouses()
   }, [])
 
   const loadSettings = async () => {
@@ -259,19 +268,22 @@ export default function JntSettings() {
                 Configure your J&T Express API credentials and warehouse addresses
               </p>
             </div>
-            <a href='/apps/jnt-express/analytics'>
-              <Button variant='outline' size='sm'>
-                View Analytics & COD
-              </Button>
-            </a>
+            {can('view shipment analytics') && (
+              <a href='/apps/jnt-express/analytics'>
+                <Button variant='outline' size='sm'>
+                  View Analytics & COD
+                </Button>
+              </a>
+            )}
           </div>
 
-          <Tabs defaultValue='credentials' className='space-y-4'>
+          <Tabs defaultValue={canConfigure ? 'credentials' : 'warehouses'} className='space-y-4'>
             <TabsList>
-              <TabsTrigger value='credentials'>API Credentials</TabsTrigger>
-              <TabsTrigger value='warehouses'>Warehouses</TabsTrigger>
+              {canConfigure && <TabsTrigger value='credentials'>API Credentials</TabsTrigger>}
+              {canWarehouses && <TabsTrigger value='warehouses'>Warehouses</TabsTrigger>}
             </TabsList>
 
+            {canConfigure && (
             <TabsContent value='credentials' className='space-y-4'>
               <Card>
                 <CardHeader>
@@ -410,15 +422,20 @@ export default function JntSettings() {
                     <Button onClick={saveSettings} disabled={saving}>
                       {saving ? 'Saving...' : 'Save Settings'}
                     </Button>
-                    <Button variant='outline' onClick={testConnection} disabled={testing}>
-                      {testing ? 'Testing...' : 'Test Connection'}
-                    </Button>
+                    {canTest && (
+                      <Button variant='outline' onClick={testConnection} disabled={testing}>
+                        {testing ? 'Testing...' : 'Test Connection'}
+                      </Button>
+                    )}
                   </div>
                 </CardContent>
               </Card>
             </TabsContent>
+            )}
 
+            {canWarehouses && (
             <TabsContent value='warehouses' className='space-y-4'>
+              {can(editingWarehouse ? 'edit warehouses' : 'create warehouses') && (
               <Card>
                 <CardHeader>
                   <CardTitle>{editingWarehouse ? 'Edit Warehouse' : 'Add Warehouse'}</CardTitle>
@@ -546,6 +563,7 @@ export default function JntSettings() {
                   </div>
                 </CardContent>
               </Card>
+              )}
 
               {warehouses.length > 0 && (
                 <Card>
@@ -574,12 +592,16 @@ export default function JntSettings() {
                             </p>
                           </div>
                           <div className='flex gap-2'>
-                            <Button size='sm' variant='outline' onClick={() => editWarehouse(w)}>
-                              Edit
-                            </Button>
-                            <Button size='sm' variant='destructive' onClick={() => deleteWarehouse(w.id)}>
-                              Delete
-                            </Button>
+                            {can('edit warehouses') && (
+                              <Button size='sm' variant='outline' onClick={() => editWarehouse(w)}>
+                                Edit
+                              </Button>
+                            )}
+                            {can('delete warehouses') && (
+                              <Button size='sm' variant='destructive' onClick={() => deleteWarehouse(w.id)}>
+                                Delete
+                              </Button>
+                            )}
                           </div>
                         </div>
                       ))}
@@ -588,6 +610,7 @@ export default function JntSettings() {
                 </Card>
               )}
             </TabsContent>
+            )}
           </Tabs>
         </div>
       </Main>

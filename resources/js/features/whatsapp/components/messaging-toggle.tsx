@@ -22,7 +22,7 @@ export function MessagingToggle({ onLocked }: { onLocked: () => void }) {
   const { can } = usePermissions()
   const enabled = useWhatsAppMessaging()
   const [saving, setSaving] = useState(false)
-  const canEdit = can('edit apps')
+  const canEdit = can('toggle whatsapp messaging')
 
   const toggle = async (next: boolean) => {
     setSaving(true)
@@ -59,10 +59,10 @@ export function MessagingToggle({ onLocked }: { onLocked: () => void }) {
           {enabled
             ? 'Marking a call “No Answer” sends the confirmation message, with a follow-up after 24 hours.'
             : 'Nothing is sent to customers, and WhatsApp is hidden from Orders, the Dashboard and Apps.'}
-          {!canEdit && ' Only someone who can edit apps can change this.'}
+          {!canEdit && ' You do not have permission to change this.'}
         </p>
       </div>
-      {canEdit && (
+      {can('configure whatsapp connector') && (
         <Button variant='outline' size='sm' asChild>
           <Link href='/apps/whatsapp'>
             <Settings className='h-3.5 w-3.5' />

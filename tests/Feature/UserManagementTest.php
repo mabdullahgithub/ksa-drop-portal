@@ -36,8 +36,8 @@ class UserManagementTest extends TestCase
             Permission::findOrCreate($permission);
         }
 
-        Role::create(['name' => 'admin'])->givePermissionTo($permissions);
-        Role::create(['name' => 'superadmin']);
+        Role::create(['name' => 'admin'])->givePermissionTo($this->permissions($permissions));
+        Role::findOrCreate('superadmin');
         Role::create(['name' => 'client']);
         Role::create(['name' => 'staff']);
 
@@ -191,7 +191,7 @@ class UserManagementTest extends TestCase
     {
         $role = Role::create(['name' => 'orders-only']);
         Permission::findOrCreate('delete orders');
-        $role->givePermissionTo(['delete orders', 'view recycle bin']);
+        $role->givePermissionTo($this->permissions(['delete orders', 'view recycle bin']));
         $user = User::factory()->create();
         $user->assignRole($role);
 

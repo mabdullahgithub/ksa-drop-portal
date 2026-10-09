@@ -30,8 +30,9 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
   const isSelf = isRealData && auth?.user && row.original.id === auth.user.id
   const canDelete = !isSuperAdmin && !isSelf && can('delete users')
 
-  // Check permissions
-  const canEdit = can('edit users')
+  // Check permissions. Edit opens the access dialog, which is empty for
+  // someone who may assign neither roles nor clients.
+  const canEdit = can('edit users') && can(['assign user roles', 'assign client access'])
   const canDeleteUsers = can('delete users')
 
   // Don't show menu if user has no permissions
@@ -59,7 +60,7 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
                 setOpen('edit')
               }}
             >
-              Edit
+              Edit access
               <DropdownMenuShortcut>
                 <UserPen size={16} />
               </DropdownMenuShortcut>

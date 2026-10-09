@@ -3,14 +3,14 @@ import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import { VEHICLE_TYPES, type RiderRow } from '../data/types'
 import { AppState, CashDue, PayDue, RiderAvatar, RowActions, sar, type RiderDialog } from './rider-parts'
+import { usePermissions } from '@/hooks/use-permissions'
 
 type Props = {
   rider: RiderRow
-  canManage: boolean
   onPick: (dialog: RiderDialog) => void
 }
 
-export function RiderCard({ rider, canManage, onPick }: Props) {
+export function RiderCard({ rider, onPick }: Props) {
   const suspended = rider.status === 'suspended'
   const vehicle = VEHICLE_TYPES.find((v) => v.value === rider.vehicle_type)?.label
   // Stays at the warehouse scanning parcels OUT and IN: no parcels, cash or pay of their own.
@@ -46,7 +46,7 @@ export function RiderCard({ rider, canManage, onPick }: Props) {
           </p>
         </div>
 
-        {canManage && <RowActions rider={rider} onPick={onPick} />}
+        <RowActions rider={rider} onPick={onPick} />
       </div>
 
       <div className='flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground'>
@@ -121,33 +121,43 @@ function StockToday({ rider }: { rider: RiderRow }) {
 
 /** A rider's parcels today and their money both ways. */
 function RiderNumbers({ rider, onPick }: Pick<Props, 'rider' | 'onPick'>) {
+  // The orders sheet and the money are each a permission of their own.
+  const { can } = usePermissions()
+  const canParcels = can('view rider parcels')
+  const canMoney = can('view rider payments')
+  const orders = (outcome?: 'delivered' | 'attempt_fail') =>
+    canParcels ? () => onPick({ type: 'orders', rider, outcome }) : undefined
+
   return (
     <>
       {/* Each number opens the rider's orders on that filter. */}
-      <div className='mt-auto grid grid-cols-4 gap-1 border-t pt-2 text-center'>
-        <Stat label='With rider' value={rider.stats.held} onClick={() => onPick({ type: 'orders', rider })} />
+      <div className={cn('mt-auto grid gap-1 border-t pt-2 text-center', rider.cash ? 'grid-cols-4' : 'grid-cols-3')}>
+        <Stat label='With rider' value={rider.stats.held} onClick={orders()} />
         <Stat
           label='Delivered'
           value={rider.stats.delivered}
           tone='text-green-700 dark:text-green-400'
-          onClick={() => onPick({ type: 'orders', rider, outcome: 'delivered' })}
+          onClick={orders('delivered')}
         />
         <Stat
           label='Failed'
           value={rider.stats.failed}
           tone={rider.stats.failed ? 'text-red-600' : undefined}
-          onClick={() => onPick({ type: 'orders', rider, outcome: 'attempt_fail' })}
+          onClick={orders('attempt_fail')}
         />
-        <Stat
-          label='Cash today'
-          value={sar(rider.stats.cash_collected).replace('SAR ', '')}
-          small
-          onClick={() => onPick({ type: 'orders', rider, outcome: 'delivered' })}
-        />
+        {rider.cash && (
+          <Stat
+            label='Cash today'
+            value={sar(rider.stats.cash_collected).replace('SAR ', '')}
+            small
+            onClick={orders('delivered')}
+          />
+        )}
       </div>
 
       {/* The rider's orders, and their money both ways. Each line opens its sheet. */}
       <div className='-mx-2 -my-1'>
+        {canParcels && (
         <button
           type='button'
           onClick={() => onPick({ type: 'orders', rider })}
@@ -158,6 +168,9 @@ function RiderNumbers({ rider, onPick }: Pick<Props, 'rider' | 'onPick'>) {
           <span className='ms-auto text-muted-foreground'>Delivered, failed, all</span>
           <ChevronRight className='h-3.5 w-3.5 text-muted-foreground rtl:rotate-180' />
         </button>
+        )}
+        {canMoney && rider.cash && (
+          <>
         <button
           type='button'
           onClick={() => onPick({ type: 'payments', rider, direction: 'in' })}
@@ -178,6 +191,8 @@ function RiderNumbers({ rider, onPick }: Pick<Props, 'rider' | 'onPick'>) {
           <PayDue pay={rider.pay} className='ms-auto' />
           <ChevronRight className='h-3.5 w-3.5 text-muted-foreground rtl:rotate-180' />
         </button>
+          </>
+        )}
       </div>
     </>
   )
@@ -197,12 +212,21 @@ function Stat({
   value: number | string
   tone?: string
   small?: boolean
-  onClick: () => void
+  /** Left out for someone who may not open the rider's orders: a plain number. */
+  onClick?: () => void
 }) {
-  return (
-    <button type='button' onClick={onClick} className='rounded-md py-1 transition-colors hover:bg-muted/60' title={`${label}: view orders`}>
+  const content = (
+    <>
       <p className={cn('font-semibold tabular-nums', small ? 'text-sm leading-6' : 'text-lg leading-6', tone)}>{value}</p>
       <p className='text-[11px] text-muted-foreground'>{label}</p>
+    </>
+  )
+
+  if (!onClick) return <div className='py-1'>{content}</div>
+
+  return (
+    <button type='button' onClick={onClick} className='rounded-md py-1 transition-colors hover:bg-muted/60' title={`${label}: view orders`}>
+      {content}
     </button>
   )
 }

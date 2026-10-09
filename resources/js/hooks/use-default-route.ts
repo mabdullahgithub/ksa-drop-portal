@@ -11,9 +11,15 @@ const LANDING_CANDIDATES: { permission: string; url: string }[] = [
   { permission: 'view client', url: '/client' },
   { permission: 'view inventory', url: '/inventory' },
   { permission: 'view orders', url: '/orders' },
+  { permission: 'view whatsapp', url: '/whatsapp' },
+  { permission: 'view riders', url: '/riders' },
   { permission: 'view apps', url: '/apps' },
   { permission: 'view tags', url: '/tags' },
+  { permission: 'view recycle bin', url: '/recycle-bin' },
   { permission: 'view users', url: '/team-management/users' },
+  { permission: 'view roles', url: '/team-management/roles' },
+  { permission: 'view notifications', url: '/notifications' },
+  { permission: 'view settings', url: '/settings' },
 ]
 
 /**

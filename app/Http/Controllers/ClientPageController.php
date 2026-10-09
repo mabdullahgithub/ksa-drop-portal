@@ -11,6 +11,10 @@ class ClientPageController extends Controller
     {
         $client->load(['user', 'creator', 'clientProducts']);
 
+        $user = request()->user();
+        $canRevenue = $user->can('view client revenue');
+        $canProducts = $user->can('view client products');
+
         $data = [
             'id'                      => $client->id,
             'user_id'                 => $client->user_id,
@@ -44,10 +48,11 @@ class ClientPageController extends Controller
                 'id'   => $client->creator->id,
                 'name' => $client->creator->name,
             ] : null,
-            'orders_count'            => $client->orders()->count(),
-            'total_revenue'           => round((float) $client->orders()->sum('total'), 2),
-            'products_count'          => $client->clientProducts()->count(),
-            'verified_products_count' => $client->clientProducts()->verified()->count(),
+            // Null for a card the person has no permission to see.
+            'orders_count'            => $canRevenue ? $client->orders()->count() : null,
+            'total_revenue'           => $canRevenue ? round((float) $client->orders()->sum('total'), 2) : null,
+            'products_count'          => $canProducts ? $client->clientProducts()->count() : null,
+            'verified_products_count' => $canProducts ? $client->clientProducts()->verified()->count() : null,
             'created_at'              => $client->created_at?->toISOString(),
             'updated_at'              => $client->updated_at?->toISOString(),
         ];

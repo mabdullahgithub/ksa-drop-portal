@@ -5,10 +5,9 @@ import { useUsers } from './users-provider'
 
 interface UsersDialogsProps {
   availableRoles?: string[]
-  availablePermissions?: string[]
 }
 
-export function UsersDialogs({ availableRoles, availablePermissions }: UsersDialogsProps = {}) {
+export function UsersDialogs({ availableRoles }: UsersDialogsProps = {}) {
   const { open, setOpen, currentRow, setCurrentRow } = useUsers()
   const isRealData = currentRow && typeof currentRow.id === 'number'
 
@@ -20,7 +19,6 @@ export function UsersDialogs({ availableRoles, availablePermissions }: UsersDial
           open={open === 'add'}
           onOpenChange={() => setOpen('add')}
           availableRoles={availableRoles}
-          availablePermissions={availablePermissions}
         />
       )}
 
@@ -51,8 +49,7 @@ export function UsersDialogs({ availableRoles, availablePermissions }: UsersDial
               }}
               currentRow={currentRow}
               availableRoles={availableRoles}
-              availablePermissions={availablePermissions}
-            />
+                />
           )}
 
           <UsersDeleteDialog

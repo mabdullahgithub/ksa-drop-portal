@@ -594,7 +594,7 @@ class ShipmentController extends Controller
     {
         $base = (string) $order->order_number;
 
-        $taken = Shipment::where('courier', $courier)
+        $taken = Shipment::acrossClients()->where('courier', $courier)
             ->where(fn ($q) => $q->where('txlogistic_id', $base)->orWhere('txlogistic_id', 'like', $base . '-R%'))
             ->pluck('txlogistic_id')
             ->all();

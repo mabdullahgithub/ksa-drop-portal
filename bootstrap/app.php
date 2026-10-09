@@ -44,7 +44,15 @@ return Application::configure(basePath: dirname(__DIR__))
             \Illuminate\Routing\Middleware\SubstituteBindings::class,
         ]);
 
+        // Ahead of route model binding, so a record belonging to a client the
+        // person was not assigned is a 404.
+        $middleware->prependToPriorityList(
+            before: \Illuminate\Routing\Middleware\SubstituteBindings::class,
+            prepend: \App\Http\Middleware\RestrictToAssignedClients::class,
+        );
+
         $middleware->alias([
+            'client.access' => \App\Http\Middleware\RestrictToAssignedClients::class,
             'permission' => \App\Http\Middleware\CheckPermission::class,
             'role' => \App\Http\Middleware\CheckRole::class,
             'shopify.session' => \App\Http\Middleware\VerifyShopifySessionToken::class,

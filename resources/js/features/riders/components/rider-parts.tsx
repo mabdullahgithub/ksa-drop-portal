@@ -14,6 +14,7 @@ import {
 import { cn } from '@/lib/utils'
 import type { ParcelOutcome, PaymentDirection, RiderCash, RiderPay, RiderRow } from '../data/types'
 import type { AccessKind } from './rider-access-dialog'
+import { usePermissions } from '@/hooks/use-permissions'
 
 export type RiderDialog =
   | { type: 'add' }
@@ -36,7 +37,9 @@ export function appStateOf(rider: RiderRow): AppStateKey {
 export const sar = (n: number) => `SAR ${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 
 /** What a rider still owes, or that they owe nothing. */
-export function CashDue({ cash, className }: { cash: RiderCash; className?: string }) {
+export function CashDue({ cash, className }: { cash: RiderCash | null; className?: string }) {
+  if (!cash) return <span className={cn('text-muted-foreground', className)}>—</span>
+
   if (cash.balance > 0) {
     return <span className={cn('font-semibold tabular-nums text-amber-700 dark:text-amber-400', className)}>{sar(cash.balance)}</span>
   }
@@ -49,7 +52,9 @@ export function CashDue({ cash, className }: { cash: RiderCash; className?: stri
 }
 
 /** What KSA Drop still owes a rider for their orders, or that it owes nothing. */
-export function PayDue({ pay, className }: { pay: RiderPay; className?: string }) {
+export function PayDue({ pay, className }: { pay: RiderPay | null; className?: string }) {
+  if (!pay) return <span className={cn('text-muted-foreground', className)}>—</span>
+
   if (pay.balance > 0) {
     return <span className={cn('font-semibold tabular-nums text-green-700 dark:text-green-400', className)}>{sar(pay.balance)}</span>
   }
@@ -150,6 +155,28 @@ export function AppState({ rider }: { rider: RiderRow }) {
 }
 
 export function RowActions({ rider, onPick }: { rider: RiderRow; onPick: (dialog: RiderDialog) => void }) {
+  // Every item in this menu is a permission of its own.
+  const { can } = usePermissions()
+  const active = rider.status === 'active'
+  // An inventory manager has no parcels, cash or pay of their own.
+  const isRider = rider.role === 'rider'
+
+  const items = {
+    link: active && can('send rider app link'),
+    pin: active && can('set rider pin'),
+    orders: isRider && can('view rider parcels'),
+    payments: isRider && can('view rider payments'),
+    edit: can('edit riders'),
+    signOut: !!rider.device && can('sign rider out'),
+    suspend: can('suspend riders'),
+    remove: can('delete riders'),
+  }
+  const upper = items.link || items.pin || items.orders || items.payments || items.edit || items.signOut
+  const lower = items.suspend || items.remove
+
+  // Nothing to offer: no menu at all.
+  if (!upper && !lower) return null
+
   return (
     <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
@@ -159,50 +186,55 @@ export function RowActions({ rider, onPick }: { rider: RiderRow; onPick: (dialog
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align='end' className='w-48'>
-        {rider.status === 'active' && (
-          <>
-            <DropdownMenuItem onClick={() => onPick({ type: 'link', rider })}>
-              Send app link
-              <DropdownMenuShortcut><Link2 size={16} /></DropdownMenuShortcut>
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => onPick({ type: 'pin', rider })}>
-              {rider.has_pin ? 'New PIN' : 'Give a PIN'}
-              <DropdownMenuShortcut><KeyRound size={16} /></DropdownMenuShortcut>
-            </DropdownMenuItem>
-          </>
+        {items.link && (
+          <DropdownMenuItem onClick={() => onPick({ type: 'link', rider })}>
+            Send app link
+            <DropdownMenuShortcut><Link2 size={16} /></DropdownMenuShortcut>
+          </DropdownMenuItem>
         )}
-        {/* An inventory manager has no parcels, cash or pay of their own. */}
-        {rider.role === 'rider' && (
-          <>
-            <DropdownMenuItem onClick={() => onPick({ type: 'orders', rider })}>
-              Orders
-              <DropdownMenuShortcut><ListChecks size={16} /></DropdownMenuShortcut>
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => onPick({ type: 'payments', rider })}>
-              Cash &amp; pay
-              <DropdownMenuShortcut><Wallet size={16} /></DropdownMenuShortcut>
-            </DropdownMenuItem>
-          </>
+        {items.pin && (
+          <DropdownMenuItem onClick={() => onPick({ type: 'pin', rider })}>
+            {rider.has_pin ? 'New PIN' : 'Give a PIN'}
+            <DropdownMenuShortcut><KeyRound size={16} /></DropdownMenuShortcut>
+          </DropdownMenuItem>
         )}
-        <DropdownMenuItem onClick={() => onPick({ type: 'edit', rider })}>
-          Edit details
-          <DropdownMenuShortcut><Pencil size={16} /></DropdownMenuShortcut>
-        </DropdownMenuItem>
-        {rider.device && (
+        {items.orders && (
+          <DropdownMenuItem onClick={() => onPick({ type: 'orders', rider })}>
+            Orders
+            <DropdownMenuShortcut><ListChecks size={16} /></DropdownMenuShortcut>
+          </DropdownMenuItem>
+        )}
+        {items.payments && (
+          <DropdownMenuItem onClick={() => onPick({ type: 'payments', rider })}>
+            Cash &amp; pay
+            <DropdownMenuShortcut><Wallet size={16} /></DropdownMenuShortcut>
+          </DropdownMenuItem>
+        )}
+        {items.edit && (
+          <DropdownMenuItem onClick={() => onPick({ type: 'edit', rider })}>
+            Edit details
+            <DropdownMenuShortcut><Pencil size={16} /></DropdownMenuShortcut>
+          </DropdownMenuItem>
+        )}
+        {items.signOut && (
           <DropdownMenuItem onClick={() => onPick({ type: 'sign-out', rider })}>
             Sign phone out
             <DropdownMenuShortcut><LogOut size={16} /></DropdownMenuShortcut>
           </DropdownMenuItem>
         )}
-        <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={() => onPick({ type: 'suspend', rider })}>
-          {rider.status === 'active' ? 'Suspend' : 'Reactivate'}
-          <DropdownMenuShortcut>{rider.status === 'active' ? <Ban size={16} /> : <RotateCcw size={16} />}</DropdownMenuShortcut>
-        </DropdownMenuItem>
-        <DropdownMenuItem className='text-red-500!' onClick={() => onPick({ type: 'delete', rider })}>
-          Remove
-          <DropdownMenuShortcut><Trash2 size={16} /></DropdownMenuShortcut>
-        </DropdownMenuItem>
+        {upper && lower && <DropdownMenuSeparator />}
+        {items.suspend && (
+          <DropdownMenuItem onClick={() => onPick({ type: 'suspend', rider })}>
+            {active ? 'Suspend' : 'Reactivate'}
+            <DropdownMenuShortcut>{active ? <Ban size={16} /> : <RotateCcw size={16} />}</DropdownMenuShortcut>
+          </DropdownMenuItem>
+        )}
+        {items.remove && (
+          <DropdownMenuItem className='text-red-500!' onClick={() => onPick({ type: 'delete', rider })}>
+            Remove
+            <DropdownMenuShortcut><Trash2 size={16} /></DropdownMenuShortcut>
+          </DropdownMenuItem>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   )

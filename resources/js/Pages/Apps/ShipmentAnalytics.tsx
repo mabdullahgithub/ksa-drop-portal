@@ -19,6 +19,7 @@ import {
   ArrowLeft, ShieldCheck
 } from 'lucide-react'
 import axios from 'axios'
+import { usePermissions } from '@/hooks/use-permissions'
 
 interface Analytics {
   period_days: number
@@ -106,6 +107,9 @@ function StatCard({
 }
 
 export default function ShipmentAnalyticsPage() {
+  // The health check and the COD figures are each a permission of their own.
+  const { can } = usePermissions()
+  const canCod = can('view cod remittances')
   const [days, setDays] = useState('30')
   const [data, setData] = useState<Analytics | null>(null)
   const [loading, setLoading] = useState(true)
@@ -179,6 +183,7 @@ export default function ShipmentAnalyticsPage() {
               </SelectContent>
             </Select>
 
+            {can('check courier api health') && (
             <Button variant='outline' size='sm' onClick={checkHealth} disabled={checkingHealth}>
               <Activity className='h-4 w-4 mr-1' />
               {checkingHealth ? 'Checking...' : 'API Health'}
@@ -188,6 +193,7 @@ export default function ShipmentAnalyticsPage() {
                 }`} />
               )}
             </Button>
+            )}
           </div>
         </div>
 
@@ -220,6 +226,7 @@ export default function ShipmentAnalyticsPage() {
               <StatCard title='Returns' value={fmt(t?.returned)} sub={`${returnRate}% return rate`} icon={RotateCcw} color='text-purple-500' />
               <StatCard title='Exceptions' value={fmt(t?.exceptions)} icon={AlertTriangle} color='text-red-500' />
               <StatCard title='Cancelled' value={fmt(t?.cancelled)} icon={X} color='text-gray-500' />
+              {canCod && (
               <StatCard
                 title='COD Collected'
                 value={data?.cod.summary ? `SAR ${Number(data.cod.summary.total_amount).toLocaleString()}` : '—'}
@@ -227,6 +234,7 @@ export default function ShipmentAnalyticsPage() {
                 icon={Banknote}
                 color='text-amber-500'
               />
+              )}
             </>
           )}
         </div>
@@ -240,7 +248,7 @@ export default function ShipmentAnalyticsPage() {
               Exceptions {!loading && t?.exceptions ? <span className='ml-1 text-red-500'>({t.exceptions})</span> : null}
             </TabsTrigger>
             <TabsTrigger value='returns'>Returns</TabsTrigger>
-            <TabsTrigger value='cod'>COD Remittances</TabsTrigger>
+            {canCod && <TabsTrigger value='cod'>COD Remittances</TabsTrigger>}
           </TabsList>
 
           {/* By Status */}
@@ -427,6 +435,7 @@ export default function ShipmentAnalyticsPage() {
           </TabsContent>
 
           {/* COD */}
+          {canCod && (
           <TabsContent value='cod'>
             <Card>
               <CardHeader>
@@ -486,6 +495,7 @@ export default function ShipmentAnalyticsPage() {
               </CardContent>
             </Card>
           </TabsContent>
+          )}
         </Tabs>
       </Main>
     </AuthenticatedLayout>

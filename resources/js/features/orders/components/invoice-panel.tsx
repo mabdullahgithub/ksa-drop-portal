@@ -4,6 +4,7 @@ import { toast } from 'sonner'
 import axios from 'axios'
 import { useState } from 'react'
 import { type Order, type Invoice } from '@/types/order'
+import { usePermissions } from '@/hooks/use-permissions'
 
 interface InvoicePanelProps {
   order: Order
@@ -17,6 +18,7 @@ export function InvoicePanel({ order, onInvoicesChanged }: InvoicePanelProps) {
 
   const [generating, setGenerating] = useState<'shipping' | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const { can } = usePermissions()
 
   const generateShipping = async () => {
     if (!order.latest_shipment) return
@@ -59,7 +61,7 @@ export function InvoicePanel({ order, onInvoicesChanged }: InvoicePanelProps) {
         invoice={shipping}
         generating={generating === 'shipping'}
         onGenerate={generateShipping}
-        onDelete={deleteInvoice}
+        onDelete={can('delete waybills') ? deleteInvoice : undefined}
         deleting={deleting}
         generateLabel='Generate'
         disabled={!hasShipment}
@@ -83,6 +85,9 @@ interface InvoiceRowProps {
 }
 
 function InvoiceRow({ icon, title, invoice, generating, onGenerate, onDelete, deleting, generateLabel, disabled, disabledHint }: InvoiceRowProps) {
+  // View, PDF, Generate and Delete are each a permission of their own.
+  const { can } = usePermissions()
+
   return (
     <div className='flex items-center justify-between rounded-lg border p-3 text-sm'>
       <div className='flex items-center gap-2'>
@@ -101,22 +106,26 @@ function InvoiceRow({ icon, title, invoice, generating, onGenerate, onDelete, de
       <div className='flex gap-2'>
         {invoice ? (
           <>
-            <Button
-              size='sm'
-              variant='outline'
-              onClick={() => window.open(`/api/invoices/${invoice.id}/preview`, '_blank')}
-            >
-              <Eye className='h-3 w-3 mr-1' />
-              View
-            </Button>
-            <Button
-              size='sm'
-              variant='outline'
-              onClick={() => window.open(`/api/invoices/${invoice.id}/download`, '_blank')}
-            >
-              <Download className='h-3 w-3 mr-1' />
-              PDF
-            </Button>
+            {can('view waybills') && (
+              <Button
+                size='sm'
+                variant='outline'
+                onClick={() => window.open(`/api/invoices/${invoice.id}/preview`, '_blank')}
+              >
+                <Eye className='h-3 w-3 mr-1' />
+                View
+              </Button>
+            )}
+            {can('download waybills') && (
+              <Button
+                size='sm'
+                variant='outline'
+                onClick={() => window.open(`/api/invoices/${invoice.id}/download`, '_blank')}
+              >
+                <Download className='h-3 w-3 mr-1' />
+                PDF
+              </Button>
+            )}
             {onDelete && (
               <Button
                 size='sm'
@@ -130,12 +139,12 @@ function InvoiceRow({ icon, title, invoice, generating, onGenerate, onDelete, de
               </Button>
             )}
           </>
-        ) : (
+        ) : can('generate waybills') ? (
           <Button size='sm' variant='outline' onClick={onGenerate} disabled={disabled || generating}>
             {generating ? <Loader2 className='h-3 w-3 mr-1 animate-spin' /> : null}
             {generateLabel}
           </Button>
-        )}
+        ) : null}
       </div>
     </div>
   )

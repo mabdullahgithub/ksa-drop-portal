@@ -153,7 +153,7 @@ class WhatsAppOrderConfirmationTest extends TestCase
 
         app(PermissionRegistrar::class)->forgetCachedPermissions();
         $role = Role::create(['name' => 'agent-' . uniqid()]);
-        $role->givePermissionTo(Permission::findOrCreate('edit orders'));
+        $role->givePermissionTo($this->permissions(Permission::findOrCreate('edit orders')));
         $agent = User::factory()->create();
         $agent->assignRole($role);
 

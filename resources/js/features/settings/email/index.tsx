@@ -4,11 +4,7 @@ import { EmailSmtpForm } from './email-smtp-form'
 import { usePage } from '@inertiajs/react'
 
 export function SettingsEmail() {
-  const { isAdmin, emailSettings } = usePage().props as any
-
-  // Debug logging
-  console.log('SettingsEmail - isAdmin:', isAdmin)
-  console.log('SettingsEmail - emailSettings:', emailSettings)
+  const { isAdmin } = usePage().props as any
 
   return (
     <div className='space-y-6'>

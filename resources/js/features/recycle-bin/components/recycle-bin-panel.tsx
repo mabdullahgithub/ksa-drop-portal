@@ -38,6 +38,18 @@ type RecycleBinPanelProps<T> = {
   onLocked: () => void
 }
 
+/** What restoring and deleting forever need on each tab. */
+const TAB_PERMISSIONS: Record<RecycleBinTab, { restore: string[]; purge: string[] }> = {
+  orders: { restore: ['restore deleted orders'], purge: ['purge deleted orders'] },
+  clients: { restore: ['restore deleted clients'], purge: ['purge deleted clients'] },
+  inventory: {
+    restore: ['restore deleted inventory', 'restore deleted client products'],
+    purge: ['purge deleted inventory', 'purge deleted client products'],
+  },
+  users: { restore: ['restore deleted users'], purge: ['purge deleted users'] },
+  riders: { restore: ['restore deleted riders'], purge: ['purge deleted riders'] },
+}
+
 /**
  * One tab of the bin: search, listing, bulk restore/purge and Empty bin.
  * All three tabs differ only in their columns and wording.
@@ -59,8 +71,12 @@ export function RecycleBinPanel<T extends { id: number }>({
     useRecycleBinList<T>(tab, true, onLocked)
   const { restore, purge, purgeAll } = useRecycleBinActions(tab)
   const { can } = usePermissions()
-  const canRestore = can('restore recycle bin')
-  const canPurge = can('purge recycle bin')
+  // Restoring, deleting forever and emptying are each a permission of their
+  // own, per tab. The server keeps a mixed selection on the inventory tab to
+  // the kind of product this person may touch.
+  const canRestore = can(TAB_PERMISSIONS[tab].restore)
+  const canPurge = can(TAB_PERMISSIONS[tab].purge)
+  const canEmpty = canPurge && can('empty recycle bin')
   const [showEmptyDialog, setShowEmptyDialog] = useState(false)
 
   const afterChange = async () => {
@@ -148,7 +164,7 @@ export function RecycleBinPanel<T extends { id: number }>({
           </SearchBeam>
         </div>
 
-        {canPurge && (
+        {canEmpty && (
           <Button
             variant='destructive'
             size='sm'

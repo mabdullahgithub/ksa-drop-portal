@@ -14,6 +14,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { cn } from '@/lib/utils'
 import axios from 'axios'
 import { type PageProps } from '@/types'
+import { usePermissions } from '@/hooks/use-permissions'
 
 interface Notification {
   id: string
@@ -46,6 +47,12 @@ export function NotificationsDropdown() {
   const [listLoaded, setListLoaded] = useState(false)
   const [loading, setLoading] = useState(false)
   const pollingStoppedRef = useRef(false)
+
+  // The bell, marking read and deleting are each a permission for the team.
+  const { canOrPortal } = usePermissions()
+  const mayView = canOrPortal('view notifications')
+  const mayRead = canOrPortal('mark notifications read')
+  const mayDelete = canOrPortal('delete notifications')
 
   // Every Inertia navigation delivers a fresh, server-cached count for free.
   // Adopt it whenever it changes instead of firing a dedicated request.
@@ -80,7 +87,7 @@ export function NotificationsDropdown() {
   useEffect(() => {
     // Never poll without a logged-in user — this is what guarantees the
     // endpoint can't be hit from a logged-out or pre-auth context.
-    if (!user) return
+    if (!user || !mayView) return
 
     pollingStoppedRef.current = false
 
@@ -97,7 +104,7 @@ export function NotificationsDropdown() {
     }, POLL_INTERVAL_MS)
 
     return () => clearInterval(interval)
-  }, [user?.id])
+  }, [user?.id, mayView])
 
   const handleOpenChange = (open: boolean) => {
     // The notification list itself is only ever needed once the dropdown is
@@ -160,6 +167,8 @@ export function NotificationsDropdown() {
     return notificationDate.toLocaleDateString()
   }
 
+  if (!mayView) return null
+
   return (
     <DropdownMenu onOpenChange={handleOpenChange}>
       <DropdownMenuTrigger asChild>
@@ -179,7 +188,7 @@ export function NotificationsDropdown() {
       <DropdownMenuContent align='end' className='w-80'>
         <div className='flex items-center justify-between p-2'>
           <h3 className='text-sm font-semibold'>Notifications</h3>
-          {unreadCount > 0 && (
+          {unreadCount > 0 && mayRead && (
             <Button
               variant='ghost'
               size='sm'
@@ -224,7 +233,7 @@ export function NotificationsDropdown() {
                     </p>
                   </div>
                   <div className='flex shrink-0 gap-1 opacity-0 transition-opacity group-hover:opacity-100'>
-                    {!notification.read_at && (
+                    {!notification.read_at && mayRead && (
                       <Button
                         variant='ghost'
                         size='icon'
@@ -235,15 +244,17 @@ export function NotificationsDropdown() {
                         <Check className='h-3.5 w-3.5' />
                       </Button>
                     )}
-                    <Button
-                      variant='ghost'
-                      size='icon'
-                      className='h-7 w-7 text-destructive'
-                      onClick={() => deleteNotification(notification.id)}
-                      title='Delete'
-                    >
-                      <Trash2 className='h-3.5 w-3.5' />
-                    </Button>
+                    {mayDelete && (
+                      <Button
+                        variant='ghost'
+                        size='icon'
+                        className='h-7 w-7 text-destructive'
+                        onClick={() => deleteNotification(notification.id)}
+                        title='Delete'
+                      >
+                        <Trash2 className='h-3.5 w-3.5' />
+                      </Button>
+                    )}
                   </div>
                 </div>
               </div>

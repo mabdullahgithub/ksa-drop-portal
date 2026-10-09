@@ -16,6 +16,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Info, Eye, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import axios from 'axios'
+import { usePermissions } from '@/hooks/use-permissions'
 
 // Placeholder ConnectorSettingsController::show() sends in place of a saved
 // encrypted value — the real value never round-trips to the browser.
@@ -50,6 +51,10 @@ interface Connector {
 }
 
 export default function ImileSettings() {
+  // Revealing a saved secret and testing the connection are each a permission of their own.
+  const { can } = usePermissions()
+  const canReveal = can('reveal connector secrets')
+  const canTest = can('test connector connection')
   const [connectorId, setConnectorId] = useState<number | null>(null)
   const [settings, setSettings] = useState({
     customer_id: '',
@@ -234,17 +239,19 @@ export default function ImileSettings() {
                         autoComplete='off'
                         className='pe-9'
                       />
-                      <Button
-                        type='button'
-                        size='icon'
-                        variant='ghost'
-                        disabled={revealingApiKey}
-                        className='absolute inset-e-1 top-1/2 h-6 w-6 -translate-y-1/2 rounded-md text-muted-foreground'
-                        onClick={revealApiKey}
-                      >
-                        {revealingApiKey ? <Loader2 size={18} className='animate-spin' /> : <Eye size={18} />}
-                        <span className='sr-only'>Reveal saved API key</span>
-                      </Button>
+                      {canReveal && (
+                        <Button
+                          type='button'
+                          size='icon'
+                          variant='ghost'
+                          disabled={revealingApiKey}
+                          className='absolute inset-e-1 top-1/2 h-6 w-6 -translate-y-1/2 rounded-md text-muted-foreground'
+                          onClick={revealApiKey}
+                        >
+                          {revealingApiKey ? <Loader2 size={18} className='animate-spin' /> : <Eye size={18} />}
+                          <span className='sr-only'>Reveal saved API key</span>
+                        </Button>
+                      )}
                     </div>
                   ) : (
                     <PasswordInput
@@ -304,9 +311,11 @@ export default function ImileSettings() {
                 <Button onClick={saveSettings} disabled={saving || !connectorId}>
                   {saving ? 'Saving...' : 'Save Settings'}
                 </Button>
-                <Button variant='outline' onClick={testConnection} disabled={testing || !connectorId}>
-                  {testing ? 'Testing...' : 'Test Connection'}
-                </Button>
+                {canTest && (
+                  <Button variant='outline' onClick={testConnection} disabled={testing || !connectorId}>
+                    {testing ? 'Testing...' : 'Test Connection'}
+                  </Button>
+                )}
               </div>
             </CardContent>
           </Card>

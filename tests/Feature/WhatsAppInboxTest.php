@@ -29,21 +29,21 @@ class WhatsAppInboxTest extends TestCase
         // rollback — see ConnectorSettingsRevealTest for the same guard.
         app(PermissionRegistrar::class)->forgetCachedPermissions();
 
-        Role::findOrCreate('admin')->givePermissionTo([
+        Role::findOrCreate('admin')->givePermissionTo($this->permissions([
             Permission::findOrCreate('view orders'),
             Permission::findOrCreate('edit orders'),
             Permission::findOrCreate('view whatsapp'),
             Permission::findOrCreate('reply whatsapp'),
-        ]);
+        ]));
 
         // Read-only role: can open the inbox, must not be able to message a customer.
-        Role::findOrCreate('whatsapp-viewer')->givePermissionTo(Permission::findOrCreate('view whatsapp'));
+        Role::findOrCreate('whatsapp-viewer')->givePermissionTo($this->permissions(Permission::findOrCreate('view whatsapp')));
 
         // Full order rights but no WhatsApp permission at all.
-        Role::findOrCreate('order-editor')->givePermissionTo([
+        Role::findOrCreate('order-editor')->givePermissionTo($this->permissions([
             Permission::findOrCreate('view orders'),
             Permission::findOrCreate('edit orders'),
-        ]);
+        ]));
 
         // The conversation routes sit behind a PIN; the tests below are about
         // what the inbox does once open, so unlock by default. The lock itself

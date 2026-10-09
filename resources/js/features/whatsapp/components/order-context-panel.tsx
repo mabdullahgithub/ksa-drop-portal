@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import type { ConversationOrder } from '../types'
+import { usePermissions } from '@/hooks/use-permissions'
 
 /**
  * Radix's ScrollArea viewport wraps children in a `display: table` div, which
@@ -31,6 +32,9 @@ function Row({ label, value }: { label: string; value: React.ReactNode }) {
  * orders get edited.
  */
 export function OrderContextPanel({ order }: { order: ConversationOrder }) {
+  // The link opens the order's details dialog on the Orders page.
+  const { can } = usePermissions()
+  const canOpenOrder = can('view orders') && can('view order details')
   const address = [
     order.shipping_address1,
     order.shipping_address2,
@@ -53,6 +57,7 @@ export function OrderContextPanel({ order }: { order: ConversationOrder }) {
           </p>
         </div>
 
+        {canOpenOrder && (
         <Button asChild size='sm' className='w-full'>
           {/* Deep link — the Orders page reads ?order= and opens this order's
               details dialog straight away. */}
@@ -61,6 +66,7 @@ export function OrderContextPanel({ order }: { order: ConversationOrder }) {
             View full order details
           </Link>
         </Button>
+        )}
 
         <Separator />
 

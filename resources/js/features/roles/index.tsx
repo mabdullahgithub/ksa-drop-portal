@@ -12,10 +12,9 @@ import { type Role } from './data/schema'
 
 interface RolesProps {
   roles: Role[]
-  availablePermissions: string[]
 }
 
-export function Roles({ roles, availablePermissions }: RolesProps) {
+export function Roles({ roles }: RolesProps) {
   return (
     <RolesProvider>
       <Header fixed>
@@ -30,7 +29,7 @@ export function Roles({ roles, availablePermissions }: RolesProps) {
           <div className='space-y-1'>
             <h2 className='text-3xl font-bold tracking-tight'>Roles</h2>
             <p className='text-muted-foreground'>
-              Manage roles and assign permissions to control access levels.
+              Create roles and tick exactly what each one may see and do.
             </p>
           </div>
           <RolesPrimaryButtons />
@@ -38,7 +37,7 @@ export function Roles({ roles, availablePermissions }: RolesProps) {
         <RolesTable data={roles} />
       </Main>
 
-      <RolesDialogs availablePermissions={availablePermissions} />
+      <RolesDialogs />
     </RolesProvider>
   )
 }

@@ -25,7 +25,7 @@ class OrderCityFilterTest extends TestCase
         app(PermissionRegistrar::class)->forgetCachedPermissions();
 
         $viewOrders = Permission::findOrCreate('view orders');
-        Role::findOrCreate('admin')->givePermissionTo($viewOrders);
+        Role::findOrCreate('admin')->givePermissionTo($this->permissions($viewOrders));
     }
 
     private function admin(): User

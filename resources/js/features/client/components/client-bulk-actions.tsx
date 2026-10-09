@@ -62,6 +62,8 @@ export function ClientBulkActions<TData>({ table, onSuccess }: ClientBulkActions
   return (
     <>
       <BulkActionsToolbar table={table} entityName='client'>
+        {can('change client status') && (
+          <>
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
@@ -109,6 +111,8 @@ export function ClientBulkActions<TData>({ table, onSuccess }: ClientBulkActions
           </TooltipTrigger>
           <TooltipContent>Suspend</TooltipContent>
         </Tooltip>
+          </>
+        )}
 
         {can('delete client') && (
           <Tooltip>

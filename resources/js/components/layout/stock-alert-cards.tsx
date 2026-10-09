@@ -76,7 +76,7 @@ export function StockAlertCards() {
   const behind = Math.min(open.length - 1, 2)
 
   const href = staff
-    ? product.client && can('view client')
+    ? product.client && can('view client details') && can('view client products')
       ? `${route('client.show', product.client.id)}?tab=inventory`
       : null
     : auth.portal_features?.includes('inventory')

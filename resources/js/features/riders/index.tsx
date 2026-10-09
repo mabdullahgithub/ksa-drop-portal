@@ -77,7 +77,13 @@ export function Riders({
   support: RiderSupportContact | null
 }) {
   const { can } = usePermissions()
-  const canManage = can('manage riders')
+  // Each part of the page is a permission of its own.
+  const canCreate = can('create riders')
+  const canStats = can('view rider stats')
+  const canCashStats = can('view rider cash stats')
+  const canPerformance = can('view rider performance')
+  const canParcels = can('view rider parcels')
+  const canMoney = can('view rider payments')
 
   const [riders, setRiders] = useState(initial)
   const [support, setSupport] = useState(initialSupport)
@@ -137,8 +143,8 @@ export function Riders({
       delivered: riders.reduce((sum, r) => sum + r.stats.delivered, 0),
       cash: riders.reduce((sum, r) => sum + r.stats.cash_collected, 0),
       // Riders in credit don't offset what the others owe.
-      owed: riders.reduce((sum, r) => sum + Math.max(r.cash.balance, 0), 0),
-      pay: riders.reduce((sum, r) => sum + Math.max(r.pay.balance, 0), 0),
+      owed: riders.reduce((sum, r) => sum + Math.max(r.cash?.balance ?? 0, 0), 0),
+      pay: riders.reduce((sum, r) => sum + Math.max(r.pay?.balance ?? 0, 0), 0),
     }),
     [riders]
   )
@@ -196,14 +202,14 @@ export function Riders({
             <p className='text-muted-foreground'>KSA Express riders, inventory managers and the app on their phones.</p>
           </div>
           <div className='flex items-center gap-2'>
-            {!showPerformers && riders.length > 0 && (
+            {canPerformance && !showPerformers && riders.length > 0 && (
               <Button variant='outline' onClick={() => setShowPerformers(true)}>
                 <Trophy size={16} className='me-1 text-amber-600 dark:text-amber-400' />
                 Top performers
               </Button>
             )}
-            <RiderSupportButton support={support} canManage={canManage} onChange={setSupport} />
-            <Can permission='manage riders'>
+            <RiderSupportButton support={support} canManage={can('edit rider support contact')} onChange={setSupport} />
+            <Can permission='create riders'>
               <Button onClick={() => setDialog({ type: 'add' })}>
                 <Plus size={16} className='me-1' />
                 Add rider
@@ -220,7 +226,10 @@ export function Riders({
             above and below it, two across and four across alike (worst
             neighbours: ΔE 9.1 colour-blind, 21.9 normal vision). Moving a
             card, or changing the column counts, means working it out again. */}
+        {(canStats || canCashStats) && (
         <div className='grid grid-cols-2 gap-x-2 gap-y-0.5 lg:grid-cols-4'>
+          {canStats && (
+          <>
           <StatCard
             icon={<Bike className='h-3.5 w-3.5' />}
             label='Active riders'
@@ -255,6 +264,10 @@ export function Riders({
             value={totals.delivered}
             tone='teal'
           />
+          </>
+          )}
+          {canCashStats && (
+          <>
           <StatCard
             icon={<Banknote className='h-3.5 w-3.5' />}
             label='Cash collected today'
@@ -279,9 +292,12 @@ export function Riders({
             tone='sky'
             hint='What KSA Drop still owes riders for their visits. Overpaid riders don’t reduce it.'
           />
+          </>
+          )}
         </div>
+        )}
 
-        {showPerformers && riders.length > 0 && <TopPerformers onClose={() => setShowPerformers(false)} />}
+        {canPerformance && showPerformers && riders.length > 0 && <TopPerformers onClose={() => setShowPerformers(false)} />}
 
         {riders.length === 0 ? (
           <EmptyState
@@ -289,7 +305,7 @@ export function Riders({
             title='No riders yet'
             description='Add a rider with just their name and phone, then send them the app link.'
             action={
-              canManage && (
+              canCreate && (
                 <Button onClick={() => setDialog({ type: 'add' })} size='sm'>
                   <Plus size={16} className='me-1' />
                   Add rider
@@ -370,7 +386,7 @@ export function Riders({
             ) : view === 'cards' ? (
               <div className='grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4'>
                 {filtered.map((rider) => (
-                  <RiderCard key={rider.id} rider={rider} canManage={canManage} onPick={setDialog} />
+                  <RiderCard key={rider.id} rider={rider} onPick={setDialog} />
                 ))}
               </div>
             ) : (
@@ -424,9 +440,10 @@ export function Riders({
                         <TableCell className='text-end tabular-nums'>
                           <button
                             type='button'
+                            disabled={!canParcels}
                             onClick={() => setDialog({ type: 'orders', rider })}
-                            className='rounded-md px-1.5 py-0.5 hover:bg-muted/60'
-                            title='View orders'
+                            className='rounded-md px-1.5 py-0.5 enabled:hover:bg-muted/60'
+                            title={canParcels ? 'View orders' : undefined}
                           >
                             {rider.stats.held}
                           </button>
@@ -437,30 +454,33 @@ export function Riders({
                         <TableCell className='hidden text-end text-sm tabular-nums md:table-cell'>
                           <button
                             type='button'
+                            disabled={!canParcels}
                             onClick={() => setDialog({ type: 'orders', rider, outcome: 'delivered' })}
-                            className='rounded-md px-1.5 py-0.5 text-green-700 hover:bg-muted/60 dark:text-green-400'
-                            title='View delivered orders'
+                            className='rounded-md px-1.5 py-0.5 text-green-700 enabled:hover:bg-muted/60 dark:text-green-400'
+                            title={canParcels ? 'View delivered orders' : undefined}
                           >
                             {rider.stats.delivered} delivered
                           </button>
                           {rider.stats.failed > 0 && (
                             <button
                               type='button'
+                              disabled={!canParcels}
                               onClick={() => setDialog({ type: 'orders', rider, outcome: 'attempt_fail' })}
-                              className='rounded-md px-1.5 py-0.5 text-red-600 hover:bg-muted/60'
-                              title='View failed orders'
+                              className='rounded-md px-1.5 py-0.5 text-red-600 enabled:hover:bg-muted/60'
+                              title={canParcels ? 'View failed orders' : undefined}
                             >
                               {rider.stats.failed} failed
                             </button>
                           )}
                         </TableCell>
-                        <TableCell className='hidden text-end tabular-nums lg:table-cell'>{sar(rider.stats.cash_collected)}</TableCell>
+                        <TableCell className='hidden text-end tabular-nums lg:table-cell'>{rider.cash ? sar(rider.stats.cash_collected) : '—'}</TableCell>
                         <TableCell className='text-end'>
                           <button
                             type='button'
+                            disabled={!canMoney}
                             onClick={() => setDialog({ type: 'payments', rider })}
-                            className='rounded-md px-1.5 py-0.5 text-sm hover:bg-muted/60'
-                            title='Cash & payments'
+                            className='rounded-md px-1.5 py-0.5 text-sm enabled:hover:bg-muted/60'
+                            title={canMoney ? 'Cash & payments' : undefined}
                           >
                             <CashDue cash={rider.cash} />
                           </button>
@@ -468,9 +488,10 @@ export function Riders({
                         <TableCell className='hidden text-end xl:table-cell'>
                           <button
                             type='button'
+                            disabled={!canMoney}
                             onClick={() => setDialog({ type: 'payments', rider, direction: 'out' })}
-                            className='rounded-md px-1.5 py-0.5 text-sm hover:bg-muted/60'
-                            title='Pay to rider'
+                            className='rounded-md px-1.5 py-0.5 text-sm enabled:hover:bg-muted/60'
+                            title={canMoney ? 'Pay to rider' : undefined}
                           >
                             <PayDue pay={rider.pay} />
                           </button>
@@ -484,7 +505,7 @@ export function Riders({
                             <Badge variant='outline' className='border-red-300 text-red-700 dark:text-red-400'>Suspended</Badge>
                           )}
                         </TableCell>
-                        <TableCell>{canManage && <RowActions rider={rider} onPick={setDialog} />}</TableCell>
+                        <TableCell><RowActions rider={rider} onPick={setDialog} /></TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -536,7 +557,7 @@ export function Riders({
           key={dialog.rider.id}
           rider={dialog.rider}
           initialDirection={dialog.direction}
-          onEditRates={canManage ? () => setDialog({ type: 'edit', rider: dialog.rider }) : undefined}
+          onEditRates={can('edit riders') ? () => setDialog({ type: 'edit', rider: dialog.rider }) : undefined}
           open
           onOpenChange={(open) => !open && setDialog(null)}
           onChanged={(balances) => setRiders((list) => list.map((r) => (r.id === dialog.rider.id ? { ...r, ...balances } : r)))}

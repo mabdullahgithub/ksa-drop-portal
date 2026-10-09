@@ -6,8 +6,11 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { usePermissions } from '@/hooks/use-permissions'
 
 export function ProfileForm() {
+  // Saving the profile and changing the photo are each a permission of their own.
+  const { can } = usePermissions()
   const { auth } = usePage().props
   const user = auth.user
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -94,29 +97,31 @@ export function ProfileForm() {
           <p className='text-muted-foreground text-xs'>
             JPG, PNG or WebP. Max 2MB.
           </p>
-          <div className='flex gap-2'>
-            <Button
-              type='button'
-              variant='outline'
-              size='sm'
-              onClick={() => fileInputRef.current?.click()}
-              disabled={avatarForm.processing}
-            >
-              Upload
-            </Button>
-            {user.avatar && (
+          {can('change avatar') && (
+            <div className='flex gap-2'>
               <Button
                 type='button'
                 variant='outline'
                 size='sm'
-                onClick={handleRemoveAvatar}
-                disabled={removeAvatarForm.processing}
+                onClick={() => fileInputRef.current?.click()}
+                disabled={avatarForm.processing}
               >
-                <Trash2 size={14} />
-                Remove
+                Upload
               </Button>
-            )}
-          </div>
+              {user.avatar && (
+                <Button
+                  type='button'
+                  variant='outline'
+                  size='sm'
+                  onClick={handleRemoveAvatar}
+                  disabled={removeAvatarForm.processing}
+                >
+                  <Trash2 size={14} />
+                  Remove
+                </Button>
+              )}
+            </div>
+          )}
           {avatarForm.errors.avatar && (
             <p className='text-destructive text-xs'>{avatarForm.errors.avatar}</p>
           )}
@@ -149,9 +154,11 @@ export function ProfileForm() {
           )}
         </div>
 
-        <Button type='submit' disabled={profileForm.processing}>
-          Save Changes
-        </Button>
+        {can('edit profile') && (
+          <Button type='submit' disabled={profileForm.processing}>
+            Save Changes
+          </Button>
+        )}
       </form>
     </div>
   )

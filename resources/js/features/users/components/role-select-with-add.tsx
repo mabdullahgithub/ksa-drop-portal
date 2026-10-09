@@ -10,6 +10,7 @@ import {
   SelectValue,
   SelectSeparator,
 } from '@/components/ui/select'
+import { usePermissions } from '@/hooks/use-permissions'
 import { CreateRoleDialog } from './create-role-dialog'
 
 type RoleSelectWithAddProps = {
@@ -19,7 +20,6 @@ type RoleSelectWithAddProps = {
   items: { label: string; value: string }[]
   disabled?: boolean
   className?: string
-  availablePermissions?: string[]
 }
 
 export function RoleSelectWithAdd({
@@ -29,8 +29,8 @@ export function RoleSelectWithAdd({
   placeholder,
   disabled,
   className = '',
-  availablePermissions = [],
 }: RoleSelectWithAddProps) {
+  const { can } = usePermissions()
   const [showCreateDialog, setShowCreateDialog] = useState(false)
   const [selectOpen, setSelectOpen] = useState(false)
 
@@ -64,17 +64,21 @@ export function RoleSelectWithAdd({
             </SelectItem>
           ))}
 
-          <SelectSeparator />
+          {can('create roles') && (
+            <>
+              <SelectSeparator />
 
-          <SelectItem
-            value="__add_new__"
-            className="text-primary font-medium cursor-pointer"
-          >
-            <div className="flex items-center gap-2">
-              <Plus className="h-4 w-4" />
-              <span>Add New Role</span>
-            </div>
-          </SelectItem>
+              <SelectItem
+                value="__add_new__"
+                className="text-primary font-medium cursor-pointer"
+              >
+                <div className="flex items-center gap-2">
+                  <Plus className="h-4 w-4" />
+                  <span>Add New Role</span>
+                </div>
+              </SelectItem>
+            </>
+          )}
         </SelectContent>
       </Select>
 
@@ -82,7 +86,6 @@ export function RoleSelectWithAdd({
         open={showCreateDialog}
         onOpenChange={setShowCreateDialog}
         onRoleCreated={handleRoleCreated}
-        availablePermissions={availablePermissions}
       />
     </>
   )

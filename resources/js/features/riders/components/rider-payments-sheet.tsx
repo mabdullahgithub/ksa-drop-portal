@@ -102,10 +102,15 @@ type Props = {
  */
 export function RiderPaymentsSheet({ rider, onEditRates, initialDirection = 'in', open, onOpenChange, onChanged }: Props) {
   const { can } = usePermissions()
-  const canRecord = can('manage rider payments')
+  // Recording a payment and voiding one are each a permission of their own.
+  const canRecord = can('record rider payments')
+  const canVoid = can('void rider payments')
 
   const [direction, setDirection] = useState<PaymentDirection>(initialDirection)
-  const [balances, setBalances] = useState<RiderBalances>({ cash: rider.cash, pay: rider.pay })
+  const [balances, setBalances] = useState<RiderBalances>(
+    // Never null here: this sheet only opens for someone who may see rider money.
+    { cash: rider.cash, pay: rider.pay } as RiderBalances
+  )
   // One KSA day to look at and pay for; empty for the running balance.
   const [day, setDay] = useState('')
   const [dayBalances, setDayBalances] = useState<RiderBalances | null>(null)
@@ -277,7 +282,7 @@ export function RiderPaymentsSheet({ rider, onEditRates, initialDirection = 'in'
             <>
               <ul className='divide-y'>
                 {payments.map((payment) => (
-                  <PaymentItem key={payment.id} payment={payment} onVoid={canRecord ? () => setVoiding(payment) : undefined} />
+                  <PaymentItem key={payment.id} payment={payment} onVoid={canVoid ? () => setVoiding(payment) : undefined} />
                 ))}
               </ul>
               {nextPage !== null && (

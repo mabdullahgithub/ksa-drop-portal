@@ -5,6 +5,7 @@ import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
 import { useClients, useClientStatistics, useClientFilterOptions } from '@/hooks/useClients'
+import { usePermissions } from '@/hooks/use-permissions'
 import { ClientProvider } from './components/client-provider'
 import { ClientStats } from './components/client-stats'
 import { ClientTable } from './components/client-table'
@@ -22,7 +23,9 @@ export function Client() {
 
 function ClientContent() {
   const { clients, meta, loading, filters, updateFilters, refresh } = useClients()
-  const { stats, loading: statsLoading, refresh: refreshStats } = useClientStatistics()
+  const { can } = usePermissions()
+  const canStats = can('view client stats')
+  const { stats, loading: statsLoading, refresh: refreshStats } = useClientStatistics(canStats)
   const filterOptions = useClientFilterOptions()
 
   const handlePageChange = (page: number) => updateFilters({ page })
@@ -55,7 +58,7 @@ function ClientContent() {
         </div>
 
         <div className='space-y-4'>
-          <ClientStats stats={stats} loading={statsLoading} />
+          {canStats && <ClientStats stats={stats} loading={statsLoading} />}
 
           <ClientFiltersComponent
             filters={filters}

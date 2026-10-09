@@ -17,6 +17,7 @@ import axios from 'axios'
 import { useState } from 'react'
 import { BUSINESS_TIMEZONE } from '@/lib/business-time'
 import { EmptyState } from '@/components/empty-state'
+import { usePermissions } from '@/hooks/use-permissions'
 
 interface TrackingEvent {
   status: string
@@ -140,6 +141,8 @@ export function ShipmentPanel({ shipment, orderId, onCreateShipment, onShipmentU
   const [unassigning, setUnassigning] = useState(false)
   const [returning, setReturning] = useState(false)
   const [receiving, setReceiving] = useState(false)
+  // Each button on this panel is a permission of its own.
+  const { can } = usePermissions()
 
   if (!shipment) {
     return (
@@ -147,9 +150,11 @@ export function ShipmentPanel({ shipment, orderId, onCreateShipment, onShipmentU
         bot='pill'
         title='No shipment created yet'
         action={
-          <Button onClick={onCreateShipment} size='sm'>
-            Create Shipment
-          </Button>
+          can('create shipments') ? (
+            <Button onClick={onCreateShipment} size='sm'>
+              Create Shipment
+            </Button>
+          ) : undefined
         }
         className='py-6'
       />
@@ -336,7 +341,7 @@ export function ShipmentPanel({ shipment, orderId, onCreateShipment, onShipmentU
               <a href={`tel:${shipment.rider.phone}`} className='font-normal text-muted-foreground hover:text-foreground' dir='ltr'>
                 {shipment.rider.phone}
               </a>
-              {!isTerminal && (
+              {!isTerminal && can('unassign shipment rider') && (
                 <Button size='sm' variant='ghost' className='ms-auto h-6 px-2 text-xs' onClick={unassignRider} disabled={unassigning}>
                   <UserMinus className='h-3 w-3 mr-1' />
                   {unassigning ? 'Unassigning…' : 'Unassign'}
@@ -347,10 +352,12 @@ export function ShipmentPanel({ shipment, orderId, onCreateShipment, onShipmentU
               <div className='mt-1.5 flex items-center gap-2 rounded-md bg-amber-50 px-2.5 py-1.5 text-xs text-amber-800 dark:bg-amber-900/20 dark:text-amber-300'>
                 <Undo2 className='h-3 w-3 shrink-0' />
                 <span>Still with the rider — not handed back at the hub yet.</span>
-                <Button size='sm' variant='outline' className='ms-auto h-6 px-2 text-xs' onClick={receiveAtHub} disabled={receiving}>
-                  <PackageCheck className='h-3 w-3 mr-1' />
-                  {receiving ? 'Saving…' : 'Mark received'}
-                </Button>
+                {can('receive shipments at hub') && (
+                  <Button size='sm' variant='outline' className='ms-auto h-6 px-2 text-xs' onClick={receiveAtHub} disabled={receiving}>
+                    <PackageCheck className='h-3 w-3 mr-1' />
+                    {receiving ? 'Saving…' : 'Mark received'}
+                  </Button>
+                )}
               </div>
             )}
             {wentBack && shipment.hub_received_at && (
@@ -464,9 +471,9 @@ export function ShipmentPanel({ shipment, orderId, onCreateShipment, onShipmentU
                     {event.recipient_name && <div>Received by {event.recipient_name}</div>}
                     {event.note && <div className='text-foreground'>“{event.note}”</div>}
                   </div>
-                  {(event.has_photo || (event.lat && event.lng)) && (
+                  {((event.has_photo && can('view delivery proof photos')) || (event.lat && event.lng)) && (
                     <div className='flex gap-3 mt-1.5 text-xs'>
-                      {event.has_photo && (
+                      {event.has_photo && can('view delivery proof photos') && (
                         <a href={`/api/shipment-events/${event.id}/photo`} target='_blank' rel='noopener noreferrer' className='inline-flex items-center gap-1 text-primary hover:underline'>
                           <ImageIcon className='h-3 w-3' /> Photo
                         </a>
@@ -504,12 +511,14 @@ export function ShipmentPanel({ shipment, orderId, onCreateShipment, onShipmentU
 
         {!isTerminal && (
           <>
-            <Button size='sm' variant='outline' onClick={refreshTracking} disabled={refreshing}>
-              <RefreshCw className={`h-3 w-3 mr-1 ${refreshing ? 'animate-spin' : ''}`} />
-              {refreshing ? 'Refreshing...' : 'Refresh'}
-            </Button>
+            {can('refresh shipment tracking') && (
+              <Button size='sm' variant='outline' onClick={refreshTracking} disabled={refreshing}>
+                <RefreshCw className={`h-3 w-3 mr-1 ${refreshing ? 'animate-spin' : ''}`} />
+                {refreshing ? 'Refreshing...' : 'Refresh'}
+              </Button>
+            )}
 
-            {isException && !shipment.exception_escalated_at && (
+            {isException && !shipment.exception_escalated_at && can('escalate shipments') && (
               <Button size='sm' variant='outline' className='text-orange-600 border-orange-300' onClick={() => setShowEscalateDialog(true)}>
                 <AlertTriangle className='h-3 w-3 mr-1' />
                 Escalate
@@ -517,17 +526,19 @@ export function ShipmentPanel({ shipment, orderId, onCreateShipment, onShipmentU
             )}
 
             {/* Other couriers report their own returns; ours is marked here. */}
-            {isKsaExpress && (
+            {isKsaExpress && can('mark shipments returned') && (
               <Button size='sm' variant='outline' onClick={markReturned} disabled={returning}>
                 <Undo2 className='h-3 w-3 mr-1' />
                 {returning ? 'Saving…' : 'Mark returned'}
               </Button>
             )}
 
-            <Button size='sm' variant='destructive' onClick={cancelShipment} disabled={cancelling}>
-              <X className='h-3 w-3 mr-1' />
-              {cancelling ? 'Cancelling...' : 'Cancel'}
-            </Button>
+            {can('cancel shipments') && (
+              <Button size='sm' variant='destructive' onClick={cancelShipment} disabled={cancelling}>
+                <X className='h-3 w-3 mr-1' />
+                {cancelling ? 'Cancelling...' : 'Cancel'}
+              </Button>
+            )}
           </>
         )}
       </div>

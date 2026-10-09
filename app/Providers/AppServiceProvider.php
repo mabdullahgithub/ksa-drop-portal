@@ -17,12 +17,14 @@ use App\Observers\ProductObserver;
 use App\Observers\RiderObserver;
 use App\Observers\UserObserver;
 use App\Services\Mail\GraveyardMailManager;
+use App\Support\ClientAccess;
 use App\Support\PhoneNumber;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Mail\Events\MessageSending;
 use Illuminate\Mail\Events\MessageSent;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Facades\Vite;
@@ -39,6 +41,9 @@ class AppServiceProvider extends ServiceProvider
         // recipient as unknown. extend() rather than a binding of our own: the
         // framework's mail provider is deferred and would overwrite one.
         $this->app->extend('mail.manager', fn ($manager, $app) => new GraveyardMailManager($app));
+
+        // One per request: which clients this person may see.
+        $this->app->scoped(ClientAccess::class);
     }
 
     /**
@@ -47,6 +52,10 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         Vite::prefetch(concurrency: 3);
+
+        // superadmin and developer can do everything, always -- including a
+        // permission added a minute ago that no seeder has granted yet.
+        Gate::before(fn ($user) => $user instanceof User && $user->hasFullAccess() ? true : null);
 
         // Behind an HTTPS-terminating proxy (e.g. ngrok), Laravel sees the
         // forwarded request as HTTP and generates http:// links, which the

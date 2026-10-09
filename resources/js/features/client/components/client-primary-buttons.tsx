@@ -29,7 +29,7 @@ export function ClientPrimaryButtons({ filters, onRefresh }: ClientPrimaryButton
         <RefreshCw className={`mr-2 h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
         Refresh
       </Button>
-      {can('view client') && (
+      {can('export clients') && (
         <Button variant='outline' size='sm' onClick={() => exportClients(filters)}>
           <Download className='mr-2 h-4 w-4' />
           Export CSV

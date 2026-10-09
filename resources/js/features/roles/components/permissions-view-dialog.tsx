@@ -1,3 +1,4 @@
+import { usePage } from '@inertiajs/react'
 import {
   Dialog,
   DialogContent,
@@ -5,49 +6,29 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Badge } from '@/components/ui/badge'
-import { ScrollArea } from '@/components/ui/scroll-area'
 import { useRoles } from './roles-provider'
-import { groupPermissions } from '../data/data'
+import { PermissionPicker } from './permission-picker'
+import { type PageProps } from '@/types'
+import { type CatalogModule } from '../data/catalog'
 
 export function PermissionsViewDialog() {
   const { open, setOpen, currentRow } = useRoles()
+  const { catalog } = usePage<PageProps<{ catalog: CatalogModule[] }>>().props
   const isOpen = open === 'view-permissions' && currentRow
-
-  const groupedPermissions = Object.fromEntries(groupPermissions(currentRow?.permissions ?? []))
 
   return (
     <Dialog open={!!isOpen} onOpenChange={() => setOpen(null)}>
-      <DialogContent className='max-w-2xl'>
+      <DialogContent className='max-h-[92vh] overflow-y-auto sm:max-w-5xl'>
         <DialogHeader>
-          <DialogTitle>Permissions for {currentRow?.name}</DialogTitle>
+          <DialogTitle className='capitalize'>Permissions for {currentRow?.name}</DialogTitle>
           <DialogDescription>
-            This role has {currentRow?.permissions.length} permission(s)
+            {currentRow?.is_super_admin
+              ? 'This role has full access: everything, always, including anything added later.'
+              : `This role has ${currentRow?.permissions.length ?? 0} permission(s).`}
           </DialogDescription>
         </DialogHeader>
 
-        <ScrollArea className='h-[400px] pr-4'>
-          {Object.keys(groupedPermissions).length === 0 ? (
-            <p className='text-muted-foreground text-center py-8'>
-              This role has no permissions assigned.
-            </p>
-          ) : (
-            <div className='space-y-4'>
-              {Object.entries(groupedPermissions).map(([category, permissions]) => (
-                <div key={category}>
-                  <h4 className='font-semibold mb-2'>{category}</h4>
-                  <div className='flex flex-wrap gap-2'>
-                    {permissions.map((permission) => (
-                      <Badge key={permission} variant='secondary'>
-                        {permission}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </ScrollArea>
+        <PermissionPicker catalog={catalog} value={currentRow?.permissions ?? []} />
       </DialogContent>
     </Dialog>
   )

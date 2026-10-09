@@ -71,7 +71,8 @@ class KsaDropExpressDriver implements CourierDriver
         return Cache::lock('ksadrop-express-tracking', 10)->block(5, function () {
             $prefix = self::TRACKING_PREFIX . now()->format('ym');
 
-            $latest = Shipment::where('courier', self::KEY)
+            // Across every client: the sequence is one for the whole courier.
+            $latest = Shipment::acrossClients()->where('courier', self::KEY)
                 ->where('tracking_number', 'like', $prefix . '%')
                 ->orderByDesc('tracking_number')
                 ->value('tracking_number');

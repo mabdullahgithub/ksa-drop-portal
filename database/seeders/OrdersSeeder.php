@@ -70,6 +70,22 @@ class OrdersSeeder extends Seeder
 
         $this->command->info('Found ' . count($orders) . ' orders. Seeding database...');
 
+        // Leave out the ones already here, so seeding can be run again: the
+        // order number is unique. withoutGlobalScopes() because a deleted or
+        // Shopify-hidden order still holds its number.
+        $found = count($orders);
+        $existing = Order::withoutGlobalScopes()
+            ->whereIn('order_number', array_column($orders, 'order_number'))
+            ->pluck('order_number')
+            ->all();
+        $orders = array_values(array_filter($orders, fn (array $order) => ! in_array($order['order_number'], $existing, true)));
+
+        if ($orders === []) {
+            $this->command->info("All {$found} orders are already in the database. Nothing to add.");
+
+            return;
+        }
+
         DB::transaction(function () use ($orders) {
             foreach ($orders as $orderData) {
                 $items = $orderData['items'];
@@ -83,7 +99,8 @@ class OrdersSeeder extends Seeder
             }
         });
 
-        $this->command->info('Successfully seeded ' . count($orders) . ' orders!');
+        $this->command->info('Successfully seeded ' . count($orders) . ' orders!'
+            . ($found > count($orders) ? ' ' . ($found - count($orders)) . ' were already there.' : ''));
     }
 
     /**

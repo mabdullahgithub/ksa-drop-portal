@@ -29,19 +29,19 @@ export function InventoryPrimaryButtons({ onImportSuccess }: InventoryPrimaryBut
           Refresh
         </Button>
         {/* Why a product's stock changed: the warehouse's OUT and IN scans. */}
-        <Can permission='view inventory'>
+        <Can permission='view stock scans'>
           <Button variant='outline' size='sm' onClick={() => setScansOpen(true)}>
             <ScanLine className='mr-2 h-4 w-4' />
             Scan log
           </Button>
         </Can>
-        <Can permission='edit inventory'>
+        <Can permission='import inventory'>
           <Button variant='outline' size='sm' onClick={() => setImportOpen(true)}>
             <Upload className='mr-2 h-4 w-4' />
             Import CSV
           </Button>
         </Can>
-        <Can permission='view inventory'>
+        <Can permission='export inventory'>
           <Button variant='outline' size='sm' onClick={() => exportProducts()}>
             <Download className='mr-2 h-4 w-4' />
             Export CSV

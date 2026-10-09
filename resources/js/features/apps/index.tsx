@@ -35,6 +35,15 @@ const displayOrder: Record<string, number> = {
   whatsapp: 5,
 }
 
+// Each connector's settings are a permission of their own. J&T's page also
+// holds the warehouses, so that permission opens it too.
+const settingsPermissionMap: Record<string, string[]> = {
+  jnt_express: ['configure jnt connector', 'view warehouses'],
+  imile: ['configure imile connector'],
+  logestechs: ['configure logestechs connector'],
+  whatsapp: ['configure whatsapp connector'],
+}
+
 // Connectors that have a dedicated settings page
 const settingsRouteMap: Record<string, string> = {
   jnt_express: '/apps/jnt-express',
@@ -98,7 +107,7 @@ export function Apps() {
                 key={connector.id}
                 connector={connector}
                 logo={logoMap[connector.key]}
-                canEdit={can('edit apps')}
+                canEdit={can(settingsPermissionMap[connector.key] ?? [])}
                 showPartnerBadge={connector.key === 'shopify'}
               />
             ))}

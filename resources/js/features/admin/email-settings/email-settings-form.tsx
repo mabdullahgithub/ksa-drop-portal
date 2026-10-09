@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { CheckCircle2, XCircle, Loader2, Mail, TestTube } from 'lucide-react'
+import { usePermissions } from '@/hooks/use-permissions'
 
 interface EmailSettings {
   is_active: boolean
@@ -27,6 +28,8 @@ interface EmailSettings {
 }
 
 export function EmailSettingsForm({ settings }: { settings: EmailSettings }) {
+  // Saving the mail server and sending a test are each a permission of their own.
+  const { can } = usePermissions()
   const [testing, setTesting] = useState(false)
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null)
 
@@ -250,82 +253,86 @@ export function EmailSettingsForm({ settings }: { settings: EmailSettings }) {
       </Card>
 
       {/* Test Connection */}
-      <Card>
-        <CardHeader>
-          <CardTitle className='flex items-center gap-2'>
-            <TestTube className='h-5 w-5' />
-            Test Connection
-          </CardTitle>
-          <CardDescription>
-            Send a test email to verify your SMTP settings
-          </CardDescription>
-        </CardHeader>
-        <CardContent className='space-y-4'>
-          <div className='flex gap-4'>
-            <div className='flex-1 space-y-2'>
-              <Label htmlFor='test_email'>Test Email Address</Label>
-              <Input
-                id='test_email'
-                type='email'
-                placeholder='admin@example.com'
-                value={data.test_email}
-                onChange={(e) => setData('test_email', e.target.value)}
-              />
+      {can('send test email') && (
+        <Card>
+          <CardHeader>
+            <CardTitle className='flex items-center gap-2'>
+              <TestTube className='h-5 w-5' />
+              Test Connection
+            </CardTitle>
+            <CardDescription>
+              Send a test email to verify your SMTP settings
+            </CardDescription>
+          </CardHeader>
+          <CardContent className='space-y-4'>
+            <div className='flex gap-4'>
+              <div className='flex-1 space-y-2'>
+                <Label htmlFor='test_email'>Test Email Address</Label>
+                <Input
+                  id='test_email'
+                  type='email'
+                  placeholder='admin@example.com'
+                  value={data.test_email}
+                  onChange={(e) => setData('test_email', e.target.value)}
+                />
+              </div>
+              <div className='flex items-end'>
+                <Button
+                  type='button'
+                  variant='outline'
+                  onClick={handleTestConnection}
+                  disabled={testing || !data.test_email}
+                >
+                  {testing ? (
+                    <>
+                      <Loader2 className='mr-2 h-4 w-4 animate-spin' />
+                      Testing...
+                    </>
+                  ) : (
+                    <>
+                      <Mail className='mr-2 h-4 w-4' />
+                      Send Test
+                    </>
+                  )}
+                </Button>
+              </div>
             </div>
-            <div className='flex items-end'>
-              <Button
-                type='button'
-                variant='outline'
-                onClick={handleTestConnection}
-                disabled={testing || !data.test_email}
-              >
-                {testing ? (
-                  <>
-                    <Loader2 className='mr-2 h-4 w-4 animate-spin' />
-                    Testing...
-                  </>
+
+            {testResult && (
+              <Alert variant={testResult.success ? 'default' : 'destructive'}>
+                {testResult.success ? (
+                  <CheckCircle2 className='h-4 w-4' />
                 ) : (
-                  <>
-                    <Mail className='mr-2 h-4 w-4' />
-                    Send Test
-                  </>
+                  <XCircle className='h-4 w-4' />
                 )}
-              </Button>
-            </div>
-          </div>
+                <AlertDescription>{testResult.message}</AlertDescription>
+              </Alert>
+            )}
 
-          {testResult && (
-            <Alert variant={testResult.success ? 'default' : 'destructive'}>
-              {testResult.success ? (
-                <CheckCircle2 className='h-4 w-4' />
-              ) : (
-                <XCircle className='h-4 w-4' />
-              )}
-              <AlertDescription>{testResult.message}</AlertDescription>
-            </Alert>
-          )}
-
-          {settings?.last_tested_at && (
-            <p className='text-sm text-muted-foreground'>
-              Last tested: {new Date(settings.last_tested_at).toLocaleString()}
-              {settings.test_status === 'success' && ' ✓ Success'}
-              {settings.test_status === 'failed' && ' ✗ Failed'}
-            </p>
-          )}
-        </CardContent>
-      </Card>
+            {settings?.last_tested_at && (
+              <p className='text-sm text-muted-foreground'>
+                Last tested: {new Date(settings.last_tested_at).toLocaleString()}
+                {settings.test_status === 'success' && ' ✓ Success'}
+                {settings.test_status === 'failed' && ' ✗ Failed'}
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <div className='flex justify-end'>
-        <Button type='submit' disabled={processing}>
-          {processing ? (
-            <>
-              <Loader2 className='mr-2 h-4 w-4 animate-spin' />
-              Saving...
-            </>
-          ) : (
-            'Save Settings'
-          )}
-        </Button>
+        {can('edit email settings') && (
+          <Button type='submit' disabled={processing}>
+            {processing ? (
+              <>
+                <Loader2 className='mr-2 h-4 w-4 animate-spin' />
+                Saving...
+              </>
+            ) : (
+              'Save Settings'
+            )}
+          </Button>
+        )}
       </div>
     </form>
   )

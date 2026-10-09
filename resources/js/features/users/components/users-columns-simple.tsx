@@ -17,6 +17,9 @@ interface SimpleUser {
   email: string
   roles: string[]
   is_super_admin?: boolean
+  is_client?: boolean
+  client_access?: 'all' | 'assigned'
+  client_ids?: number[]
   created_at: string
 }
 
@@ -115,6 +118,30 @@ export const usersColumnsSimple: ColumnDef<SimpleUser>[] = [
             ))
           )}
         </div>
+      )
+    },
+    enableSorting: false,
+  },
+  {
+    id: 'clients',
+    header: ({ column }) => (
+      <DataTableColumnHeader column={column} title='Clients' />
+    ),
+    cell: ({ row }) => {
+      // A client account only ever sees itself.
+      if (row.original.is_client) {
+        return <span className='text-muted-foreground text-sm'>—</span>
+      }
+
+      if (row.original.client_access !== 'assigned') {
+        return <Badge variant='outline'>All clients</Badge>
+      }
+
+      const count = row.original.client_ids?.length ?? 0
+      return (
+        <Badge variant='secondary' className={cn(count === 0 && 'text-amber-700 dark:text-amber-400')}>
+          {count === 0 ? 'No clients' : `${count} client${count === 1 ? '' : 's'}`}
+        </Badge>
       )
     },
     enableSorting: false,

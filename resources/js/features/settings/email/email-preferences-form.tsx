@@ -4,6 +4,7 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Lock } from 'lucide-react'
+import { usePermissions } from '@/hooks/use-permissions'
 
 interface EmailPreference {
   id: string
@@ -124,6 +125,7 @@ const CATEGORY_LABELS = {
 }
 
 export function EmailPreferencesForm() {
+  const { can } = usePermissions()
   const { preference } = usePage().props as any
 
   const { data, setData, put, processing } = useForm<EmailPreferencesData>({
@@ -218,9 +220,11 @@ export function EmailPreferencesForm() {
         ))}
       </div>
 
-      <Button type='submit' disabled={processing}>
-        {processing ? 'Updating...' : 'Update preferences'}
-      </Button>
+      {can('edit email preferences') && (
+        <Button type='submit' disabled={processing}>
+          {processing ? 'Updating...' : 'Update preferences'}
+        </Button>
+      )}
     </form>
   )
 }

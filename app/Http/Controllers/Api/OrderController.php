@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Concerns\CountsOrdersByTag;
 use App\Http\Controllers\Controller;
+use App\Support\ClientAccess;
 use App\Models\Client;
 use App\Models\Order;
 use App\Models\Tag;
@@ -246,13 +247,24 @@ class OrderController extends Controller
      */
     public function show(Order $order)
     {
-        $order->load([
-            'items.clientProduct', 'items.product', 'invoices',
-            // KSA Express: who holds it, and what the riders recorded.
-            'latestShipment.rider:id,name,phone',
-            'latestShipment.events.rider:id,name',
-            'latestShipment.events.user:id,name',
-        ]);
+        $user = request()->user();
+
+        $order->load(['items.clientProduct', 'items.product']);
+
+        // The shipment and waybill panels are permissions of their own, so
+        // what they show is not sent to someone who cannot open them.
+        if ($user->can('view shipments')) {
+            $order->load([
+                // KSA Express: who holds it, and what the riders recorded.
+                'latestShipment.rider:id,name,phone',
+                'latestShipment.events.rider:id,name',
+                'latestShipment.events.user:id,name',
+            ]);
+        } else {
+            $order->setRelation('latestShipment', null);
+        }
+
+        $order->setRelation('invoices', $user->can('view waybills') ? $order->invoices()->get() : collect());
 
         $this->stockAlerts->flagOrders([$order]);
 
@@ -320,6 +332,21 @@ class OrderController extends Controller
             'tags' => 'sometimes|array|max:1',
             'tags.*' => 'string|max:255',
         ]);
+
+        // One endpoint behind four buttons: the tag, the two status menus and
+        // the edit form each need their own permission.
+        $needed = [];
+        foreach (array_keys($validated) as $field) {
+            $needed[match ($field) {
+                'tags' => 'tag orders',
+                'fulfillment_status' => 'update order fulfillment status',
+                'financial_status' => 'update order payment status',
+                default => 'edit orders',
+            }] = true;
+        }
+        foreach (array_keys($needed) as $permission) {
+            abort_unless($request->user()->can($permission), 403, 'You do not have permission to change this.');
+        }
 
         // Update timestamps based on status changes
         if (isset($validated['fulfillment_status'])) {
@@ -438,23 +465,33 @@ class OrderController extends Controller
 
         $totalOrders = (int) $totals->total_orders;
 
+        // Each block of cards is its own permission, on the orders page and
+        // on the dashboard; a block the person cannot see is not sent.
+        $user = $request->user();
+        $counts = $user->canAny(['view order stats', 'view dashboard order stats']);
+        $revenue = $user->can('view dashboard revenue');
+
         return response()->json([
-            'total_orders' => $totalOrders,
-            'unassigned_orders' => $totalOrders - (int) $totals->shipped_orders,
+            'total_orders' => $counts ? $totalOrders : null,
+            'unassigned_orders' => $counts ? $totalOrders - (int) $totals->shipped_orders : null,
             // Matches the "Assigned to Courier" tab: external couriers only.
-            'assigned_orders' => (int) $totals->courier_orders,
-            'ksa_express_orders' => (int) $totals->ksa_express_orders,
-            'total_revenue' => round((float) $totals->total_revenue, 2),
-            'average_order_value' => round((float) $totals->average_order_value, 2),
+            'assigned_orders' => $counts ? (int) $totals->courier_orders : null,
+            'ksa_express_orders' => $counts ? (int) $totals->ksa_express_orders : null,
+            'total_revenue' => $revenue ? round((float) $totals->total_revenue, 2) : null,
+            'average_order_value' => $revenue ? round((float) $totals->average_order_value, 2) : null,
             // Orders (not shipments) per status, matching what the shipment_status filter lists.
             // Served by the shipments (order_id, status) index.
-            'by_shipment_status' => DB::table('shipments')
-                ->whereIn('order_id', $filtered(['shipment_status'])->select('orders.id'))
-                ->select('status', DB::raw('count(distinct order_id) as count'))
-                ->groupBy('status')
-                ->orderByDesc('count')
-                ->get(),
-            'by_tag' => $this->tagCounts($filtered(['tags'])),
+            'by_shipment_status' => $user->canAny(['view order shipment status cards', 'view dashboard shipment status'])
+                ? DB::table('shipments')
+                    ->whereIn('order_id', $filtered(['shipment_status'])->select('orders.id'))
+                    ->select('status', DB::raw('count(distinct order_id) as count'))
+                    ->groupBy('status')
+                    ->orderByDesc('count')
+                    ->get()
+                : null,
+            'by_tag' => $user->canAny(['view order tag cards', 'view dashboard tag cards'])
+                ? $this->tagCounts($filtered(['tags']))
+                : null,
         ]);
     }
 
@@ -463,6 +500,9 @@ class OrderController extends Controller
      */
     public function filterOptions()
     {
+        // These three read the table directly, past the model's client scope.
+        $access = app(ClientAccess::class);
+
         return response()->json([
             'fulfillment_statuses' => [
                 ['value' => 'pending', 'label' => 'Pending'],
@@ -488,21 +528,21 @@ class OrderController extends Controller
                 ['value' => 'cancelled', 'label' => 'Cancelled'],
                 ['value' => 'failed', 'label' => 'Failed'],
             ],
-            'payment_methods' => DB::table('orders')
+            'payment_methods' => $access->scopeOrders(DB::table('orders'))
                 ->select('payment_method')
                 ->distinct()
                 ->whereNotNull('payment_method')
                 ->pluck('payment_method')
                 ->map(fn($method) => ['value' => $method, 'label' => $method])
                 ->values(),
-            'utm_sources' => DB::table('orders')
+            'utm_sources' => $access->scopeOrders(DB::table('orders'))
                 ->select('utm_source')
                 ->distinct()
                 ->whereNotNull('utm_source')
                 ->pluck('utm_source')
                 ->map(fn($source) => ['value' => $source, 'label' => ucfirst($source)])
                 ->values(),
-            'countries' => DB::table('orders')
+            'countries' => $access->scopeOrders(DB::table('orders'))
                 ->select('shipping_country')
                 ->distinct()
                 ->whereNotNull('shipping_country')
@@ -545,6 +585,15 @@ class OrderController extends Controller
             'tags' => 'required_if:action,add_tags|array|max:1',
             'tags.*' => 'string|max:255',
         ]);
+
+        // Each bulk button is the same permission as its single-order twin.
+        abort_unless($request->user()->can(match ($request->action) {
+            'update_fulfillment' => 'update order fulfillment status',
+            'update_financial' => 'update order payment status',
+            'update_call_status' => 'update order call status',
+            'add_tags' => 'tag orders',
+            'cancel' => 'cancel orders',
+        }), 403, 'You do not have permission for this action.');
 
         $orders = Order::whereIn('id', $request->order_ids)->get();
 

@@ -29,6 +29,8 @@ export type PageProps<
     auth: {
         user: User;
         permissions: string[];
+        /** superadmin / developer: every permission, always. */
+        full_access?: boolean;
         roles: string[];
         portal_features?: string[];
         impersonating?: {

@@ -12,6 +12,7 @@ import { Switch } from '@/components/ui/switch'
 import { type Product } from '@/types/product'
 import { useProductMutations } from '@/hooks/useProducts'
 import { toast } from 'sonner'
+import { usePermissions } from '@/hooks/use-permissions'
 
 interface EditProductDialogProps {
   product: Product
@@ -29,6 +30,8 @@ export function EditProductDialog({ product, open, onOpenChange }: EditProductDi
   const [qty, setQty] = useState(String(product.variant_inventory_qty))
   const [tags, setTags] = useState(product.tags?.join(', ') || '')
   const [published, setPublished] = useState(product.published)
+  // Both ride along with the form, but are permissions of their own.
+  const { can } = usePermissions()
 
   const handleSave = async () => {
     const success = await updateProduct(product.id, {
@@ -71,7 +74,7 @@ export function EditProductDialog({ product, open, onOpenChange }: EditProductDi
           <div className='grid grid-cols-2 gap-3'>
             <div className='grid gap-1.5'>
               <Label htmlFor='ep-status'>Status</Label>
-              <Select value={status} onValueChange={(v) => setStatus(v as typeof status)}>
+              <Select value={status} onValueChange={(v) => setStatus(v as typeof status)} disabled={!can('change product status')}>
                 <SelectTrigger id='ep-status'>
                   <SelectValue />
                 </SelectTrigger>
@@ -134,7 +137,7 @@ export function EditProductDialog({ product, open, onOpenChange }: EditProductDi
           </div>
 
           <div className='flex items-center gap-2'>
-            <Switch id='ep-published' checked={published} onCheckedChange={setPublished} />
+            <Switch id='ep-published' checked={published} onCheckedChange={setPublished} disabled={!can('publish products')} />
             <Label htmlFor='ep-published' className='cursor-pointer'>Published</Label>
           </div>
         </div>

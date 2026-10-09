@@ -84,7 +84,18 @@ function ClientDetailContent({ client }: ClientDetailPageProps) {
   const [editOpen, setEditOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [changePasswordOpen, setChangePasswordOpen] = useState(false)
-  const initialTab = new URLSearchParams(window.location.search).get('tab') ?? 'overview'
+  // The cards and the two extra tabs are each a permission of their own.
+  const canRevenue = can('view client revenue')
+  const canProducts = can('view client products')
+  const canPayments = can('view client payments')
+  const showInventory = client.is_fulfilment && canProducts
+
+  // A link to a tab this person cannot open lands on the overview instead.
+  const requestedTab = new URLSearchParams(window.location.search).get('tab') ?? 'overview'
+  const initialTab =
+    (requestedTab === 'inventory' && !showInventory) || (requestedTab === 'payments' && !canPayments)
+      ? 'overview'
+      : requestedTab
 
   const statusColorMap: Record<string, string> = {
     active: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
@@ -193,7 +204,7 @@ function ClientDetailContent({ client }: ClientDetailPageProps) {
               </Button>
             )}
 
-            {can('edit client') && (
+            {can('change client status') && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant='outline' size='sm'>
@@ -227,7 +238,7 @@ function ClientDetailContent({ client }: ClientDetailPageProps) {
               </DropdownMenu>
             )}
 
-            {can('edit client') && client.user_id && (
+            {can(['change client password', 'send client reset link']) && client.user_id && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant='outline' size='sm'>
@@ -236,14 +247,18 @@ function ClientDetailContent({ client }: ClientDetailPageProps) {
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align='end'>
-                  <DropdownMenuItem onClick={() => setChangePasswordOpen(true)}>
-                    <KeyRound className='mr-2 h-4 w-4' />
-                    Change Password
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={handleSendResetLink} disabled={loading}>
-                    <Mail className='mr-2 h-4 w-4' />
-                    Send Reset Link
-                  </DropdownMenuItem>
+                  {can('change client password') && (
+                    <DropdownMenuItem onClick={() => setChangePasswordOpen(true)}>
+                      <KeyRound className='mr-2 h-4 w-4' />
+                      Change Password
+                    </DropdownMenuItem>
+                  )}
+                  {can('send client reset link') && (
+                    <DropdownMenuItem onClick={handleSendResetLink} disabled={loading}>
+                      <Mail className='mr-2 h-4 w-4' />
+                      Send Reset Link
+                    </DropdownMenuItem>
+                  )}
                 </DropdownMenuContent>
               </DropdownMenu>
             )}
@@ -282,8 +297,11 @@ function ClientDetailContent({ client }: ClientDetailPageProps) {
           </div>
         )}
 
-        {/* Stats */}
+        {/* Stats — orders and revenue are one permission, the product counts another. */}
+        {(canRevenue || canProducts) && (
         <div className='mb-6 grid gap-4 md:grid-cols-2 lg:grid-cols-4'>
+          {canRevenue && (
+          <>
           <Card>
             <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
               <CardTitle className='text-sm font-medium'>Total Orders</CardTitle>
@@ -306,6 +324,10 @@ function ClientDetailContent({ client }: ClientDetailPageProps) {
               <p className='text-xs text-muted-foreground'>Across all orders</p>
             </CardContent>
           </Card>
+          </>
+          )}
+          {canProducts && (
+          <>
           <Card>
             <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
               <CardTitle className='text-sm font-medium'>Products</CardTitle>
@@ -326,22 +348,27 @@ function ClientDetailContent({ client }: ClientDetailPageProps) {
               <p className='text-xs text-muted-foreground'>Active in inventory</p>
             </CardContent>
           </Card>
+          </>
+          )}
         </div>
+        )}
 
         {/* Tabs */}
         <Tabs defaultValue={initialTab}>
           <TabsList>
             <TabsTrigger value='overview'>Overview</TabsTrigger>
-            {client.is_fulfilment && (
+            {showInventory && (
               <TabsTrigger value='inventory'>
                 <Package className='mr-1.5 h-4 w-4' />
                 Inventory
               </TabsTrigger>
             )}
-            <TabsTrigger value='payments'>
-              <DollarSign className='mr-1.5 h-4 w-4' />
-              Payments
-            </TabsTrigger>
+            {canPayments && (
+              <TabsTrigger value='payments'>
+                <DollarSign className='mr-1.5 h-4 w-4' />
+                Payments
+              </TabsTrigger>
+            )}
           </TabsList>
 
           <TabsContent value='overview' className='mt-6 space-y-6'>
@@ -411,15 +438,17 @@ function ClientDetailContent({ client }: ClientDetailPageProps) {
             </div>
           </TabsContent>
 
-          {client.is_fulfilment && (
+          {showInventory && (
             <TabsContent value='inventory' className='mt-6'>
               <ClientInventoryTab client={client} />
             </TabsContent>
           )}
 
-          <TabsContent value='payments' className='mt-6'>
-            <ClientPaymentsTab client={client} />
-          </TabsContent>
+          {canPayments && (
+            <TabsContent value='payments' className='mt-6'>
+              <ClientPaymentsTab client={client} />
+            </TabsContent>
+          )}
         </Tabs>
       </Main>
 

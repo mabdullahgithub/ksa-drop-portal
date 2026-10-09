@@ -76,14 +76,14 @@ export const sidebarData: SidebarData = {
           title: 'Track Shipment',
           url: '/track',
           icon: Truck,
-          permission: 'view orders',
+          permission: 'view shipments',
           newTab: true,
         },
         {
           title: 'Riders',
           url: '/riders',
           icon: Bike,
-          permission: ['view riders', 'manage riders'],
+          permission: 'view riders',
         },
         {
           title: 'Tags',
@@ -207,7 +207,7 @@ export const sidebarData: SidebarData = {
           title: 'Notifications',
           url: '/notifications',
           icon: Bell,
-          permission: 'view dashboard',
+          permission: 'view notifications',
         },
         {
           title: 'Settings',

@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
@@ -24,6 +25,17 @@ class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
     use HasFactory, HasRoles, Notifiable, SoftDeletes;
+
+    /**
+     * Roles that can do everything, always: no permission is ever checked
+     * for them (see the Gate::before in AppServiceProvider), and the seeder
+     * also grants them every permission so the database says the same.
+     */
+    public const FULL_ACCESS_ROLES = ['superadmin', 'developer'];
+
+    /** `client_access`: every client, or only the ones assigned. */
+    public const CLIENT_ACCESS_ALL = 'all';
+    public const CLIENT_ACCESS_ASSIGNED = 'assigned';
 
     /**
      * Get the attributes that should be cast.
@@ -61,6 +73,20 @@ class User extends Authenticatable
         return $this->hasOne(Client::class);
     }
 
+    public function hasFullAccess(): bool
+    {
+        return $this->hasAnyRole(self::FULL_ACCESS_ROLES);
+    }
+
+    /**
+     * The clients this person handles. Only read while `client_access` is
+     * 'assigned'; see App\Support\ClientAccess.
+     */
+    public function assignedClients(): BelongsToMany
+    {
+        return $this->belongsToMany(Client::class, 'client_user_access')->withTimestamps();
+    }
+
     /**
      * Resolve the best landing route for this user based on their permissions.
      *
@@ -81,9 +107,14 @@ class User extends Authenticatable
             'view inventory' => 'inventory',
             'view orders' => 'orders',
             'view whatsapp' => 'whatsapp',
+            'view riders' => 'riders',
             'view apps' => 'apps',
             'view tags' => 'tags',
+            'view recycle bin' => 'recycle-bin',
             'view users' => 'team-management.users',
+            'view roles' => 'team-management.roles',
+            'view notifications' => 'notifications',
+            'view settings' => 'settings',
         ];
 
         foreach ($candidates as $permission => $route) {
@@ -92,8 +123,8 @@ class User extends Authenticatable
             }
         }
 
-        // Settings has no permission gate, so every authenticated user can reach it.
-        return 'settings';
+        // Nothing granted at all: the one page that needs no permission.
+        return 'errors.forbidden';
     }
 
     /**

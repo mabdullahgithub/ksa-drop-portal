@@ -30,6 +30,7 @@ import { MessagingToggle } from './components/messaging-toggle'
 import { MessageThread } from './components/message-thread'
 import { OrderContextPanel } from './components/order-context-panel'
 import { ReplyComposer } from './components/reply-composer'
+import { usePermissions } from '@/hooks/use-permissions'
 import {
   INBOX_FILTERS,
   type ConversationDetail,
@@ -41,6 +42,11 @@ import {
 export function WhatsAppInbox() {
   // Always starts locked, like the recycle bin. Component state rather than
   // storage, so every visit to the inbox asks for the PIN.
+  // The numbers and the conversations are each a permission of their own;
+  // only the conversations sit behind the PIN.
+  const { can } = usePermissions()
+  const canStats = can('view whatsapp stats')
+  const canConversations = can('view whatsapp conversations')
   const [unlocked, setUnlocked] = useState(false)
   const [lockNotice, setLockNotice] = useState<string | null>(null)
 
@@ -104,7 +110,7 @@ export function WhatsAppInbox() {
   }, [unlocked, filter, debouncedSearch, handleLocked])
 
   const loadStats = useCallback(async () => {
-    if (!unlocked) return
+    if (!canStats || (canConversations && !unlocked)) return
     try {
       const res = await axios.get('/api/whatsapp/stats')
       setStats(res.data)
@@ -158,7 +164,7 @@ export function WhatsAppInbox() {
 
       <Main fixed fluid className='flex flex-col gap-3'>
         <PinLock
-          open={!unlocked}
+          open={canConversations && !unlocked}
           title='WhatsApp is locked'
           description='Enter the PIN to unlock the WhatsApp inbox.'
           unlock={unlockWhatsApp}
@@ -171,12 +177,13 @@ export function WhatsAppInbox() {
 
         {/* Nothing below loads until the PIN is accepted, so there is no
             data behind the prompt. */}
-        {unlocked && (
+        {(unlocked || !canConversations) && (
           <>
-            <MessagingToggle onLocked={handleLocked} />
+            {unlocked && <MessagingToggle onLocked={handleLocked} />}
 
-            <InboxStats stats={stats} />
+            {canStats && <InboxStats stats={stats} />}
 
+            {unlocked && (
             <section className='flex min-h-0 flex-1 overflow-hidden rounded-lg border bg-background'>
               {/* ── Conversation list ─────────────────────────────────────── */}
               <div
@@ -385,6 +392,7 @@ export function WhatsAppInbox() {
                 </div>
               )}
             </section>
+            )}
           </>
         )}
       </Main>

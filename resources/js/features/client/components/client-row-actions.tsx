@@ -47,7 +47,18 @@ export function ClientRowActions({ row }: ClientRowActionsProps) {
     }
   }
 
-  const showPortalGroup = (can('impersonate client') && client.status === 'active') || client.is_fulfilment
+  // Every item in this menu is a permission of its own.
+  const canView = can('view client details')
+  const canEdit = can('edit client')
+  const canPortal = can('impersonate client') && client.status === 'active'
+  // Adding stock happens on the client's Inventory tab.
+  const canAddInventory = client.is_fulfilment && canView && can(['view client products']) && can('create client products')
+  const canStatus = can('change client status')
+  const canDelete = can('delete client')
+  const showPortalGroup = canPortal || canAddInventory
+
+  // Nothing to offer: no menu at all.
+  if (!canView && !canEdit && !showPortalGroup && !canStatus && !canDelete) return null
 
   return (
     <DropdownMenu modal={false}>
@@ -58,12 +69,14 @@ export function ClientRowActions({ row }: ClientRowActionsProps) {
       </DropdownMenuTrigger>
       <DropdownMenuContent align='end' className='w-48'>
         {/* Group 1: View / Edit */}
-        <DropdownMenuItem onClick={() => router.visit(`/client/${client.id}`)}>
-          <Eye className='mr-2 h-4 w-4' />
-          View Details
-        </DropdownMenuItem>
+        {canView && (
+          <DropdownMenuItem onClick={() => router.visit(`/client/${client.id}`)}>
+            <Eye className='mr-2 h-4 w-4' />
+            View Details
+          </DropdownMenuItem>
+        )}
 
-        {can('edit client') && (
+        {canEdit && (
           <DropdownMenuItem
             onClick={() => {
               setCurrentRow(client)
@@ -76,9 +89,9 @@ export function ClientRowActions({ row }: ClientRowActionsProps) {
         )}
 
         {/* Group 2: Portal / Inventory */}
-        {showPortalGroup && <DropdownMenuSeparator />}
+        {showPortalGroup && (canView || canEdit) && <DropdownMenuSeparator />}
 
-        {can('impersonate client') && client.status === 'active' && (
+        {canPortal && (
           <DropdownMenuItem
             onClick={handleImpersonate}
             className='text-amber-600 focus:text-amber-600 focus:bg-amber-50 dark:text-amber-400 dark:focus:text-amber-400 dark:focus:bg-amber-950/40'
@@ -88,7 +101,7 @@ export function ClientRowActions({ row }: ClientRowActionsProps) {
           </DropdownMenuItem>
         )}
 
-        {client.is_fulfilment && (
+        {canAddInventory && (
           <DropdownMenuItem onClick={() => router.visit(`/client/${client.id}?tab=inventory`)}>
             <PackagePlus className='mr-2 h-4 w-4' />
             Add Inventory
@@ -96,9 +109,9 @@ export function ClientRowActions({ row }: ClientRowActionsProps) {
         )}
 
         {/* Group 3: Status / Delete */}
-        {can('edit client') && (
+        {canStatus && (
           <>
-            <DropdownMenuSeparator />
+            {(canView || canEdit || showPortalGroup) && <DropdownMenuSeparator />}
             <DropdownMenuSub>
               <DropdownMenuSubTrigger>
                 <UserCheck className='mr-2 h-4 w-4' />
@@ -122,9 +135,9 @@ export function ClientRowActions({ row }: ClientRowActionsProps) {
           </>
         )}
 
-        {can('delete client') && (
+        {canDelete && (
           <>
-            <DropdownMenuSeparator />
+            {(canView || canEdit || showPortalGroup || canStatus) && <DropdownMenuSeparator />}
             <DropdownMenuItem
               className='text-destructive'
               onClick={() => {

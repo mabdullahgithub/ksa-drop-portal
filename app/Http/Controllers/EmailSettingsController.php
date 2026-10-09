@@ -20,8 +20,6 @@ class EmailSettingsController extends Controller
 
     public function index(): Response
     {
-        abort_unless(auth()->user()->can('manage-email-settings'), 403, 'Unauthorized access to email settings.');
-
         $settings = EmailSetting::getActive() ?? new EmailSetting([
             'is_active' => false,
             'driver' => 'smtp',
@@ -37,10 +35,10 @@ class EmailSettingsController extends Controller
 
         return Inertia::render('Admin/EmailSettings', [
             'settings' => $settingsData,
-            'recentLogs' => EmailLog::with('user')
-                ->latest()
-                ->take(10)
-                ->get(),
+            // The logs are a permission of their own.
+            'recentLogs' => auth()->user()->can('view email logs')
+                ? EmailLog::with('user')->latest()->take(10)->get()
+                : [],
             'graveyard' => EmailGraveyard::latest()->take(200)->get(),
         ]);
     }
@@ -51,8 +49,6 @@ class EmailSettingsController extends Controller
      */
     public function restoreFromGraveyard(EmailGraveyard $entry): RedirectResponse
     {
-        abort_unless(auth()->user()->can('manage-email-settings'), 403, 'Unauthorized access to email settings.');
-
         $entry->delete();
 
         \Log::channel('mail')->info('Address restored from graveyard', [
@@ -65,8 +61,6 @@ class EmailSettingsController extends Controller
 
     public function update(Request $request): RedirectResponse
     {
-        abort_unless(auth()->user()->can('manage-email-settings'), 403, 'Unauthorized access to email settings.');
-
         $validated = $request->validate([
             'is_active' => ['required', 'boolean'],
             'driver' => ['required', 'in:smtp,sendmail,mailgun,ses,postmark,log'],
@@ -101,8 +95,6 @@ class EmailSettingsController extends Controller
 
     public function test(Request $request): JsonResponse
     {
-        abort_unless(auth()->user()->can('manage-email-settings'), 403, 'Unauthorized access to email settings.');
-
         $request->validate([
             'test_email' => ['required', 'email', 'max:255'],
         ]);
@@ -133,8 +125,6 @@ class EmailSettingsController extends Controller
 
     public function logs(Request $request): JsonResponse
     {
-        abort_unless(auth()->user()->can('manage-email-settings'), 403, 'Unauthorized access to email settings.');
-
         $logs = EmailLog::with('user')
             ->when($request->status, fn ($q) => $q->where('status', $request->status))
             ->when($request->type, fn ($q) => $q->where('email_type', $request->type))
@@ -146,8 +136,6 @@ class EmailSettingsController extends Controller
 
     public function statistics(): JsonResponse
     {
-        abort_unless(auth()->user()->can('manage-email-settings'), 403, 'Unauthorized access to email settings.');
-
         $stats = [
             'total_sent' => EmailLog::where('status', 'sent')->count(),
             'total_failed' => EmailLog::where('status', 'failed')->count(),

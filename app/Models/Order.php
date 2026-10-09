@@ -2,13 +2,14 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\RestrictedByClientAccess;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Order extends Model
 {
-    use HasFactory, SoftDeletes;
+    use HasFactory, SoftDeletes, RestrictedByClientAccess;
 
     /**
      * Hide Shopify orders that are awaiting client review (manual-approval mode)

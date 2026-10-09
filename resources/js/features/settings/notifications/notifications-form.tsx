@@ -16,8 +16,10 @@ import {
   ArrowDown,
   ArrowDownRight
 } from 'lucide-react'
+import { usePermissions } from '@/hooks/use-permissions'
 
 export function NotificationsForm() {
+  const { can } = usePermissions()
   const { preference } = usePage().props as any
 
   const { data, setData, put, processing, errors } = useForm({
@@ -115,9 +117,11 @@ export function NotificationsForm() {
           )}
         </div>
 
-        <Button type='submit' disabled={processing}>
-          {processing ? 'Updating...' : 'Update notifications'}
-        </Button>
+        {can('edit notification preferences') && (
+          <Button type='submit' disabled={processing}>
+            {processing ? 'Updating...' : 'Update notifications'}
+          </Button>
+        )}
       </form>
   )
 }

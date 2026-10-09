@@ -33,9 +33,9 @@ interface Props {
  */
 export function CallDispositionPanel({ order, onSaved }: Props) {
   const { can } = usePermissions()
-  const editable = can('edit orders')
+  const editable = can('update order call status')
   // The message history is WhatsApp data, gated separately from the order.
-  const canViewWhatsapp = can('view whatsapp')
+  const canViewWhatsapp = can('view order whatsapp messages')
 
   const [callStatus, setCallStatus] = useState<CallStatus>(order.call_status ?? 'not_called')
   const [notes, setNotes] = useState(order.call_notes ?? '')

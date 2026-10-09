@@ -33,9 +33,13 @@ export function ProductActions({ product }: ProductActionsProps) {
   const [showDelete, setShowDelete] = useState(false)
   const [deleting, setDeleting] = useState(false)
 
-  const canView = can('view inventory')
+  // Every item in this menu is a permission of its own.
+  const canView = can('view product details')
   const canEdit = can('edit inventory')
+  const canStatus = can('change product status')
+  const canPublish = can('publish products')
   const canDelete = can('delete inventory')
+  const hasEditGroup = canEdit || canStatus || canPublish
 
   const handleStatusChange = async (status: 'active' | 'draft' | 'archived') => {
     const success = await updateProduct(product.id, { status })
@@ -73,7 +77,8 @@ export function ProductActions({ product }: ProductActionsProps) {
     }
   }
 
-  if (!canView) return null
+  // Nothing to offer: no menu at all.
+  if (!canView && !hasEditGroup && !canDelete) return null
 
   return (
     <>
@@ -85,25 +90,30 @@ export function ProductActions({ product }: ProductActionsProps) {
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align='end' className='w-48'>
-          <DropdownMenuItem
-            onClick={() => {
-              setCurrentRow(product)
-              setOpen('view')
-            }}
-          >
-            <Eye className='mr-2 h-4 w-4' />
-            View Details
-          </DropdownMenuItem>
+          {canView && (
+            <DropdownMenuItem
+              onClick={() => {
+                setCurrentRow(product)
+                setOpen('view')
+              }}
+            >
+              <Eye className='mr-2 h-4 w-4' />
+              View Details
+            </DropdownMenuItem>
+          )}
 
-          {canEdit && (
+          {hasEditGroup && (
             <>
-              <DropdownMenuSeparator />
+              {canView && <DropdownMenuSeparator />}
 
-              <DropdownMenuItem onClick={() => setShowEdit(true)}>
-                <Pencil className='mr-2 h-4 w-4' />
-                Edit Product
-              </DropdownMenuItem>
+              {canEdit && (
+                <DropdownMenuItem onClick={() => setShowEdit(true)}>
+                  <Pencil className='mr-2 h-4 w-4' />
+                  Edit Product
+                </DropdownMenuItem>
+              )}
 
+              {canStatus && (
               <DropdownMenuSub>
                 <DropdownMenuSubTrigger>
                   <CheckCircle className='mr-2 h-4 w-4' />
@@ -133,7 +143,9 @@ export function ProductActions({ product }: ProductActionsProps) {
                   </DropdownMenuItem>
                 </DropdownMenuSubContent>
               </DropdownMenuSub>
+              )}
 
+              {canPublish && (
               <DropdownMenuItem onClick={handleTogglePublished}>
                 {product.published ? (
                   <>
@@ -147,12 +159,13 @@ export function ProductActions({ product }: ProductActionsProps) {
                   </>
                 )}
               </DropdownMenuItem>
+              )}
             </>
           )}
 
           {canDelete && (
             <>
-              <DropdownMenuSeparator />
+              {(canView || hasEditGroup) && <DropdownMenuSeparator />}
               <DropdownMenuItem
                 onClick={() => setShowDelete(true)}
                 className='text-destructive focus:text-destructive'

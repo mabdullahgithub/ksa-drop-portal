@@ -9,6 +9,7 @@ import {
 } from '@/components/ui/tooltip'
 import { DataTableBulkActions as BulkActionsToolbar } from '@/components/data-table'
 import { UsersMultiDeleteDialog } from './users-multi-delete-dialog'
+import { usePermissions } from '@/hooks/use-permissions'
 
 type DataTableBulkActionsProps<TData> = {
   table: Table<TData>
@@ -21,6 +22,10 @@ export function DataTableBulkActions<TData>({
   table,
 }: DataTableBulkActionsProps<TData>) {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const { can } = usePermissions()
+
+  // Delete is the only bulk action: without it there is no bar to show.
+  if (!can('delete users')) return null
 
   return (
     <>

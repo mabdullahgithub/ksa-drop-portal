@@ -140,7 +140,7 @@ export function ClientPaymentsTab({ client }: Props) {
           <h3 className='text-sm font-semibold'>Payment History</h3>
           <p className='text-xs text-muted-foreground mt-0.5'>Manual transfers made to this client</p>
         </div>
-        {can('edit client') && (
+        {can('record client payments') && (
           <Dialog open={addOpen} onOpenChange={setAddOpen}>
             <DialogTrigger asChild>
               <Button size='sm' className='gap-1.5'>
@@ -240,7 +240,7 @@ export function ClientPaymentsTab({ client }: Props) {
                     <th className='pb-2 pr-4 font-medium text-muted-foreground'>Message</th>
                     <th className='pb-2 pr-4 font-medium text-muted-foreground'>Proof</th>
                     <th className='pb-2 pr-4 font-medium text-muted-foreground'>By</th>
-                    {can('edit client') && <th className='pb-2' />}
+                    {can('delete client payments') && <th className='pb-2' />}
                   </tr>
                 </thead>
                 <tbody>
@@ -256,7 +256,7 @@ export function ClientPaymentsTab({ client }: Props) {
                         {p.message || <span className='italic'>—</span>}
                       </td>
                       <td className='py-2.5 pr-4'>
-                        {p.proof_url ? (
+                        {p.proof_url && can('view client payment proof') ? (
                           <Button variant='outline' size='sm' className='h-7 gap-1.5 text-xs' onClick={() => setProofUrl(p.proof_url)}>
                             <Eye className='h-3 w-3' />
                             View
@@ -268,7 +268,7 @@ export function ClientPaymentsTab({ client }: Props) {
                       <td className='py-2.5 pr-4 text-xs text-muted-foreground'>
                         {p.created_by?.name ?? '—'}
                       </td>
-                      {can('edit client') && (
+                      {can('delete client payments') && (
                         <td className='py-2.5 text-right'>
                           <Button
                             variant='ghost'

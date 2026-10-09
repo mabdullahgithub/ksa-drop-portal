@@ -59,7 +59,10 @@ export default function NotificationsPage({
   const [filter, setFilter] = useState<'all' | 'unread'>('all')
   const [loading, setLoading] = useState(false)
   const [perPage, setPerPage] = useState(initialNotifications.per_page)
-  const { can } = usePermissions()
+  // Marking read and deleting are each a permission for the team.
+  const { canOrPortal } = usePermissions()
+  const mayRead = canOrPortal('mark notifications read')
+  const mayDelete = canOrPortal('delete notifications')
 
   const fetchNotifications = async (page: number = 1, newPerPage?: number) => {
     try {
@@ -173,7 +176,7 @@ export default function NotificationsPage({
         <div className='mb-2 flex items-center justify-between'>
           <h1 className='text-2xl font-bold tracking-tight'>Notifications</h1>
           <div className='flex items-center gap-2'>
-            {unreadCount > 0 && (
+            {unreadCount > 0 && mayRead && (
               <Button
                 variant='outline'
                 size='sm'
@@ -249,7 +252,7 @@ export default function NotificationsPage({
                           </p>
                         </div>
                         <div className='flex shrink-0 gap-1 opacity-0 transition-opacity group-hover:opacity-100'>
-                          {!notification.read_at && (
+                          {!notification.read_at && mayRead && (
                             <Button
                               variant='ghost'
                               size='icon'
@@ -260,7 +263,7 @@ export default function NotificationsPage({
                               <Check className='h-4 w-4' />
                             </Button>
                           )}
-                          {can('delete notifications') && (
+                          {mayDelete && (
                             <Button
                               variant='ghost'
                               size='icon'

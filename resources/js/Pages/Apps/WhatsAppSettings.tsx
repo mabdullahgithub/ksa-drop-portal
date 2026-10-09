@@ -16,6 +16,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Info, Eye, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import axios from 'axios'
+import { usePermissions } from '@/hooks/use-permissions'
 
 // Placeholder ConnectorSettingsController::show() sends in place of a saved
 // encrypted value — the real value never round-trips to the browser.
@@ -48,6 +49,10 @@ interface Connector {
 }
 
 export default function WhatsAppSettings() {
+  // Revealing a saved secret and testing the connection are each a permission of their own.
+  const { can } = usePermissions()
+  const canReveal = can('reveal connector secrets')
+  const canTest = can('test connector connection')
   const [connectorId, setConnectorId] = useState<number | null>(null)
   const [settings, setSettings] = useState({
     phone_number_id: '',
@@ -270,17 +275,19 @@ export default function WhatsAppSettings() {
                       autoComplete='off'
                       className='pe-9'
                     />
-                    <Button
-                      type='button'
-                      size='icon'
-                      variant='ghost'
-                      disabled={revealing === 'access_token'}
-                      className='absolute inset-e-1 top-1/2 h-6 w-6 -translate-y-1/2 rounded-md text-muted-foreground'
-                      onClick={() => revealSecret('access_token')}
-                    >
-                      {revealing === 'access_token' ? <Loader2 size={18} className='animate-spin' /> : <Eye size={18} />}
-                      <span className='sr-only'>Reveal saved access token</span>
-                    </Button>
+                    {canReveal && (
+                      <Button
+                        type='button'
+                        size='icon'
+                        variant='ghost'
+                        disabled={revealing === 'access_token'}
+                        className='absolute inset-e-1 top-1/2 h-6 w-6 -translate-y-1/2 rounded-md text-muted-foreground'
+                        onClick={() => revealSecret('access_token')}
+                      >
+                        {revealing === 'access_token' ? <Loader2 size={18} className='animate-spin' /> : <Eye size={18} />}
+                        <span className='sr-only'>Reveal saved access token</span>
+                      </Button>
+                    )}
                   </div>
                 ) : (
                   <PasswordInput
@@ -319,17 +326,19 @@ export default function WhatsAppSettings() {
                         autoComplete='off'
                         className='pe-9'
                       />
-                      <Button
-                        type='button'
-                        size='icon'
-                        variant='ghost'
-                        disabled={revealing === 'app_secret'}
-                        className='absolute inset-e-1 top-1/2 h-6 w-6 -translate-y-1/2 rounded-md text-muted-foreground'
-                        onClick={() => revealSecret('app_secret')}
-                      >
-                        {revealing === 'app_secret' ? <Loader2 size={18} className='animate-spin' /> : <Eye size={18} />}
-                        <span className='sr-only'>Reveal saved app secret</span>
-                      </Button>
+                      {canReveal && (
+                        <Button
+                          type='button'
+                          size='icon'
+                          variant='ghost'
+                          disabled={revealing === 'app_secret'}
+                          className='absolute inset-e-1 top-1/2 h-6 w-6 -translate-y-1/2 rounded-md text-muted-foreground'
+                          onClick={() => revealSecret('app_secret')}
+                        >
+                          {revealing === 'app_secret' ? <Loader2 size={18} className='animate-spin' /> : <Eye size={18} />}
+                          <span className='sr-only'>Reveal saved app secret</span>
+                        </Button>
+                      )}
                     </div>
                   ) : (
                     <PasswordInput
@@ -475,9 +484,11 @@ export default function WhatsAppSettings() {
             <Button onClick={saveSettings} disabled={saving || !connectorId}>
               {saving ? 'Saving...' : 'Save Settings'}
             </Button>
-            <Button variant='outline' onClick={testConnection} disabled={testing || !connectorId}>
-              {testing ? 'Testing...' : 'Test Connection'}
-            </Button>
+            {canTest && (
+              <Button variant='outline' onClick={testConnection} disabled={testing || !connectorId}>
+                {testing ? 'Testing...' : 'Test Connection'}
+              </Button>
+            )}
           </div>
         </div>
       </Main>

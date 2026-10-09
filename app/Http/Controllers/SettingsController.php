@@ -304,7 +304,7 @@ class SettingsController extends Controller
     {
         $user = $request->user();
         $preference = $user->preference;
-        $isAdmin = $user->can('manage-email-settings');
+        $isAdmin = $user->canAny(['view email settings', 'edit email settings']);
 
         $data = [
             'preference' => $preference ? $preference->only([
@@ -367,8 +367,6 @@ class SettingsController extends Controller
 
     public function updateEmailSettings(Request $request): RedirectResponse
     {
-        abort_unless(auth()->user()->can('manage-email-settings'), 403, 'Unauthorized access to email settings.');
-
         $validated = $request->validate([
             'is_active' => ['required', 'boolean'],
             'driver' => ['required', 'in:smtp,sendmail,mailgun,ses,postmark,log'],

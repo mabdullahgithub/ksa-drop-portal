@@ -3,7 +3,8 @@
 import { z } from 'zod'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { router } from '@inertiajs/react'
+import { useState } from 'react'
+import { router, usePage } from '@inertiajs/react'
 import { showSubmittedData } from '@/lib/show-submitted-data'
 import { Button } from '@/components/ui/button'
 import {
@@ -26,7 +27,9 @@ import { Input } from '@/components/ui/input'
 import { RoleSelectWithAdd } from './role-select-with-add'
 import { roles as defaultRoles } from '../data/data'
 import { type User } from '../data/schema'
-import { permissionCategories } from '@/features/roles/data/data'
+import { usePermissions } from '@/hooks/use-permissions'
+import { type PageProps } from '@/types'
+import { type AssignableClient, type ClientAccessMode, ClientAccessField } from './client-access-field'
 
 const formSchema = z.object({
   firstName: z.string().min(1, 'First Name is required.'),
@@ -36,7 +39,8 @@ const formSchema = z.object({
   email: z.email({
     error: (iss) => (iss.input === '' ? 'Email is required.' : undefined),
   }),
-  role: z.string().min(1, 'Role is required.'),
+  // Empty when the person adding the user may not hand out roles.
+  role: z.string(),
   isEdit: z.boolean(),
 })
 type UserForm = z.infer<typeof formSchema>
@@ -46,7 +50,6 @@ type UserActionDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
   availableRoles?: string[]
-  availablePermissions?: string[]
 }
 
 export function UsersActionDialog({
@@ -54,7 +57,6 @@ export function UsersActionDialog({
   open,
   onOpenChange,
   availableRoles,
-  availablePermissions,
 }: UserActionDialogProps) {
   const isEdit = !!currentRow
 
@@ -69,8 +71,15 @@ export function UsersActionDialog({
       })
     : defaultRoles.map(({ label, value }) => ({ label, value }))
 
-  // Get all available permissions from categories
-  const allPermissions = availablePermissions || Object.values(permissionCategories).flat()
+  const { can } = usePermissions()
+  const canRoles = can('assign user roles')
+  const canClients = can('assign client access')
+  const { clients = [], canGrantAllClients = true } = usePage<PageProps<{ clients?: AssignableClient[]; canGrantAllClients?: boolean }>>().props
+
+  // Someone limited to their own clients cannot hand out "all".
+  const [clientAccess, setClientAccess] = useState<ClientAccessMode>(canGrantAllClients ? 'all' : 'assigned')
+  const [clientIds, setClientIds] = useState<number[]>([])
+  const [clientError, setClientError] = useState<string>()
 
   const form = useForm<UserForm>({
     resolver: zodResolver(formSchema),
@@ -105,7 +114,8 @@ export function UsersActionDialog({
         {
           name,
           email: values.email,
-          roles: [values.role],
+          ...(canRoles && values.role ? { roles: [values.role] } : {}),
+          ...(canClients ? { client_access: clientAccess, client_ids: clientIds } : {}),
         },
         {
           onSuccess: () => {
@@ -113,7 +123,8 @@ export function UsersActionDialog({
             onOpenChange(false)
           },
           onError: (errors) => {
-            console.error('Failed to create user:', errors)
+            setClientError(errors.client_access ?? errors.client_ids)
+            if (errors.email) form.setError('email', { message: errors.email })
           },
         }
       )
@@ -238,25 +249,39 @@ export function UsersActionDialog({
                   </FormItem>
                 )}
               />
-              <FormField
-                control={form.control}
-                name='role'
-                render={({ field }) => (
-                  <FormItem className='grid grid-cols-6 items-center space-y-0 gap-x-4 gap-y-1'>
-                    <FormLabel className='col-span-2 text-end'>Role</FormLabel>
-                    <div className='col-span-4'>
-                      <RoleSelectWithAdd
-                        value={field.value}
-                        onValueChange={field.onChange}
-                        placeholder='Select a role'
-                        items={roleOptions}
-                        availablePermissions={allPermissions}
-                      />
-                    </div>
-                    <FormMessage className='col-span-4 col-start-3' />
-                  </FormItem>
-                )}
-              />
+              {canRoles && (
+                <FormField
+                  control={form.control}
+                  name='role'
+                  render={({ field }) => (
+                    <FormItem className='grid grid-cols-6 items-center space-y-0 gap-x-4 gap-y-1'>
+                      <FormLabel className='col-span-2 text-end'>Role</FormLabel>
+                      <div className='col-span-4'>
+                        <RoleSelectWithAdd
+                          value={field.value}
+                          onValueChange={field.onChange}
+                          placeholder='Select a role'
+                          items={roleOptions}
+                        />
+                      </div>
+                      <FormMessage className='col-span-4 col-start-3' />
+                    </FormItem>
+                  )}
+                />
+              )}
+              {!isEdit && canClients && (
+                <ClientAccessField
+                  mode={clientAccess}
+                  clientIds={clientIds}
+                  onChange={(mode, ids) => {
+                    setClientAccess(mode)
+                    setClientIds(ids)
+                  }}
+                  clients={clients}
+                  canGrantAll={canGrantAllClients}
+                  error={clientError}
+                />
+              )}
               {!isEdit && (
                 <div className='col-span-6 rounded-md bg-muted/50 p-4 text-sm text-muted-foreground'>
                   <p className='font-medium text-foreground mb-1'>

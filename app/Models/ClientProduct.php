@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\RestrictedByClientAccess;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -10,7 +11,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class ClientProduct extends Model
 {
-    use HasFactory, SoftDeletes;
+    use HasFactory, SoftDeletes, RestrictedByClientAccess;
 
     protected $fillable = [
         'client_id',
@@ -116,7 +117,7 @@ class ClientProduct extends Model
 
         // Rows predating the withTrashed() fix above may already have taken a
         // code out of sequence, so walk forward until one is genuinely free.
-        while (static::withTrashed()->where('product_code', $candidate)->exists()) {
+        while (static::acrossClients()->withTrashed()->where('product_code', $candidate)->exists()) {
             $nextNumber++;
             $candidate = $client->client_id . '-' . str_pad($nextNumber, 3, '0', STR_PAD_LEFT);
         }

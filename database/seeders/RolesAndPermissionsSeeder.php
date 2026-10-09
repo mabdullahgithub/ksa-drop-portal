@@ -3,199 +3,47 @@
 namespace Database\Seeders;
 
 use App\Models\User;
+use App\Support\PermissionCatalog;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
-use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
+use Spatie\Permission\PermissionRegistrar;
 
 class RolesAndPermissionsSeeder extends Seeder
 {
+    /**
+     * Safe to run any number of times. Every run checks the whole permission
+     * list (App\Support\PermissionCatalog) and gives all of it to superadmin
+     * and developer. The other roles are only created when missing: once they
+     * exist they belong to whoever edits them in the Roles page, and a re-run
+     * must not undo that.
+     */
     public function run(): void
     {
-        app()[\Spatie\Permission\PermissionRegistrar::class]->forgetCachedPermissions();
+        // Every permission exists, and superadmin + developer hold them all.
+        PermissionCatalog::sync();
 
-        $permissions = [
-            // Dashboard CRUD
-            'view dashboard',
-            'create dashboard',
-            'edit dashboard',
-            'delete dashboard',
+        $all = PermissionCatalog::names();
 
-            // Client CRUD
-            'view client',
-            'create client',
-            'edit client',
-            'delete client',
-            'impersonate client',
+        // Admin — everything except handing out roles and permissions.
+        $this->createRole('admin', array_values(array_diff($all, [
+            'create roles', 'edit roles', 'delete roles',
+        ])));
 
-            // Inventory CRUD (global product catalog)
-            'view inventory',
-            'create inventory',
-            'edit inventory',
-            'delete inventory',
-
-            // Orders CRUD
-            'view orders',
-            'create orders',
-            'edit orders',
-            'delete orders',
-
-            // WhatsApp inbox
-            'view whatsapp',
-            'reply whatsapp',
-
-            // Recycle Bin (each tab also needs that entity's delete permission)
-            'view recycle bin',
-            'restore recycle bin',
-            'purge recycle bin',
-
-            // Apps CRUD
-            'view apps',
-            'create apps',
-            'edit apps',
-            'delete apps',
-
-            // Tags CRUD
-            'view tags',
-            'create tags',
-            'edit tags',
-            'delete tags',
-
-            // User Management CRUD
-            'view users',
-            'create users',
-            'edit users',
-            'delete users',
-
-            // Role Management CRUD
-            'view roles',
-            'create roles',
-            'edit roles',
-            'delete roles',
-
-            // Permission Management
-            'view permissions',
-            'create permissions',
-            'edit permissions',
-            'delete permissions',
-
-            // Team Management
-            'view teams',
-            'create teams',
-            'edit teams',
-            'delete teams',
-
-            // Notifications
-            'view notifications',
-            'delete notifications',
-
-            // Settings
-            'view settings',
-            'edit settings',
-
-            // Email Settings
-            'manage-email-settings',
-        ];
-
-        // Create permissions if they don't already exist
-        foreach ($permissions as $permission) {
-            Permission::firstOrCreate(['name' => $permission]);
-        }
-
-        // Super Admin — sync all permissions (runs after all are created above)
-        $superAdmin = Role::firstOrCreate(['name' => 'superadmin']);
-        $superAdmin->syncPermissions(Permission::all());
-
-        // Admin — full CRUD on all content, manage users/roles, view permissions, manage settings
-        $admin = Role::firstOrCreate(['name' => 'admin']);
-        $adminPermissions = [
-            // Dashboard
-            'view dashboard', 'create dashboard', 'edit dashboard', 'delete dashboard',
-
-            // Client
-            'view client', 'create client', 'edit client', 'delete client', 'impersonate client',
-
-            // Inventory
-            'view inventory', 'create inventory', 'edit inventory', 'delete inventory',
-
-            // Orders
-            'view orders', 'create orders', 'edit orders', 'delete orders',
-
-            // WhatsApp
-            'view whatsapp', 'reply whatsapp',
-
-            // Recycle Bin
-            'view recycle bin', 'restore recycle bin', 'purge recycle bin',
-
-            // Apps
-            'view apps', 'create apps', 'edit apps', 'delete apps',
-
-            // Tags
-            'view tags', 'create tags', 'edit tags', 'delete tags',
-
-            // User & Role Management
-            'view users', 'create users', 'edit users', 'delete users',
-            'view roles', 'create roles', 'edit roles', 'delete roles',
-            'view permissions',
-
-            // Teams
-            'view teams', 'create teams', 'edit teams', 'delete teams',
-
-            // Notifications
-            'view notifications', 'delete notifications',
-
-            // Settings
-            'view settings', 'edit settings',
-            'manage-email-settings',
-        ];
-        $admin->syncPermissions($adminPermissions);
-
-        // Manager — view-only on user management, full CRUD on content, view settings
-        $manager = Role::firstOrCreate(['name' => 'manager']);
-        $managerPermissions = [
-            // Dashboard
-            'view dashboard',
-
-            // Client
-            'view client', 'create client', 'edit client', 'delete client', 'impersonate client',
-
-            // Inventory
-            'view inventory', 'create inventory', 'edit inventory', 'delete inventory',
-
-            // Orders
-            'view orders', 'create orders', 'edit orders', 'delete orders',
-
-            // WhatsApp
-            'view whatsapp', 'reply whatsapp',
-
-            // Recycle Bin
-            'view recycle bin', 'restore recycle bin', 'purge recycle bin',
-
-            // Apps
-            'view apps', 'create apps', 'edit apps', 'delete apps',
-
-            // Tags
-            'view tags', 'create tags', 'edit tags',
-
-            // User & Role Management (view only)
-            'view users',
-            'view roles',
-            'view permissions',
-
-            // Teams
-            'view teams', 'create teams', 'edit teams',
-
-            // Notifications
-            'view notifications',
-
-            // Settings (view only)
-            'view settings',
-        ];
-        $manager->syncPermissions($managerPermissions);
+        // Manager — the daily work, without deleting forever or managing the team.
+        $this->createRole('manager', array_values(array_filter($all, fn (string $permission) => ! str_starts_with($permission, 'purge ')
+            && ! in_array($permission, [
+                'empty recycle bin',
+                'create users', 'edit users', 'assign user roles', 'assign client access', 'delete users',
+                'create roles', 'edit roles', 'delete roles',
+                'edit email settings', 'send test email', 'restore graveyard emails',
+                'reveal connector secrets',
+            ], true))));
 
         // Client — portal access only, section access controlled via portal_features column
-        $clientRole = Role::firstOrCreate(['name' => 'client']);
-        $clientRole->syncPermissions([]);
+        $this->createRole('client', []);
+
+        app(PermissionRegistrar::class)->forgetCachedPermissions();
 
         // Create admin user if not exists
         $adminUser = User::firstOrCreate(
@@ -210,5 +58,15 @@ class RolesAndPermissionsSeeder extends Seeder
         if (! $adminUser->hasRole('superadmin')) {
             $adminUser->assignRole('superadmin');
         }
+    }
+
+    /** @param  list<string>  $permissions */
+    private function createRole(string $name, array $permissions): void
+    {
+        if (Role::where('name', $name)->where('guard_name', 'web')->exists()) {
+            return;
+        }
+
+        Role::create(['name' => $name, 'guard_name' => 'web'])->syncPermissions($permissions);
     }
 }

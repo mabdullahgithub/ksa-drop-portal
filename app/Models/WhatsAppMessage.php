@@ -2,11 +2,18 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\RestrictedByClientAccess;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class WhatsAppMessage extends Model
 {
+    use RestrictedByClientAccess;
+
+    protected static function clientAccessColumn(): string
+    {
+        return 'order_id';
+    }
     protected $table = 'whatsapp_messages';
 
     protected $fillable = [

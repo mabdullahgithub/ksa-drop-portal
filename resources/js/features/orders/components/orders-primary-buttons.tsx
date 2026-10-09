@@ -45,7 +45,7 @@ export function OrdersPrimaryButtons({ filters, table }: OrdersPrimaryButtonsPro
         <RefreshCw className={`mr-2 h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
         Refresh
       </Button>
-      <Can permission='view orders'>
+      <Can permission='export orders'>
         <Button variant='outline' size='sm' onClick={handleExport}>
           <Download className='mr-2 h-4 w-4' />
           Export CSV

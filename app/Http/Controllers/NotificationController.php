@@ -12,8 +12,25 @@ class NotificationController extends Controller
 {
     use ResolvesNotifiableUser;
 
+    /**
+     * The bell is a permission for the team. Clients, and staff looking at a
+     * client's portal, always have it: these routes are shared with the
+     * portal, where there are no staff permissions.
+     */
+    private function staffMay(Request $request, string $permission): bool
+    {
+        $user = $request->user();
+
+        return ! $user
+            || $user->hasRole('client')
+            || $request->session()->has('impersonate.admin_id')
+            || $user->can($permission);
+    }
+
     public function index(Request $request): JsonResponse
     {
+        abort_unless($this->staffMay($request, 'view notifications'), 403);
+
         $perPage = $request->input('per_page', 20);
 
         $notifications = $this->resolveNotifiableUser($request)
@@ -31,6 +48,11 @@ class NotificationController extends Controller
      */
     public function unread(Request $request): JsonResponse
     {
+        // Polled from every page, so no bell is a zero and not an error.
+        if (! $this->staffMay($request, 'view notifications')) {
+            return response()->json(['count' => 0]);
+        }
+
         $user = $this->resolveNotifiableUser($request);
 
         return response()->json(['count' => $user ? $this->cachedUnreadCount($user) : 0]);
@@ -38,6 +60,8 @@ class NotificationController extends Controller
 
     public function markAsRead(Request $request, string $id): JsonResponse
     {
+        abort_unless($this->staffMay($request, 'mark notifications read'), 403);
+
         $user = $this->resolveNotifiableUser($request);
 
         if (! $user) {
@@ -53,6 +77,8 @@ class NotificationController extends Controller
 
     public function markAllAsRead(Request $request): JsonResponse
     {
+        abort_unless($this->staffMay($request, 'mark notifications read'), 403);
+
         $user = $this->resolveNotifiableUser($request);
 
         if (! $user) {
@@ -67,6 +93,8 @@ class NotificationController extends Controller
 
     public function destroy(Request $request, string $id): JsonResponse
     {
+        abort_unless($this->staffMay($request, 'delete notifications'), 403);
+
         $user = $this->resolveNotifiableUser($request);
 
         if (! $user) {
@@ -82,6 +110,8 @@ class NotificationController extends Controller
 
     public function page(Request $request): Response
     {
+        abort_unless($this->staffMay($request, 'view notifications'), 403);
+
         $perPage = $request->input('per_page', 20);
 
         $notifications = $this->resolveNotifiableUser($request)

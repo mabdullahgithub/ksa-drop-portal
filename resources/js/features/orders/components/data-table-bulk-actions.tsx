@@ -306,7 +306,7 @@ export function DataTableBulkActions<TData>({
     <>
       <BulkActionsToolbar table={table} entityName='order'>
         {/* Call outcomes drive the WhatsApp flow, so they go with it. */}
-        {whatsappMessaging && (
+        {whatsappMessaging && can('update order call status') && (
           <DropdownMenu>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -337,6 +337,7 @@ export function DataTableBulkActions<TData>({
           </DropdownMenu>
         )}
 
+        {can('tag orders') && (
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
@@ -355,8 +356,9 @@ export function DataTableBulkActions<TData>({
             <p>Assign tag</p>
           </TooltipContent>
         </Tooltip>
+        )}
 
-        {can('edit orders') && (
+        {can('create shipments') && (
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
@@ -377,7 +379,7 @@ export function DataTableBulkActions<TData>({
           </Tooltip>
         )}
 
-        {can('edit orders') && (
+        {can('generate waybills') && (
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
@@ -405,6 +407,7 @@ export function DataTableBulkActions<TData>({
 
         {/* Cancel only sets the order status -- deliberately not a trash icon,
             so it cannot be mistaken for the delete button beside it. */}
+        {can('cancel orders') && (
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
@@ -423,6 +426,7 @@ export function DataTableBulkActions<TData>({
             <p>Cancel orders (keeps them in the list)</p>
           </TooltipContent>
         </Tooltip>
+        )}
 
         {can('delete orders') && (
           <Tooltip>

@@ -157,9 +157,11 @@ class RiderRecycleBinTest extends TestCase
     /** staff() plus full use of the bin, so the tests turn on the rider gate alone. */
     private function binStaff(?array $permissions = null): User
     {
-        $user = $permissions === null ? $this->staff() : $this->staff($permissions);
-        $user->givePermissionTo(self::BIN_PERMISSIONS);
-
-        return $user;
+        // One role holding both: a bin tab opens for someone who has the bin
+        // and could have deleted what is in it.
+        return $this->staff([
+            ...($permissions ?? ['view riders', 'manage riders', 'manage rider payments', 'view orders', 'edit orders']),
+            ...self::BIN_PERMISSIONS,
+        ]);
     }
 }

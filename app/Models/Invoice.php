@@ -2,12 +2,18 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\RestrictedByClientAccess;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class Invoice extends Model
 {
-    use HasFactory;
+    use HasFactory, RestrictedByClientAccess;
+
+    protected static function clientAccessColumn(): string
+    {
+        return 'order_id';
+    }
 
     protected $fillable = [
         'order_id',
@@ -58,7 +64,8 @@ class Invoice extends Model
         $prefix = $type === 'shipping' ? 'SHP' : 'INV';
         $year = date('Y');
 
-        $latest = static::where('invoice_number', 'like', "{$prefix}-{$year}-%")
+        // Across every client: the numbers are one sequence.
+        $latest = static::acrossClients()->where('invoice_number', 'like', "{$prefix}-{$year}-%")
             ->orderBy('id', 'desc')
             ->first();
 

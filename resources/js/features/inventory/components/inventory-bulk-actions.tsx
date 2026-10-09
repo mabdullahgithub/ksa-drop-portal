@@ -93,6 +93,8 @@ export function InventoryBulkActions<TData>({ table }: InventoryBulkActionsProps
   return (
     <>
     <BulkActionsToolbar table={table} entityName='product'>
+      {can('change product status') && (
+        <>
       {/* Change Status */}
       <DropdownMenu>
         <Tooltip>
@@ -123,7 +125,11 @@ export function InventoryBulkActions<TData>({ table }: InventoryBulkActionsProps
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
+        </>
+      )}
 
+      {can('publish products') && (
+        <>
       {/* Publish */}
       <Tooltip>
         <TooltipTrigger asChild>
@@ -161,6 +167,8 @@ export function InventoryBulkActions<TData>({ table }: InventoryBulkActionsProps
           <p>Unpublish selected</p>
         </TooltipContent>
       </Tooltip>
+        </>
+      )}
 
       {/* Delete -- distinct from "Set Archived" above, which is the Shopify
           product status and has nothing to do with the recycle bin. */}
