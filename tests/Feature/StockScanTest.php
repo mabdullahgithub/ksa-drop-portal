@@ -437,4 +437,65 @@ class StockScanTest extends TestCase
         $this->actingAs($staff)->getJson('/api/stock-scans?search=' . $linked->order->order_number)->assertOk()->assertJsonCount(2, 'scans');
         $this->actingAs($staff)->getJson('/api/stock-scans?search=CAT-1')->assertOk()->assertJsonCount(2, 'scans');
     }
+
+    public function test_the_riders_page_opens_one_managers_scans(): void
+    {
+        $manager = $this->makeInventoryManager();
+        $token = $this->signedInDevice($manager);
+        $other = $this->makeInventoryManager(['name' => 'Other Manager']);
+        $this->catalogProduct('CAT-1', 10);
+        $linked = $this->parcelOf('CAT-1');
+        $unlinked = $this->ksaShipment();
+
+        $this->scan($token, 'out', $linked->tracking_number);
+        $this->scan($token, 'out', $unlinked->tracking_number);
+        $this->scan($token, 'in', $linked->tracking_number);
+        $this->scan($this->signedInDevice($other), 'out', $this->ksaShipment()->tracking_number);
+
+        // Its own permission: neither the Riders page nor the Inventory scan log opens it.
+        $this->actingAs($this->staff(['view riders', 'view inventory']))->getJson("/api/riders/{$manager->id}/stock-scans")->assertStatus(403);
+
+        $staff = $this->staff(['view riders', 'view inventory manager scans']);
+        $today = now(config('app.business_timezone', 'Asia/Riyadh'))->toDateString();
+
+        $this->actingAs($staff)->getJson("/api/riders/{$manager->id}/stock-scans?from={$today}&to={$today}")
+            ->assertOk()
+            ->assertJsonCount(3, 'scans')
+            ->assertJsonPath('next_page', null)
+            ->assertJsonPath('scans.0.direction', 'in')
+            ->assertJsonPath('totals.out', ['parcels' => 2, 'pieces' => 4])
+            ->assertJsonPath('totals.in', ['parcels' => 1, 'pieces' => 2])
+            ->assertJsonPath('totals.unmatched', 1);
+
+        // The counts are of the dates, whatever the filter.
+        $this->actingAs($staff)->getJson("/api/riders/{$manager->id}/stock-scans?direction=in")
+            ->assertOk()
+            ->assertJsonCount(1, 'scans')
+            ->assertJsonPath('totals.out.parcels', 2);
+
+        $this->actingAs($staff)->getJson("/api/riders/{$manager->id}/stock-scans?unmatched=1")
+            ->assertOk()
+            ->assertJsonCount(1, 'scans')
+            ->assertJsonPath('scans.0.parcel.tracking_number', $unlinked->tracking_number);
+
+        $this->actingAs($staff)->getJson("/api/riders/{$manager->id}/stock-scans?search=CAT-1")->assertOk()->assertJsonCount(2, 'scans');
+
+        $yesterday = now(config('app.business_timezone', 'Asia/Riyadh'))->subDay()->toDateString();
+        $this->actingAs($staff)->getJson("/api/riders/{$manager->id}/stock-scans?from={$yesterday}&to={$yesterday}")
+            ->assertOk()
+            ->assertJsonCount(0, 'scans')
+            ->assertJsonPath('totals.out.parcels', 0)
+            ->assertJsonPath('totals.unmatched', 0);
+
+        $this->actingAs($staff)->getJson("/api/riders/{$other->id}/stock-scans")
+            ->assertOk()
+            ->assertJsonCount(1, 'scans')
+            ->assertJsonPath('totals.out.parcels', 1);
+
+        // Later pages carry no counts.
+        $this->actingAs($staff)->getJson("/api/riders/{$manager->id}/stock-scans?page=2")
+            ->assertOk()
+            ->assertJsonCount(0, 'scans')
+            ->assertJsonPath('totals', null);
+    }
 }

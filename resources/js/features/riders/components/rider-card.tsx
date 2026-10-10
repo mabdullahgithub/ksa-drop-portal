@@ -1,4 +1,4 @@
-import { ArrowDownToLine, ArrowUpFromLine, Bike, ChevronRight, Coins, ListChecks, Undo2, Wallet, Warehouse } from 'lucide-react'
+import { ArrowDownToLine, ArrowUpFromLine, Bike, ChevronRight, Coins, ListChecks, ScanLine, Undo2, Wallet, Warehouse } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import { VEHICLE_TYPES, type RiderRow } from '../data/types'
@@ -87,7 +87,7 @@ export function RiderCard({ rider, onPick }: Props) {
       <AppState rider={rider} />
 
       {isManager ? (
-        <StockToday rider={rider} />
+        <StockToday rider={rider} onPick={onPick} />
       ) : (
         <RiderNumbers rider={rider} onPick={onPick} />
       )}
@@ -96,26 +96,65 @@ export function RiderCard({ rider, onPick }: Props) {
 }
 
 /** Parcels an inventory manager scanned today, each way, and the units in them. */
-function StockToday({ rider }: { rider: RiderRow }) {
+function StockToday({ rider, onPick }: Pick<Props, 'rider' | 'onPick'>) {
+  // Their scans are a permission of their own.
+  const { can } = usePermissions()
+  const canScans = can('view inventory manager scans')
   const today = rider.stock_today
 
+  const ways = [
+    { way: 'out', label: 'Out today', Icon: ArrowUpFromLine, tone: undefined },
+    { way: 'in', label: 'In today', Icon: ArrowDownToLine, tone: 'text-green-700 dark:text-green-400' },
+  ] as const
+
   return (
-    <div className='mt-auto grid grid-cols-2 gap-1 border-t pt-2 text-center'>
-      <div className='py-1'>
-        <p className='text-lg font-semibold leading-6 tabular-nums'>{today?.out.parcels ?? 0}</p>
-        <p className='inline-flex items-center gap-1 text-[11px] text-muted-foreground'>
-          <ArrowUpFromLine className='h-3 w-3' />
-          Out today · {today?.out.pieces ?? 0} pcs
-        </p>
+    <>
+      {/* Each number opens today's scans that way. */}
+      <div className='mt-auto grid grid-cols-2 gap-1 border-t pt-2 text-center'>
+        {ways.map(({ way, label, Icon, tone }) => {
+          const content = (
+            <>
+              <p className={cn('text-lg font-semibold leading-6 tabular-nums', tone)}>{today?.[way].parcels ?? 0}</p>
+              <p className='inline-flex items-center gap-1 text-[11px] text-muted-foreground'>
+                <Icon className='h-3 w-3' />
+                {label} · {today?.[way].pieces ?? 0} pcs
+              </p>
+            </>
+          )
+
+          return canScans ? (
+            <button
+              key={way}
+              type='button'
+              onClick={() => onPick({ type: 'scans', rider, filter: way, today: true })}
+              className='rounded-md py-1 transition-colors hover:bg-muted/60'
+              title={`${label}: view scans`}
+            >
+              {content}
+            </button>
+          ) : (
+            <div key={way} className='py-1'>
+              {content}
+            </div>
+          )
+        })}
       </div>
-      <div className='py-1'>
-        <p className='text-lg font-semibold leading-6 tabular-nums text-green-700 dark:text-green-400'>{today?.in.parcels ?? 0}</p>
-        <p className='inline-flex items-center gap-1 text-[11px] text-muted-foreground'>
-          <ArrowDownToLine className='h-3 w-3' />
-          In today · {today?.in.pieces ?? 0} pcs
-        </p>
-      </div>
-    </div>
+
+      {canScans && (
+        <div className='-mx-2 -my-1'>
+          <button
+            type='button'
+            onClick={() => onPick({ type: 'scans', rider })}
+            className='flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors hover:bg-muted/60'
+          >
+            <ScanLine className='h-3.5 w-3.5 text-muted-foreground' />
+            <span className='text-muted-foreground'>Scans</span>
+            <span className='ms-auto text-muted-foreground'>Out, in, not linked</span>
+            <ChevronRight className='h-3.5 w-3.5 text-muted-foreground rtl:rotate-180' />
+          </button>
+        </div>
+      )}
+    </>
   )
 }
 

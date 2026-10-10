@@ -143,6 +143,8 @@ Route::middleware(['auth', 'verified', 'role:!client', 'client.access'])->group(
         // Also the counts beside the filters on a rider's orders sheet.
         Route::get('/api/riders/{rider}/performance', [RiderController::class, 'riderPerformance'])->middleware('permission:view rider performance|view rider parcels')->name('api.riders.rider-performance');
         Route::get('/api/riders/{rider}/parcels', [RiderController::class, 'riderParcels'])->middleware('permission:view rider parcels')->name('api.riders.parcels');
+        // What an inventory manager scanned OUT and IN.
+        Route::get('/api/riders/{rider}/stock-scans', [StockScanController::class, 'manager'])->middleware('permission:view inventory manager scans')->name('api.riders.stock-scans');
         // Cash a rider owes and has handed in.
         Route::prefix('api/riders/{rider}/payments')->scopeBindings()->group(function () {
             Route::get('/', [RiderPaymentController::class, 'index'])->middleware('permission:view rider payments')->name('api.riders.payments.index');

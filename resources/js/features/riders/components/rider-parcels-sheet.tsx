@@ -193,7 +193,7 @@ export function RiderParcelsSheet({
   )
 }
 
-function Chip({
+export function Chip({
   active,
   onClick,
   label,

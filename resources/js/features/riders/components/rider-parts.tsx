@@ -1,6 +1,6 @@
 import { formatDistanceToNowStrict } from 'date-fns'
 import { DotsHorizontalIcon } from '@radix-ui/react-icons'
-import { Ban, KeyRound, Link2, ListChecks, LogOut, Pencil, RotateCcw, Smartphone, Trash2, Wallet } from 'lucide-react'
+import { Ban, KeyRound, Link2, ListChecks, LogOut, Pencil, RotateCcw, ScanLine, Smartphone, Trash2, Wallet } from 'lucide-react'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import {
@@ -12,7 +12,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/utils'
-import type { ParcelOutcome, PaymentDirection, RiderCash, RiderPay, RiderRow } from '../data/types'
+import type { ManagerScanFilter, ParcelOutcome, PaymentDirection, RiderCash, RiderPay, RiderRow } from '../data/types'
 import type { AccessKind } from './rider-access-dialog'
 import { usePermissions } from '@/hooks/use-permissions'
 
@@ -22,6 +22,8 @@ export type RiderDialog =
   | { type: AccessKind; rider: RiderRow }
   | { type: 'payments'; rider: RiderRow; direction?: PaymentDirection }
   | { type: 'orders'; rider: RiderRow; outcome?: ParcelOutcome }
+  /** An inventory manager's scans. `today`: opened from today's numbers. */
+  | { type: 'scans'; rider: RiderRow; filter?: ManagerScanFilter; today?: boolean }
   | { type: 'sign-out' | 'suspend' | 'delete'; rider: RiderRow }
 
 /** What the Riders filters match on for "App". */
@@ -165,13 +167,14 @@ export function RowActions({ rider, onPick }: { rider: RiderRow; onPick: (dialog
     link: active && can('send rider app link'),
     pin: active && can('set rider pin'),
     orders: isRider && can('view rider parcels'),
+    scans: !isRider && can('view inventory manager scans'),
     payments: isRider && can('view rider payments'),
     edit: can('edit riders'),
     signOut: !!rider.device && can('sign rider out'),
     suspend: can('suspend riders'),
     remove: can('delete riders'),
   }
-  const upper = items.link || items.pin || items.orders || items.payments || items.edit || items.signOut
+  const upper = items.link || items.pin || items.orders || items.scans || items.payments || items.edit || items.signOut
   const lower = items.suspend || items.remove
 
   // Nothing to offer: no menu at all.
@@ -202,6 +205,12 @@ export function RowActions({ rider, onPick }: { rider: RiderRow; onPick: (dialog
           <DropdownMenuItem onClick={() => onPick({ type: 'orders', rider })}>
             Orders
             <DropdownMenuShortcut><ListChecks size={16} /></DropdownMenuShortcut>
+          </DropdownMenuItem>
+        )}
+        {items.scans && (
+          <DropdownMenuItem onClick={() => onPick({ type: 'scans', rider })}>
+            Scans
+            <DropdownMenuShortcut><ScanLine size={16} /></DropdownMenuShortcut>
           </DropdownMenuItem>
         )}
         {items.payments && (

@@ -208,6 +208,7 @@ final class PermissionCatalog
                     'view rider cash stats' => ['Rider cash numbers', 'Cash collected, cash owed and pay owed.'],
                     'view rider performance' => ['Rider performance', 'Top performers and each rider\'s performance.'],
                     'view rider parcels' => ['Rider orders', 'The parcels a rider holds or handled.'],
+                    'view inventory manager scans' => ['Inventory manager scans', 'The parcels an inventory manager scanned out and in.'],
                     'view rider payments' => ['Rider cash & pay', 'What a rider owes, was paid and handed in.'],
                 ],
                 'Actions' => [

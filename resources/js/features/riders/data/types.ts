@@ -17,6 +17,12 @@ export type RiderRole = (typeof RIDER_ROLES)[number]['value']
 /** What an inventory manager scanned today, each way. */
 export type StockToday = Record<'out' | 'in', { parcels: number; pieces: number }>
 
+/** What an inventory manager scanned between two dates. `unmatched`: scans with an item linked to no product. */
+export type ManagerScanTotals = StockToday & { unmatched: number }
+
+/** The filters of a manager's scans: one way only, or the scans with an item linked to no product. */
+export type ManagerScanFilter = 'out' | 'in' | 'unmatched'
+
 export type RiderRow = {
   id: number
   name: string

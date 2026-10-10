@@ -17,7 +17,7 @@ import { cn } from '@/lib/utils'
 type ScanItem = { name: string; sku: string | null; quantity: number; matched: boolean; stock_after: number | null }
 
 /** One parcel an inventory manager scanned OUT of or IN to the warehouse. */
-type StockScan = {
+export type StockScan = {
   id: number
   direction: 'out' | 'in'
   occurred_at: string
@@ -208,7 +208,8 @@ export function StockScansSheet({ open, onOpenChange }: Props) {
   )
 }
 
-function ScanRow({ scan }: { scan: StockScan }) {
+/** `hideScanner`: in one manager's own log, where every scan is theirs. */
+export function ScanRow({ scan, hideScanner }: { scan: StockScan; hideScanner?: boolean }) {
   const out = scan.direction === 'out'
   const Icon = out ? ArrowUpFromLine : ArrowDownToLine
 
@@ -236,7 +237,7 @@ function ScanRow({ scan }: { scan: StockScan }) {
           scan.parcel?.order_number && `Order ${scan.parcel.order_number}`,
           scan.parcel?.courier_label,
           scan.parcel?.status_label,
-          scan.scanned_by && `by ${scan.scanned_by}`,
+          !hideScanner && scan.scanned_by && `by ${scan.scanned_by}`,
           !out && scan.parcel_rider && `from ${scan.parcel_rider}`,
         ]
           .filter(Boolean)

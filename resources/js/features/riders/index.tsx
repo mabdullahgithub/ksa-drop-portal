@@ -37,6 +37,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { usePermissions } from '@/hooks/use-permissions'
+import { ManagerScansSheet } from './components/manager-scans-sheet'
 import { RiderAccessDialog } from './components/rider-access-dialog'
 import { RiderCard } from './components/rider-card'
 import { RiderFormDialog } from './components/rider-form-dialog'
@@ -83,6 +84,7 @@ export function Riders({
   const canCashStats = can('view rider cash stats')
   const canPerformance = can('view rider performance')
   const canParcels = can('view rider parcels')
+  const canScans = can('view inventory manager scans')
   const canMoney = can('view rider payments')
 
   const [riders, setRiders] = useState(initial)
@@ -433,7 +435,15 @@ export function Riders({
                         {rider.role === 'inventory_manager' ? (
                           // No parcels, cash or pay of their own: what they scanned today instead.
                           <TableCell colSpan={5} className='text-end text-sm tabular-nums text-muted-foreground'>
-                            {rider.stock_today?.out.parcels ?? 0} out · {rider.stock_today?.in.parcels ?? 0} in today
+                            <button
+                              type='button'
+                              disabled={!canScans}
+                              onClick={() => setDialog({ type: 'scans', rider, today: true })}
+                              className='rounded-md px-1.5 py-0.5 enabled:hover:bg-muted/60'
+                              title={canScans ? 'View scans' : undefined}
+                            >
+                              {rider.stock_today?.out.parcels ?? 0} out · {rider.stock_today?.in.parcels ?? 0} in today
+                            </button>
                           </TableCell>
                         ) : (
                         <>
@@ -547,6 +557,17 @@ export function Riders({
           key={`${dialog.rider.id}:${dialog.outcome ?? 'all'}`}
           rider={dialog.rider}
           outcome={dialog.outcome}
+          open
+          onOpenChange={(open) => !open && setDialog(null)}
+        />
+      )}
+
+      {dialog?.type === 'scans' && (
+        <ManagerScansSheet
+          key={`${dialog.rider.id}:${dialog.filter ?? 'all'}:${dialog.today ? 'today' : 'all'}`}
+          rider={dialog.rider}
+          filter={dialog.filter}
+          today={dialog.today}
           open
           onOpenChange={(open) => !open && setDialog(null)}
         />
