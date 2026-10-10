@@ -33,9 +33,27 @@ class User extends Authenticatable
      */
     public const FULL_ACCESS_ROLES = ['superadmin', 'developer'];
 
-    /** `client_access`: every client, or only the ones assigned. */
+    /**
+     * `client_access`: every client, every client of one type, or only the
+     * ones assigned.
+     */
     public const CLIENT_ACCESS_ALL = 'all';
+    public const CLIENT_ACCESS_DROPSHIPPERS = 'dropshippers';
+    public const CLIENT_ACCESS_FULFILMENT = 'fulfilment';
     public const CLIENT_ACCESS_ASSIGNED = 'assigned';
+
+    public const CLIENT_ACCESS_MODES = [
+        self::CLIENT_ACCESS_ALL,
+        self::CLIENT_ACCESS_DROPSHIPPERS,
+        self::CLIENT_ACCESS_FULFILMENT,
+        self::CLIENT_ACCESS_ASSIGNED,
+    ];
+
+    /** The choices that follow a client type, and the `client_types` value each one follows. */
+    public const CLIENT_ACCESS_TYPES = [
+        self::CLIENT_ACCESS_DROPSHIPPERS => 'dropshipper',
+        self::CLIENT_ACCESS_FULFILMENT => 'fulfilment',
+    ];
 
     /**
      * Get the attributes that should be cast.
@@ -79,12 +97,19 @@ class User extends Authenticatable
     }
 
     /**
-     * The clients this person handles. Only read while `client_access` is
-     * 'assigned'; see App\Support\ClientAccess.
+     * The clients this person handles by name. Not read while `client_access`
+     * is 'all'; on top of the whole type while it follows one. See
+     * App\Support\ClientAccess.
      */
     public function assignedClients(): BelongsToMany
     {
         return $this->belongsToMany(Client::class, 'client_user_access')->withTimestamps();
+    }
+
+    /** The client type this person's access follows, when it follows one. */
+    public function clientAccessType(): ?string
+    {
+        return self::CLIENT_ACCESS_TYPES[$this->client_access ?? ''] ?? null;
     }
 
     /**

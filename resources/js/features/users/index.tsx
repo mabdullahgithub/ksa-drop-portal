@@ -23,7 +23,7 @@ interface User {
   roles: string[]
   is_super_admin?: boolean
   is_client?: boolean
-  client_access?: 'all' | 'assigned'
+  client_access?: 'all' | 'dropshippers' | 'fulfilment' | 'assigned'
   client_ids?: number[]
   created_at: string
 }

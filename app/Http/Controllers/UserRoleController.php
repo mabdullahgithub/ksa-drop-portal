@@ -17,6 +17,7 @@ use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Spatie\Permission\Models\Role;
+use Symfony\Component\Mailer\Exception\TransportExceptionInterface;
 
 class UserRoleController extends Controller
 {
@@ -63,8 +64,8 @@ class UserRoleController extends Controller
                 ? Client::orderBy('company_name')->get(['id', 'company_name', 'short_id'])
                     ->map(fn (Client $client) => ['id' => $client->id, 'name' => $client->company_name, 'code' => $client->short_id])
                 : [],
-            // False for someone limited to their own clients: they cannot hand out "all".
-            'canGrantAllClients' => fn () => ClientAccess::idsFor($actor) === null,
+            // Someone limited to their own clients cannot hand out more than they handle.
+            'grantableClientModes' => fn () => $this->grantableClientModes($actor),
         ]);
     }
 
@@ -81,7 +82,7 @@ class UserRoleController extends Controller
                 }],
             'roles' => 'array',
             'roles.*' => 'string|exists:roles,name',
-            'client_access' => ['sometimes', Rule::in([User::CLIENT_ACCESS_ALL, User::CLIENT_ACCESS_ASSIGNED])],
+            'client_access' => ['sometimes', Rule::in(User::CLIENT_ACCESS_MODES)],
             'client_ids' => 'sometimes|array',
             'client_ids.*' => 'integer',
         ]);
@@ -91,26 +92,41 @@ class UserRoleController extends Controller
         // Auto-generate a secure password (16 chars with letters, numbers, symbols)
         $generatedPassword = Str::password(16, true, true, false, true);
 
-        $user = User::create([
-            'name' => $validated['name'],
-            'email' => $validated['email'],
-            'password' => $generatedPassword,
-        ]);
+        // The welcome email is the only place the password is ever shown, so
+        // a user whose email did not leave is not kept: nobody could sign in
+        // as them, and their address would be taken for the next attempt.
+        try {
+            $user = DB::transaction(function () use ($validated, $actor, $generatedPassword) {
+                $user = User::create([
+                    'name' => $validated['name'],
+                    'email' => $validated['email'],
+                    'password' => $generatedPassword,
+                ]);
 
-        if ($actor->can('assign user roles')) {
-            $roles = array_intersect($validated['roles'] ?? [], $this->assignableRoles($actor));
-            if ($roles !== []) {
-                $user->assignRole(array_values($roles));
-            }
+                if ($actor->can('assign user roles')) {
+                    $roles = array_intersect($validated['roles'] ?? [], $this->assignableRoles($actor));
+                    if ($roles !== []) {
+                        $user->assignRole(array_values($roles));
+                    }
+                }
+
+                $this->applyClientAccess($actor, $user, $validated, creating: true);
+
+                // Send welcome email with credentials to the new user
+                $user->notify(new WelcomeUserNotification(
+                    password: $generatedPassword,
+                    createdBy: $actor->name
+                ));
+
+                return $user;
+            });
+        } catch (TransportExceptionInterface $e) {
+            report($e);
+
+            throw ValidationException::withMessages([
+                'email' => 'The welcome email could not be sent, so the user was not created. The portal\'s email settings need fixing first.',
+            ]);
         }
-
-        $this->applyClientAccess($actor, $user, $validated, creating: true);
-
-        // Send welcome email with credentials to the new user
-        $user->notify(new WelcomeUserNotification(
-            password: $generatedPassword,
-            createdBy: $actor->name
-        ));
 
         // Notify admins and superadmins about the new user
         $admins = User::role(['superadmin', 'admin'])
@@ -142,7 +158,7 @@ class UserRoleController extends Controller
         $validated = $request->validate([
             'roles' => 'sometimes|array',
             'roles.*' => 'string|exists:roles,name',
-            'client_access' => ['sometimes', Rule::in([User::CLIENT_ACCESS_ALL, User::CLIENT_ACCESS_ASSIGNED])],
+            'client_access' => ['sometimes', Rule::in(User::CLIENT_ACCESS_MODES)],
             'client_ids' => 'sometimes|array',
             'client_ids.*' => 'integer',
         ]);
@@ -254,11 +270,31 @@ class UserRoleController extends Controller
     }
 
     /**
+     * The client choices a person may hand out: any of them when they are not
+     * limited themselves, otherwise the type they handle in full (if they do)
+     * and a pick from their own clients.
+     *
+     * @return list<string>
+     */
+    private function grantableClientModes(User $actor): array
+    {
+        if (ClientAccess::idsFor($actor) === null) {
+            return User::CLIENT_ACCESS_MODES;
+        }
+
+        return array_values(array_filter([
+            $actor->clientAccessType() !== null ? $actor->client_access : null,
+            User::CLIENT_ACCESS_ASSIGNED,
+        ]));
+    }
+
+    /**
      * Save which clients a person handles, when the request says and the
      * actor may assign them.
      *
      * Someone limited to their own clients can only hand out those, and can
-     * never hand out "all"; clients of the target they cannot see are kept.
+     * never hand out more than they handle; clients of the target they cannot
+     * see are kept.
      */
     private function applyClientAccess(User $actor, User $user, array $validated, bool $creating = false): void
     {
@@ -279,13 +315,14 @@ class UserRoleController extends Controller
         }
 
         $mode = $validated['client_access'];
-        $ids = array_map('intval', $validated['client_ids'] ?? []);
+        // Only "selected clients" names clients; the other choices need none.
+        $ids = $mode === User::CLIENT_ACCESS_ASSIGNED ? array_map('intval', $validated['client_ids'] ?? []) : [];
+
+        if (! in_array($mode, $this->grantableClientModes($actor), true)) {
+            throw ValidationException::withMessages(['client_access' => 'You can only assign the clients you handle yourself.']);
+        }
 
         if ($own !== null) {
-            if ($mode === User::CLIENT_ACCESS_ALL) {
-                throw ValidationException::withMessages(['client_access' => 'You can only assign the clients you handle yourself.']);
-            }
-
             if (array_diff($ids, $own) !== []) {
                 throw ValidationException::withMessages(['client_ids' => 'You can only assign the clients you handle yourself.']);
             }
@@ -301,6 +338,6 @@ class UserRoleController extends Controller
         $ids = Client::withoutGlobalScope('client_access')->withTrashed()->whereIn('id', $ids)->pluck('id')->all();
 
         $user->forceFill(['client_access' => $mode])->save();
-        $user->assignedClients()->sync($mode === User::CLIENT_ACCESS_ASSIGNED ? $ids : []);
+        $user->assignedClients()->sync($ids);
     }
 }

@@ -22,11 +22,17 @@ class ClientAccess
      * The clients a user is limited to, or null when they may see every
      * client. Full-access roles and client accounts are never limited.
      *
+     * Someone on "all dropshippers" or "all fulfilment" gets every client of
+     * that type as it stands on this request, so a client added later is
+     * theirs without anyone assigning it.
+     *
      * @return list<int>|null
      */
     public static function idsFor(?User $user): ?array
     {
-        if (! $user || $user->client_access !== User::CLIENT_ACCESS_ASSIGNED) {
+        $type = $user?->clientAccessType();
+
+        if (! $user || ($type === null && $user->client_access !== User::CLIENT_ACCESS_ASSIGNED)) {
             return null;
         }
 
@@ -34,11 +40,13 @@ class ClientAccess
             return null;
         }
 
-        return DB::table('client_user_access')
-            ->where('user_id', $user->id)
-            ->pluck('client_id')
-            ->map(fn ($id) => (int) $id)
-            ->all();
+        $ids = DB::table('client_user_access')->where('user_id', $user->id)->pluck('client_id');
+
+        if ($type !== null) {
+            $ids = $ids->merge(DB::table('clients')->whereJsonContains('client_types', $type)->pluck('id'));
+        }
+
+        return $ids->map(fn ($id) => (int) $id)->unique()->values()->all();
     }
 
     /** @param  list<int>|null  $ids */

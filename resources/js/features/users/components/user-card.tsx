@@ -108,6 +108,8 @@ function Stat({ label, value, tone }: { label: string; value: string; tone?: str
 function clients(user: SimpleUser): { value: string; tone?: string } {
   // A client account only ever sees itself.
   if (user.is_client) return { value: '—' }
+  if (user.client_access === 'dropshippers') return { value: 'Dropshippers' }
+  if (user.client_access === 'fulfilment') return { value: 'Fulfilment' }
   if (user.client_access !== 'assigned') return { value: 'All' }
 
   const count = user.client_ids?.length ?? 0

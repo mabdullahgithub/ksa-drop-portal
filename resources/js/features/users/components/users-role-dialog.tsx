@@ -15,7 +15,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { usePermissions } from '@/hooks/use-permissions'
 import { type PageProps } from '@/types'
-import { type AssignableClient, type ClientAccessMode, ClientAccessField } from './client-access-field'
+import { type AssignableClient, type ClientAccessMode, CLIENT_ACCESS_MODES, ClientAccessField } from './client-access-field'
 
 interface User {
   id: number
@@ -46,7 +46,7 @@ export function UsersRoleDialog({
   availableRoles = [],
 }: UsersRoleDialogProps) {
   const { can } = usePermissions()
-  const { clients = [], canGrantAllClients = true } = usePage<PageProps<{ clients?: AssignableClient[]; canGrantAllClients?: boolean }>>().props
+  const { clients = [], grantableClientModes = CLIENT_ACCESS_MODES } = usePage<PageProps<{ clients?: AssignableClient[]; grantableClientModes?: ClientAccessMode[] }>>().props
 
   const canRoles = can('assign user roles')
   // Client accounts are not team members: they only ever see themselves.
@@ -159,7 +159,7 @@ export function UsersRoleDialog({
                     clientIds={data.client_ids}
                     onChange={(mode, ids) => setData((form) => ({ ...form, client_access: mode, client_ids: ids }))}
                     clients={clients}
-                    canGrantAll={canGrantAllClients}
+                    modes={grantableClientModes}
                     error={errors.client_access ?? errors.client_ids}
                   />
                 )}

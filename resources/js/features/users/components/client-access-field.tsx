@@ -12,24 +12,37 @@ export interface AssignableClient {
   code: string
 }
 
-export type ClientAccessMode = 'all' | 'assigned'
+export type ClientAccessMode = 'all' | 'dropshippers' | 'fulfilment' | 'assigned'
+
+/** Every choice, in the order it is offered. */
+export const CLIENT_ACCESS_MODES: ClientAccessMode[] = ['all', 'dropshippers', 'fulfilment', 'assigned']
+
+const OPTIONS: Record<ClientAccessMode, { label: string; hint: string }> = {
+  all: { label: 'All clients', hint: 'Sees every client, now and in future.' },
+  dropshippers: { label: 'All dropshippers', hint: 'Sees every dropshipper, including ones added later.' },
+  fulfilment: { label: 'All fulfilment clients', hint: 'Sees every fulfilment client, including ones added later.' },
+  assigned: {
+    label: 'Selected clients only',
+    hint: 'Sees only these clients and their orders, shipments, inventory, payments and chats.',
+  },
+}
 
 interface ClientAccessFieldProps {
   mode: ClientAccessMode
   clientIds: number[]
   onChange: (mode: ClientAccessMode, clientIds: number[]) => void
   clients: AssignableClient[]
-  /** False for someone limited to their own clients: they cannot hand out "all". */
-  canGrantAll: boolean
+  /** The choices this person may hand out: someone limited cannot give more than they handle. */
+  modes: ClientAccessMode[]
   error?: string
 }
 
 /**
- * Which clients a team member handles: every client, or a chosen few. With a
- * few, they only see those clients' orders, shipments, inventory, payments
- * and chats.
+ * Which clients a team member handles: every client, every client of one
+ * type, or a chosen few. Anything short of all, and they only see those
+ * clients' orders, shipments, inventory, payments and chats.
  */
-export function ClientAccessField({ mode, clientIds, onChange, clients, canGrantAll, error }: ClientAccessFieldProps) {
+export function ClientAccessField({ mode, clientIds, onChange, clients, modes, error }: ClientAccessFieldProps) {
   const [search, setSearch] = useState('')
   const selected = useMemo(() => new Set(clientIds), [clientIds])
 
@@ -48,26 +61,17 @@ export function ClientAccessField({ mode, clientIds, onChange, clients, canGrant
       <RadioGroup
         value={mode}
         onValueChange={(value) => onChange(value as ClientAccessMode, clientIds)}
-        className='gap-2'
+        className='gap-2 sm:grid-cols-2'
       >
-        {canGrantAll && (
-          <label className='flex cursor-pointer items-start gap-2.5 rounded-md border p-2.5'>
-            <RadioGroupItem value='all' className='mt-0.5' />
+        {CLIENT_ACCESS_MODES.filter((value) => modes.includes(value)).map((value) => (
+          <label key={value} className='flex cursor-pointer items-start gap-2.5 rounded-md border p-2.5'>
+            <RadioGroupItem value={value} className='mt-0.5' />
             <span>
-              <span className='block text-sm font-medium'>All clients</span>
-              <span className='block text-xs text-muted-foreground'>Sees every client, now and in future.</span>
+              <span className='block text-sm font-medium'>{OPTIONS[value].label}</span>
+              <span className='block text-xs text-muted-foreground'>{OPTIONS[value].hint}</span>
             </span>
           </label>
-        )}
-        <label className='flex cursor-pointer items-start gap-2.5 rounded-md border p-2.5'>
-          <RadioGroupItem value='assigned' className='mt-0.5' />
-          <span>
-            <span className='block text-sm font-medium'>Selected clients only</span>
-            <span className='block text-xs text-muted-foreground'>
-              Sees only these clients and their orders, shipments, inventory, payments and chats.
-            </span>
-          </span>
-        </label>
+        ))}
       </RadioGroup>
 
       {mode === 'assigned' && (

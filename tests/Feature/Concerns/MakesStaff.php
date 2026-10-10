@@ -56,11 +56,12 @@ trait MakesStaff
         return $user;
     }
 
-    protected function makeClient(string $name = 'Acme Trading'): Client
+    /** @param  list<string>  $types */
+    protected function makeClient(string $name = 'Acme Trading', array $types = ['fulfilment']): Client
     {
         return Client::create([
             'user_id' => User::factory()->create()->id,
-            'client_types' => ['fulfilment'],
+            'client_types' => $types,
             'company_name' => $name,
             'short_id' => 'C' . strtoupper(substr(uniqid(), -5)),
             'status' => 'active',

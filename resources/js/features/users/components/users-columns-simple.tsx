@@ -19,7 +19,7 @@ export interface SimpleUser {
   roles: string[]
   is_super_admin?: boolean
   is_client?: boolean
-  client_access?: 'all' | 'assigned'
+  client_access?: 'all' | 'dropshippers' | 'fulfilment' | 'assigned'
   client_ids?: number[]
   created_at: string
 }
@@ -135,7 +135,13 @@ export const usersColumnsSimple: ColumnDef<SimpleUser>[] = [
         return <span className='text-muted-foreground text-sm'>—</span>
       }
 
-      if (row.original.client_access !== 'assigned') {
+      const mode = row.original.client_access
+
+      if (mode === 'dropshippers' || mode === 'fulfilment') {
+        return <Badge variant='outline'>{mode === 'dropshippers' ? 'All dropshippers' : 'All fulfilment'}</Badge>
+      }
+
+      if (mode !== 'assigned') {
         return <Badge variant='outline'>All clients</Badge>
       }
 

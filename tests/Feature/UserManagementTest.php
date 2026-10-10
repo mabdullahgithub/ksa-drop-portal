@@ -8,10 +8,16 @@ use App\Models\ClientPayment;
 use App\Models\DeletionLog;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Mail;
 use Inertia\Testing\AssertableInertia as Assert;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 use Spatie\Permission\PermissionRegistrar;
+use Symfony\Component\Mailer\Envelope;
+use Symfony\Component\Mailer\Exception\TransportException;
+use Symfony\Component\Mailer\SentMessage;
+use Symfony\Component\Mailer\Transport\TransportInterface;
+use Symfony\Component\Mime\RawMessage;
 use Tests\TestCase;
 
 /**
@@ -55,6 +61,31 @@ class UserManagementTest extends TestCase
             ->assertSessionHasNoErrors();
 
         $this->assertTrue(User::where('email', 'new@example.com')->firstOrFail()->hasRole('staff'));
+    }
+
+    public function test_a_user_whose_welcome_email_cannot_be_sent_is_not_created(): void
+    {
+        // The mail server refuses to sign us in.
+        Mail::extend('refusing', fn () => new class implements TransportInterface
+        {
+            public function send(RawMessage $message, ?Envelope $envelope = null): ?SentMessage
+            {
+                throw new TransportException('535 Username and Password not accepted');
+            }
+
+            public function __toString(): string
+            {
+                return 'refusing://';
+            }
+        });
+        config(['mail.default' => 'refusing', 'mail.mailers.refusing' => ['transport' => 'refusing']]);
+
+        $this->actingAs($this->admin)
+            ->post('/team-management/users', ['name' => 'New Person', 'email' => 'new@example.com', 'roles' => ['staff']])
+            ->assertRedirect()
+            ->assertSessionHasErrors('email');
+
+        $this->assertDatabaseMissing('users', ['email' => 'new@example.com']);
     }
 
     public function test_users_page_flags_client_accounts_for_the_clients_tab(): void

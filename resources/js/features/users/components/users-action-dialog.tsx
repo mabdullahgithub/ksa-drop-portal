@@ -30,7 +30,7 @@ import { roles as defaultRoles } from '../data/data'
 import { type User } from '../data/schema'
 import { usePermissions } from '@/hooks/use-permissions'
 import { type PageProps } from '@/types'
-import { type AssignableClient, type ClientAccessMode, ClientAccessField } from './client-access-field'
+import { type AssignableClient, type ClientAccessMode, CLIENT_ACCESS_MODES, ClientAccessField } from './client-access-field'
 
 const formSchema = z.object({
   firstName: z.string().min(1, 'First Name is required.'),
@@ -75,10 +75,10 @@ export function UsersActionDialog({
   const { can } = usePermissions()
   const canRoles = can('assign user roles')
   const canClients = can('assign client access')
-  const { clients = [], canGrantAllClients = true } = usePage<PageProps<{ clients?: AssignableClient[]; canGrantAllClients?: boolean }>>().props
+  const { clients = [], grantableClientModes = CLIENT_ACCESS_MODES } = usePage<PageProps<{ clients?: AssignableClient[]; grantableClientModes?: ClientAccessMode[] }>>().props
 
-  // Someone limited to their own clients cannot hand out "all".
-  const [clientAccess, setClientAccess] = useState<ClientAccessMode>(canGrantAllClients ? 'all' : 'assigned')
+  // Someone limited to their own clients cannot hand out "all": start on the widest they can.
+  const [clientAccess, setClientAccess] = useState<ClientAccessMode>(grantableClientModes[0] ?? 'assigned')
   const [clientIds, setClientIds] = useState<number[]>([])
   const [clientError, setClientError] = useState<string>()
 
@@ -280,7 +280,7 @@ export function UsersActionDialog({
                     setClientIds(ids)
                   }}
                   clients={clients}
-                  canGrantAll={canGrantAllClients}
+                  modes={grantableClientModes}
                   error={clientError}
                 />
               )}

@@ -139,9 +139,12 @@ class ClientController extends Controller
         ]);
 
         // Someone limited to their own clients keeps the one they just made.
+        // One of the type they already handle in full needs no row for it.
         $access = app(ClientAccess::class);
         if ($access->restricted()) {
-            $request->user()->assignedClients()->syncWithoutDetaching([$client->id]);
+            if (! in_array($request->user()->clientAccessType(), $client->client_types, true)) {
+                $request->user()->assignedClients()->syncWithoutDetaching([$client->id]);
+            }
             $access->restrictTo([...$access->ids(), $client->id]);
         }
 

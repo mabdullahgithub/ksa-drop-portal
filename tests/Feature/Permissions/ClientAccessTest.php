@@ -192,6 +192,52 @@ class ClientAccessTest extends TestCase
         $this->assertEqualsCanonicalizing([$this->mine->id, $id], ClientAccess::idsFor($user->fresh()));
     }
 
+    // ------------------------------------------------------------ whole types
+
+    public function test_all_dropshippers_covers_every_dropshipper_and_no_fulfilment_client(): void
+    {
+        $dropshipper = $this->makeClient('Drop One', ['dropshipper']);
+        $both = $this->makeClient('Does Both', ['dropshipper', 'fulfilment']);
+
+        $user = $this->staffWith(['view client']);
+        $user->forceFill(['client_access' => User::CLIENT_ACCESS_DROPSHIPPERS])->save();
+
+        // `mine` and `theirs` are fulfilment clients.
+        $ids = $this->actingAs($user)->getJson('/api/clients')->assertOk()->json('data.*.id');
+        $this->assertEqualsCanonicalizing([$dropshipper->id, $both->id], $ids);
+    }
+
+    public function test_a_client_added_later_is_seen_by_whoever_handles_its_type(): void
+    {
+        $dropshippers = User::factory()->create(['client_access' => User::CLIENT_ACCESS_DROPSHIPPERS]);
+        $fulfilment = User::factory()->create(['client_access' => User::CLIENT_ACCESS_FULFILMENT]);
+
+        $id = $this->actingAs($this->fullAccessUser())->postJson('/api/clients', [
+            'client_types' => ['dropshipper'],
+            'company_name' => 'Brand New',
+            'email' => 'brand-new@example.com',
+            'name' => 'Brand New Owner',
+        ])->assertCreated()->json('client.id');
+
+        $this->assertSame([$id], ClientAccess::idsFor($dropshippers));
+        $this->assertNotContains($id, ClientAccess::idsFor($fulfilment));
+    }
+
+    public function test_a_client_of_another_type_they_create_stays_theirs(): void
+    {
+        $user = $this->staffWith(['view client', 'create client']);
+        $user->forceFill(['client_access' => User::CLIENT_ACCESS_DROPSHIPPERS])->save();
+
+        $id = $this->actingAs($user)->postJson('/api/clients', [
+            'client_types' => ['fulfilment'],
+            'company_name' => 'Brand New',
+            'email' => 'brand-new@example.com',
+            'name' => 'Brand New Owner',
+        ])->assertCreated()->json('client.id');
+
+        $this->assertSame([$id], ClientAccess::idsFor($user->fresh()));
+    }
+
     // ---------------------------------------------------------------- nothing
 
     public function test_with_no_client_assigned_they_see_no_orders_at_all(): void
@@ -256,6 +302,50 @@ class ClientAccessTest extends TestCase
         $this->actingAs($this->fullAccessUser())
             ->put("/team-management/users/{$target->id}", ['client_access' => 'all'])
             ->assertSessionHasNoErrors();
+
+        $this->assertNull(ClientAccess::idsFor($target->fresh()));
+    }
+
+    public function test_an_admin_gives_someone_a_whole_type(): void
+    {
+        $target = $this->limitTo(User::factory()->create(), $this->mine);
+        $dropshipper = $this->makeClient('Drop One', ['dropshipper']);
+
+        $this->actingAs($this->fullAccessUser())
+            ->put("/team-management/users/{$target->id}", ['client_access' => 'dropshippers', 'client_ids' => [$this->mine->id]])
+            ->assertSessionHasNoErrors();
+
+        // The clients picked before are gone: the type is all they handle now.
+        $this->assertSame([$dropshipper->id], ClientAccess::idsFor($target->fresh()));
+    }
+
+    public function test_someone_handling_one_type_hands_out_that_type_and_nothing_wider(): void
+    {
+        $manager = $this->staffWith(['view users', 'edit users', 'assign client access']);
+        $manager->forceFill(['client_access' => User::CLIENT_ACCESS_FULFILMENT])->save();
+        $target = User::factory()->create();
+
+        foreach (['all', 'dropshippers'] as $mode) {
+            $this->actingAs($manager)
+                ->put("/team-management/users/{$target->id}", ['client_access' => $mode])
+                ->assertSessionHasErrors('client_access');
+        }
+        $this->assertNull(ClientAccess::idsFor($target->fresh()));
+
+        $this->actingAs($manager)
+            ->put("/team-management/users/{$target->id}", ['client_access' => 'fulfilment'])
+            ->assertSessionHasNoErrors();
+        $this->assertEqualsCanonicalizing([$this->mine->id, $this->theirs->id], ClientAccess::idsFor($target->fresh()));
+    }
+
+    public function test_someone_with_selected_clients_cannot_hand_out_a_whole_type(): void
+    {
+        $manager = $this->limited(['view users', 'edit users', 'assign client access']);
+        $target = User::factory()->create();
+
+        $this->actingAs($manager)
+            ->put("/team-management/users/{$target->id}", ['client_access' => 'fulfilment'])
+            ->assertSessionHasErrors('client_access');
 
         $this->assertNull(ClientAccess::idsFor($target->fresh()));
     }
