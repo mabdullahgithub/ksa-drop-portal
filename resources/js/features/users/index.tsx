@@ -40,7 +40,7 @@ export function Users({ users, availableRoles, online }: UsersProps) {
   const team = useMemo(() => users.filter((u) => !u.is_client), [users])
   const clients = useMemo(() => users.filter((u) => u.is_client), [users])
   const { can } = usePermissions()
-  const [view, setView] = useState<'grid' | 'table'>('table')
+  const [view, setView] = useState<'grid' | 'table'>('grid')
   const tabs = [
     { value: 'team', label: 'Team', rows: team },
     // The client sign-in accounts are a permission of their own.
