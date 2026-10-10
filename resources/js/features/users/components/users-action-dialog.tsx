@@ -81,6 +81,9 @@ export function UsersActionDialog({
   const [clientAccess, setClientAccess] = useState<ClientAccessMode>(grantableClientModes[0] ?? 'assigned')
   const [clientIds, setClientIds] = useState<number[]>([])
   const [clientError, setClientError] = useState<string>()
+  // Creating a user sends their welcome email, which takes a few seconds:
+  // a second press in that time would ask for the same user twice.
+  const [saving, setSaving] = useState(false)
 
   const form = useForm<UserForm>({
     resolver: zodResolver(formSchema),
@@ -101,6 +104,8 @@ export function UsersActionDialog({
   })
 
   const onSubmit = (values: UserForm) => {
+    if (saving) return
+
     if (isEdit) {
       // For edit, just show submitted data as before (role update handled separately)
       form.reset()
@@ -119,6 +124,8 @@ export function UsersActionDialog({
           ...(canClients ? { client_access: clientAccess, client_ids: clientIds } : {}),
         },
         {
+          onStart: () => setSaving(true),
+          onFinish: () => setSaving(false),
           onSuccess: () => {
             form.reset()
             onOpenChange(false)
@@ -299,8 +306,8 @@ export function UsersActionDialog({
           </Form>
         </div>
         <DialogFooter className='px-6 py-4 border-t flex-shrink-0'>
-          <Button type='submit' form='user-form'>
-            Save changes
+          <Button type='submit' form='user-form' disabled={saving}>
+            {saving ? 'Saving…' : 'Save changes'}
           </Button>
         </DialogFooter>
       </DialogContent>

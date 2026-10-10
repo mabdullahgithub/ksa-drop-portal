@@ -21,8 +21,8 @@ use Illuminate\Support\Facades\Password;
 use Illuminate\Validation\Rules\Password as PasswordRule;
 use App\Services\EmailService;
 use App\Support\ClientAccess;
+use App\Support\GeneratedPassword;
 use Illuminate\Support\Facades\Mail;
-use Illuminate\Support\Str;
 
 class ClientController extends Controller
 {
@@ -105,7 +105,7 @@ class ClientController extends Controller
             'email.unique' => "You can't create an account with this email.",
         ]);
 
-        $password = Str::random(16);
+        $password = GeneratedPassword::make();
 
         $user = User::create([
             'name' => $validated['name'],

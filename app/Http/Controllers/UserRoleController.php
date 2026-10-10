@@ -8,11 +8,11 @@ use App\Notifications\WelcomeUserNotification;
 use App\Notifications\UserUpdatedNotification;
 use App\Notifications\UserCreatedNotification;
 use App\Support\ClientAccess;
+use App\Support\GeneratedPassword;
 use App\Support\PermissionCatalog;
 use App\Support\UserPresence;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
@@ -89,8 +89,7 @@ class UserRoleController extends Controller
 
         $actor = $request->user();
 
-        // Auto-generate a secure password (16 chars with letters, numbers, symbols)
-        $generatedPassword = Str::password(16, true, true, false, true);
+        $generatedPassword = GeneratedPassword::make();
 
         // The welcome email is the only place the password is ever shown, so
         // a user whose email did not leave is not kept: nobody could sign in
