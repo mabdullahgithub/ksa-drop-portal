@@ -7,6 +7,7 @@ use App\Models\EmailSetting;
 use App\Models\User;
 use Exception;
 use Illuminate\Mail\Mailable;
+use Illuminate\Mail\MailManager;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\RateLimiter;
@@ -73,9 +74,17 @@ class EmailService
             ],
         ];
 
+        $changed = Config::get('mail.mailers.smtp') != $config;
+
         Config::set('mail.mailers.smtp', $config);
         Config::set('mail.from.address', $settings->from_address);
         Config::set('mail.from.name', $settings->from_name);
+
+        // A mailer made earlier in this process still holds the old server
+        // and password; drop it so the next send is made from these.
+        if ($changed && ($manager = app('mail.manager')) instanceof MailManager) {
+            $manager->purge('smtp');
+        }
     }
 
     /**
