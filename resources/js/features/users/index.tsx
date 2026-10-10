@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { usePoll } from '@inertiajs/react'
 import { LayoutGrid, Table2 } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import { Header } from '@/components/layout/header'
 import { NotificationsDropdown } from '@/components/layout/notifications-dropdown'
 import { Main } from '@/components/layout/main'
@@ -41,6 +42,9 @@ export function Users({ users, availableRoles, online }: UsersProps) {
   const clients = useMemo(() => users.filter((u) => u.is_client), [users])
   const { can } = usePermissions()
   const [view, setView] = useState<'grid' | 'table'>('grid')
+  const [tab, setTab] = useState('team')
+  // Client accounts are only ever a list; the cards are for the team.
+  const listOnly = tab === 'clients'
   const tabs = [
     { value: 'team', label: 'Team', rows: team },
     // The client sign-in accounts are a permission of their own.
@@ -69,7 +73,7 @@ export function Users({ users, availableRoles, online }: UsersProps) {
           </div>
           <div className='flex items-center gap-2'>
             {/* View toggle */}
-            <div className='flex items-center rounded-md border p-0.5'>
+            <div className={cn('flex items-center rounded-md border p-0.5', listOnly && 'hidden')}>
               <Button
                 variant={view === 'grid' ? 'secondary' : 'ghost'}
                 size='icon'
@@ -92,7 +96,7 @@ export function Users({ users, availableRoles, online }: UsersProps) {
             <UsersPrimaryButtons />
           </div>
         </div>
-        <Tabs defaultValue='team' className='flex flex-1 flex-col gap-4'>
+        <Tabs value={tab} onValueChange={setTab} className='flex flex-1 flex-col gap-4'>
           <TabsList className='w-fit'>
             {tabs.map((tab) => (
               <TabsTrigger key={tab.value} value={tab.value} className='gap-1.5'>
@@ -105,7 +109,11 @@ export function Users({ users, availableRoles, online }: UsersProps) {
           </TabsList>
           {tabs.map((tab) => (
             <TabsContent key={tab.value} value={tab.value}>
-              <UsersTable data={tab.rows} availableRoles={availableRoles} view={view} />
+              <UsersTable
+                data={tab.rows}
+                availableRoles={availableRoles}
+                view={tab.value === 'clients' ? 'table' : view}
+              />
             </TabsContent>
           ))}
         </Tabs>
