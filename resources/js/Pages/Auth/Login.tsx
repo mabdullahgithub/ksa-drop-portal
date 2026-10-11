@@ -1,5 +1,5 @@
 import { Head, Link, useForm } from '@inertiajs/react'
-import { FormEventHandler } from 'react'
+import { FormEventHandler, useEffect, useRef, useState } from 'react'
 import { cn } from '@/lib/utils'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -10,6 +10,7 @@ import { AuthLogo } from '@/components/layout/auth-logo'
 
 const BRAND = '#f26722'
 const BRAND_HOVER = '#d9591c'
+const DRONE = '/images/login/drone-with-parcel'
 
 export default function Login({
   status,
@@ -41,25 +42,7 @@ export default function Login({
             <AuthLogo />
           </div>
           <div className='flex flex-1 items-center justify-center p-10'>
-            <video
-              className='h-auto w-full max-w-2xl select-none object-contain'
-              autoPlay
-              loop
-              muted
-              playsInline
-              aria-label='KSA Drop'
-            >
-              {/* HEVC-with-alpha plays only in Safari; the quicktime type keeps
-                  Chromium from claiming it and rendering the alpha as black. */}
-              <source
-                src='/images/login/drone-with-parcel.mov'
-                type='video/quicktime'
-              />
-              <source
-                src='/images/login/drone-with-parcel.webm'
-                type='video/webm'
-              />
-            </video>
+            <DroneVideo className='aspect-square h-auto w-full max-w-2xl select-none object-contain' />
           </div>
         </div>
 
@@ -175,5 +158,52 @@ export default function Login({
         </div>
       </div>
     </ThemeProvider>
+  )
+}
+
+/**
+ * The drone loop on its see-through background. Safari refuses to autoplay in
+ * Low Power Mode and paints its own play button and tint over the video, so
+ * the still takes over when motion is reduced or playback is refused.
+ */
+function DroneVideo({ className }: { className?: string }) {
+  const ref = useRef<HTMLVideoElement>(null)
+  const [still, setStill] = useState(
+    () => window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  )
+
+  useEffect(() => {
+    const video = ref.current
+    if (!video) return
+    // React sets `muted` as a property only; Safari wants it before autoplay.
+    video.muted = true
+    video.play().catch(() => setStill(true))
+  }, [])
+
+  if (still) {
+    return <img src={`${DRONE}-poster.webp`} alt='KSA Drop' className={className} />
+  }
+
+  return (
+    <video
+      ref={ref}
+      className={className}
+      poster={`${DRONE}-poster.webp`}
+      autoPlay
+      loop
+      muted
+      playsInline
+      disablePictureInPicture
+      aria-label='KSA Drop'
+    >
+      {/* HEVC-with-alpha plays only in Safari; the quicktime type keeps
+          Chromium from claiming it and rendering the alpha as black. */}
+      <source src={`${DRONE}.mov`} type='video/quicktime' />
+      <source
+        src={`${DRONE}.webm`}
+        type='video/webm'
+        onError={() => setStill(true)}
+      />
+    </video>
   )
 }
