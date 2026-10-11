@@ -17,6 +17,20 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Always-On Worker
+    |--------------------------------------------------------------------------
+    |
+    | True where a long-running `queue:work database` process is supervised
+    | next to the app (the VPS container sets it in start-container.sh). The
+    | scheduler then skips its every-minute drain of that connection, so the
+    | queue keeps a single worker. Leave it off on hosts that only have cron.
+    |
+    */
+
+    'always_on' => (bool) env('QUEUE_ALWAYS_ON', false),
+
+    /*
+    |--------------------------------------------------------------------------
     | Queue Connections
     |--------------------------------------------------------------------------
     |

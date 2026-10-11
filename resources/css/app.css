@@ -2,6 +2,10 @@
 @import 'tw-animate-css';
 @import './theme.css';
 
+/* Server process config, not markup: its "[program:web]" section headers read
+   as arbitrary-property classes and would end up in the stylesheet. */
+@source not '../../deploy';
+
 @custom-variant dark (&:is(.dark *));
 
 @layer base {
