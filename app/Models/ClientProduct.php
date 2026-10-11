@@ -45,6 +45,19 @@ class ClientProduct extends Model
         return $this->hasMany(ClientProductImage::class)->orderBy('position');
     }
 
+    /**
+     * Changes the client asked for on this product once it was verified.
+     */
+    public function requests(): HasMany
+    {
+        return $this->hasMany(InventoryRequest::class);
+    }
+
+    public function pendingRequests(): HasMany
+    {
+        return $this->requests()->where('status', InventoryRequest::PENDING);
+    }
+
     public function verifiedByUser(): BelongsTo
     {
         return $this->belongsTo(User::class, 'verified_by')->withTrashed();

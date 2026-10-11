@@ -3,13 +3,15 @@
 namespace App\Http\Controllers;
 
 use App\Http\Concerns\CountsOrdersByTag;
+use App\Http\Concerns\ResolvesPortalClient;
 use App\Models\Client;
 use App\Models\ClientProduct;
 use App\Models\ClientProductImage;
 use App\Models\Tag;
-use App\Models\User;
-use App\Notifications\ProductSubmittedNotification;
 use App\Services\CityDirectory;
+use App\Services\Inventory\InventoryRequestNotifier;
+use App\Services\Inventory\InventoryRequestPresenter;
+use App\Services\Inventory\InventoryRequestRecorder;
 use App\Services\Inventory\StockAlerts;
 use App\Services\OrderExportService;
 use App\Services\Shipping\Enums\ShipmentStatus;
@@ -19,7 +21,7 @@ use Illuminate\Support\Facades\Storage;
 
 class PortalController extends Controller
 {
-    use CountsOrdersByTag;
+    use CountsOrdersByTag, ResolvesPortalClient;
 
     public function __construct(
         protected OrderExportService $orderExport,
@@ -79,15 +81,6 @@ class PortalController extends Controller
         }
 
         return $candidate;
-    }
-
-    private function resolveClient(): ?Client
-    {
-        if (session()->has('impersonate.client_id')) {
-            return Client::find(session('impersonate.client_id'));
-        }
-
-        return auth()->user()->client ?? null;
     }
 
     private function parseMultiValue($value): array
@@ -866,7 +859,9 @@ class PortalController extends Controller
         $perPage = $request->get('per_page', 20);
 
         $paginator = $query->paginate($perPage);
-        $paginator->getCollection()->load('images');
+        // With what is waiting on each product, for the row's badge and to
+        // open the edit form on it.
+        $paginator->getCollection()->load(['images', 'pendingRequests.images']);
 
         return response()->json($paginator);
     }
@@ -1320,17 +1315,6 @@ class PortalController extends Controller
 
     // --- Fulfilment Inventory (client-facing write endpoints) ---
 
-    private function resolveFulfilmentClient(): Client
-    {
-        $client = $this->resolveClient();
-
-        if (!$client || !$client->is_fulfilment || !in_array('inventory', $client->portal_features ?? [])) {
-            abort(403);
-        }
-
-        return $client;
-    }
-
     public function storeInventory(Request $request)
     {
         $client = $this->resolveFulfilmentClient();
@@ -1365,13 +1349,7 @@ class PortalController extends Controller
             }
         }
 
-        try {
-            User::role(['admin', 'superadmin'])->each(
-                fn ($adminUser) => $adminUser->notify(new ProductSubmittedNotification($product, $client))
-            );
-        } catch (\Exception $e) {
-            // Notification failure should not block product creation
-        }
+        app(InventoryRequestNotifier::class)->productSubmitted($product, $client);
 
         return response()->json([
             'message' => 'Product added successfully',
@@ -1379,6 +1357,14 @@ class PortalController extends Controller
         ], 201);
     }
 
+    /**
+     * The client saved one of their products.
+     *
+     * A product still waiting to be verified, or one that was rejected, is
+     * changed here and now (a rejected one goes back in the queue). A
+     * verified product is not touched: what changed becomes a request for the
+     * team to approve — see InventoryRequestRecorder.
+     */
     public function updateInventory(Request $request, ClientProduct $product)
     {
         $client = $this->resolveFulfilmentClient();
@@ -1387,24 +1373,58 @@ class PortalController extends Controller
             abort(403);
         }
 
-        if ($product->verification_status === 'verified') {
-            abort(422, 'Verified products cannot be edited.');
-        }
-
         $validated = $request->validate([
             'name'             => 'sometimes|string|max:255',
             'sku'              => 'nullable|string|max:100',
             'description'      => 'nullable|string',
             'quantity'         => 'sometimes|integer|min:0',
+            // The stock the form showed, to tell a changed quantity from
+            // stock that moved while the form was open.
+            'base_quantity'    => 'nullable|integer',
             'unit_price'       => 'nullable|numeric|min:0',
             'notes'            => 'nullable|string',
             'images'           => 'nullable|array|max:10',
             'images.*'         => 'image|max:5120',
             'remove_image_ids' => 'nullable|array',
             'remove_image_ids.*' => 'integer',
+            // Images from a request still waiting that the client took back out.
+            'remove_pending_image_ids' => 'nullable|array',
+            'remove_pending_image_ids.*' => 'integer',
         ]);
 
-        $product->update($validated);
+        if ($product->verification_status === 'verified') {
+            $result = app(InventoryRequestRecorder::class)->record(
+                $product,
+                $validated,
+                $request->file('images') ?? [],
+                $request->user(),
+            );
+
+            foreach ($result['created'] as $created) {
+                app(InventoryRequestNotifier::class)->submitted($created);
+            }
+
+            return response()->json([
+                'message' => match ($result['outcome']) {
+                    InventoryRequestRecorder::SENT => 'Changes sent for approval.',
+                    InventoryRequestRecorder::WITHDRAWN => 'Pending changes withdrawn.',
+                    default => 'No changes to send.',
+                },
+                'pending_approval' => true,
+                'outcome' => $result['outcome'],
+                'requests' => $result['pending']
+                    ->map(fn ($pending) => InventoryRequestPresenter::request($pending, forTeam: false))
+                    ->values(),
+                'product' => $product->fresh()->load('images'),
+            ]);
+        }
+
+        $resubmitted = $product->verification_status === 'rejected';
+
+        $product->update($validated + ($resubmitted ? [
+            'verification_status' => 'pending',
+            'rejection_reason' => null,
+        ] : []));
 
         if (!empty($validated['remove_image_ids'])) {
             $toDelete = $product->images()->whereIn('id', $validated['remove_image_ids'])->get();
@@ -1422,8 +1442,12 @@ class PortalController extends Controller
             }
         }
 
+        if ($resubmitted) {
+            app(InventoryRequestNotifier::class)->productSubmitted($product->fresh(), $client);
+        }
+
         return response()->json([
-            'message' => 'Product updated successfully',
+            'message' => $resubmitted ? 'Product sent back for verification' : 'Product updated successfully',
             'product' => $product->fresh()->load('images'),
         ]);
     }
@@ -1434,6 +1458,12 @@ class PortalController extends Controller
 
         if ($product->client_id !== $client->id || $image->client_product_id !== $product->id) {
             abort(403);
+        }
+
+        // On a verified product an image goes the way every other change
+        // does: through the edit form, as a request.
+        if ($product->verification_status === 'verified') {
+            abort(422, 'Images of a verified product are changed from the edit form.');
         }
 
         Storage::disk('public')->delete($image->path);

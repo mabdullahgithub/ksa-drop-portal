@@ -9,6 +9,7 @@ import { PinLock } from '@/components/pin-lock'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { usePermissions } from '@/hooks/use-permissions'
+import { useScreenLock } from '@/hooks/use-screen-lock'
 import {
   type TrashedClient,
   type TrashedInventoryItem,
@@ -30,8 +31,10 @@ export function RecycleBin() {
   const { can } = usePermissions()
 
   // Always starts locked. Deliberately component state rather than session or
-  // local storage, so opening the page ever again asks for the PIN.
-  const [unlocked, setUnlocked] = useState(false)
+  // local storage, so opening the page ever again asks for the PIN. Unless
+  // the lock is switched off in .env (LOCK_RECYCLE_BIN=false).
+  const locked = useScreenLock('recycle_bin')
+  const [unlocked, setUnlocked] = useState(!locked)
   const [lockNotice, setLockNotice] = useState<string | null>(null)
 
   const { counts, refreshCounts } = useRecycleBinCounts(unlocked)

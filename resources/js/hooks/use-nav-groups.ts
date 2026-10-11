@@ -19,7 +19,7 @@ const portalFeatureUrlMap: Record<string, string> = {
  * Shared by the sidebar and the command menu so both stay in sync.
  */
 export function useNavGroups(): NavGroupType[] {
-  const { auth } = usePage().props as any
+  const { auth, pendingRequestsCount } = usePage().props as any
   const portalFeatures: string[] | null = auth?.portal_features
   const isImpersonating: boolean = !!auth?.impersonating
   const isDropshipper: boolean = !!auth?.client?.is_dropshipper
@@ -51,11 +51,22 @@ export function useNavGroups(): NavGroupType[] {
       return [{ ...portalGroup, items: filteredItems }]
     }
 
-    if (!portalFeatures) return sidebarData.navGroups
+    // "Requests" carries how much is waiting on the team.
+    const waiting = Number(pendingRequestsCount) || 0
+    const groups: NavGroupType[] = waiting > 0
+      ? sidebarData.navGroups.map((group) => ({
+          ...group,
+          items: group.items.map((item) =>
+            item.url === '/requests' ? { ...item, badge: waiting > 99 ? '99+' : String(waiting) } : item
+          ),
+        }))
+      : sidebarData.navGroups
 
-    return sidebarData.navGroups.map((group): NavGroupType => {
+    if (!portalFeatures) return groups
+
+    return groups.map((group): NavGroupType => {
       if (group.title !== 'My Portal') return group
       return { ...group, items: filterPortalItems(group.items, portalFeatures) }
     })
-  }, [portalFeatures, isImpersonating, isDropshipper])
+  }, [portalFeatures, isImpersonating, isDropshipper, pendingRequestsCount])
 }

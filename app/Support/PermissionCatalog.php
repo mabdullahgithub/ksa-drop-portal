@@ -248,6 +248,34 @@ final class PermissionCatalog
             ],
         ],
 
+        'requests' => [
+            'label' => 'Requests',
+            'description' => 'What clients are waiting on: new products, and changes to verified ones.',
+            'groups' => [
+                'Page' => [
+                    'view requests' => ['Open the requests page', 'See the Requests page.', null],
+                    'view product requests' => ['New products tab', 'Products clients added that await verification.'],
+                    'view stock requests' => ['Stock updates tab', 'Stock changes clients asked for on verified products.'],
+                    'view detail requests' => ['Details changes tab', 'Name, SKU, price and image changes clients asked for.'],
+                ],
+                'New products' => [
+                    'review product requests' => ['Review & verify', 'Verify, reject or keep a new product pending.', 'view product requests'],
+                ],
+                'Stock updates' => [
+                    'approve stock requests' => ['Approve stock update', 'Confirm the count received and change the stock.', 'view stock requests'],
+                    'reject stock requests' => ['Reject stock update', 'Turn a stock update down with a reason.', 'view stock requests'],
+                    'bulk approve stock requests' => ['Approve several', 'Approve the selected stock updates as requested.', 'view stock requests'],
+                    'bulk reject stock requests' => ['Reject several', 'Reject the selected stock updates with one reason.', 'view stock requests'],
+                ],
+                'Details changes' => [
+                    'approve detail requests' => ['Approve details change', 'Apply the changes to the product.', 'view detail requests'],
+                    'reject detail requests' => ['Reject details change', 'Turn a details change down with a reason.', 'view detail requests'],
+                    'bulk approve detail requests' => ['Approve several', 'Approve the selected details changes.', 'view detail requests'],
+                    'bulk reject detail requests' => ['Reject several', 'Reject the selected details changes with one reason.', 'view detail requests'],
+                ],
+            ],
+        ],
+
         'tags' => [
             'label' => 'Tags',
             'description' => 'Order tags.',

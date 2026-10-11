@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { toast } from 'sonner'
-import { Plus, CheckCircle, Clock, ShieldCheck, XCircle, Pencil, Trash2, AlertTriangle, RefreshCw, PackageX } from 'lucide-react'
+import { Link } from '@inertiajs/react'
+import { Plus, CheckCircle, Clock, ShieldCheck, XCircle, Pencil, Trash2, AlertTriangle, RefreshCw, PackageX, GitPullRequestArrow } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -49,6 +50,9 @@ export function ClientInventoryTab({ client }: ClientInventoryTabProps) {
   const canDelete = can('delete client products')
   // The actions column only exists when its menu has something in it.
   const canEdit = canReview || canEditProduct || canDelete
+  // The badge on a product with a change waiting links to the Requests page
+  // for those who can open it.
+  const canOpenRequests = can('view requests')
   const { products, loading, error, refresh } = useClientProducts(client.id)
   const { loading: mutating, reviewProduct, deleteProduct } = useClientProductMutations()
 
@@ -57,9 +61,15 @@ export function ClientInventoryTab({ client }: ClientInventoryTabProps) {
   const [deleteTarget, setDeleteTarget] = useState<ClientProduct | null>(null)
   const [verifyTarget, setVerifyTarget] = useState<ClientProduct | null>(null)
 
-  const handleReview = async (action: 'verify' | 'reject' | 'pending', images: File[], rejectionReason: string, isOutOfStock: boolean) => {
+  const handleReview = async (
+    action: 'verify' | 'reject' | 'pending',
+    images: File[],
+    rejectionReason: string,
+    isOutOfStock: boolean,
+    receivedQuantity: number | null
+  ) => {
     if (!verifyTarget) return
-    const ok = await reviewProduct(client.id, verifyTarget.id, action, images, rejectionReason, isOutOfStock)
+    const ok = await reviewProduct(client.id, verifyTarget.id, action, images, rejectionReason, isOutOfStock, receivedQuantity)
     if (ok) {
       const labels = { verify: 'verified', reject: 'rejected', pending: 'kept pending' }
       toast.success(`"${verifyTarget.name}" ${labels[action]}`)
@@ -199,6 +209,20 @@ export function ClientInventoryTab({ client }: ClientInventoryTabProps) {
                           Out of Stock
                         </Badge>
                       )}
+                      {(product.pending_requests_count ?? 0) > 0 &&
+                        (canOpenRequests ? (
+                          <Link href={`/requests?tab=stock&client=${client.id}`}>
+                            <Badge variant='outline' className='bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400 text-xs'>
+                              <GitPullRequestArrow className='mr-1 h-3 w-3' />
+                              Change requested
+                            </Badge>
+                          </Link>
+                        ) : (
+                          <Badge variant='outline' className='bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400 text-xs'>
+                            <GitPullRequestArrow className='mr-1 h-3 w-3' />
+                            Change requested
+                          </Badge>
+                        ))}
                     </div>
                   </TableCell>
                   {canEdit && (

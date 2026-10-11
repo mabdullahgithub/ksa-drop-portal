@@ -3,6 +3,7 @@
 namespace App\Observers;
 
 use App\Models\Client;
+use App\Models\InventoryRequest;
 use App\Observers\Concerns\RecordsDeletionAudit;
 use Illuminate\Support\Facades\Storage;
 
@@ -27,6 +28,13 @@ class ClientObserver
 
         foreach ($productIds as $productId) {
             Storage::disk('public')->deleteDirectory("client-products/{$productId}");
+        }
+
+        // The same goes for images waiting in the client's inventory requests.
+        $requestIds = InventoryRequest::acrossClients()->where('client_id', $client->id)->pluck('id');
+
+        foreach ($requestIds as $requestId) {
+            Storage::disk('public')->deleteDirectory(InventoryRequest::imageDirectory($requestId));
         }
 
         if ($client->logo) {

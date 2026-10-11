@@ -130,6 +130,7 @@ class User extends Authenticatable
             'view dashboard' => 'dashboard',
             'view client' => 'client',
             'view inventory' => 'inventory',
+            'view requests' => 'requests',
             'view orders' => 'orders',
             'view whatsapp' => 'whatsapp',
             'view riders' => 'riders',

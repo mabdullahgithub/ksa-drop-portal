@@ -31,6 +31,7 @@ import { MessageThread } from './components/message-thread'
 import { OrderContextPanel } from './components/order-context-panel'
 import { ReplyComposer } from './components/reply-composer'
 import { usePermissions } from '@/hooks/use-permissions'
+import { useScreenLock } from '@/hooks/use-screen-lock'
 import {
   INBOX_FILTERS,
   type ConversationDetail,
@@ -47,7 +48,9 @@ export function WhatsAppInbox() {
   const { can } = usePermissions()
   const canStats = can('view whatsapp stats')
   const canConversations = can('view whatsapp conversations')
-  const [unlocked, setUnlocked] = useState(false)
+  // Unless the lock is switched off in .env (LOCK_WHATSAPP=false).
+  const locked = useScreenLock('whatsapp')
+  const [unlocked, setUnlocked] = useState(!locked)
   const [lockNotice, setLockNotice] = useState<string | null>(null)
 
   const [conversations, setConversations] = useState<ConversationSummary[]>([])

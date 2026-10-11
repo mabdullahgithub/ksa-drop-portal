@@ -7,6 +7,7 @@ use App\Models\Product;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Inertia\Testing\AssertableInertia as Assert;
+use Tests\Feature\Concerns\MakesInventory;
 use Tests\Feature\Concerns\MakesStaff;
 use Tests\TestCase;
 
@@ -16,7 +17,7 @@ use Tests\TestCase;
  */
 class GranularPermissionTest extends TestCase
 {
-    use MakesStaff, RefreshDatabase;
+    use MakesInventory, MakesStaff, RefreshDatabase;
 
     protected function setUp(): void
     {
@@ -206,6 +207,76 @@ class GranularPermissionTest extends TestCase
         $this->assertSame('Blue shirt', $product->title);
         $this->assertSame('archived', $product->status);
         $this->assertFalse((bool) $product->published);
+    }
+
+    // --------------------------------------------------------------- requests
+
+    public function test_each_queue_of_the_requests_page_is_its_own_permission(): void
+    {
+        $this->unlockRequests();
+
+        [, $client] = $this->fulfilmentClient();
+        $product = $this->makeProduct($client);
+        $this->stockRequest($product, 300);
+        $this->detailsRequest($product, ['name' => 'Navy Mug']);
+        $this->makeProduct($client, ['verification_status' => 'pending', 'sku' => 'NEW-1']);
+
+        $clerk = $this->staffWith(['view requests', 'view stock requests']);
+
+        $this->actingAs($clerk)->get('/requests')->assertOk();
+        $this->actingAs($clerk)->getJson('/api/requests/stock')->assertOk()->assertJsonCount(1, 'data');
+        $this->actingAs($clerk)->getJson('/api/requests/details')->assertForbidden();
+        $this->actingAs($clerk)->getJson('/api/requests/products')->assertForbidden();
+
+        // The counts leave out the queues they cannot open.
+        $this->actingAs($clerk)->getJson('/api/requests/counts')
+            ->assertOk()
+            ->assertJsonPath('counts.stock', 1)
+            ->assertJsonPath('counts.details', null)
+            ->assertJsonPath('counts.products', null);
+
+        // The page alone opens no queue.
+        $visitor = $this->staffWith(['view requests']);
+        $this->actingAs($visitor)->get('/requests')->assertOk();
+        $this->actingAs($visitor)->getJson('/api/requests/counts')->assertForbidden();
+
+        // And a queue without the page is not a way in.
+        $this->actingAs($this->staffWith(['view stock requests']))->get('/requests')->assertForbidden();
+    }
+
+    public function test_each_button_on_a_request_is_its_own_permission(): void
+    {
+        $this->unlockRequests();
+
+        [, $client] = $this->fulfilmentClient();
+        $product = $this->makeProduct($client);
+        $pending = $this->makeProduct($client, ['verification_status' => 'pending', 'sku' => 'NEW-1']);
+
+        // Each button's route, what it is sent, and the one permission that opens it.
+        $buttons = [
+            'review product requests' => fn () => ["/api/requests/products/{$pending->id}/review", ['action' => 'pending']],
+            'approve stock requests' => fn () => ['/api/requests/stock/' . $this->stockRequest($product, 300)->id . '/approve', ['units' => 1]],
+            'reject stock requests' => fn () => ['/api/requests/stock/' . $this->stockRequest($product, 300)->id . '/reject', ['reason' => 'No']],
+            'bulk approve stock requests' => fn () => ['/api/requests/stock/bulk-approve', ['ids' => [$this->stockRequest($product, 300)->id]]],
+            'bulk reject stock requests' => fn () => ['/api/requests/stock/bulk-reject', ['ids' => [$this->stockRequest($product, 300)->id], 'reason' => 'No']],
+            'approve detail requests' => fn () => ['/api/requests/details/' . $this->detailsRequest($product, ['notes' => 'Fragile'])->id . '/approve', []],
+            'reject detail requests' => fn () => ['/api/requests/details/' . $this->detailsRequest($product, ['notes' => 'Fragile'])->id . '/reject', ['reason' => 'No']],
+            'bulk approve detail requests' => fn () => ['/api/requests/details/bulk-approve', ['ids' => [$this->detailsRequest($product, ['notes' => 'Fragile'])->id]]],
+            'bulk reject detail requests' => fn () => ['/api/requests/details/bulk-reject', ['ids' => [$this->detailsRequest($product, ['notes' => 'Fragile'])->id], 'reason' => 'No']],
+        ];
+
+        foreach (array_keys($buttons) as $held) {
+            $person = $this->staffWith(['view requests', 'view product requests', 'view stock requests', 'view detail requests', $held]);
+
+            foreach ($buttons as $permission => $button) {
+                [$url, $payload] = $button();
+                $response = $this->actingAs($person)->postJson($url, $payload);
+
+                $permission === $held
+                    ? $response->assertOk()
+                    : $response->assertForbidden();
+            }
+        }
     }
 
     // ------------------------------------------------------------- connectors

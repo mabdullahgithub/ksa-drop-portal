@@ -41,7 +41,11 @@ class ProductSubmittedNotification extends Notification
             'title'      => 'New Product Awaiting Verification',
             'message'    => "{$this->client->company_name} submitted \"{$this->product->name}\" ({$this->product->product_code}) for verification.",
             'icon'       => 'package',
-            'action_url' => "/client/{$this->client->id}",
+            // The Requests page when they can open its queue, the client's
+            // own page otherwise.
+            'action_url' => $notifiable->can('view product requests')
+                ? '/requests?tab=products'
+                : "/client/{$this->client->id}",
         ];
     }
 }

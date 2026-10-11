@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { toast } from 'sonner'
-import { Search as SearchIcon, CheckCircle, Clock, Plus, Lock, Pencil, Trash2, ArrowUpDown, ArrowUp, ArrowDown, PackageX, ImageOff, X, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Search as SearchIcon, CheckCircle, Clock, Plus, Lock, Pencil, Trash2, ArrowUpDown, ArrowUp, ArrowDown, PackageX, ImageOff, X, ChevronLeft, ChevronRight, Hourglass } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -44,25 +44,14 @@ import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
 import { SearchBeam } from '@/components/search-beam'
 import { ThemeSwitch } from '@/components/theme-switch'
-import { usePortalInventory, usePortalInventoryMutations } from '@/hooks/usePortal'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { usePortalInventory, usePortalInventoryMutations, usePortalInventoryRequests } from '@/hooks/usePortal'
 import { PortalProductFormDialog } from './portal-product-form-dialog'
-import type { ClientProductImage } from '@/types/client'
+import { PortalRequestsTab } from './portal-requests-tab'
+import type { PortalInventoryProduct } from '@/types/client'
 import { EmptyState } from '@/components/empty-state'
 
-interface PortalProduct {
-  id: number
-  product_code: string
-  name: string
-  sku: string | null
-  description: string | null
-  quantity: number
-  unit_price: string | null
-  notes: string | null
-  verification_status: 'pending' | 'verified' | 'rejected'
-  is_out_of_stock: boolean
-  images: ClientProductImage[]
-  created_at: string
-}
+type PortalProduct = PortalInventoryProduct
 
 type SortField = 'product_code' | 'quantity' | 'created_at'
 type SortOrder = 'asc' | 'desc'
@@ -70,6 +59,18 @@ type SortOrder = 'asc' | 'desc'
 export function PortalInventory() {
   const { products, meta, loading, updateFilters, refresh } = usePortalInventory()
   const { loading: mutating, deleteProduct } = usePortalInventoryMutations()
+  // What was asked to change on verified products, and what became of it.
+  const requestQueue = usePortalInventoryRequests(true)
+  // A notification about a decided request opens the page on its tab.
+  const [tab, setTab] = useState(() =>
+    new URLSearchParams(window.location.search).get('tab') === 'requests' ? 'requests' : 'products'
+  )
+
+  // Saving a verified product may have made, replaced or withdrawn a request.
+  const refreshAll = () => {
+    refresh()
+    requestQueue.refresh()
+  }
 
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
@@ -157,6 +158,24 @@ export function PortalInventory() {
           </Button>
         </div>
 
+        <Tabs value={tab} onValueChange={setTab} className='gap-4'>
+          <TabsList className='w-fit'>
+            <TabsTrigger value='products'>Products</TabsTrigger>
+            <TabsTrigger value='requests' className='gap-1.5'>
+              Requests
+              {requestQueue.pending > 0 && (
+                <Badge variant='secondary' className='px-1.5 text-[10px]'>
+                  {requestQueue.pending}
+                </Badge>
+              )}
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value='requests'>
+            <PortalRequestsTab queue={requestQueue} onChanged={refresh} />
+          </TabsContent>
+
+          <TabsContent value='products'>
         <div className='space-y-4'>
           <div className='flex flex-wrap items-center gap-2'>
             <div className='relative'>
@@ -266,7 +285,13 @@ export function PortalInventory() {
                   </TableRow>
                 ) : (
                   (products as PortalProduct[]).map((product) => {
-                    const isPending = product.verification_status === 'pending'
+                    const isVerified = product.verification_status === 'verified'
+                    // What this product has waiting on the team's approval.
+                    const stockRequest = product.pending_requests?.find((request) => request.type === 'stock')
+                    const detailsRequest = product.pending_requests?.find((request) => request.type === 'details')
+                    const stockChange = stockRequest
+                      ? (stockRequest.requested_quantity ?? 0) - (stockRequest.stock_at_request ?? 0)
+                      : 0
                     return (
                       <TableRow key={product.id}>
                         <TableCell>
@@ -340,43 +365,64 @@ export function PortalInventory() {
                                 Out of Stock
                               </Badge>
                             )}
+                            {stockRequest && (
+                              <Badge
+                                variant='outline'
+                                className='bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400 text-xs'
+                                title='Waiting for our team to approve'
+                              >
+                                <Hourglass className='mr-1 h-3 w-3' />
+                                Stock {stockChange > 0 ? '+' : '−'}{Math.abs(stockChange)} pending
+                              </Badge>
+                            )}
+                            {detailsRequest && (
+                              <Badge
+                                variant='outline'
+                                className='bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400 text-xs'
+                                title='Waiting for our team to approve'
+                              >
+                                <Hourglass className='mr-1 h-3 w-3' />
+                                Details pending
+                              </Badge>
+                            )}
                           </div>
                         </TableCell>
                         <TableCell className='text-sm text-muted-foreground'>
                           {new Date(product.created_at).toLocaleDateString()}
                         </TableCell>
                         <TableCell>
-                          {isPending ? (
-                            <DropdownMenu modal={false}>
-                              <DropdownMenuTrigger asChild>
-                                <Button
-                                  variant='ghost'
-                                  className='flex h-8 w-8 p-0 data-[state=open]:bg-muted'
-                                  disabled={mutating}
-                                >
-                                  <DotsHorizontalIcon className='h-4 w-4' />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align='end' className='w-40'>
-                                <DropdownMenuItem onClick={() => openEdit(product)}>
-                                  <Pencil className='mr-2 h-4 w-4' />
-                                  Edit
-                                </DropdownMenuItem>
-                                <DropdownMenuSeparator />
-                                <DropdownMenuItem
-                                  className='text-destructive'
-                                  onClick={() => setDeleteTarget(product)}
-                                >
-                                  <Trash2 className='mr-2 h-4 w-4' />
-                                  Delete
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          ) : (
-                            <div className='flex h-8 w-8 items-center justify-center' title='Verified products are locked'>
-                              <Lock className='h-3.5 w-3.5 text-muted-foreground/50' />
-                            </div>
-                          )}
+                          {/* A verified product is edited too: the change
+                              is sent for approval. Only removing one is not
+                              the client's to do. */}
+                          <DropdownMenu modal={false}>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                variant='ghost'
+                                className='flex h-8 w-8 p-0 data-[state=open]:bg-muted'
+                                disabled={mutating}
+                              >
+                                <DotsHorizontalIcon className='h-4 w-4' />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align='end' className='w-40'>
+                              <DropdownMenuItem onClick={() => openEdit(product)}>
+                                <Pencil className='mr-2 h-4 w-4' />
+                                Edit
+                              </DropdownMenuItem>
+                              {!isVerified && (
+                                <>
+                                  <DropdownMenuSeparator />
+                                  <DropdownMenuItem
+                                    className='text-destructive'
+                                    onClick={() => setDeleteTarget(product)}
+                                  >
+                                    <Trash2 className='mr-2 h-4 w-4' />
+                                    Delete
+                                  </DropdownMenuItem>
+                                </>
+                              )}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                         </TableCell>
                       </TableRow>
                     )
@@ -392,13 +438,15 @@ export function PortalInventory() {
             </div>
           )}
         </div>
+          </TabsContent>
+        </Tabs>
       </Main>
 
       <PortalProductFormDialog
         product={editingProduct}
         open={formOpen}
         onOpenChange={setFormOpen}
-        onSuccess={refresh}
+        onSuccess={refreshAll}
       />
 
       <AlertDialog open={!!deleteTarget} onOpenChange={(open) => { if (!open) setDeleteTarget(null) }}>

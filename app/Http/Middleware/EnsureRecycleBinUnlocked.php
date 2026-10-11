@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Support\ScreenLock;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -19,6 +20,11 @@ class EnsureRecycleBinUnlocked
 
     public function handle(Request $request, Closure $next): Response
     {
+        // Switched off in .env (LOCK_RECYCLE_BIN=false).
+        if (! ScreenLock::enabled(ScreenLock::RECYCLE_BIN)) {
+            return $next($request);
+        }
+
         $unlockedAt = $request->session()->get(self::SESSION_KEY);
 
         if ($unlockedAt === null) {

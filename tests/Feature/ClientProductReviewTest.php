@@ -103,6 +103,43 @@ class ClientProductReviewTest extends TestCase
         $this->assertEquals('verified', $product->verification_status);
     }
 
+    public function test_verifying_can_record_the_count_the_warehouse_received(): void
+    {
+        $admin = User::factory()->create();
+        $admin->assignRole('admin');
+
+        $client = Client::create([
+            'user_id' => User::factory()->create()->id,
+            'company_name' => 'Test Company',
+            'short_id' => 'TEST',
+            'client_types' => ['fulfilment'],
+            'portal_features' => ['inventory'],
+        ]);
+
+        $product = ClientProduct::create([
+            'client_id' => $client->id,
+            'product_code' => 'TEST-001',
+            'name' => 'Test Product',
+            'quantity' => 10,
+            'verification_status' => 'pending',
+        ]);
+
+        $review = fn (array $data) => $this->actingAs($admin)
+            ->patchJson("/api/clients/{$client->id}/products/{$product->id}/review", $data)
+            ->assertOk();
+
+        // Left out, the quantity the client stated stands.
+        $review(['action' => 'verify']);
+        $this->assertSame(10, $product->fresh()->quantity);
+
+        $review(['action' => 'verify', 'received_quantity' => 8]);
+        $this->assertSame(8, $product->fresh()->quantity);
+
+        // It is the count at verification only: a rejection does not take it.
+        $review(['action' => 'reject', 'received_quantity' => 0]);
+        $this->assertSame(8, $product->fresh()->quantity);
+    }
+
     public function test_raw_patch_request_fails_if_sent_as_multipart_form_data_without_spoofing(): void
     {
         $admin = User::factory()->create();

@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\ClientController;
 use App\Http\Controllers\Api\ClientPaymentController;
 use App\Http\Controllers\Api\ConnectorSettingsController;
 use App\Http\Controllers\Api\ImileWebhookController;
+use App\Http\Controllers\Api\InventoryRequestController;
 use App\Http\Controllers\Api\LogesTechsController;
 use App\Http\Controllers\Api\LogesTechsWebhookController;
 use App\Http\Controllers\Api\InvoiceController;
@@ -22,6 +23,7 @@ use App\Http\Controllers\ClientPageController;
 use App\Http\Controllers\Api\ProductController;
 use App\Http\Controllers\ImpersonateController;
 use App\Http\Controllers\PortalController;
+use App\Http\Controllers\PortalInventoryRequestController;
 use App\Http\Controllers\EmailSettingsController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\PermissionController;
@@ -69,6 +71,7 @@ Route::middleware(['auth', 'verified', 'role:!client', 'client.access'])->group(
     Route::get('/client', fn () => Inertia::render('Client'))->middleware('permission:view client')->name('client');
     Route::get('/client/{client}', [ClientPageController::class, 'show'])->middleware('permission:view client details')->name('client.show');
     Route::get('/inventory', fn () => Inertia::render('Inventory'))->middleware('permission:view inventory')->name('inventory');
+    Route::get('/requests', fn () => Inertia::render('Requests'))->middleware('permission:view requests')->name('requests');
     Route::get('/orders', fn () => Inertia::render('Orders'))->middleware('permission:view orders')->name('orders');
 
     // WhatsApp inbox — the confirmation conversations started when an agent
@@ -260,6 +263,40 @@ Route::middleware(['auth', 'verified', 'role:!client', 'client.access'])->group(
     // Parcels the inventory managers scanned OUT and IN, and what it did to stock.
     Route::get('/api/stock-scans', [StockScanController::class, 'index'])->middleware('permission:view stock scans')->name('api.stock-scans.index');
 
+    // The Requests page: what clients are waiting on. New products are
+    // client products pending verification; stock and details are changes
+    // asked for on verified ones. Each queue and each button is a permission
+    // of its own.
+    Route::prefix('api/requests')->group(function () {
+        // Unlock sits outside the requests.unlocked gate (it is what opens it)
+        // and is throttled so the PIN cannot be walked through. Its own
+        // limiter name keeps its attempt count apart from the other screens'.
+        Route::post('/unlock', [InventoryRequestController::class, 'unlock'])
+            ->middleware(['permission:view requests', 'throttle:5,1,requests-unlock'])
+            ->name('api.requests.unlock');
+        Route::post('/lock', [InventoryRequestController::class, 'lock'])->middleware('permission:view requests')->name('api.requests.lock');
+
+        // Everything the page shows or does sits behind the PIN.
+        Route::middleware('requests.unlocked')->group(function () {
+            Route::get('/counts', [InventoryRequestController::class, 'counts'])->middleware('permission:view product requests|view stock requests|view detail requests')->name('api.requests.counts');
+
+            Route::get('/products', [InventoryRequestController::class, 'products'])->middleware('permission:view product requests')->name('api.requests.products');
+            Route::post('/products/{product}/review', [InventoryRequestController::class, 'reviewProduct'])->middleware('permission:review product requests')->name('api.requests.products.review');
+
+            Route::get('/stock', [InventoryRequestController::class, 'stock'])->middleware('permission:view stock requests')->name('api.requests.stock');
+            Route::post('/stock/bulk-approve', [InventoryRequestController::class, 'bulkApproveStock'])->middleware('permission:bulk approve stock requests')->name('api.requests.stock.bulk-approve');
+            Route::post('/stock/bulk-reject', [InventoryRequestController::class, 'bulkRejectStock'])->middleware('permission:bulk reject stock requests')->name('api.requests.stock.bulk-reject');
+            Route::post('/stock/{inventoryRequest}/approve', [InventoryRequestController::class, 'approveStock'])->middleware('permission:approve stock requests')->name('api.requests.stock.approve');
+            Route::post('/stock/{inventoryRequest}/reject', [InventoryRequestController::class, 'rejectStock'])->middleware('permission:reject stock requests')->name('api.requests.stock.reject');
+
+            Route::get('/details', [InventoryRequestController::class, 'details'])->middleware('permission:view detail requests')->name('api.requests.details');
+            Route::post('/details/bulk-approve', [InventoryRequestController::class, 'bulkApproveDetails'])->middleware('permission:bulk approve detail requests')->name('api.requests.details.bulk-approve');
+            Route::post('/details/bulk-reject', [InventoryRequestController::class, 'bulkRejectDetails'])->middleware('permission:bulk reject detail requests')->name('api.requests.details.bulk-reject');
+            Route::post('/details/{inventoryRequest}/approve', [InventoryRequestController::class, 'approveDetails'])->middleware('permission:approve detail requests')->name('api.requests.details.approve');
+            Route::post('/details/{inventoryRequest}/reject', [InventoryRequestController::class, 'rejectDetails'])->middleware('permission:reject detail requests')->name('api.requests.details.reject');
+        });
+    });
+
     // Inventory / Products API
     Route::prefix('api/products')->group(function () {
         Route::get('/', [ProductController::class, 'index'])->middleware('permission:view inventory')->name('api.products.index');
@@ -441,6 +478,10 @@ Route::prefix('portal')->middleware(['auth', 'verified', 'role:client', 'client.
     Route::put('/api/inventory/{product}', [PortalController::class, 'updateInventory'])->name('portal.api.inventory.update');
     Route::delete('/api/inventory/{product}', [PortalController::class, 'destroyInventory'])->name('portal.api.inventory.destroy');
     Route::delete('/api/inventory/{product}/images/{image}', [PortalController::class, 'destroyInventoryImage'])->name('portal.api.inventory.images.destroy');
+    // What the client asked to change on verified products. Requests are made
+    // by saving the product (updateInventory above), not here.
+    Route::get('/api/inventory/requests', [PortalInventoryRequestController::class, 'index'])->name('portal.api.inventory.requests');
+    Route::delete('/api/inventory/requests/{inventoryRequest}', [PortalInventoryRequestController::class, 'destroy'])->name('portal.api.inventory.requests.destroy');
     Route::get('/api/products', [PortalController::class, 'products'])->name('portal.api.products');
     Route::get('/api/products/filter-options', [PortalController::class, 'productFilterOptions'])->name('portal.api.products.filter-options');
     Route::get('/api/products/download', [PortalController::class, 'productsDownload'])->name('portal.api.products.download');

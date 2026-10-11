@@ -10,6 +10,7 @@ const LANDING_CANDIDATES: { permission: string; url: string }[] = [
   { permission: 'view dashboard', url: '/dashboard' },
   { permission: 'view client', url: '/client' },
   { permission: 'view inventory', url: '/inventory' },
+  { permission: 'view requests', url: '/requests' },
   { permission: 'view orders', url: '/orders' },
   { permission: 'view whatsapp', url: '/whatsapp' },
   { permission: 'view riders', url: '/riders' },

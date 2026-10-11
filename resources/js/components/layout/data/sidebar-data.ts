@@ -23,6 +23,7 @@ import {
   MessageCircle,
   Trash2,
   Bike,
+  ClipboardCheck,
 } from 'lucide-react'
 import { type SidebarData } from '../types'
 
@@ -96,6 +97,12 @@ export const sidebarData: SidebarData = {
           url: '/inventory',
           icon: PackageSearch,
           permission: 'view inventory',
+        },
+        {
+          title: 'Requests',
+          url: '/requests',
+          icon: ClipboardCheck,
+          permission: 'view requests',
         },
         {
           title: 'Connectors',

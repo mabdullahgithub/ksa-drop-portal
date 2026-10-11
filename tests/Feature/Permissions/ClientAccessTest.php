@@ -2,9 +2,11 @@
 
 namespace Tests\Feature\Permissions;
 
+use App\Http\Middleware\EnsureRequestsUnlocked;
 use App\Models\Client;
 use App\Models\ClientPayment;
 use App\Models\ClientProduct;
+use App\Models\InventoryRequest;
 use App\Models\Invoice;
 use App\Models\Order;
 use App\Models\User;
@@ -168,6 +170,54 @@ class ClientAccessTest extends TestCase
         $this->actingAs($user)->getJson("/api/clients/{$this->theirs->id}/products")->assertNotFound();
         $this->actingAs($user)->getJson("/api/clients/{$this->theirs->id}/payments")->assertNotFound();
         $this->actingAs($user)->postJson("/api/clients/{$this->theirs->id}/payments", ['amount' => 5, 'paid_at' => now()->toDateString()])->assertNotFound();
+    }
+
+    public function test_the_requests_page_holds_only_their_clients_requests(): void
+    {
+        // Behind the PIN; this is about what an open page shows.
+        $this->withSession([EnsureRequestsUnlocked::SESSION_KEY => now()]);
+
+        $myProduct = ClientProduct::create(['client_id' => $this->mine->id, 'product_code' => 'M-001', 'name' => 'My product', 'quantity' => 10, 'verification_status' => 'verified']);
+        $theirProduct = ClientProduct::create(['client_id' => $this->theirs->id, 'product_code' => 'T-001', 'name' => 'Their product', 'quantity' => 10, 'verification_status' => 'verified']);
+        ClientProduct::create(['client_id' => $this->theirs->id, 'product_code' => 'T-002', 'name' => 'Their new product']);
+
+        $request = fn (ClientProduct $product) => InventoryRequest::create([
+            'client_id' => $product->client_id,
+            'client_product_id' => $product->id,
+            'type' => 'stock',
+            'requested_quantity' => 50,
+            'stock_at_request' => 10,
+        ]);
+        $myRequest = $request($myProduct);
+        $theirRequest = $request($theirProduct);
+
+        $user = $this->limited(['view dashboard', 'view requests', 'view product requests', 'view stock requests', 'approve stock requests', 'bulk approve stock requests', 'review product requests']);
+
+        $this->actingAs($user)->getJson('/api/requests/stock')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.id', $myRequest->id);
+        $this->actingAs($user)->getJson('/api/requests/products')->assertOk()->assertJsonCount(0, 'data');
+        $this->actingAs($user)->getJson('/api/requests/counts')
+            ->assertJsonPath('counts.stock', 1)
+            ->assertJsonPath('counts.products', 0)
+            ->assertJsonCount(1, 'clients');
+
+        // The number in the sidebar counts the same rows.
+        $this->actingAs($user)->get('/dashboard')
+            ->assertInertia(fn ($page) => $page->where('pendingRequestsCount', 1));
+
+        $this->actingAs($user)->postJson("/api/requests/stock/{$theirRequest->id}/approve", ['units' => 40])->assertNotFound();
+        $this->actingAs($user)->postJson("/api/requests/products/{$theirProduct->id}/review", ['action' => 'reject'])->assertNotFound();
+        $this->actingAs($user)->postJson('/api/requests/stock/bulk-approve', ['ids' => [$theirRequest->id]])
+            ->assertOk()
+            ->assertJsonPath('done', 0);
+
+        $this->assertSame('pending', $theirRequest->fresh()->status);
+        $this->assertSame(10, $theirProduct->fresh()->quantity);
+
+        $this->actingAs($user)->postJson("/api/requests/stock/{$myRequest->id}/approve", ['units' => 40])->assertOk();
+        $this->assertSame(50, $myProduct->fresh()->quantity);
     }
 
     public function test_another_clients_portal_cannot_be_opened(): void

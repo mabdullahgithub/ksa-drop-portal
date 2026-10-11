@@ -4,10 +4,13 @@ namespace App\Http\Middleware;
 
 use App\Http\Concerns\ResolvesNotifiableUser;
 use App\Models\Client;
+use App\Services\Inventory\RequestQueues;
 use App\Services\Inventory\StockAlerts;
 use App\Support\PermissionCatalog;
+use App\Support\ScreenLock;
 use App\Support\WhatsAppMessaging;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 use Inertia\Middleware;
 
@@ -127,6 +130,15 @@ class HandleInertiaRequests extends Middleware
             // hide everything WhatsApp added (call/WhatsApp columns, the
             // call-outcome panel, the dashboard section). Only staff see it.
             'whatsappMessaging' => fn () => $user && ! $user->hasRole('client') && WhatsAppMessaging::enabled(),
+            // Which screens ask for the PIN (the switches in .env), so a page
+            // with its lock off does not put up the prompt.
+            'locks' => fn () => $user && ! $user->hasRole('client') ? ScreenLock::all() : null,
+            // The number beside "Requests" in the sidebar: what clients are
+            // waiting on, in the queues this person can open. Cached briefly
+            // like the unread count, so moving between pages costs nothing.
+            'pendingRequestsCount' => fn () => $user && ! $client && ! $user->hasRole('client') && $user->can('view requests')
+                ? Cache::remember("requests:pending_count:user:{$user->id}", now()->addSeconds(20), fn () => RequestQueues::total($user))
+                : 0,
             // The stock warning cards: a fulfilment client's products down to
             // their last few units, or out. See StockAlerts.
             'stockAlerts' => fn () => $user ? $this->stockAlerts($request, $client) : null,

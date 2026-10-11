@@ -12,14 +12,13 @@ use App\Models\User;
 use Illuminate\Support\Facades\Storage;
 use App\Notifications\ClientCreatedNotification;
 use App\Notifications\ClientStatusChangedNotification;
-use App\Notifications\ProductVerifiedNotification;
-use App\Notifications\ProductRejectedNotification;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Password;
 use Illuminate\Validation\Rules\Password as PasswordRule;
 use App\Services\EmailService;
+use App\Services\Inventory\ClientProductReviewer;
 use App\Support\ClientAccess;
 use App\Support\GeneratedPassword;
 use Illuminate\Support\Facades\Mail;
@@ -529,7 +528,8 @@ class ClientController extends Controller
 
         $perPage = $request->get('per_page', 20);
 
-        $paginator = $query->paginate($perPage);
+        // How many changes the client has waiting on each, for the badge.
+        $paginator = $query->withCount('pendingRequests')->paginate($perPage);
         $paginator->getCollection()->load('images');
 
         return response()->json($paginator);
@@ -593,65 +593,9 @@ class ClientController extends Controller
             abort(404);
         }
 
-        $request->validate([
-            'action'           => 'required|in:verify,reject,pending',
-            'rejection_reason' => 'nullable|string|max:1000',
-            'is_out_of_stock'  => 'nullable|boolean',
-            'images'           => 'nullable|array|max:10',
-            'images.*'         => 'image|max:5120',
-        ]);
-
-        $action = $request->input('action');
-        $isOutOfStock = (bool) $request->input('is_out_of_stock', false);
-
-        if ($action === 'verify') {
-            $product->update([
-                'verification_status' => 'verified',
-                'verified_at'         => now(),
-                'verified_by'         => auth()->id(),
-                'rejection_reason'    => null,
-                'is_out_of_stock'     => $isOutOfStock,
-            ]);
-
-            if ($request->hasFile('images')) {
-                $nextPosition = ($product->images()->max('position') ?? 0) + 1;
-                foreach ($request->file('images') as $file) {
-                    $path = $file->store("client-products/{$product->id}", 'public');
-                    $product->images()->create(['path' => $path, 'position' => $nextPosition++]);
-                }
-            }
-
-            try {
-                $product->client->user?->notify(new ProductVerifiedNotification($product->fresh()));
-            } catch (\Throwable) {}
-
-        } elseif ($action === 'reject') {
-            $product->update([
-                'verification_status' => 'rejected',
-                'rejection_reason'    => $request->input('rejection_reason'),
-                'verified_at'         => null,
-                'verified_by'         => null,
-                'is_out_of_stock'     => $isOutOfStock,
-            ]);
-
-            try {
-                $product->client->user?->notify(new ProductRejectedNotification($product->fresh()));
-            } catch (\Throwable) {}
-
-        } else {
-            // keep pending
-            $product->update([
-                'verification_status' => 'pending',
-                'rejection_reason'    => null,
-                'verified_at'         => null,
-                'verified_by'         => null,
-                'is_out_of_stock'     => $isOutOfStock,
-            ]);
-        }
-
         return response()->json([
             'message' => 'Product reviewed successfully',
-            'product' => $product->fresh()->load('images'),
+            'product' => app(ClientProductReviewer::class)->reviewFromRequest($request, $product),
         ]);
     }
 

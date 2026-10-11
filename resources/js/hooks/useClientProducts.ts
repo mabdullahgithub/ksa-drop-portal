@@ -103,7 +103,8 @@ export function useClientProductMutations() {
     action: 'verify' | 'reject' | 'pending',
     images?: File[],
     rejectionReason?: string,
-    isOutOfStock?: boolean
+    isOutOfStock?: boolean,
+    receivedQuantity?: number | null
   ): Promise<boolean> => {
     setLoading(true)
     try {
@@ -112,6 +113,9 @@ export function useClientProductMutations() {
       body.append('action', action)
       if (rejectionReason) body.append('rejection_reason', rejectionReason)
       body.append('is_out_of_stock', isOutOfStock ? '1' : '0')
+      if (receivedQuantity !== null && receivedQuantity !== undefined) {
+        body.append('received_quantity', String(receivedQuantity))
+      }
       if (images && images.length > 0) {
         images.forEach((f) => body.append('images[]', f))
       }

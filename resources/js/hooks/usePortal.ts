@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
+import type { InventoryRequest } from '@/types/client'
 
 export function usePortalInventoryMutations() {
   const [loading, setLoading] = useState(false)
@@ -36,20 +37,35 @@ export function usePortalInventoryMutations() {
     }
   }
 
+  /**
+   * Save a product. One that is already verified is not changed by this: the
+   * server turns what differs into a request for the team, and answers with
+   * `pendingApproval` saying what became of it.
+   */
   const updateProduct = async (
     productId: number,
     payload: Record<string, unknown>,
     images?: File[],
-    removeImageIds?: number[]
-  ): Promise<boolean | { errors: Record<string, string[]> } | { message: string }> => {
+    removeImageIds?: number[],
+    removePendingImageIds?: number[]
+  ): Promise<
+    | true
+    | { pendingApproval: true; outcome: 'sent' | 'withdrawn' | 'none'; message: string }
+    | false
+    | { errors: Record<string, string[]> }
+    | { message: string }
+  > => {
     setLoading(true)
     try {
       const form = new FormData()
+      // An emptied field goes as an empty string, which the server reads as
+      // "clear it"; leaving it out would mean "leave it as it is".
       Object.entries(payload).forEach(([k, v]) => {
-        if (v !== null && v !== undefined) form.append(k, String(v))
+        if (v !== undefined) form.append(k, v === null ? '' : String(v))
       })
       images?.forEach((f) => form.append('images[]', f))
       removeImageIds?.forEach((id) => form.append('remove_image_ids[]', String(id)))
+      removePendingImageIds?.forEach((id) => form.append('remove_pending_image_ids[]', String(id)))
       form.append('_method', 'PUT')
 
       const response = await fetch(`/portal/api/inventory/${productId}`, {
@@ -59,9 +75,13 @@ export function usePortalInventoryMutations() {
       })
       if (!response.ok) {
         const error = await response.json()
-        if (response.status === 422) return { message: error.message || 'This product cannot be edited.' }
         if (error.errors) return { errors: error.errors }
+        if (response.status === 422) return { message: error.message || 'This product cannot be edited.' }
         throw new Error('Failed')
+      }
+      const data = await response.json()
+      if (data.pending_approval) {
+        return { pendingApproval: true, outcome: data.outcome, message: data.message }
       }
       return true
     } catch {
@@ -357,6 +377,71 @@ export function usePortalInventory(initialFilters: Record<string, any> = {}) {
     filters,
     updateFilters,
     refresh: () => fetchProducts(),
+  }
+}
+
+/**
+ * The Requests tab of My Inventory: what the client asked to change on
+ * verified products, and what became of each.
+ */
+export function usePortalInventoryRequests(enabled: boolean) {
+  const [requests, setRequests] = useState<InventoryRequest[]>([])
+  const [pending, setPending] = useState(0)
+  const [status, setStatus] = useState('all')
+  const [page, setPage] = useState(1)
+  const [meta, setMeta] = useState<{ current_page: number; last_page: number; total: number } | null>(null)
+  const [loading, setLoading] = useState(false)
+
+  const load = useCallback(async () => {
+    if (!enabled) return
+    setLoading(true)
+    try {
+      const params = new URLSearchParams({ status, page: String(page) })
+      const response = await fetch(`/portal/api/inventory/requests?${params}`, { headers: { Accept: 'application/json' } })
+      if (!response.ok) throw new Error('Failed')
+      const data = await response.json()
+      setRequests(data.data)
+      setPending(data.pending)
+      setMeta({ current_page: data.current_page, last_page: data.last_page, total: data.total })
+    } catch (error) {
+      console.error('Error fetching inventory requests:', error)
+    } finally {
+      setLoading(false)
+    }
+  }, [enabled, status, page])
+
+  useEffect(() => { load() }, [load])
+
+  /** Take back a request nobody has decided yet. Resolves to an error message, or null when done. */
+  const cancel = async (id: number): Promise<string | null> => {
+    try {
+      const response = await fetch(`/portal/api/inventory/requests/${id}`, {
+        method: 'DELETE',
+        headers: {
+          Accept: 'application/json',
+          'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
+        },
+      })
+      if (!response.ok) {
+        const error = await response.json().catch(() => null)
+        return error?.message || 'Failed to cancel the request'
+      }
+      return null
+    } catch {
+      return 'Failed to cancel the request'
+    }
+  }
+
+  return {
+    requests,
+    pending,
+    meta,
+    loading,
+    status,
+    setStatus: (value: string) => { setStatus(value); setPage(1) },
+    setPage,
+    refresh: load,
+    cancel,
   }
 }
 

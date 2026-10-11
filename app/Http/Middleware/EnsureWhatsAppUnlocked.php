@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Support\ScreenLock;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -21,6 +22,11 @@ class EnsureWhatsAppUnlocked
 
     public function handle(Request $request, Closure $next): Response
     {
+        // Switched off in .env (LOCK_WHATSAPP=false).
+        if (! ScreenLock::enabled(ScreenLock::WHATSAPP)) {
+            return $next($request);
+        }
+
         $unlockedAt = $request->session()->get(self::SESSION_KEY);
 
         if ($unlockedAt === null) {

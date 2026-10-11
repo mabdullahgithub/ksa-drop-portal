@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { ImagePlus, X, ShieldCheck, XCircle, Clock, ChevronLeft, ChevronRight, PackageX } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
@@ -17,7 +18,14 @@ interface ClientProductReviewDialogProps {
   product: ClientProduct | null
   open: boolean
   onOpenChange: (open: boolean) => void
-  onConfirm: (action: 'verify' | 'reject' | 'pending', images: File[], rejectionReason: string, isOutOfStock: boolean) => Promise<void>
+  /** `receivedQuantity` is the count the warehouse received; null leaves the client's number. */
+  onConfirm: (
+    action: 'verify' | 'reject' | 'pending',
+    images: File[],
+    rejectionReason: string,
+    isOutOfStock: boolean,
+    receivedQuantity: number | null
+  ) => Promise<void>
   loading: boolean
 }
 
@@ -32,14 +40,25 @@ export function ClientProductVerifyDialog({
   const [previews, setPreviews] = useState<string[]>([])
   const [rejectionReason, setRejectionReason] = useState('')
   const [isOutOfStock, setIsOutOfStock] = useState(false)
+  const [receivedQuantity, setReceivedQuantity] = useState('')
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     if (open && product) {
       setIsOutOfStock(product.is_out_of_stock ?? false)
+      setReceivedQuantity(String(product.quantity ?? ''))
     }
   }, [open, product])
+
+  // Only a product not yet verified takes a received count: once verified,
+  // its stock moves on scans and approved requests, and a number typed here
+  // could overwrite them.
+  const takesReceivedQuantity = product?.verification_status !== 'verified'
+  const received =
+    takesReceivedQuantity && receivedQuantity.trim() !== '' && Number.isInteger(Number(receivedQuantity)) && Number(receivedQuantity) >= 0
+      ? Number(receivedQuantity)
+      : null
 
   const handleOpenChange = (o: boolean) => {
     if (!o) {
@@ -48,6 +67,7 @@ export function ClientProductVerifyDialog({
       setPreviews([])
       setRejectionReason('')
       setIsOutOfStock(false)
+      setReceivedQuantity('')
       setLightboxIndex(null)
     }
     onOpenChange(o)
@@ -230,6 +250,28 @@ export function ClientProductVerifyDialog({
                 )}
               </div>
 
+              {/* Count the warehouse received */}
+              {takesReceivedQuantity && (
+                <div className='space-y-2'>
+                  <Label htmlFor='received-quantity'>
+                    Received Quantity
+                    <span className='ml-1 text-xs font-normal text-muted-foreground'>
+                      (saved on verify — the client stated {product?.quantity ?? 0})
+                    </span>
+                  </Label>
+                  <Input
+                    id='received-quantity'
+                    type='number'
+                    min={0}
+                    step={1}
+                    className='w-40'
+                    value={receivedQuantity}
+                    onChange={(e) => setReceivedQuantity(e.target.value)}
+                    disabled={loading}
+                  />
+                </div>
+              )}
+
               {/* Out of stock */}
               <div className='flex items-center gap-2'>
                 <Checkbox
@@ -280,7 +322,7 @@ export function ClientProductVerifyDialog({
                 size='sm'
                 className='h-7 px-2.5 text-xs border-yellow-400 text-yellow-700 hover:bg-yellow-50 dark:text-yellow-400 dark:hover:bg-yellow-900/20'
                 disabled={loading}
-                onClick={() => onConfirm('pending', images, rejectionReason, isOutOfStock)}
+                onClick={() => onConfirm('pending', images, rejectionReason, isOutOfStock, received)}
               >
                 <Clock className='mr-1.5 h-3 w-3' />
                 {loading ? 'Saving…' : 'Keep Pending'}
@@ -290,7 +332,7 @@ export function ClientProductVerifyDialog({
                 size='sm'
                 className='h-7 px-2.5 text-xs border-red-400 text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20'
                 disabled={loading}
-                onClick={() => onConfirm('reject', images, rejectionReason, isOutOfStock)}
+                onClick={() => onConfirm('reject', images, rejectionReason, isOutOfStock, received)}
               >
                 <XCircle className='mr-1.5 h-3 w-3' />
                 {loading ? 'Saving…' : 'Reject'}
@@ -299,7 +341,7 @@ export function ClientProductVerifyDialog({
                 size='sm'
                 className='h-7 px-2.5 text-xs bg-green-600 hover:bg-green-700 text-white'
                 disabled={loading}
-                onClick={() => onConfirm('verify', images, rejectionReason, isOutOfStock)}
+                onClick={() => onConfirm('verify', images, rejectionReason, isOutOfStock, received)}
               >
                 <ShieldCheck className='mr-1.5 h-3 w-3' />
                 {loading ? 'Verifying…' : 'Verify'}
@@ -309,45 +351,64 @@ export function ClientProductVerifyDialog({
         </DialogContent>
       </Dialog>
 
-      {/* Lightbox */}
-      {lightboxIndex !== null && allImages.length > 0 && (
-        <div
-          className='fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm'
-          onClick={() => setLightboxIndex(null)}
+      {/* Lightbox. A dialog of its own, so it opens above the review dialog
+          rather than behind it, and Escape or a click outside closes only
+          the image. */}
+      <Dialog
+        open={lightboxIndex !== null && allImages.length > 0}
+        onOpenChange={(o) => { if (!o) setLightboxIndex(null) }}
+      >
+        <DialogContent
+          showCloseButton={false}
+          overlayClassName='bg-black/80'
+          aria-describedby={undefined}
+          className='flex w-auto max-w-[96vw] sm:max-w-[96vw] max-h-none items-center gap-2 space-y-0 overflow-visible border-0 bg-transparent p-0 shadow-none'
         >
-          <button
-            className='absolute top-4 right-4 text-white hover:text-white/70 p-2'
-            onClick={() => setLightboxIndex(null)}
-          >
-            <X className='h-6 w-6' />
-          </button>
-          {allImages.length > 1 && (
+          <DialogTitle className='sr-only'>Product image</DialogTitle>
+          {lightboxIndex !== null && allImages[lightboxIndex] && (
             <>
-              <button
-                className='absolute left-4 text-white hover:text-white/70 p-2'
-                onClick={(e) => { e.stopPropagation(); setLightboxIndex((lightboxIndex - 1 + allImages.length) % allImages.length) }}
-              >
-                <ChevronLeft className='h-8 w-8' />
-              </button>
-              <button
-                className='absolute right-4 text-white hover:text-white/70 p-2'
-                onClick={(e) => { e.stopPropagation(); setLightboxIndex((lightboxIndex + 1) % allImages.length) }}
-              >
-                <ChevronRight className='h-8 w-8' />
-              </button>
+              {allImages.length > 1 && (
+                <button
+                  type='button'
+                  className='shrink-0 p-2 text-white hover:text-white/70'
+                  aria-label='Previous image'
+                  onClick={() => setLightboxIndex((lightboxIndex - 1 + allImages.length) % allImages.length)}
+                >
+                  <ChevronLeft className='h-8 w-8' />
+                </button>
+              )}
+              <div className='relative'>
+                <button
+                  type='button'
+                  className='absolute bottom-full right-0 p-2 text-white hover:text-white/70'
+                  aria-label='Close image'
+                  onClick={() => setLightboxIndex(null)}
+                >
+                  <X className='h-6 w-6' />
+                </button>
+                <img
+                  src={allImages[lightboxIndex].src}
+                  alt=''
+                  className='max-h-[80vh] max-w-[78vw] rounded-lg object-contain'
+                />
+                <p className='absolute left-1/2 top-full mt-2 -translate-x-1/2 whitespace-nowrap text-sm text-white/70'>
+                  {lightboxIndex + 1} / {allImages.length}
+                </p>
+              </div>
+              {allImages.length > 1 && (
+                <button
+                  type='button'
+                  className='shrink-0 p-2 text-white hover:text-white/70'
+                  aria-label='Next image'
+                  onClick={() => setLightboxIndex((lightboxIndex + 1) % allImages.length)}
+                >
+                  <ChevronRight className='h-8 w-8' />
+                </button>
+              )}
             </>
           )}
-          <img
-            src={allImages[lightboxIndex].src}
-            alt=''
-            className='max-h-[85vh] max-w-[85vw] rounded-lg object-contain'
-            onClick={(e) => e.stopPropagation()}
-          />
-          <p className='absolute bottom-4 text-white/70 text-sm'>
-            {lightboxIndex + 1} / {allImages.length}
-          </p>
-        </div>
-      )}
+        </DialogContent>
+      </Dialog>
     </>
   )
 }

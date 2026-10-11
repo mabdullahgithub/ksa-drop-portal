@@ -60,6 +60,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'shopify.csp' => \App\Http\Middleware\ShopifyEmbeddedCsp::class,
             'recyclebin.unlocked' => \App\Http\Middleware\EnsureRecycleBinUnlocked::class,
             'whatsapp.unlocked' => \App\Http\Middleware\EnsureWhatsAppUnlocked::class,
+            'requests.unlocked' => \App\Http\Middleware\EnsureRequestsUnlocked::class,
         ]);
 
         \Illuminate\Auth\Middleware\RedirectIfAuthenticated::redirectUsing(function ($request) {
