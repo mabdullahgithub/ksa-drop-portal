@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Jobs\ProcessShopifyWebhookJob;
 use App\Models\Client;
+use App\Models\ClientProduct;
 use App\Models\ClientShopifyConnection;
 use App\Models\Order;
 use App\Models\User;
@@ -158,6 +159,42 @@ class ShopifyWebhookTest extends TestCase
         $this->assertSame(self::SHOP, $order->shopify_shop_domain);
         $this->assertSame($connection->client_id, $order->client_id);
         $this->assertSame('Jane Buyer', $order->customer_name);
+    }
+
+    public function test_an_update_keeps_the_stock_product_an_item_was_tied_to(): void
+    {
+        // An item with no SKU can only be counted against stock through the
+        // product it was tied to in the portal. Items are replaced on every
+        // orders/updated, and the tie must come through that.
+        $connection = $this->makeConnection();
+        $product = ClientProduct::create([
+            'client_id' => $connection->client_id,
+            'product_code' => 'TST-001',
+            'name' => 'Lamp',
+            'quantity' => 10,
+        ]);
+
+        $payload = [
+            'id'           => 9002,
+            'order_number' => 1043,
+            'line_items'   => [
+                ['name' => 'Lamp', 'quantity' => 2, 'price' => '50.00', 'sku' => null],
+                ['name' => 'Gift card', 'quantity' => 1, 'price' => '0.00', 'sku' => null],
+            ],
+        ];
+
+        ProcessShopifyWebhookJob::dispatchSync(self::SHOP, 'orders/create', $payload);
+
+        $order = Order::withoutGlobalScope('shopify_visible')->where('shopify_order_id', '9002')->sole();
+        $order->items()->where('lineitem_name', 'Lamp')->update(['client_product_id' => $product->id]);
+
+        ProcessShopifyWebhookJob::dispatchSync(self::SHOP, 'orders/updated', $payload);
+
+        $items = $order->items()->get()->keyBy('lineitem_name');
+
+        $this->assertCount(2, $items);
+        $this->assertSame($product->id, $items['Lamp']->client_product_id);
+        $this->assertNull($items['Gift card']->client_product_id);
     }
 
     public function test_a_second_store_continues_the_clients_order_sequence(): void

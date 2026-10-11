@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\ClientShopifyConnection;
 use App\Models\Order;
+use App\Models\OrderItem;
 use App\Models\ShopifySyncFailure;
 use Illuminate\Support\Facades\DB;
 
@@ -82,6 +83,14 @@ class ShopifyOrderWriter
             // id across syncs, so delete-and-reinsert is both correct and simpler
             // — and it is what makes a re-sync of the same order a no-op rather
             // than a second copy of every item.
+            //
+            // What does not come from Shopify is the stock product an item was
+            // tied to in the portal. An item with no SKU can only be counted
+            // against stock through that tie, so it is carried over to the row
+            // that replaces it — otherwise the next orders/updated unties the
+            // order and its parcel scans OUT without moving any stock.
+            $lineItems = $this->keepStockLinks($lineItems, $order);
+
             $order->items()->delete();
             $order->items()->createMany($lineItems);
 
@@ -93,6 +102,35 @@ class ShopifyOrderWriter
 
             return $order;
         });
+    }
+
+    /**
+     * Give each incoming line item the stock product its predecessor was tied
+     * to: the same item, by name, variant and SKU.
+     *
+     * @param  array<int,array<string,mixed>>  $lineItems
+     * @return array<int,array<string,mixed>>
+     */
+    private function keepStockLinks(array $lineItems, Order $order): array
+    {
+        $key = fn ($name, $variant, $sku) => implode("\0", [trim((string) $name), trim((string) $variant), trim((string) $sku)]);
+
+        $links = $order->items()
+            ->where(fn ($query) => $query->whereNotNull('client_product_id')->orWhereNotNull('product_id'))
+            ->get(['lineitem_name', 'variant_name', 'lineitem_sku', 'client_product_id', 'product_id'])
+            ->keyBy(fn (OrderItem $item) => $key($item->lineitem_name, $item->variant_name, $item->lineitem_sku));
+
+        if ($links->isEmpty()) {
+            return $lineItems;
+        }
+
+        return array_map(function (array $item) use ($links, $key) {
+            $link = $links->get($key($item['lineitem_name'] ?? null, $item['variant_name'] ?? null, $item['lineitem_sku'] ?? null));
+
+            return $link
+                ? $item + ['client_product_id' => $link->client_product_id, 'product_id' => $link->product_id]
+                : $item;
+        }, $lineItems);
     }
 
     /**
