@@ -409,7 +409,8 @@ export function Riders({
                   </TableHeader>
                   <TableBody>
                     {filtered.map((rider) => (
-                      <TableRow key={rider.id}>
+                      // Suspended: the whole row goes gray, and everything on it still works.
+                      <TableRow key={rider.id} className={rider.status === 'suspended' ? 'bg-muted/40 *:grayscale' : undefined}>
                         <TableCell>
                           <div className='flex items-center gap-3'>
                             <RiderAvatar name={rider.name} photoUrl={rider.photo_url} online={rider.online} className='size-8 text-xs' />

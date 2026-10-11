@@ -17,9 +17,10 @@ export function RiderCard({ rider, onPick }: Props) {
   const isManager = rider.role === 'inventory_manager'
 
   return (
-    <div className={cn('flex flex-col gap-4 rounded-xl border bg-card p-4 shadow-xs', suspended && 'bg-muted/40')}>
+    // Suspended: the whole card goes gray, and everything on it still works.
+    <div className={cn('flex flex-col gap-4 rounded-xl border bg-card p-4 shadow-xs', suspended && 'bg-muted/40 grayscale')}>
       <div className='flex items-start gap-3'>
-        <RiderAvatar name={rider.name} photoUrl={rider.photo_url} online={rider.online} className={cn('size-14 text-lg', suspended && 'grayscale')} />
+        <RiderAvatar name={rider.name} photoUrl={rider.photo_url} online={rider.online} className='size-14 text-lg' />
 
         <div className='min-w-0 flex-1'>
           {/* The badges drop under the name rather than squeeze it. */}
