@@ -34,7 +34,7 @@ return [
             'channel' => env('SLACK_BOT_USER_DEFAULT_CHANNEL'),
         ],
 
-        // Incoming Webhook that the daily operations report is posted to. The
+        // Incoming Webhook that the daily stock-scan report is posted to. The
         // URL is bound to one channel and can only write to it, so it is a much
         // narrower credential than a bot token — but it is still a credential,
         // and anyone holding it can post as the app.
@@ -50,9 +50,8 @@ return [
         // landing in the wrong place is diagnosed by opening Slack and guessing.
         'ops_channel' => env('SLACK_OPS_CHANNEL'),
 
-        // The report covers a business day, not a UTC one. Orders peak between
-        // 20:00 and 02:00 local, so a UTC boundary would cut the busiest part of
-        // the evening in half and spread it across two reports.
+        // The report covers a business day, not a UTC one: a UTC boundary falls
+        // at 03:00 local and would not match the day the warehouse works.
         'ops_timezone' => env('SLACK_OPS_TIMEZONE', 'Asia/Riyadh'),
     ],
 
