@@ -87,8 +87,8 @@ export function NavGroup({ title, icon: Icon, items, collapsible = false }: NavG
     return (
       <SidebarGroup>
         <SidebarGroupLabel>
-          {Icon && <Icon className='me-1.5 size-3.5!' />}
           {title}
+          {Icon && <Icon className='ms-auto' />}
         </SidebarGroupLabel>
         {menu}
       </SidebarGroup>
@@ -103,9 +103,11 @@ export function NavGroup({ title, icon: Icon, items, collapsible = false }: NavG
           className='w-full cursor-pointer hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
         >
           <CollapsibleTrigger>
-            {Icon && <Icon className='me-1.5 size-3.5!' />}
             {title}
-            <ChevronRight className='ms-auto transition-transform duration-200 group-data-[state=open]/section:rotate-90 rtl:rotate-180' />
+            {Icon && <Icon className='ms-auto' />}
+            <ChevronRight
+              className={`${Icon ? 'ms-1.5' : 'ms-auto'} transition-transform duration-200 group-data-[state=open]/section:rotate-90 rtl:rotate-180`}
+            />
           </CollapsibleTrigger>
         </SidebarGroupLabel>
         <CollapsibleContent className='CollapsibleContent'>{menu}</CollapsibleContent>

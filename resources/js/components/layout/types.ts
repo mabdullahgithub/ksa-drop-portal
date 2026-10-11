@@ -33,7 +33,7 @@ type NavItem = NavCollapsible | NavLink
 
 type NavGroup = {
   title: string
-  // Shown beside the section title.
+  // Shown at the far end of the section title, where a folding one has its arrow.
   icon?: React.ElementType
   items: NavItem[]
   // The section can be folded away under its title; it starts open.
