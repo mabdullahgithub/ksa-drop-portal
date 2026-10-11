@@ -29,7 +29,6 @@
         "@radix-ui/react-switch": "^1.2.6",
         "@radix-ui/react-tabs": "^1.1.13",
         "@radix-ui/react-tooltip": "^1.2.8",
-        "@rolldown/binding-darwin-x64": "^1.0.1",
         "@tanstack/react-table": "^8.21.3",
         "axios": "^1.15.0",
         "barcode-detector": "^3.2.2",
@@ -72,5 +71,8 @@
         "prettier-plugin-tailwindcss": "^0.7.2",
         "typescript": "~6.0.3",
         "vite": "^8.0.8"
+    },
+    "optionalDependencies": {
+        "@rolldown/binding-darwin-x64": "^1.0.1"
     }
 }
