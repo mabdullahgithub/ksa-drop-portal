@@ -14,6 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Bell, Check, CheckCheck, Trash2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { usePermissions } from '@/hooks/use-permissions'
+import { useUnreadNotifications } from '@/hooks/use-unread-notifications'
 import axios from 'axios'
 
 interface Notification {
@@ -63,6 +64,8 @@ export default function NotificationsPage({
   const { canOrPortal } = usePermissions()
   const mayRead = canOrPortal('mark notifications read')
   const mayDelete = canOrPortal('delete notifications')
+  // Keeps the bell and the sidebar badge in step with what is read here.
+  const { setUnreadCount, decrementUnread } = useUnreadNotifications()
 
   const fetchNotifications = async (page: number = 1, newPerPage?: number) => {
     try {
@@ -95,6 +98,7 @@ export default function NotificationsPage({
           n.id === id ? { ...n, read_at: new Date().toISOString() } : n
         )
       )
+      decrementUnread()
     } catch (error) {
       console.error('Failed to mark notification as read:', error)
     }
@@ -107,6 +111,7 @@ export default function NotificationsPage({
       setNotifications(
         notifications.map((n) => ({ ...n, read_at: new Date().toISOString() }))
       )
+      setUnreadCount(0)
     } catch (error) {
       console.error('Failed to mark all as read:', error)
     } finally {
@@ -118,6 +123,9 @@ export default function NotificationsPage({
     try {
       await axios.delete(`/api/notifications/${id}`)
       setNotifications(notifications.filter((n) => n.id !== id))
+      if (notifications.find((n) => n.id === id)?.read_at === null) {
+        decrementUnread()
+      }
       // Refresh to get updated pagination
       if (notifications.length === 1 && pagination.current_page > 1) {
         fetchNotifications(pagination.current_page - 1)

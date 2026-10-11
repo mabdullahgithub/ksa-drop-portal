@@ -1,24 +1,18 @@
-import { usePage } from '@inertiajs/react'
 import { useLayout } from '@/context/layout-provider'
 import {
   Sidebar,
   SidebarContent,
-  SidebarFooter,
   SidebarHeader,
   SidebarRail,
 } from '@/components/ui/sidebar'
 import { AppLogo } from './app-logo'
 // import { AppTitle } from './app-title'
-import { NavGroup } from './nav-group'
-import { NavUser } from './nav-user'
+import { NavGroup, NavPinned } from './nav-group'
 import { TeamSwitcher } from './team-switcher'
 import { useNavGroups } from '@/hooks/use-nav-groups'
 
 export function AppSidebar() {
   const { collapsible, variant } = useLayout()
-  const { auth } = usePage().props as any
-  const portalFeatures: string[] | null = auth?.portal_features
-  const isImpersonating: boolean = !!auth?.impersonating
   const navGroups = useNavGroups()
 
   return (
@@ -38,9 +32,7 @@ export function AppSidebar() {
           <NavGroup key={props.title} {...props} />
         ))}
       </SidebarContent>
-      <SidebarFooter>
-        <NavUser user={auth.user} disableDropdown={!!portalFeatures || isImpersonating} />
-      </SidebarFooter>
+      <NavPinned items={navGroups.flatMap((group) => group.items)} />
       <SidebarRail />
     </Sidebar>
   )

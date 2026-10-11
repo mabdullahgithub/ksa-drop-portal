@@ -15,6 +15,7 @@ import { cn } from '@/lib/utils'
 import axios from 'axios'
 import { type PageProps } from '@/types'
 import { usePermissions } from '@/hooks/use-permissions'
+import { useUnreadNotifications } from '@/hooks/use-unread-notifications'
 
 interface Notification {
   id: string
@@ -32,18 +33,18 @@ interface Notification {
 
 // Background refresh cadence for the badge while a user sits on one page
 // without navigating. Normal Inertia navigation already refreshes the count
-// for free via the shared `notifications.unread_count` prop (see
-// HandleInertiaRequests), so this only needs to catch notifications that
+// for free via the shared `unreadNotificationsCount` prop (see
+// useUnreadNotifications), so this only needs to catch notifications that
 // arrive while idle on one screen — hence the long interval.
 const POLL_INTERVAL_MS = 90_000
 
 export function NotificationsDropdown() {
   const page = usePage<PageProps>()
   const user = page.props.auth?.user
-  const sharedUnreadCount = page.props.unreadNotificationsCount ?? 0
+  // Shared with the sidebar badge, so both always show the same number.
+  const { unreadCount, setUnreadCount, decrementUnread } = useUnreadNotifications()
 
   const [notifications, setNotifications] = useState<Notification[]>([])
-  const [unreadCount, setUnreadCount] = useState(sharedUnreadCount)
   const [listLoaded, setListLoaded] = useState(false)
   const [loading, setLoading] = useState(false)
   const pollingStoppedRef = useRef(false)
@@ -53,12 +54,6 @@ export function NotificationsDropdown() {
   const mayView = canOrPortal('view notifications')
   const mayRead = canOrPortal('mark notifications read')
   const mayDelete = canOrPortal('delete notifications')
-
-  // Every Inertia navigation delivers a fresh, server-cached count for free.
-  // Adopt it whenever it changes instead of firing a dedicated request.
-  useEffect(() => {
-    setUnreadCount(sharedUnreadCount)
-  }, [sharedUnreadCount])
 
   const fetchNotifications = async () => {
     try {
@@ -122,7 +117,7 @@ export function NotificationsDropdown() {
           n.id === id ? { ...n, read_at: new Date().toISOString() } : n
         )
       )
-      setUnreadCount((count) => Math.max(0, count - 1))
+      decrementUnread()
     } catch (error) {
       console.error('Failed to mark notification as read:', error)
     }
@@ -148,7 +143,7 @@ export function NotificationsDropdown() {
       await axios.delete(`/api/notifications/${id}`)
       setNotifications(notifications.filter((n) => n.id !== id))
       if (notifications.find((n) => n.id === id)?.read_at === null) {
-        setUnreadCount((count) => Math.max(0, count - 1))
+        decrementUnread()
       }
     } catch (error) {
       console.error('Failed to delete notification:', error)

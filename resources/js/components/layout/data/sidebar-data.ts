@@ -72,6 +72,7 @@ export const sidebarData: SidebarData = {
           url: '/whatsapp',
           icon: MessageCircle,
           permission: 'view whatsapp',
+          lock: 'whatsapp',
         },
         {
           title: 'Track Shipment',
@@ -79,6 +80,7 @@ export const sidebarData: SidebarData = {
           icon: Truck,
           permission: 'view shipments',
           newTab: true,
+          pinned: true,
         },
         {
           title: 'Riders',
@@ -103,23 +105,20 @@ export const sidebarData: SidebarData = {
           url: '/requests',
           icon: ClipboardCheck,
           permission: 'view requests',
-        },
-        {
-          title: 'Connectors',
-          url: '/apps',
-          icon: Package,
-          permission: 'view apps',
+          lock: 'requests',
         },
         {
           title: 'Recycle Bin',
           url: '/recycle-bin',
           icon: Trash2,
           permission: 'view recycle bin',
+          lock: 'recycle_bin',
         },
       ],
     },
     {
       title: 'Team Management',
+      collapsible: true,
       items: [
         {
           title: 'Users',
@@ -209,12 +208,19 @@ export const sidebarData: SidebarData = {
     },
     {
       title: 'Other',
+      collapsible: true,
       items: [
         {
           title: 'Notifications',
           url: '/notifications',
           icon: Bell,
           permission: 'view notifications',
+        },
+        {
+          title: 'Connectors',
+          url: '/apps',
+          icon: Package,
+          permission: 'view apps',
         },
         {
           title: 'Settings',

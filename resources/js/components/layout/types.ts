@@ -1,3 +1,5 @@
+import type { LockedScreen } from '@/hooks/use-screen-lock'
+
 type Team = {
   name: string
   logo: React.ElementType
@@ -11,6 +13,10 @@ type BaseNavItem = {
   permission?: string | string[]
   role?: string | string[]
   newTab?: boolean
+  // Stuck to the bottom of the sidebar in the brand orange, out of its section.
+  pinned?: boolean
+  // The screen sits behind the PIN: it moves to the locked section while it does.
+  lock?: LockedScreen
 }
 
 type NavLink = BaseNavItem & {
@@ -27,7 +33,11 @@ type NavItem = NavCollapsible | NavLink
 
 type NavGroup = {
   title: string
+  // Shown beside the section title.
+  icon?: React.ElementType
   items: NavItem[]
+  // The section can be folded away under its title; it starts open.
+  collapsible?: boolean
 }
 
 type SidebarData = {

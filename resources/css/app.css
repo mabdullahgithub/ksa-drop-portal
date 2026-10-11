@@ -89,6 +89,25 @@
   }
 }
 
+/* The opens-in-a-new-tab bubble on a pinned sidebar link (NavOpenBubble): a
+   short hop, then a rest, so it draws the eye without fidgeting. */
+@keyframes nav-open-hop {
+  0%,
+  55%,
+  100% {
+    transform: translateY(0) scale(1);
+  }
+  65% {
+    transform: translateY(-3px) scale(1.12);
+  }
+  75% {
+    transform: translateY(0) scale(1);
+  }
+  85% {
+    transform: translateY(-1.5px) scale(1.05);
+  }
+}
+
 /* Impersonation bar: fixed at the top of the viewport, so anything else that
    anchors to the viewport (the sidebar, sticky page headers, full-height panes)
    has to start below it instead of sliding underneath. */
