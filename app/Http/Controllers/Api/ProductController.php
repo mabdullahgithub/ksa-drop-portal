@@ -12,7 +12,8 @@ class ProductController extends Controller
 {
     public function index(Request $request)
     {
-        $query = Product::with('images');
+        // `sold`: units dropshippers have sold between them (StockScanRecorder).
+        $query = Product::with('images')->withSum('dropshipSales as sold', 'units')->withCasts(['sold' => 'integer']);
 
         if ($request->filled('search')) {
             $query->search($request->search);

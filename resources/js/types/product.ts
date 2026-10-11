@@ -53,6 +53,10 @@ export interface Product {
   status: 'active' | 'draft' | 'archived'
   primary_image: string | null
 
+  // Units sold, counted as parcels are scanned OUT of the warehouse: the
+  // client's own in the portal, every dropshipper's for staff.
+  sold?: number | null
+
   images?: ProductImage[]
   created_at: string
   updated_at: string

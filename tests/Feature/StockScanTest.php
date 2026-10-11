@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\Client;
 use App\Models\ClientProduct;
+use App\Models\DropshipSale;
 use App\Models\Product;
 use App\Models\Rider;
 use App\Models\Shipment;
@@ -14,6 +15,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Spatie\Permission\Models\Role;
 use Tests\Feature\Concerns\MakesRiders;
 use Tests\TestCase;
 
@@ -64,6 +66,29 @@ class StockScanTest extends TestCase
         $shipment->order->items()->first()->update(['lineitem_sku' => $sku]);
 
         return $shipment;
+    }
+
+    private function dropshipper(string $shortId = 'DROP'): Client
+    {
+        $user = User::factory()->create();
+        $user->assignRole(Role::findOrCreate('client'));
+
+        return Client::create([
+            'user_id' => $user->id,
+            'company_name' => "Dropship {$shortId}",
+            'short_id' => $shortId,
+            'client_types' => ['dropshipper'],
+        ]);
+    }
+
+    /**
+     * What a client has sold of a product, as [orders, units].
+     */
+    private function sold(Client $client, Product $product): array
+    {
+        $sale = DropshipSale::where('client_id', $client->id)->where('product_id', $product->id)->first();
+
+        return [$sale?->orders ?? 0, $sale?->units ?? 0];
     }
 
     public function test_the_admin_picks_the_role_and_a_rider_is_the_default(): void
@@ -244,6 +269,109 @@ class StockScanTest extends TestCase
         // Back on the shelf, it can go out again — as the order stands now.
         $this->scan($token, 'out', $shipment->tracking_number)->assertJsonPath('result', 'out')->assertJsonPath('scan.pieces', 9);
         $this->assertSame(1, $other->fresh()->variant_inventory_qty);
+    }
+
+    public function test_a_dropshippers_parcel_counts_as_sold_until_it_comes_back(): void
+    {
+        $token = $this->signedInDevice($this->makeInventoryManager());
+        $product = $this->catalogProduct('CAT-1', 10);
+        $client = $this->dropshipper();
+        $other = $this->dropshipper('OTHR');
+
+        $first = $this->parcelOf('CAT-1');
+        $first->order->update(['client_id' => $client->id]);
+        // The same product on two lines of one order: one order, five units.
+        $first->order->items()->create(['lineitem_name' => 'Again', 'lineitem_sku' => 'CAT-1', 'lineitem_quantity' => 3, 'lineitem_price' => 50.0]);
+        $second = $this->parcelOf('CAT-1');
+        $second->order->update(['client_id' => $client->id]);
+
+        $this->scan($token, 'out', $first->tracking_number)->assertJsonPath('result', 'out');
+        $this->assertSame([1, 5], $this->sold($client, $product));
+
+        // A retried scan counts once.
+        $uuid = (string) Str::uuid();
+        $this->scan($token, 'out', $second->tracking_number, $uuid)->assertJsonPath('result', 'out');
+        $this->scan($token, 'out', $second->tracking_number, $uuid)->assertOk();
+        $this->scan($token, 'out', $second->tracking_number)->assertJsonPath('result', 'already_out');
+        $this->assertSame([2, 7], $this->sold($client, $product));
+        $this->assertSame([0, 0], $this->sold($other, $product));
+
+        // Back at the warehouse, it is no longer sold — even if the client
+        // has stopped dropshipping since.
+        $client->update(['client_types' => ['fulfilment']]);
+        $this->scan($token, 'in', $first->tracking_number)->assertJsonPath('result', 'in');
+        $this->assertSame([1, 2], $this->sold($client, $product));
+
+        // …and going out again counts for whoever is a dropshipper then.
+        $this->scan($token, 'out', $first->tracking_number)->assertJsonPath('result', 'out');
+        $this->assertSame([1, 2], $this->sold($client, $product));
+    }
+
+    public function test_only_a_dropshippers_catalogue_items_going_out_count_as_sold(): void
+    {
+        $token = $this->signedInDevice($this->makeInventoryManager());
+        $product = $this->catalogProduct('CAT-1', 10);
+        $client = $this->dropshipper();
+        $client->update(['client_types' => ['dropshipper', 'fulfilment']]);
+        ClientProduct::create(['client_id' => $client->id, 'product_code' => 'DROP-001', 'name' => 'Own', 'sku' => 'OWN-1', 'quantity' => 5]);
+
+        // Nobody's order, and a fulfilment client's.
+        $this->scan($token, 'out', $this->parcelOf('CAT-1')->tracking_number)->assertJsonPath('result', 'out');
+        $fulfilment = $this->parcelOf('CAT-1');
+        $fulfilment->order->update(['client_id' => Client::create([
+            'user_id' => User::factory()->create()->id,
+            'company_name' => 'Fulfilment Co',
+            'short_id' => 'FULF',
+            'client_types' => ['fulfilment'],
+        ])->id]);
+        $this->scan($token, 'out', $fulfilment->tracking_number)->assertJsonPath('result', 'out');
+
+        // The dropshipper's own stock, and an item that matches no product.
+        $own = $this->parcelOf('OWN-1');
+        $own->order->update(['client_id' => $client->id]);
+        $own->order->items()->create(['lineitem_name' => 'Mystery', 'lineitem_sku' => 'NO-SUCH', 'lineitem_quantity' => 1, 'lineitem_price' => 50.0]);
+        $this->scan($token, 'out', $own->tracking_number)->assertJsonPath('result', 'out');
+
+        // Never scanned out, so coming in takes nothing off the count.
+        $returned = $this->parcelOf('CAT-1', ['status' => ShipmentStatus::RETURNED->value]);
+        $returned->order->update(['client_id' => $client->id]);
+        $this->scan($token, 'in', $returned->tracking_number)->assertJsonPath('result', 'in');
+
+        $this->assertSame(0, DropshipSale::count());
+
+        $sale = $this->parcelOf('CAT-1');
+        $sale->order->update(['client_id' => $client->id]);
+        $this->scan($token, 'out', $sale->tracking_number)->assertJsonPath('result', 'out');
+
+        $this->assertSame([1, 2], $this->sold($client, $product));
+        $this->assertSame(1, DropshipSale::count());
+    }
+
+    public function test_the_product_lists_show_what_was_sold(): void
+    {
+        $token = $this->signedInDevice($this->makeInventoryManager());
+        $product = $this->catalogProduct('CAT-1', 10);
+        $product->update(['published' => true]);
+        $unsold = $this->catalogProduct('CAT-2', 10);
+        $unsold->update(['published' => true]);
+        $client = $this->dropshipper();
+        $other = $this->dropshipper('OTHR');
+
+        foreach ([$client, $client, $other] as $seller) {
+            $shipment = $this->parcelOf('CAT-1');
+            $shipment->order->update(['client_id' => $seller->id]);
+            $this->scan($token, 'out', $shipment->tracking_number)->assertJsonPath('result', 'out');
+        }
+
+        // A dropshipper sees their own count…
+        $mine = collect($this->actingAs($client->user)->getJson('/portal/api/products')->assertOk()->json('data'))->pluck('sold', 'id');
+        $this->assertSame(4, $mine[$product->id]);
+        $this->assertSame(0, $mine[$unsold->id]);
+
+        // …and staff see every dropshipper's together.
+        $all = collect($this->actingAs($this->staff(['view inventory']))->getJson('/api/products')->assertOk()->json('data'))->pluck('sold', 'id');
+        $this->assertSame(6, $all[$product->id]);
+        $this->assertNull($all[$unsold->id]);
     }
 
     public function test_in_takes_any_parcel_whatever_became_of_it(): void

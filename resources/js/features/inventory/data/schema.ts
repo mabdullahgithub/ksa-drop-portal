@@ -10,6 +10,7 @@ export const productSchema = z.object({
   variant_price: z.string().nullable(),
   variant_compare_at_price: z.string().nullable(),
   variant_inventory_qty: z.number(),
+  sold: z.number().nullish(),
   status: z.enum(['active', 'draft', 'archived']),
   published: z.boolean(),
   primary_image: z.string().nullable(),

@@ -898,12 +898,15 @@ class PortalController extends Controller
         $query->orderBy($sortBy, $sortOrder);
 
         $perPage = $request->get('per_page', 20);
-        $orders = $query->paginate($perPage);
+        $products = $query->paginate($perPage);
 
-        // Orders waiting on a product the client has none left of.
-        $this->stockAlerts->flagOrders($orders->getCollection());
+        // How many units of each this client has sold (StockScanRecorder).
+        $sold = \App\Models\DropshipSale::where('client_id', $client->id)
+            ->whereIn('product_id', $products->getCollection()->modelKeys())
+            ->pluck('units', 'product_id');
+        $products->getCollection()->each(fn ($product) => $product->setAttribute('sold', (int) ($sold[$product->id] ?? 0)));
 
-        return response()->json($orders);
+        return response()->json($products);
     }
 
     public function productShow(Request $request, \App\Models\Product $product)

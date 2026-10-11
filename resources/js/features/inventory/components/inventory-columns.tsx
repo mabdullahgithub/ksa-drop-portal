@@ -124,6 +124,15 @@ export const inventoryColumns: ColumnDef<Product>[] = [
     enableSorting: true,
   },
   {
+    accessorKey: 'sold',
+    header: ({ column }) => <DataTableColumnHeader column={column} title='Sold' />,
+    meta: { className: 'ps-1', tdClassName: 'ps-4' },
+    cell: ({ row }) => (
+      <span className='text-sm font-medium tabular-nums'>{row.original.sold ?? 0}</span>
+    ),
+    enableSorting: true,
+  },
+  {
     accessorKey: 'status',
     header: ({ column }) => <DataTableColumnHeader column={column} title='Status' />,
     meta: { className: 'ps-1', tdClassName: 'ps-4' },

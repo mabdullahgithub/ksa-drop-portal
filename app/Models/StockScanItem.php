@@ -15,6 +15,7 @@ class StockScanItem extends Model
         'stock_scan_id',
         'product_id',
         'client_product_id',
+        'sale_client_id',
         'name',
         'sku',
         'quantity',

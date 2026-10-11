@@ -3,6 +3,7 @@
 namespace App\Services\Inventory;
 
 use App\Models\ClientProduct;
+use App\Models\DropshipSale;
 use App\Models\OrderItem;
 use App\Models\Product;
 use App\Models\Rider;
@@ -21,9 +22,14 @@ use Illuminate\Support\Str;
  * back. OUT takes the order's items off stock; IN puts them back. Whichever
  * courier carries it, and — for IN — whatever became of the delivery.
  *
- * Stock is all it changes. The parcel's status and the rider holding it are
- * left alone: a KSA Express rider still scans the parcel in their own app to
- * take it (ShipmentEventRecorder).
+ * A dropshipper's parcel also counts as sold: OUT adds its catalogue items to
+ * that client's sell count for each product (DropshipSale), and the IN that
+ * follows takes them off again, so a parcel that came back, or was scanned by
+ * mistake, is not left counted.
+ *
+ * Stock and that count are all it changes. The parcel's status and the rider
+ * holding it are left alone: a KSA Express rider still scans the parcel in
+ * their own app to take it (ShipmentEventRecorder).
  *
  * A parcel is either in or out, so two scans the same way in a row are
  * refused — that is what keeps a double scan from counting stock twice. A
@@ -58,7 +64,7 @@ class StockScanRecorder
                 // edited or re-synced in between.
                 $lines = $direction === StockScan::IN && $last
                     ? $this->linesOf($last)
-                    : $this->linesFor($shipment);
+                    : $this->linesFor($shipment, $direction);
 
                 $scan = StockScan::create([
                     'shipment_id' => $shipment->id,
@@ -77,11 +83,14 @@ class StockScanRecorder
                 $scan->setRelation('items', collect($lines)->map(fn (array $line) => $scan->items()->create([
                     'product_id' => $line['target'] instanceof Product ? $line['target']->id : null,
                     'client_product_id' => $line['target'] instanceof ClientProduct ? $line['target']->id : null,
+                    'sale_client_id' => $line['sold_by'],
                     'name' => $line['name'],
                     'sku' => $line['sku'],
                     'quantity' => $sign * $line['quantity'],
                     'stock_after' => $this->move($line['target'], $sign * $line['quantity']),
                 ])));
+
+                $this->countSales($lines, -$sign);
 
                 return $scan;
             });
@@ -114,7 +123,7 @@ class StockScanRecorder
     /**
      * What an earlier scan moved, to move it back.
      *
-     * @return list<array{name: string, sku: ?string, quantity: int, target: Product|ClientProduct|null}>
+     * @return list<array{name: string, sku: ?string, quantity: int, target: Product|ClientProduct|null, sold_by: ?int}>
      */
     private function linesOf(StockScan $scan): array
     {
@@ -122,6 +131,7 @@ class StockScanRecorder
             'name' => $item->name,
             'sku' => $item->sku,
             'quantity' => abs($item->quantity),
+            'sold_by' => $item->sale_client_id,
             // A product removed since still gets its units back: it may be restored.
             'target' => match (true) {
                 $item->product_id !== null => Product::withTrashed()->find($item->product_id),
@@ -133,27 +143,38 @@ class StockScanRecorder
 
     /**
      * The parcel's contents: the order's items that ship, each with the
-     * product whose stock it counts against (null when it matches none).
+     * product whose stock it counts against (null when it matches none) and
+     * the dropshipper it counts as a sale for (null when it is nobody's).
      *
-     * @return list<array{name: string, sku: ?string, quantity: int, target: Product|ClientProduct|null}>
+     * @return list<array{name: string, sku: ?string, quantity: int, target: Product|ClientProduct|null, sold_by: ?int}>
      */
-    private function linesFor(Shipment $shipment): array
+    private function linesFor(Shipment $shipment, string $direction): array
     {
         // In the order's own order, so the list reads like the packing slip.
-        $order = $shipment->order()->with(['items' => fn ($q) => $q->orderBy('id')])->first();
+        $order = $shipment->order()->with(['client', 'items' => fn ($q) => $q->orderBy('id')])->first();
 
         if (! $order) {
             return [];
         }
 
+        // A dropshipper sells from our catalogue, and only a parcel that is
+        // leaving is a sale: one that comes in without having gone out was
+        // never counted, so there is nothing to take back.
+        $seller = $direction === StockScan::OUT && $order->client?->is_dropshipper ? $order->client_id : null;
+
         return $order->items
             ->filter(fn (OrderItem $item) => $item->lineitem_requires_shipping !== false && $item->lineitem_quantity > 0)
-            ->map(fn (OrderItem $item) => [
-                'name' => Str::limit(trim($item->lineitem_name . ($item->variant_name ? ' - ' . $item->variant_name : '')), 497),
-                'sku' => filled($item->lineitem_sku) ? mb_substr(trim($item->lineitem_sku), 0, 255) : null,
-                'quantity' => (int) $item->lineitem_quantity,
-                'target' => $this->productFor($item, $order->client_id),
-            ])
+            ->map(function (OrderItem $item) use ($order, $seller) {
+                $target = $this->productFor($item, $order->client_id);
+
+                return [
+                    'name' => Str::limit(trim($item->lineitem_name . ($item->variant_name ? ' - ' . $item->variant_name : '')), 497),
+                    'sku' => filled($item->lineitem_sku) ? mb_substr(trim($item->lineitem_sku), 0, 255) : null,
+                    'quantity' => (int) $item->lineitem_quantity,
+                    'target' => $target,
+                    'sold_by' => $target instanceof Product ? $seller : null,
+                ];
+            })
             ->values()
             ->all();
     }
@@ -204,6 +225,33 @@ class StockScanRecorder
         $row()->increment($column, $by);
 
         return (int) $row()->value($column);
+    }
+
+    /**
+     * Add the parcel to (or, coming back, take it off) each dropshipper's
+     * sell count: one order per product it carried, and the units of it.
+     *
+     * @param  list<array{quantity: int, target: Product|ClientProduct|null, sold_by: ?int}>  $lines
+     */
+    private function countSales(array $lines, int $by): void
+    {
+        collect($lines)
+            // A product removed for good took its counts with it.
+            ->filter(fn (array $line) => $line['sold_by'] && $line['target'] instanceof Product)
+            // The same product on two lines is still one order of it.
+            ->groupBy(fn (array $line) => $line['sold_by'] . ':' . $line['target']->id)
+            ->each(function ($lines) use ($by) {
+                $sale = DropshipSale::firstOrCreate([
+                    'client_id' => $lines->first()['sold_by'],
+                    'product_id' => $lines->first()['target']->id,
+                ]);
+
+                // In one statement, like stock: two parcels at once both count.
+                DropshipSale::whereKey($sale->id)->incrementEach(
+                    ['orders' => $by, 'units' => $by * $lines->sum('quantity')],
+                    ['updated_at' => now()],
+                );
+            });
     }
 
     private function alreadyRecorded(string $clientUuid, Rider $manager): ?StockScan

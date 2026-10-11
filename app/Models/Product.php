@@ -48,6 +48,14 @@ class Product extends Model
     }
 
     /**
+     * Each dropshipper's sell count for this product.
+     */
+    public function dropshipSales(): HasMany
+    {
+        return $this->hasMany(DropshipSale::class);
+    }
+
+    /**
      * What a dropshipper pays us for one unit: the price we list on the portal.
      *
      * This is the merchant's cost of goods sold, so it is exported as Shopify's

@@ -114,6 +114,7 @@ export function InventoryCardView({ data, meta, loading, onPageChange, onPageSiz
                     {product.vendor && (
                       <p className='text-[10px] text-muted-foreground mt-0.5'>{product.vendor}</p>
                     )}
+                    <p className='text-[10px] text-muted-foreground mt-0.5 tabular-nums'>{product.sold ?? 0} sold</p>
                   </div>
                   <div onClick={(e) => e.stopPropagation()} className='shrink-0 -mr-1 -mt-1'>
                     <ProductActions product={product} />

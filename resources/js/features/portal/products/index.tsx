@@ -151,6 +151,15 @@ function buildColumns(onView: (p: Product) => void, onDownload: (p: Product) => 
       enableSorting: true,
     },
     {
+      accessorKey: 'sold',
+      header: () => <span className='text-xs font-medium'>Sold</span>,
+      meta: { className: 'ps-1', tdClassName: 'ps-4' },
+      cell: ({ row }) => (
+        <span className='text-sm font-medium tabular-nums'>{row.original.sold ?? 0}</span>
+      ),
+      enableSorting: false,
+    },
+    {
       accessorKey: 'created_at',
       header: ({ column }) => <DataTableColumnHeader column={column} title='Added' />,
       meta: { className: 'ps-1', tdClassName: 'ps-4' },
@@ -429,6 +438,7 @@ function ProductCardView({ data, meta, loading, onPageChange, onPageSizeChange, 
                   {product.vendor && (
                     <p className='mt-0.5 text-[10px] text-muted-foreground'>{product.vendor}</p>
                   )}
+                  <p className='mt-0.5 text-[10px] tabular-nums text-muted-foreground'>{product.sold ?? 0} sold</p>
                 </div>
 
                 <div className='flex items-end justify-between gap-1'>
