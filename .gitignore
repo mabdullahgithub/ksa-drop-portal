@@ -37,3 +37,4 @@ Thumbs.db
 # untracked leftovers (vendor, node_modules, .env) are on disk. Remove this
 # line when mobile-app is merged, or new files in the folder will be ignored.
 /rider-native
+/n8n
