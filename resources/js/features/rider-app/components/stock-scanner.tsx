@@ -9,7 +9,7 @@ import { cssColor, useStatusBarColor } from '../lib/status-bar'
 import { useBarcodeCamera } from '../lib/use-barcode-camera'
 import type { EntryMethod, StockDirection, StockSessionItem } from '../types'
 import { BottomSheet } from './bottom-sheet'
-import { problemText, StockScanList, StockStateIcon, stockTotals } from './stock-scan-list'
+import { problemText, StockScanList, StockShortages, StockStateIcon, stockTotals } from './stock-scan-list'
 
 /** OUT is the brand's orange, IN is green — on the frame, the corner and the buttons that are on. */
 export const STOCK_COLORS: Record<StockDirection, string> = { out: 'var(--brand)', in: '#16a34a' }
@@ -20,8 +20,8 @@ type Props = {
   direction: StockDirection
   /** This go's scans, newest first. */
   items: StockSessionItem[]
-  /** The frame flashes green or red with the last scan's result. */
-  flash: 'ok' | 'error' | null
+  /** The frame flashes with the last scan's result: green, amber when it counted but stock was short, or red. */
+  flash: 'ok' | 'warn' | 'error' | null
   onDetected: (code: string, entry: EntryMethod) => void
   /** Send again a scan that failed on the network. */
   onRetry: (code: string) => void
@@ -61,7 +61,7 @@ export function StockScanner({ direction, items, flash, onDetected, onRetry, onC
   }
 
   const color = STOCK_COLORS[direction]
-  const frame = flash === 'ok' ? '#16a34a' : flash === 'error' ? '#dc2626' : color
+  const frame = flash === 'ok' ? '#16a34a' : flash === 'warn' ? '#d97706' : flash === 'error' ? '#dc2626' : color
   const Icon = STOCK_ICONS[direction]
   const totals = stockTotals(items, direction)
   const summary = t(direction === 'out' ? 'stock_count_out' : 'stock_count_in', { n: totals.parcels, p: totals.pieces })
@@ -125,7 +125,7 @@ export function StockScanner({ direction, items, flash, onDetected, onRetry, onC
               aria-hidden
               className={cn(
                 'pointer-events-none absolute inset-0 transition-colors',
-                flash === 'ok' ? 'bg-green-500/30' : flash === 'error' ? 'bg-red-500/30' : 'bg-transparent'
+                flash === 'ok' ? 'bg-green-500/30' : flash === 'warn' ? 'bg-amber-500/35' : flash === 'error' ? 'bg-red-500/30' : 'bg-transparent'
               )}
             />
 
@@ -174,6 +174,7 @@ export function StockScanner({ direction, items, flash, onDetected, onRetry, onC
           {items.length > 0 && (
             <button type='button' onClick={() => setListOpen(true)} className='mt-1.5 flex items-center gap-1 rounded-full px-3 py-1 text-[13px] font-semibold active:bg-foreground/5'>
               <span>{summary}</span>
+              {totals.short > 0 && <span className='text-amber-700 dark:text-amber-400'>· {t('stock_short_n', { n: totals.short })}</span>}
               {totals.problems > 0 && <span className='text-red-600 dark:text-red-400'>· {t('stock_problems', { n: totals.problems })}</span>}
               <ChevronRight className='h-4 w-4 text-muted-foreground rtl:rotate-180' />
             </button>
@@ -213,6 +214,7 @@ export function StockScanner({ direction, items, flash, onDetected, onRetry, onC
         <SheetTitle className='mt-5 text-[20px] font-bold'>{t('stock_scan_list')}</SheetTitle>
         <SheetDescription className='mt-0.5 text-[14px] text-muted-foreground'>
           {summary}
+          {totals.short > 0 && <span className='font-semibold text-amber-700 dark:text-amber-400'> · {t('stock_short_n', { n: totals.short })}</span>}
           {totals.problems > 0 && <span className='font-semibold text-red-600 dark:text-red-400'> · {t('stock_problems', { n: totals.problems })}</span>}
         </SheetDescription>
 
@@ -233,7 +235,7 @@ export function StockScanner({ direction, items, flash, onDetected, onRetry, onC
   )
 }
 
-/** The newest scan: counted (and how many pieces), or why not. Tap to send it again if the network dropped it. */
+/** The newest scan: counted (how many pieces, and any product short of stock), or why not. Tap to send it again if the network dropped it. */
 function LastScan({ item, direction, onRetry }: { item: StockSessionItem; direction: StockDirection; onRetry: (code: string) => void }) {
   const { t } = useI18n()
   const parcel = item.scan?.parcel ?? item.parcel
@@ -261,6 +263,9 @@ function LastScan({ item, direction, onRetry }: { item: StockSessionItem; direct
       ) : (
         <span className='mt-0.5 text-[15px] font-semibold leading-snug text-red-600 dark:text-red-400'>{problemText(t, item)}</span>
       )}
+
+      {/* Counted, but there wasn't that much of it: say which product, here where it's seen. */}
+      {ok && <StockShortages scan={item.scan} limit={2} className='mt-1 max-w-full text-[14px]' />}
     </button>
   )
 }

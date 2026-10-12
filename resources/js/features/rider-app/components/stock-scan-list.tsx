@@ -1,6 +1,7 @@
-import { AlertCircle, CheckCircle2, Loader2, RotateCw } from 'lucide-react'
+import { AlertCircle, AlertTriangle, CheckCircle2, Loader2, RotateCw } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import { statusText, useI18n, type TFunction } from '../i18n'
-import type { StockDirection, StockSessionItem } from '../types'
+import type { StockDirection, StockScan, StockSessionItem } from '../types'
 
 /** What this go has counted so far, and what it couldn't. */
 export function stockTotals(items: StockSessionItem[], direction: StockDirection) {
@@ -9,6 +10,8 @@ export function stockTotals(items: StockSessionItem[], direction: StockDirection
   return {
     parcels: counted.length,
     pieces: counted.reduce((sum, item) => sum + (item.scan?.pieces ?? 0), 0),
+    // Counted, but a product in it had less stock than the parcel needed.
+    short: counted.filter((item) => item.scan?.shortages.length).length,
     problems: items.filter((item) => item.state !== direction && item.state !== 'working').length,
   }
 }
@@ -35,9 +38,39 @@ export function StockStateIcon({ item, direction, className }: { item: StockSess
   const size = className ?? 'h-5 w-5'
 
   if (item.state === 'working') return <Loader2 className={`${size} shrink-0 animate-spin text-muted-foreground`} />
+  if (item.state === direction && item.scan?.shortages.length) return <AlertTriangle className={`${size} shrink-0 text-amber-600 dark:text-amber-400`} />
   if (item.state === direction) return <CheckCircle2 className={`${size} shrink-0 text-green-600 dark:text-green-400`} />
   if (item.state === 'error') return <RotateCw className={`${size} shrink-0 text-red-600 dark:text-red-400`} />
   return <AlertCircle className={`${size} shrink-0 text-red-600 dark:text-red-400`} />
+}
+
+/**
+ * The products a parcel going out needed more of than there was, each with
+ * what it needed and what was in stock. The parcel still went: this is for
+ * the manager to see. `limit` names only the first few and counts the rest.
+ */
+export function StockShortages({ scan, limit, className }: { scan: StockScan | undefined; limit?: number; className?: string }) {
+  const { t } = useI18n()
+  const shortages = scan?.shortages ?? []
+
+  if (shortages.length === 0) return null
+
+  const shown = shortages.slice(0, limit ?? shortages.length)
+
+  return (
+    <span className={cn('block text-[13px] leading-snug text-amber-700 dark:text-amber-400', className)}>
+      <span className='inline-flex items-center gap-1 font-semibold'>
+        <AlertTriangle className='h-3.5 w-3.5 shrink-0' />
+        {t('stock_short')}
+        {shortages.length > shown.length && <span dir='ltr'>+{shortages.length - shown.length}</span>}
+      </span>
+      {shown.map((short, index) => (
+        <span key={index} className='block'>
+          {t('stock_short_line', { name: short.name, needed: short.needed, have: short.in_stock })}
+        </span>
+      ))}
+    </span>
+  )
 }
 
 type Props = {
@@ -83,6 +116,7 @@ export function StockScanList({ direction, items, onRetry }: Props) {
                   // Not counted: why, under the number, where there's room to say it.
                   <span className='block text-[13px] font-semibold leading-snug text-red-600 dark:text-red-400'>{problemText(t, item)}</span>
                 )}
+                {ok && <StockShortages scan={item.scan} className='mt-0.5' />}
               </span>
               {ok && (
                 <span className='shrink-0 text-end text-[13px] font-semibold'>

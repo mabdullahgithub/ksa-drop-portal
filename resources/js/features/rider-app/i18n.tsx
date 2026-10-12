@@ -287,6 +287,9 @@ const en = {
   stock_already_in: 'Already in',
   stock_finished: '{status} — do not hand it out',
   stock_unmatched: '{n} not linked',
+  stock_short: 'Not enough stock',
+  stock_short_line: '{name} — needs {needed}, {have} in stock',
+  stock_short_n: '{n} short of stock',
   stock_from_rider: 'From {name}',
 
   // Sign in
@@ -599,6 +602,9 @@ const ar: Record<Key, string> = {
   stock_already_in: 'دخل من قبل',
   stock_finished: '{status} — لا تسلّمه',
   stock_unmatched: '{n} غير مربوط',
+  stock_short: 'المخزون لا يكفي',
+  stock_short_line: '{name} — المطلوب {needed}، المتوفر {have}',
+  stock_short_n: '{n} مخزونه لا يكفي',
   stock_from_rider: 'من {name}',
 
   sign_in_title: 'تسجيل الدخول',

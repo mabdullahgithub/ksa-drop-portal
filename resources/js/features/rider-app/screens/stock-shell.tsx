@@ -8,6 +8,7 @@ import { api, ApiError } from '../api'
 import { BottomNav, type Tab } from '../components/bottom-nav'
 import { FilterSheet } from '../components/filter-sheet'
 import { HomeHeader } from '../components/home-header'
+import { StockShortages } from '../components/stock-scan-list'
 import { STOCK_COLORS as COLORS, STOCK_ICONS as ICONS, StockScanner } from '../components/stock-scanner'
 import { reasonText, useI18n, type Lang } from '../i18n'
 import { useBackToClose, useExitGuard } from '../lib/back-button'
@@ -55,7 +56,7 @@ export function StockShell() {
   // Which way the camera is scanning; null while it's closed.
   const [direction, setDirection] = useState<StockDirection | null>(null)
   const [items, setItems] = useState<StockSessionItem[]>([])
-  const [flash, setFlash] = useState<'ok' | 'error' | null>(null)
+  const [flash, setFlash] = useState<'ok' | 'warn' | 'error' | null>(null)
   const flashTimer = useRef<number | undefined>(undefined)
   const seen = useRef(new Set<string>())
   const entries = useRef(new Map<string, EntryMethod>())
@@ -138,11 +139,12 @@ export function StockShell() {
     return () => document.removeEventListener('visibilitychange', onVisible)
   }, [refresh])
 
-  const showFlash = (kind: 'ok' | 'error') => {
+  const showFlash = (kind: 'ok' | 'warn' | 'error') => {
     setFlash(kind)
     window.clearTimeout(flashTimer.current)
-    flashTimer.current = window.setTimeout(() => setFlash(null), 700)
-    vibrate(kind === 'ok' ? 70 : [60, 80, 60])
+    // A warning stays up longer: it is easy to miss with a parcel in each hand.
+    flashTimer.current = window.setTimeout(() => setFlash(null), kind === 'warn' ? 1400 : 700)
+    vibrate(kind === 'ok' ? 70 : kind === 'warn' ? [140, 70, 140] : [60, 80, 60])
   }
 
   const send = async (way: StockDirection, code: string, entry: EntryMethod) => {
@@ -184,7 +186,8 @@ export function StockShell() {
     }
 
     setItems((list) => list.map((other) => (other.code === code ? item : other)))
-    showFlash(item.state === way ? 'ok' : 'error')
+    // Counted either way; amber when a product in it had less stock than it needed.
+    showFlash(item.state !== way ? 'error' : item.scan?.shortages.length ? 'warn' : 'ok')
   }
 
   // A toast still up from the last go would cover the top of the scan screen.
@@ -444,6 +447,7 @@ function ScanLog({
                   <span className='font-semibold text-amber-700 dark:text-amber-400'>{t('stock_unmatched', { n: scan.unmatched })}</span>
                 )}
               </div>
+              <StockShortages scan={scan} className='mt-1 text-xs' />
             </div>
           </li>
         )

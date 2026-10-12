@@ -402,6 +402,40 @@ class StockScanTest extends TestCase
         $this->assertSame(-1, $product->fresh()->variant_inventory_qty);
     }
 
+    public function test_out_says_which_products_did_not_have_enough_stock(): void
+    {
+        $token = $this->signedInDevice($this->makeInventoryManager());
+        $short = $this->catalogProduct('CAT-1', 1);
+        $enough = $this->catalogProduct('CAT-2', 5);
+
+        // Three items: the same SKU on two of them (2 + 1 units), another on the third.
+        $shipment = $this->parcelOf('CAT-1');
+        $shipment->order->items()->createMany([
+            ['lineitem_name' => 'Again', 'lineitem_sku' => 'CAT-1', 'lineitem_quantity' => 1, 'lineitem_price' => 10],
+            ['lineitem_name' => 'Other', 'lineitem_sku' => 'CAT-2', 'lineitem_quantity' => 5, 'lineitem_price' => 10],
+        ]);
+
+        // It still goes out; the product it was short of is named.
+        $this->scan($token, 'out', $shipment->tracking_number)
+            ->assertJsonPath('result', 'out')
+            ->assertJsonPath('scan.pieces', 8)
+            ->assertJsonCount(1, 'scan.shortages')
+            ->assertJsonPath('scan.shortages.0.sku', 'CAT-1')
+            ->assertJsonPath('scan.shortages.0.needed', 3)
+            ->assertJsonPath('scan.shortages.0.in_stock', 1);
+
+        $this->assertSame(-2, $short->fresh()->variant_inventory_qty);
+        $this->assertSame(0, $enough->fresh()->variant_inventory_qty);
+
+        // Coming back is never short, and the log keeps what the OUT said.
+        $this->scan($token, 'in', $shipment->tracking_number)
+            ->assertJsonPath('result', 'in')
+            ->assertJsonCount(0, 'scan.shortages');
+
+        $this->asRider($token)->getJson('/rider/api/stock/scans?direction=out')
+            ->assertJsonPath('scans.0.shortages.0.needed', 3);
+    }
+
     public function test_any_couriers_parcel_is_found_by_its_tracking_or_order_number(): void
     {
         $token = $this->signedInDevice($this->makeInventoryManager());

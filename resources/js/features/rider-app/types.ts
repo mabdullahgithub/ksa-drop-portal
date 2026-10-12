@@ -224,6 +224,9 @@ export type StockParcel = {
 /** One item in the parcel. Not matched: it is linked to no product, so no stock changed for it. */
 export type StockItem = { name: string; sku: string | null; quantity: number; matched: boolean; stock_after: number | null }
 
+/** A product the parcel needed more of than there was: `in_stock` is what was there before it. */
+export type StockShortage = { name: string; sku: string | null; needed: number; in_stock: number }
+
 /** One parcel scanned OUT or IN (POST /rider/api/stock/scan, GET /rider/api/stock). */
 export type StockScan = {
   id: number
@@ -233,6 +236,8 @@ export type StockScan = {
   pieces: number
   /** Items that matched no product. */
   unmatched: number
+  /** Products a parcel going out needed more of than was in stock. It still went. */
+  shortages: StockShortage[]
   scanned_by: string | null
   /** The rider who had the parcel when it was scanned. */
   parcel_rider: string | null

@@ -27,6 +27,7 @@ class StockScanPresenter
             'pieces' => $scan->pieces,
             // Items that matched no product, so no stock changed for them.
             'unmatched' => $scan->items->reject->isMatched()->count(),
+            'shortages' => self::shortages($scan),
             'scanned_by' => $scan->rider?->name,
             // The rider who had the parcel when it was scanned.
             'parcel_rider' => $scan->parcelRider?->name,
@@ -39,6 +40,36 @@ class StockScanPresenter
             ])->values()->all(),
             'parcel' => $scan->shipment ? self::parcel($scan->shipment) : null,
         ];
+    }
+
+    /**
+     * The products a parcel going out needed more of than there was: what it
+     * needed, and what was in stock before it. The parcel still went and the
+     * stock is left below zero — this is for the manager to see, not a
+     * refusal.
+     *
+     * @return list<array{name: string, sku: ?string, needed: int, in_stock: int}>
+     */
+    public static function shortages(StockScan $scan): array
+    {
+        if ($scan->direction !== StockScan::OUT) {
+            return [];
+        }
+
+        return $scan->items
+            ->filter->isMatched()
+            // The same product on two lines is one count to fall short of.
+            ->groupBy(fn (StockScanItem $item) => $item->product_id !== null ? "product:{$item->product_id}" : "client:{$item->client_product_id}")
+            ->filter(fn ($lines) => $lines->min('stock_after') < 0)
+            ->map(fn ($lines) => [
+                'name' => $lines->first()->name,
+                'sku' => $lines->first()->sku,
+                'needed' => (int) abs($lines->sum('quantity')),
+                // What the first line found. Already below zero is nothing on the shelf.
+                'in_stock' => max(0, $lines->first()->stock_after - $lines->first()->quantity),
+            ])
+            ->values()
+            ->all();
     }
 
     public static function parcel(Shipment $shipment): array
