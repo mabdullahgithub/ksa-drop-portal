@@ -45,6 +45,7 @@ class Client extends Model
         'client_types' => 'array',
         'portal_features' => 'array',
         'charges' => 'array',
+        'is_isolated' => 'boolean',
     ];
 
     public function user(): BelongsTo

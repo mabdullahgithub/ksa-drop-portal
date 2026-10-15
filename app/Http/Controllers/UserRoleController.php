@@ -26,7 +26,10 @@ class UserRoleController extends Controller
         $actor = $request->user();
 
         // Closures, so the page's once-a-minute "who is online" refresh loads nothing else.
-        $users = fn () => User::with(['roles', 'assignedClients:id'])->withExists('client')->get()
+        $users = fn () => User::with(['roles', 'assignedClients:id'])->withExists('client')
+            // The sign-ins of isolated clients stay as hidden as the clients.
+            ->whereNotIn('id', app(ClientAccess::class)->hiddenUserIds())
+            ->get()
             ->map(function ($user) {
                 $fullAccess = $user->hasFullAccess();
 

@@ -10,22 +10,37 @@ use Illuminate\Support\Facades\DB;
  * Hides rows of clients the person may not see; see ClientAccess.
  *
  * A named global scope, so a query that must see everything opts out with
- * withoutGlobalScope('client_access'). It does nothing unless a staff request
- * switched the restriction on.
+ * withoutGlobalScope('client_access'). Beyond isolated clients, which it always
+ * leaves out for anyone not allowed them, it does nothing unless a staff
+ * request switched the restriction on.
  */
 trait RestrictedByClientAccess
 {
     public static function bootRestrictedByClientAccess(): void
     {
         static::addGlobalScope('client_access', function (Builder $builder) {
-            $ids = app(ClientAccess::class)->ids();
+            $access = app(ClientAccess::class);
+            $ids = $access->ids();
+            $hidden = $access->hiddenIds();
+
+            $column = static::clientAccessColumn();
+            $qualified = $builder->qualifyColumn($column);
+
+            // Every client's rows but the isolated ones the person may not see.
+            if ($hidden !== []) {
+                match ($column) {
+                    'order_id' => $builder->whereNotIn($qualified, DB::table('orders')->select('id')->whereIn('client_id', $hidden)),
+                    'shipment_id' => $builder->whereNotIn($qualified, DB::table('shipments')
+                        ->select('shipments.id')
+                        ->join('orders', 'orders.id', '=', 'shipments.order_id')
+                        ->whereIn('orders.client_id', $hidden)),
+                    default => $builder->whereNotIn($qualified, $hidden),
+                };
+            }
 
             if ($ids === null) {
                 return;
             }
-
-            $column = static::clientAccessColumn();
-            $qualified = $builder->qualifyColumn($column);
 
             match ($column) {
                 'order_id' => $builder->whereIn($qualified, DB::table('orders')->select('id')->whereIn('client_id', $ids)),

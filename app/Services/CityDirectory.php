@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Order;
+use App\Support\ClientAccess;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -211,6 +212,7 @@ class CityDirectory
         // One read per request: a stats call filters several queries by city.
         // An index-only scan thanks to the orders.shipping_city index.
         return $this->distinctCities ??= DB::table('orders')
+            ->whereNotIn('client_id', app(ClientAccess::class)->hiddenIds())
             ->whereNotNull('shipping_city')
             ->distinct()
             ->pluck('shipping_city')
