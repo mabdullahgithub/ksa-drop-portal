@@ -11,8 +11,6 @@ export interface OrderStats {
   average_order_value: number
   today_orders: number
   today_revenue: number
-  by_shipment_status: Array<{ status: string; count: number }>
-  by_tag: Array<{ id: number; name: string; color: string; count: number }>
 }
 
 export interface ClientStats {
@@ -49,14 +47,9 @@ async function getJson<T>(url: string): Promise<T | null> {
 
 export function useDashboard() {
   const { can } = usePermissions()
-  // Each block of the dashboard is a permission of its own; the four order
+  // Each block of the dashboard is a permission of its own; the two order
   // blocks share one request, which sends only the ones this person may see.
-  const canOrders = can([
-    'view dashboard order stats',
-    'view dashboard revenue',
-    'view dashboard tag cards',
-    'view dashboard shipment status',
-  ])
+  const canOrders = can(['view dashboard order stats', 'view dashboard revenue'])
   const canClients = can('view dashboard client stats')
   // No WhatsApp section while messaging is switched off.
   const showWhatsApp = useWhatsAppMessaging() && can('view dashboard whatsapp stats')
@@ -98,8 +91,6 @@ export function useDashboard() {
               average_order_value: Number(stats.average_order_value ?? 0),
               today_orders: Number(todayStats?.total_orders ?? 0),
               today_revenue: Number(todayStats?.total_revenue ?? 0),
-              by_shipment_status: (stats.by_shipment_status as OrderStats['by_shipment_status']) ?? [],
-              by_tag: (stats.by_tag as OrderStats['by_tag']) ?? [],
             }
           : null,
         whatsapp: waStats,

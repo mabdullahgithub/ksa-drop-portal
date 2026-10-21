@@ -5,11 +5,8 @@ namespace App\Console\Commands;
 use App\Models\Shipment;
 use App\Services\Shipping\Contracts\CourierDriver;
 use App\Services\Shipping\CourierManager;
-use App\Services\Shipping\DTOs\TrackingEvent;
-use App\Services\Shipping\DTOs\TrackingResult;
 use App\Services\Shipping\Drivers\ImileDriver;
 use App\Services\Shipping\Drivers\KsaDropExpressDriver;
-use App\Services\Shipping\Enums\ShipmentStatus;
 use Illuminate\Console\Command;
 use Illuminate\Support\Collection;
 
@@ -30,7 +27,11 @@ class SyncShipmentTracking extends Command
             // rewrite tracking_history from a copy read moments earlier, and
             // could drop an update a rider made in between.
             ->where('courier', '!=', KsaDropExpressDriver::KEY)
-            ->orderBy('updated_at', 'asc')
+            // Least recently asked first (never asked before all), so every
+            // active shipment gets its turn even when there are more than
+            // --limit of them.
+            ->orderByRaw('tracking_synced_at IS NOT NULL')
+            ->orderBy('tracking_synced_at')
             ->limit($limit)
             ->get();
 
@@ -58,6 +59,13 @@ class SyncShipmentTracking extends Command
             $failed += $batchFailed;
         }
 
+        // Stamped whatever the outcome, so a shipment the courier keeps
+        // failing on goes to the back of the queue instead of blocking it.
+        // Through the base query, so updated_at keeps meaning "changed".
+        Shipment::whereIn('id', $shipments->pluck('id'))
+            ->toBase()
+            ->update(['tracking_synced_at' => now()]);
+
         $this->info("Done. Updated: {$updated}, Failed: {$failed}");
 
         return self::SUCCESS;
@@ -74,25 +82,21 @@ class SyncShipmentTracking extends Command
 
         $byTrackingNumber = $shipments->keyBy('tracking_number');
 
-        foreach ($byTrackingNumber->keys()->chunk(100) as $chunk) {
-            $results = $driver->trackShipments($chunk->all());
+        foreach ($driver->trackShipments($byTrackingNumber->keys()->all()) as $trackingNumber => $result) {
+            $shipment = $byTrackingNumber->get($trackingNumber);
 
-            foreach ($results as $trackingNumber => $result) {
-                $shipment = $byTrackingNumber->get($trackingNumber);
-
-                if (! $shipment) {
-                    continue;
-                }
-
-                if (! $result->success) {
-                    $failed++;
-                    $this->warn("  Failed: {$trackingNumber} - {$result->errorMessage}");
-                    continue;
-                }
-
-                $this->applyTrackingResult($shipment, $result);
-                $updated++;
+            if (! $shipment) {
+                continue;
             }
+
+            if (! $result->success) {
+                $failed++;
+                $this->warn("  Failed: {$trackingNumber} - {$result->errorMessage}");
+                continue;
+            }
+
+            $shipment->applyPulledTracking($result);
+            $updated++;
         }
 
         return [$updated, $failed];
@@ -117,7 +121,7 @@ class SyncShipmentTracking extends Command
                     continue;
                 }
 
-                $this->applyTrackingResult($shipment, $result);
+                $shipment->applyPulledTracking($result);
                 $updated++;
 
                 // Rate limiting: pause between requests
@@ -129,61 +133,5 @@ class SyncShipmentTracking extends Command
         }
 
         return [$updated, $failed];
-    }
-
-    private function applyTrackingResult(Shipment $shipment, TrackingResult $result): void
-    {
-        // Mirror what WebhookController::handleJntExpress() stores for J&T's
-        // push path, so courier_status/courier_status_description (shown in
-        // Shipment Analytics and the CSV export) are populated the same way
-        // regardless of courier or whether the update arrived via webhook or
-        // polling — previously only the J&T webhook path set these, leaving
-        // them permanently blank for iMile (and for J&T shipments only ever
-        // synced via this polling fallback).
-        $latest = $this->latestEvent($result->events);
-
-        // A poll may race a webhook push or return events out of order —
-        // only move the coarse status forward.
-        [$appliedStatus, $extra] = $shipment->resolveTrackingStatus($result->currentStatus);
-
-        $attributes = [
-            'status' => $appliedStatus->value,
-            'tracking_history' => array_map(fn ($e) => $e->toArray(), $result->events),
-            ...$extra,
-        ];
-
-        if ($latest !== null) {
-            $attributes['courier_status'] = $latest->rawStatus;
-            $attributes['courier_status_description'] = $latest->description;
-        }
-
-        $shipment->update($attributes);
-
-        if ($result->currentStatus === ShipmentStatus::DELIVERED) {
-            $shipment->markDelivered();
-        }
-    }
-
-    /**
-     * The most recent scan (by timestamp) drives courier_status/description —
-     * same rule WebhookController::latestEvent() uses for J&T's push path.
-     *
-     * @param  TrackingEvent[]  $events
-     */
-    private function latestEvent(array $events): ?TrackingEvent
-    {
-        if ($events === []) {
-            return null;
-        }
-
-        $latest = $events[0];
-
-        foreach ($events as $event) {
-            if (strcmp($event->timestamp, $latest->timestamp) >= 0) {
-                $latest = $event;
-            }
-        }
-
-        return $latest;
     }
 }

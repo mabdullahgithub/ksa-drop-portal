@@ -117,6 +117,52 @@ class GranularPermissionTest extends TestCase
         $this->assertEquals(250, $revenue->json('total_revenue'));
     }
 
+    public function test_each_dashboard_chart_is_sent_only_to_those_who_may_see_it(): void
+    {
+        $client = $this->makeClient('Noor Store');
+        $riyadh = $this->makeOrder($client, ['shipping_city' => 'الرياض', 'total' => 300]);
+        $this->makeOrder($client, ['shipping_city' => 'riyadh', 'total' => 200]);
+        $this->makeOrder($client, ['shipping_city' => 'Jeddah', 'total' => 100]);
+        $this->makeShipment($riyadh, 'delivered');
+
+        $this->actingAs($this->staffWith(['view dashboard', 'view dashboard order stats']))
+            ->getJson('/api/orders/dashboard-insights')->assertForbidden();
+
+        $cities = $this->actingAs($this->staffWith(['view dashboard', 'view dashboard city heatmap']))
+            ->getJson('/api/orders/dashboard-insights')->assertOk()
+            ->assertJsonPath('couriers', null)
+            ->assertJsonPath('stores', null)
+            ->assertJsonPath('cities.total_orders', 3)
+            // Both spellings of Riyadh fold into one city; no money without the revenue permission.
+            ->assertJsonPath('cities.items.0.name', 'Riyadh')
+            ->assertJsonPath('cities.items.0.orders', 2)
+            ->assertJsonPath('cities.items.0.delivered', 1)
+            ->assertJsonPath('cities.items.0.revenue', null);
+
+        $couriers = $this->actingAs($this->staffWith(['view dashboard', 'view dashboard courier ranking']))
+            ->getJson('/api/orders/dashboard-insights')->assertOk()
+            ->assertJsonPath('cities', null)
+            ->assertJsonPath('couriers.0.courier', 'jnt_express')
+            ->assertJsonPath('couriers.0.delivered', 1);
+        $this->assertEquals(100, $couriers->json('couriers.0.delivery_rate'));
+
+        $rhythm = $this->actingAs($this->staffWith(['view dashboard', 'view dashboard order rhythm']))
+            ->getJson('/api/orders/dashboard-insights')->assertOk()
+            ->assertJsonPath('couriers', null)
+            ->assertJsonCount(24, 'rhythm.hours')
+            ->assertJsonCount(7, 'rhythm.weekdays');
+        $this->assertSame(3, array_sum($rhythm->json('rhythm.hours')));
+        $this->assertSame(3, array_sum($rhythm->json('rhythm.weekdays')));
+
+        $stores = $this->actingAs($this->staffWith(['view dashboard', 'view dashboard store ranking', 'view dashboard revenue']))
+            ->getJson('/api/orders/dashboard-insights?range=7')->assertOk()
+            ->assertJsonPath('stores.0.name', 'Noor Store')
+            ->assertJsonPath('stores.0.orders', 3)
+            ->assertJsonCount(7, 'stores.0.trend');
+        $this->assertEquals(600, $stores->json('stores.0.revenue'));
+        $this->assertSame(3, array_sum($stores->json('stores.0.trend')));
+    }
+
     // -------------------------------------------------------------- shipments
 
     public function test_each_shipment_button_is_its_own_permission(): void

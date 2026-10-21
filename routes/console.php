@@ -19,10 +19,9 @@ Schedule::command('mail:process-bounces')
     ->everyFifteenMinutes()
     ->withoutOverlapping(10);
 
-// Sync shipment tracking every 10 minutes. iMile has no push/webhook API
-// (pull-only) but client/track/list batches up to 100 orders per call, so
-// polling this often is cheap; J&T shipments are also covered live by
-// webhooks/jnt-express/* and use this mainly as a fallback.
+// Sync shipment tracking every 10 minutes — the safety net behind the J&T,
+// iMile and LogesTechs webhooks, for any scan a push missed. iMile's
+// client/track/list batches up to 100 orders per call, so this is cheap.
 Schedule::command('shipments:sync-tracking --limit=200')
     ->everyTenMinutes()
     ->withoutOverlapping();

@@ -23,6 +23,40 @@
   --chart-3: oklch(0.398 0.07 227.392);
   --chart-4: oklch(0.828 0.189 84.429);
   --chart-5: oklch(0.769 0.188 70.08);
+  /* Dashboard insight charts. Heat is one hue, light to dark; the status
+     trio carries delivered / in progress / returned with a label beside it. */
+  --viz-heat-lo: #b7d3f6;
+  --viz-heat-hi: #104281;
+  --viz-rank: #6250d6;
+  --viz-gold: #c98500;
+  --viz-good: #0ca30c;
+  --viz-pending: #a8b3c4;
+  --viz-bad: #d03b3b;
+  /* One colour per courier, fixed by courier (never by rank). Validated for
+     colour-blind separation in both modes. */
+  --viz-c1: #2a78d6;
+  --viz-c2: #eb6834;
+  --viz-c3: #1baf7a;
+  --viz-c4: #6250d6;
+  /* The fill behind a top-city row: one solid tint. */
+  --viz-row: rgb(42 120 214 / 0.13);
+  /* Each courier in its own brand colour; KSA Express is ink: black on light, white on dark. */
+  --viz-imile: #ea580c;
+  --viz-logestechs: #e0a100;
+  --viz-jnt: #dc2626;
+  --viz-ksx: #0f172a;
+  /* One colour per region of the Kingdom, in a validated order. */
+  --viz-r1: #2a78d6;
+  --viz-r2: #eb6834;
+  --viz-r3: #1baf7a;
+  --viz-r4: #eda100;
+  --viz-r5: #e87ba4;
+  /* The top five stores, in the same validated order (both modes follow the region steps). */
+  --viz-s1: var(--viz-r1);
+  --viz-s2: var(--viz-r2);
+  --viz-s3: var(--viz-r3);
+  --viz-s4: var(--viz-r4);
+  --viz-s5: var(--viz-r5);
 
   --sidebar: var(--background);
   --sidebar-foreground: var(--foreground);
@@ -58,6 +92,27 @@
   --chart-3: oklch(0.769 0.188 70.08);
   --chart-4: oklch(0.627 0.265 303.9);
   --chart-5: oklch(0.645 0.246 16.439);
+  --viz-heat-lo: #1c5cab;
+  --viz-heat-hi: #b7d3f6;
+  --viz-rank: #9085e9;
+  --viz-gold: #eda100;
+  --viz-good: #0ca30c;
+  --viz-pending: #52607a;
+  --viz-bad: #e66767;
+  --viz-c1: #3987e5;
+  --viz-c2: #d95926;
+  --viz-c3: #199e70;
+  --viz-c4: #9085e9;
+  --viz-row: rgb(57 135 229 / 0.2);
+  --viz-imile: #f97316;
+  --viz-logestechs: #facc15;
+  --viz-jnt: #ef4444;
+  --viz-ksx: #f1f5f9;
+  --viz-r1: #3987e5;
+  --viz-r2: #d95926;
+  --viz-r3: #199e70;
+  --viz-r4: #c98500;
+  --viz-r5: #d55181;
 }
 
 @theme inline {
@@ -91,6 +146,13 @@
   --color-chart-3: var(--chart-3);
   --color-chart-4: var(--chart-4);
   --color-chart-5: var(--chart-5);
+  --color-viz-heat-lo: var(--viz-heat-lo);
+  --color-viz-heat-hi: var(--viz-heat-hi);
+  --color-viz-rank: var(--viz-rank);
+  --color-viz-gold: var(--viz-gold);
+  --color-viz-good: var(--viz-good);
+  --color-viz-pending: var(--viz-pending);
+  --color-viz-bad: var(--viz-bad);
   --color-sidebar: var(--sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar-primary: var(--sidebar-primary);

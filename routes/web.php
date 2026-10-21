@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\ClientController;
 use App\Http\Controllers\Api\ClientPaymentController;
 use App\Http\Controllers\Api\ConnectorSettingsController;
+use App\Http\Controllers\Api\DashboardInsightsController;
 use App\Http\Controllers\Api\ImileWebhookController;
 use App\Http\Controllers\Api\InventoryRequestController;
 use App\Http\Controllers\Api\LogesTechsController;
@@ -191,7 +192,8 @@ Route::middleware(['auth', 'verified', 'role:!client', 'client.access'])->group(
     // Orders API
     Route::prefix('api/orders')->group(function () {
         Route::get('/', [OrderController::class, 'index'])->middleware('permission:view orders')->name('api.orders.index');
-        Route::get('/statistics', [OrderController::class, 'statistics'])->middleware('permission:view order stats|view order tag cards|view order shipment status cards|view dashboard order stats|view dashboard revenue|view dashboard tag cards|view dashboard shipment status')->name('api.orders.statistics');
+        Route::get('/statistics', [OrderController::class, 'statistics'])->middleware('permission:view order stats|view order tag cards|view order shipment status cards|view dashboard order stats|view dashboard revenue')->name('api.orders.statistics');
+        Route::get('/dashboard-insights', DashboardInsightsController::class)->middleware('permission:view dashboard city heatmap|view dashboard courier ranking|view dashboard order rhythm|view dashboard store ranking')->name('api.orders.dashboard-insights');
         Route::get('/filter-options', [OrderController::class, 'filterOptions'])->middleware('permission:view orders')->name('api.orders.filter-options');
         Route::get('/export', [OrderController::class, 'export'])->middleware('permission:export orders')->name('api.orders.export');
         Route::get('/{order}', [OrderController::class, 'show'])->middleware('permission:view order details')->name('api.orders.show');

@@ -27,6 +27,7 @@ interface Analytics {
     total: number
     delivered: number
     returned: number
+    returning: number
     exceptions: number
     cancelled: number
     in_transit: number
@@ -75,6 +76,7 @@ const statusColorMap: Record<string, string> = {
   delivered: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
   attempt_fail: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400',
   exception: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400',
+  returning: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400',
   returned: 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400',
   cancelled: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400',
   failed: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400',
@@ -223,7 +225,7 @@ export default function ShipmentAnalyticsPage() {
               <StatCard title='Delivered' value={fmt(t?.delivered)} sub={`${deliveryRate}% delivery rate`} icon={CheckCircle2} color='text-green-500' />
               <StatCard title='In Transit' value={fmt(t?.in_transit)} icon={TrendingUp} color='text-indigo-500' />
               <StatCard title='Avg. Delivery' value={t?.avg_delivery_days != null ? `${t.avg_delivery_days.toFixed(1)} days` : '—'} icon={Clock} color='text-orange-500' />
-              <StatCard title='Returns' value={fmt(t?.returned)} sub={`${returnRate}% return rate`} icon={RotateCcw} color='text-purple-500' />
+              <StatCard title='Returns' value={fmt(t?.returned)} sub={`${returnRate}% return rate · ${fmt(t?.returning)} on the way back`} icon={RotateCcw} color='text-purple-500' />
               <StatCard title='Exceptions' value={fmt(t?.exceptions)} icon={AlertTriangle} color='text-red-500' />
               <StatCard title='Cancelled' value={fmt(t?.cancelled)} icon={X} color='text-gray-500' />
               {canCod && (

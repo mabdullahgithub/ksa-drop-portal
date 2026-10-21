@@ -45,6 +45,7 @@ const SHIPMENT_BADGES: Record<string, Badge> = {
     in_transit: { label: "In transit", tone: "info" },
     out_for_delivery: { label: "Out for delivery", tone: "info" },
     attempt_fail: { label: "Delivery attempt failed", tone: "warning" },
+    returning: { label: "Being returned", tone: "warning" },
     delivered: { label: "Delivered", tone: "success" },
     exception: { label: "Delivery issue", tone: "warning" },
     returned: { label: "Returned", tone: "critical" },

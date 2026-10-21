@@ -22,6 +22,7 @@ class ShipmentAnalyticsController extends Controller
             COUNT(*) as total,
             SUM(CASE WHEN status = 'delivered' THEN 1 ELSE 0 END) as delivered,
             SUM(CASE WHEN status = 'returned' THEN 1 ELSE 0 END) as returned,
+            SUM(CASE WHEN status = 'returning' THEN 1 ELSE 0 END) as returning,
             SUM(CASE WHEN status = 'exception' THEN 1 ELSE 0 END) as exceptions,
             SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END) as cancelled,
             SUM(CASE WHEN status IN ('info_received','in_transit','out_for_delivery','attempt_fail') THEN 1 ELSE 0 END) as in_transit,

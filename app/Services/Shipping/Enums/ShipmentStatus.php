@@ -9,6 +9,9 @@ enum ShipmentStatus: string
     case IN_TRANSIT = 'in_transit';
     case OUT_FOR_DELIVERY = 'out_for_delivery';
     case ATTEMPT_FAIL = 'attempt_fail';
+    // The courier gave up on delivery and the parcel is on its way back to
+    // us — still moving, but no longer towards the customer.
+    case RETURNING = 'returning';
     case DELIVERED = 'delivered';
     case EXCEPTION = 'exception';
     case RETURNED = 'returned';
@@ -23,6 +26,7 @@ enum ShipmentStatus: string
             self::IN_TRANSIT => 'In Transit',
             self::OUT_FOR_DELIVERY => 'Out for Delivery',
             self::ATTEMPT_FAIL => 'Attempt Failed',
+            self::RETURNING => 'Returning',
             self::DELIVERED => 'Delivered',
             self::EXCEPTION => 'Exception',
             self::RETURNED => 'Returned',
@@ -39,6 +43,7 @@ enum ShipmentStatus: string
             self::IN_TRANSIT => 'indigo',
             self::OUT_FOR_DELIVERY => 'orange',
             self::ATTEMPT_FAIL => 'red',
+            self::RETURNING => 'yellow',
             self::DELIVERED => 'green',
             self::EXCEPTION => 'red',
             self::RETURNED => 'yellow',
@@ -55,6 +60,7 @@ enum ShipmentStatus: string
             self::IN_TRANSIT,
             self::OUT_FOR_DELIVERY,
             self::ATTEMPT_FAIL,
+            self::RETURNING,
             self::EXCEPTION,
         ]);
     }
@@ -82,6 +88,10 @@ enum ShipmentStatus: string
         'in_transit'       => 2,
         'out_for_delivery' => 3,
         'attempt_fail'     => 3,
+        // Past every forward state: once a parcel is heading back, a stray
+        // late scan (an `Arrive` at a hub on the way back) must not make it
+        // look like it is out for delivery again.
+        'returning'        => 4,
     ];
 
     /**
@@ -101,7 +111,7 @@ enum ShipmentStatus: string
      *    otherwise a resolved exception would stay stuck on display forever.
      *  - Otherwise, only forward (or lateral, same-rank) moves through the
      *    ordinary PENDING → INFO_RECEIVED → IN_TRANSIT → OUT_FOR_DELIVERY
-     *    progression are applied.
+     *    → RETURNING progression are applied.
      */
     public function shouldTransitionTo(self $incoming): bool
     {

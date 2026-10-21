@@ -102,6 +102,7 @@ class ImileWebhookController extends Controller
                 // A push may arrive out of order (iMile retries a failed
                 // delivery up to 3 times) — only move the coarse status
                 // forward; the raw courier text is always recorded regardless.
+                $previousStatus = $shipment->status_enum;
                 [$appliedStatus, $extra] = $shipment->resolveTrackingStatus($latest->status);
 
                 $shipment->update([
@@ -112,12 +113,18 @@ class ImileWebhookController extends Controller
                     ...$extra,
                 ]);
 
-                match ($latest->status) {
-                    ShipmentStatus::DELIVERED => $shipment->markDelivered(),
-                    ShipmentStatus::RETURNED  => $shipment->markReturned($latest->description),
-                    ShipmentStatus::CANCELLED => $shipment->markCancelled($latest->description),
-                    ShipmentStatus::EXCEPTION => $this->escalateOnce($shipment, $latest->description),
-                    default                   => null,
+                // Driven by the status actually applied, not the scan's: a
+                // problem scan that arrives after Delivered must neither
+                // reopen the shipment nor alert anyone about it.
+                match (true) {
+                    $appliedStatus === ShipmentStatus::DELIVERED => $shipment->markDelivered(),
+                    $appliedStatus === ShipmentStatus::EXCEPTION => $this->escalateOnce($shipment, $latest->description),
+                    // Repeat pushes of a return/cancel would otherwise queue
+                    // the Shopify fulfillment cancel again each time.
+                    $appliedStatus === $previousStatus           => null,
+                    $appliedStatus === ShipmentStatus::RETURNED  => $shipment->markReturned($latest->description),
+                    $appliedStatus === ShipmentStatus::CANCELLED => $shipment->markCancelled($latest->description),
+                    default                                      => null,
                 };
             });
 
@@ -239,13 +246,9 @@ class ImileWebhookController extends Controller
     {
         // Only notify admins once per shipment to avoid alert spam on
         // repeated abnormal scans — same rule as WebhookController's J&T path.
-        if ($shipment->exception_escalated_at) {
-            $shipment->update(['status' => ShipmentStatus::EXCEPTION->value]);
-
-            return;
+        if (! $shipment->exception_escalated_at) {
+            $shipment->escalateException($note);
         }
-
-        $shipment->escalateException($note);
     }
 
     /**

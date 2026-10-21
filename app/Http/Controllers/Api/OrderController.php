@@ -481,7 +481,7 @@ class OrderController extends Controller
             'average_order_value' => $revenue ? round((float) $totals->average_order_value, 2) : null,
             // Orders (not shipments) per status, matching what the shipment_status filter lists.
             // Served by the shipments (order_id, status) index.
-            'by_shipment_status' => $user->canAny(['view order shipment status cards', 'view dashboard shipment status'])
+            'by_shipment_status' => $user->can('view order shipment status cards')
                 ? DB::table('shipments')
                     ->whereIn('order_id', $filtered(['shipment_status'])->select('orders.id'))
                     ->select('status', DB::raw('count(distinct order_id) as count'))
@@ -489,7 +489,7 @@ class OrderController extends Controller
                     ->orderByDesc('count')
                     ->get()
                 : null,
-            'by_tag' => $user->canAny(['view order tag cards', 'view dashboard tag cards'])
+            'by_tag' => $user->can('view order tag cards')
                 ? $this->tagCounts($filtered(['tags']))
                 : null,
         ]);
@@ -523,6 +523,7 @@ class OrderController extends Controller
                 ['value' => 'out_for_delivery', 'label' => 'Out for Delivery'],
                 ['value' => 'delivered', 'label' => 'Delivered'],
                 ['value' => 'attempt_fail', 'label' => 'Attempt Failed'],
+                ['value' => 'returning', 'label' => 'Returning'],
                 ['value' => 'returned', 'label' => 'Returned'],
                 ['value' => 'exception', 'label' => 'Exception'],
                 ['value' => 'cancelled', 'label' => 'Cancelled'],

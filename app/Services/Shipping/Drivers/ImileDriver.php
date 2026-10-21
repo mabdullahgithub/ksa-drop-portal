@@ -11,6 +11,7 @@ use App\Services\Shipping\DTOs\TrackingEvent;
 use App\Services\Shipping\DTOs\TrackingResult;
 use App\Services\Shipping\Enums\ImileErrorCode;
 use App\Services\Shipping\Enums\ShipmentStatus;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -29,21 +30,11 @@ use Illuminate\Support\Facades\RateLimiter;
  * endpoints (fulfilment/SKU/ASN/stock) are a separate warehousing product
  * and out of scope here.
  *
- * Note: the tracking endpoint's exact response shape was not confirmed
- * against a live sample at integration time (iMile's official Postman
- * collection does not include a tracking request) — {@see buildTrackingResult()}
- * parses several plausible shapes defensively (preferring the field names
- * documented in the iMile Developer's Kit blueprint — `billNo`, `latestStatus`,
- * `locus[]` — and falling back to other plausible names) and logs the raw
- * payload when it doesn't recognise one, so the parsing can be tightened once
- * verified against a real account response.
- *
- * iMile has no outbound webhook/push API (confirmed against the full API
- * blueprint) — tracking is pull-only. {@see trackShipments()} batches up to
- * 100 orders per `client/track/list` call (iMile's documented limit) so a
- * full sync of active shipments costs a fraction of the API calls of polling
- * one-by-one, letting {@see \App\Console\Commands\SyncShipmentTracking} run
- * every few minutes instead of every couple of hours.
+ * Tracking reaches us two ways: iMile pushes every scan to
+ * {@see \App\Http\Controllers\Api\ImileWebhookController}, and
+ * {@see trackShipments()} pulls up to 100 waybills per `client/track/list`
+ * call, which {@see \App\Console\Commands\SyncShipmentTracking} uses as
+ * the safety net for anything a push missed.
  */
 class ImileDriver implements CourierDriver
 {
@@ -186,47 +177,21 @@ class ImileDriver implements CourierDriver
 
     public function trackShipment(string $trackingNumber): TrackingResult
     {
-        $param = ['orderCodes' => [$trackingNumber]];
-
-        $response = $this->makeRequest('client/track/list', $param);
-
-        if ($response === null) {
-            return TrackingResult::failure('Failed to connect to iMile API');
-        }
-
-        $code = (string) ($response['code'] ?? '');
-
-        if ($code !== '200') {
-            return TrackingResult::failure(
-                ImileErrorCode::resolve($code, $response['message'] ?? null),
-                $response,
-            );
-        }
-
-        $records = $this->extractTrackRecords($response['data'] ?? null);
-
-        if ($records === null) {
-            Log::warning('iMile trackShipment: unrecognised response shape', [
-                'tracking_number' => $trackingNumber,
-                'response' => $response,
-            ]);
-            $records = [];
-        }
-
-        return $this->buildTrackingResult($records[0] ?? [], $response);
+        return $this->trackShipments([$trackingNumber])[$trackingNumber]
+            ?? TrackingResult::failure('No tracking number given');
     }
 
     /**
-     * Bulk variant of {@see trackShipment()}: fetches up to 100 tracking
-     * numbers per `client/track/list` call (iMile's documented batch limit),
-     * chunking transparently for larger inputs. Returns one TrackingResult
-     * per input tracking number, keyed by that tracking number, in the same
-     * shape as calling trackShipment() individually.
+     * Fetches up to 100 waybills per `client/track/list` call (iMile's batch
+     * limit), chunking larger inputs. Returns one TrackingResult per input
+     * tracking number, keyed by it.
      *
-     * A tracking number iMile doesn't return a record for gets an explicit
-     * failure (rather than a lenient "no events yet" success) so callers
-     * don't accidentally downgrade an already-progressed shipment's status
-     * on a partial/misaligned batch response.
+     * The request shape was confirmed against the live API (2026-10-22):
+     * `orderType` 1 = look up by waybill number (2 = by our order number),
+     * `language` 2 = English, `orderNo` a list. iMile answers an unknown
+     * waybill with a blank record rather than an error; that, like a missing
+     * record, becomes an explicit failure so a caller never downgrades a
+     * shipment that has already progressed.
      *
      * @param  string[]  $trackingNumbers
      * @return array<string, TrackingResult>
@@ -235,14 +200,14 @@ class ImileDriver implements CourierDriver
     {
         $trackingNumbers = array_values(array_unique(array_filter($trackingNumbers, fn ($v) => $v !== null && $v !== '')));
 
-        if ($trackingNumbers === []) {
-            return [];
-        }
-
         $results = [];
 
         foreach (array_chunk($trackingNumbers, 100) as $chunk) {
-            $response = $this->makeRequest('client/track/list', ['orderCodes' => $chunk]);
+            $response = $this->makeRequest('client/track/list', [
+                'orderType' => '1',
+                'language' => '2',
+                'orderNo' => $chunk,
+            ]);
 
             if ($response === null) {
                 foreach ($chunk as $trackingNumber) {
@@ -261,37 +226,17 @@ class ImileDriver implements CourierDriver
                 continue;
             }
 
-            $records = $this->extractTrackRecords($response['data'] ?? null);
-
-            if ($records === null) {
-                Log::warning('iMile trackShipments: unrecognised response shape', [
-                    'batch_size' => count($chunk),
-                    'response' => $response,
-                ]);
-                $records = [];
-            }
-
-            if (count($records) !== count($chunk)) {
-                Log::info('iMile trackShipments: record count does not match requested batch size', [
-                    'requested' => count($chunk),
-                    'returned' => count($records),
-                ]);
-            }
-
-            $byIdentifier = [];
-            foreach ($records as $record) {
-                $identifier = $record['billNo'] ?? $record['orderCode'] ?? $record['expressNo'] ?? $record['waybillNo'] ?? null;
-                if ($identifier !== null) {
-                    $byIdentifier[(string) $identifier] = $record;
+            $byWaybill = [];
+            foreach ((array) ($response['data'] ?? []) as $record) {
+                if (is_array($record) && ($record['billNo'] ?? '') !== '') {
+                    $byWaybill[(string) $record['billNo']] = $record;
                 }
             }
 
-            foreach ($chunk as $index => $trackingNumber) {
-                // Prefer matching by identifier field; fall back to positional
-                // matching only if iMile didn't echo back an identifier we recognise.
-                $record = $byIdentifier[$trackingNumber] ?? $records[$index] ?? null;
+            foreach ($chunk as $trackingNumber) {
+                $record = $byWaybill[$trackingNumber] ?? null;
 
-                $results[$trackingNumber] = $record !== null
+                $results[$trackingNumber] = $record !== null && ! empty($record['locus'])
                     ? $this->buildTrackingResult($record, $response)
                     : TrackingResult::failure('No tracking data returned for this shipment', $response);
             }
@@ -301,53 +246,68 @@ class ImileDriver implements CourierDriver
     }
 
     /**
-     * Parse a single iMile tracking record (one entry of a client/track/list
-     * response) into a {@see TrackingResult}. Shared by both the single and
-     * batched tracking calls.
+     * iMile's tracking-push webhook stamps each scan in its own UTC+8 ISO
+     * form; history entries are de-duplicated on their timestamp string
+     * (see Shipment::addTrackingEvents()), so a pulled scan has to be
+     * written in exactly the same form to be recognised as the same scan.
+     */
+    public const HISTORY_TIMEZONE = '+08:00';
+
+    /**
+     * Parse one `client/track/list` record. Each `locus[]` entry has the same
+     * fields as a webhook push's `param.locus[]`, and is turned into the same
+     * TrackingEvent {@see \App\Http\Controllers\Api\ImileWebhookController}
+     * builds, so the two sources can be merged into one history.
      */
     protected function buildTrackingResult(array $record, array $response): TrackingResult
     {
-        $scans = $record['locus'] ?? $record['details'] ?? $record['scanList'] ?? $record['events'] ?? [];
-
         $events = [];
-        foreach ($scans as $scan) {
-            $rawStatus = (string) ($scan['status'] ?? $scan['scanType'] ?? $scan['statusCode'] ?? '');
+
+        foreach ((array) ($record['locus'] ?? []) as $scan) {
+            if (! is_array($scan)) {
+                continue;
+            }
+
+            $rawStatus = (string) ($scan['latestStatus'] ?? '');
+
             $events[] = new TrackingEvent(
                 status: $this->normalizeStatus($rawStatus),
-                description: $scan['desc'] ?? $scan['description'] ?? $rawStatus,
-                location: $scan['city'] ?? $scan['location'] ?? null,
-                timestamp: (string) ($scan['scanTime'] ?? $scan['timestamp'] ?? ''),
-                rawStatus: $rawStatus,
+                description: (string) ($scan['locusDetailed'] ?? $scan['latestLocus'] ?? $rawStatus),
+                location: isset($scan['latestLocation']) ? (string) $scan['latestLocation'] : (isset($scan['latestSite']) ? (string) $scan['latestSite'] : null),
+                timestamp: $this->historyTimestamp((string) ($scan['latestStatusTime'] ?? ''), $scan['timeZone'] ?? $response['timeZone'] ?? null),
+                rawStatus: $rawStatus !== '' ? $rawStatus : null,
+                latitude: isset($scan['latitude']) ? (string) $scan['latitude'] : null,
+                longitude: isset($scan['longitude']) ? (string) $scan['longitude'] : null,
             );
         }
 
-        $currentRawStatus = $record['latestStatus'] ?? $record['status'] ?? $record['orderStatus'] ?? null;
-        $currentStatus = ! empty($events)
-            ? $events[0]->status
-            : ($currentRawStatus ? $this->normalizeStatus((string) $currentRawStatus) : ShipmentStatus::INFO_RECEIVED);
+        // Newest first, as the rest of the app expects; every timestamp is
+        // now in the same zone, so they sort as strings.
+        usort($events, fn (TrackingEvent $a, TrackingEvent $b) => strcmp($b->timestamp, $a->timestamp));
 
-        return TrackingResult::success($currentStatus, $events, $response);
+        return TrackingResult::success($events[0]->status, $events, $response);
     }
 
     /**
-     * iMile's `data` payload shape for client/track/list has not been
-     * confirmed against a live response — try the plausible variants and
-     * fall back to null (caller logs + treats as "no events") rather than
-     * guessing wrong and reporting a false status.
+     * "2026-10-21 23:08:03" in the scan's zone ("GMT+03:00", or the
+     * response-level "+3") → "2026-10-22T04:08:03+08:00".
      */
-    protected function extractTrackRecords(mixed $data): ?array
+    protected function historyTimestamp(string $time, ?string $zone): string
     {
-        if (! is_array($data)) {
-            return null;
+        if ($time === '') {
+            return '';
         }
 
-        foreach (['list', 'trackList', 'orderStatuses', 'trackInfo'] as $key) {
-            if (isset($data[$key]) && is_array($data[$key])) {
-                return $data[$key];
-            }
+        $offset = '+03:00';
+        if ($zone && preg_match('/([+-])(\d{1,2})(?::?(\d{2}))?/', $zone, $m)) {
+            $offset = sprintf('%s%02d:%02d', $m[1], $m[2], $m[3] ?? 0);
         }
 
-        return array_is_list($data) ? $data : null;
+        try {
+            return Carbon::parse($time, $offset)->setTimezone(self::HISTORY_TIMEZONE)->toIso8601String();
+        } catch (\Throwable) {
+            return $time;
+        }
     }
 
     public function cancelShipment(string $trackingNumber, string $reason): CancelResult
@@ -405,20 +365,29 @@ class ImileDriver implements CourierDriver
             'SubmitOrder', 'SCH', 'AssignPickup', 'CancelAssignPickup', 'PickUpOrder' => ShipmentStatus::INFO_RECEIVED,
 
             'RecevieOrder', 'Shipping', 'Arrive', 'AssignDA', 'Transfer', 'Unpacking',
-            'ReturnShipping', 'ReturnArrive',
             'IntlReceived', 'IntlShipping', 'IntlArrive', 'IntlClearanceScan', 'IntlClearance',
             'VDispatch', 'operation_change_delivery_method', 'operation_self_pickup_point_inbound' => ShipmentStatus::IN_TRANSIT,
 
             'OFD' => ShipmentStatus::OUT_FOR_DELIVERY,
 
+            // BTD ("Back To DS") is the driver bringing the parcel back to the
+            // station after a failed round; it goes out again next day, so it
+            // is a failed attempt, not something for an admin to chase. 6001
+            // ("Uncontactable") is the reason code the driver logs for it.
+            'BTD', '6001' => ShipmentStatus::ATTEMPT_FAIL,
+
             'Delivered' => ShipmentStatus::DELIVERED,
 
-            // DeliveryCompleted looks like success by name, but per the iMile
-            // doc it fires when the waybill closes *without* delivery and
-            // enters the return process — a failure trigger, not progress.
-            // VBTD ("supplier package return collection") is the same failure
-            // family as BTD ("back to warehouse"); grouped with it here.
-            'BTD', 'VBTD', 'DeliveryCompleted', 'ReturnFailed', 'Abandon', 'AbnormalDelivered',
+            // DeliveryCompleted is what iMile's own tracking page shows as
+            // "Completed" — but it is "Order Closed": the waybill closed
+            // *without* delivery (usually after a 1101 seller-cancel) and the
+            // parcel enters the return process. Every iMile return we have
+            // passed through it on the way to RTC.
+            'DeliveryCompleted', 'ReturnShipping', 'ReturnArrive' => ShipmentStatus::RETURNING,
+
+            // VBTD ("supplier package return collection") is kept with the
+            // genuine problems: a return that went wrong, or a parcel lost.
+            'VBTD', 'ReturnFailed', 'Abandon', 'AbnormalDelivered',
             'cs_schedule_failed_no_answer' => ShipmentStatus::EXCEPTION,
 
             'ReturnSuccess', 'RefundSuccess', 'RTC' => ShipmentStatus::RETURNED,
@@ -618,7 +587,7 @@ class ImileDriver implements CourierDriver
 
                 // Token expired/invalid mid-flight — refresh once and retry
                 // immediately without consuming a full retry slot.
-                if (! $tokenRetried && ImileErrorCode::isTokenError($code)) {
+                if (! $tokenRetried && ImileErrorCode::isTokenError($code, $json['message'] ?? null)) {
                     $tokenRetried = true;
                     $accessToken = $this->getAccessToken(forceRefresh: true);
 

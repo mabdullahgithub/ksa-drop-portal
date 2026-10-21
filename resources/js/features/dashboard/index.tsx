@@ -23,12 +23,11 @@ import { Main } from '@/components/layout/main'
 import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
-import { ShipmentStatusCardsView } from '@/features/orders/components/shipment-status-cards'
-import { TagStatCardsView } from '@/features/orders/components/tag-stat-cards'
 import { InboxStats } from '@/features/whatsapp/components/inbox-stats'
 import { useDashboard } from '@/hooks/useDashboard'
 import { usePermissions } from '@/hooks/use-permissions'
 import { useWhatsAppMessaging } from '@/hooks/use-whatsapp-messaging'
+import { InsightsSection } from './components/insights-section'
 
 
 function formatCurrency(value: number) {
@@ -36,9 +35,9 @@ function formatCurrency(value: number) {
 }
 
 /**
- * One labelled band of stat cards. The dashboard is read left-to-right in
- * three passes — orders, then the confirmation inbox, then clients — so each
- * band gets a heading and a way through to the page it summarises.
+ * One labelled band of stat cards. The dashboard is read top to bottom —
+ * orders, clients, then the insight charts and the confirmation inbox — so
+ * each band gets a heading and a way through to the page it summarises.
  */
 function StatSection({
   title,
@@ -99,8 +98,6 @@ export function Dashboard() {
   const { can } = usePermissions()
   const canCounts = can('view dashboard order stats')
   const canRevenue = can('view dashboard revenue')
-  const canTagCards = can('view dashboard tag cards')
-  const canStatusCards = can('view dashboard shipment status')
   // A card only links to a page this person can open.
   const ordersHref = can('view orders') ? '/orders' : undefined
   const whatsappHref = can('view whatsapp') ? '/whatsapp' : undefined
@@ -208,41 +205,6 @@ export function Dashboard() {
                   )}
                 </div>
               )}
-
-              {/* The orders page's own two card grids, rendered straight from
-                  the statistics already loaded above. */}
-              {canTagCards && (
-                <div className='mt-5'>
-                  <TagStatCardsView tags={orders?.by_tag ?? []} loading={loading} />
-                </div>
-              )}
-
-              {canStatusCards && (
-                <div className='mt-5'>
-                  <div className='mb-3 flex items-center gap-1.5'>
-                    <Truck className='h-3.5 w-3.5 text-muted-foreground' />
-                    <h3 className='text-sm font-semibold'>Shipment status distribution</h3>
-                  </div>
-                  <ShipmentStatusCardsView
-                    byStatus={orders?.by_shipment_status ?? null}
-                    loading={loading}
-                  />
-                </div>
-              )}
-            </StatSection>
-          )}
-
-          {/* ── WhatsApp ── (none while messaging is switched off) */}
-          {whatsappMessaging && (loading || whatsapp) && (
-            <StatSection
-              title='WhatsApp confirmations'
-              description='Order confirmations opened when a call goes unanswered'
-              href={whatsappHref}
-              linkLabel='Open inbox'
-            >
-              {/* Literally the inbox's own KPI row, so the two pages can never
-                  drift apart — it just links back to the inbox from here. */}
-              {loading || !whatsapp ? <StatRowSkeleton /> : <InboxStats stats={whatsapp} href={whatsappHref} />}
             </StatSection>
           )}
 
@@ -313,6 +275,23 @@ export function Dashboard() {
                   />
                 </div>
               )}
+            </StatSection>
+          )}
+
+          {/* ── Insights ── city heatmap, best couriers, best stores */}
+          <InsightsSection />
+
+          {/* ── WhatsApp ── (none while messaging is switched off) */}
+          {whatsappMessaging && (loading || whatsapp) && (
+            <StatSection
+              title='WhatsApp confirmations'
+              description='Order confirmations opened when a call goes unanswered'
+              href={whatsappHref}
+              linkLabel='Open inbox'
+            >
+              {/* Literally the inbox's own KPI row, so the two pages can never
+                  drift apart — it just links back to the inbox from here. */}
+              {loading || !whatsapp ? <StatRowSkeleton /> : <InboxStats stats={whatsapp} href={whatsappHref} />}
             </StatSection>
           )}
 

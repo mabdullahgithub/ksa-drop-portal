@@ -49,7 +49,7 @@ const PATH_STEPS: { key: string; label: string; icon: LucideIcon }[] = [
   { key: 'delivered',        label: 'Delivered',         icon: Home },
 ]
 
-const HALTED  = ['cancelled', 'failed', 'returned']
+const HALTED  = ['cancelled', 'failed', 'returning', 'returned']
 const PROBLEM = ['exception', 'attempt_fail', ...HALTED]
 
 // Mirrors shipment-panel.tsx's courierLabels
@@ -85,6 +85,7 @@ function stepIndex(status: string): number {
     case 'exception':        return 1
     case 'out_for_delivery':
     case 'attempt_fail':
+    case 'returning':
     case 'returned':         return 2
     case 'delivered':        return 3
     default:                 return -1
@@ -105,7 +106,7 @@ function fmtDateTime(v: string | null) {
 
 function tlIcon(status: string): LucideIcon {
   if (status === 'delivered')                   return PackageCheck
-  if (status === 'returned')                    return RotateCcw
+  if (['returning', 'returned'].includes(status)) return RotateCcw
   if (['cancelled', 'failed'].includes(status)) return Ban
   if (PROBLEM.includes(status))                 return AlertTriangle
   if (status === 'out_for_delivery')            return MapPin

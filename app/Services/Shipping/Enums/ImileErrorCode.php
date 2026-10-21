@@ -65,7 +65,10 @@ enum ImileErrorCode: string
         return match ($this) {
             self::REQUEST_FAILED => 'iMile rejected the request (general failure).',
             self::INVALID_SIGNATURE => 'iMile signature verification failed — check the CustomerID and APIKey.',
-            self::ACCESS_TOKEN_EMPTY => 'Access token is empty — the token grant call may have failed.',
+            // iMile also answers 402 for any request parameter that fails its
+            // validation ("param is invalid", "orderType ... NotBlank"), so
+            // this is not only about the token; resolve() adds iMile's own text.
+            self::ACCESS_TOKEN_EMPTY => 'iMile rejected the request parameters or access token.',
             self::FORBIDDEN => 'Forbidden — the customerID does not exist or the signature does not match.',
             self::METHOD_NOT_FOUND => 'iMile does not recognise this request method/endpoint.',
             self::DUPLICATE_REQUEST => 'Duplicate concurrent request — please retry shortly.',
@@ -116,11 +119,13 @@ enum ImileErrorCode: string
      */
     public static function resolve(string $code, ?string $rawMessage = null): string
     {
-        if ($known = self::tryFrom($code)) {
-            return $known->message() . ' (code ' . $code . ').';
-        }
-
         $rawMessage = trim((string) $rawMessage);
+
+        if ($known = self::tryFrom($code)) {
+            $detail = $known === self::ACCESS_TOKEN_EMPTY && $rawMessage !== '' ? ' iMile: ' . $rawMessage : '';
+
+            return $known->message() . $detail . ' (code ' . $code . ').';
+        }
 
         if ($rawMessage === '') {
             return 'iMile rejected the request (code ' . $code . ').';
@@ -132,10 +137,15 @@ enum ImileErrorCode: string
     /**
      * Codes worth an automatic single retry with a freshly-fetched token.
      */
-    public static function isTokenError(string $code): bool
+    public static function isTokenError(string $code, ?string $rawMessage = null): bool
     {
+        // A 402 is only a token problem when iMile says so; a fresh token
+        // does nothing for a parameter it rejected.
+        if ($code === self::ACCESS_TOKEN_EMPTY->value) {
+            return $rawMessage === null || stripos($rawMessage, 'token') !== false;
+        }
+
         return in_array($code, [
-            self::ACCESS_TOKEN_EMPTY->value,
             self::INVALID_TOKEN->value,
             self::REQUEST_EXPIRED->value,
         ], true);

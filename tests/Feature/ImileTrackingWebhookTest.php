@@ -257,9 +257,9 @@ class ImileTrackingWebhookTest extends TestCase
 
         $this->postJson('/webhooks/imile/tracking', $this->push([
             'billNo'           => $shipment->tracking_number,
-            'latestStatus'     => 'BTD',
+            'latestStatus'     => 'ReturnFailed',
             'latestStatusTime' => '2025-01-05T09:00:00+08:00',
-            'latestLocus'      => 'Delivery failed, back to warehouse.',
+            'latestLocus'      => 'Return failed.',
         ]))->assertOk();
 
         $shipment->refresh();
@@ -290,5 +290,80 @@ class ImileTrackingWebhookTest extends TestCase
         $this->assertSame(ShipmentStatus::EXCEPTION->value, $shipment->status);
         $this->assertNotNull($shipment->exception_escalated_at);
         $this->assertSame('Supplier return collection.', $shipment->exception_note);
+    }
+
+    public function test_back_to_station_is_a_failed_attempt_not_an_exception(): void
+    {
+        $shipment = $this->makeShipment();
+
+        $this->postJson('/webhooks/imile/tracking', $this->push([
+            'billNo'           => $shipment->tracking_number,
+            'latestStatus'     => 'BTD',
+            'latestStatusTime' => '2025-01-05T09:00:00+08:00',
+            'latestLocus'      => '【Taif Station】 Back To DS.',
+        ]))->assertOk();
+
+        $shipment->refresh();
+        $this->assertSame(ShipmentStatus::ATTEMPT_FAIL->value, $shipment->status);
+        $this->assertNull($shipment->exception_escalated_at);
+    }
+
+    public function test_order_closed_and_return_scans_mark_the_shipment_returning(): void
+    {
+        $shipment = $this->makeShipment();
+
+        $this->postJson('/webhooks/imile/tracking', $this->push([
+            'billNo'           => $shipment->tracking_number,
+            'latestStatus'     => 'DeliveryCompleted',
+            'latestStatusTime' => '2025-01-05T09:00:00+08:00',
+            'latestLocus'      => '【Ar Rass Station】Order Closed.',
+        ]))->assertOk();
+
+        $this->assertSame(ShipmentStatus::RETURNING->value, $shipment->refresh()->status);
+        $this->assertNull($shipment->exception_escalated_at);
+
+        // A hub scan on the way back must not make it look outbound again.
+        $this->postJson('/webhooks/imile/tracking', $this->push([
+            'billNo'           => $shipment->tracking_number,
+            'latestStatus'     => 'Arrive',
+            'latestStatusTime' => '2025-01-06T09:00:00+08:00',
+            'latestLocus'      => 'Arrived.',
+        ]))->assertOk();
+
+        $this->assertSame(ShipmentStatus::RETURNING->value, $shipment->refresh()->status);
+
+        $this->postJson('/webhooks/imile/tracking', $this->push([
+            'billNo'           => $shipment->tracking_number,
+            'latestStatus'     => 'RTC',
+            'latestStatusTime' => '2025-01-07T09:00:00+08:00',
+            'latestLocus'      => 'Returned to client.',
+        ]))->assertOk();
+
+        $this->assertSame(ShipmentStatus::RETURNED->value, $shipment->refresh()->status);
+    }
+
+    public function test_a_problem_scan_after_delivery_does_not_reopen_the_shipment(): void
+    {
+        $shipment = $this->makeShipment();
+
+        $this->postJson('/webhooks/imile/tracking', $this->push([
+            'billNo'           => $shipment->tracking_number,
+            'latestStatus'     => 'Delivered',
+            'latestStatusTime' => '2025-01-05T09:00:00+08:00',
+            'latestLocus'      => 'Delivered.',
+        ]))->assertOk();
+
+        foreach (['2025-01-06T09:00:00+08:00', '2025-01-07T09:00:00+08:00'] as $time) {
+            $this->postJson('/webhooks/imile/tracking', $this->push([
+                'billNo'           => $shipment->tracking_number,
+                'latestStatus'     => 'ReturnFailed',
+                'latestStatusTime' => $time,
+                'latestLocus'      => 'Return failed.',
+            ]))->assertOk();
+        }
+
+        $shipment->refresh();
+        $this->assertSame(ShipmentStatus::DELIVERED->value, $shipment->status);
+        $this->assertNull($shipment->exception_escalated_at);
     }
 }

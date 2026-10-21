@@ -38,6 +38,7 @@ class StockAlerts
         ShipmentStatus::IN_TRANSIT,
         ShipmentStatus::OUT_FOR_DELIVERY,
         ShipmentStatus::ATTEMPT_FAIL,
+        ShipmentStatus::RETURNING,
         ShipmentStatus::EXCEPTION,
         ShipmentStatus::DELIVERED,
         ShipmentStatus::RETURNED,

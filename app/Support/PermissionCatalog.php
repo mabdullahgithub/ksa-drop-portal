@@ -40,10 +40,12 @@ final class PermissionCatalog
                 'Sections' => [
                     'view dashboard order stats' => ['Order numbers', 'Total orders, orders today and awaiting shipment.'],
                     'view dashboard revenue' => ['Revenue numbers', 'Total revenue, today\'s revenue and average order value.'],
-                    'view dashboard tag cards' => ['Tag cards', 'Orders counted per tag.'],
-                    'view dashboard shipment status' => ['Shipment status cards', 'Orders counted per shipment status.'],
                     'view dashboard whatsapp stats' => ['WhatsApp numbers', 'The WhatsApp confirmation counts.'],
                     'view dashboard client stats' => ['Client numbers', 'Total, active, inactive and suspended clients.'],
+                    'view dashboard city heatmap' => ['City heatmap', 'Orders per city on the map of Saudi Arabia.'],
+                    'view dashboard courier ranking' => ['Best couriers', 'Couriers ranked by delivery rate.'],
+                    'view dashboard order rhythm' => ['Order rhythm', 'A radar chart of the hours and days orders come in.'],
+                    'view dashboard store ranking' => ['Best stores', 'Stores ranked by order value, with their order trend.'],
                 ],
             ],
         ],
@@ -460,8 +462,6 @@ final class PermissionCatalog
     private const GRANTS = [
         'view dashboard order stats' => [['view dashboard', 'view orders']],
         'view dashboard revenue' => [['view dashboard', 'view orders']],
-        'view dashboard tag cards' => [['view dashboard', 'view orders']],
-        'view dashboard shipment status' => [['view dashboard', 'view orders']],
         'view dashboard whatsapp stats' => [['view dashboard', 'view whatsapp']],
         'view dashboard client stats' => [['view dashboard', 'view client']],
 
@@ -621,6 +621,7 @@ final class PermissionCatalog
         'manage riders', 'manage rider payments',
         'manage-email-settings',
         'restore recycle bin', 'purge recycle bin',
+        'view dashboard tag cards', 'view dashboard shipment status', 'view dashboard courier scorecard',
     ];
 
     /** Connector key => the permission that opens and saves its settings. */

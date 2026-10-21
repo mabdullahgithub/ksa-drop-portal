@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Models\Concerns\RestrictedByClientAccess;
 use App\Services\Shipping\DTOs\TrackingEvent;
+use App\Services\Shipping\DTOs\TrackingResult;
 use App\Services\Shipping\Enums\ShipmentStatus;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -221,6 +222,7 @@ class Shipment extends Model
             ShipmentStatus::IN_TRANSIT->value,
             ShipmentStatus::OUT_FOR_DELIVERY->value,
             ShipmentStatus::ATTEMPT_FAIL->value,
+            ShipmentStatus::RETURNING->value,
             // Exception isn't a dead end — without polling it, a shipment
             // that hits Exception could only ever move again via another
             // webhook push (see ShipmentStatus::shouldTransitionTo()).
@@ -330,6 +332,61 @@ class Shipment extends Model
         ));
 
         $this->tracking_history = $history;
+    }
+
+    /**
+     * Apply tracking pulled from the courier's API — by the scheduled sync
+     * or the Refresh button — with the same rules a webhook push follows.
+     *
+     * iMile's pull returns the very scans its webhook pushes, in the same
+     * form, so they are merged into the history; replacing it would drop
+     * what only a push carried. Other couriers' pulled scans are shaped
+     * differently from their pushes, so for them the pull still replaces
+     * the stored history.
+     */
+    public function applyPulledTracking(TrackingResult $result): void
+    {
+        $previous = $this->status_enum;
+        [$applied, $extra] = $this->resolveTrackingStatus($result->currentStatus);
+
+        if ($this->courier === 'imile') {
+            $this->addTrackingEvents($result->events);
+            $history = $this->tracking_history;
+        } else {
+            $history = array_map(fn (TrackingEvent $event) => $event->toArray(), $result->events);
+        }
+
+        $attributes = [
+            'status' => $applied->value,
+            'tracking_history' => $history,
+            ...$extra,
+        ];
+
+        // The most recent scan, by time, is what the courier currently says.
+        $latest = null;
+        foreach ($result->events as $event) {
+            if ($latest === null || strcmp($event->timestamp, $latest->timestamp) >= 0) {
+                $latest = $event;
+            }
+        }
+
+        if ($latest !== null) {
+            $attributes['courier_status'] = $latest->rawStatus;
+            $attributes['courier_status_description'] = $latest->description;
+        }
+
+        $this->update($attributes);
+
+        if ($applied === $previous) {
+            return;
+        }
+
+        match ($applied) {
+            ShipmentStatus::DELIVERED => $this->markDelivered(),
+            ShipmentStatus::RETURNED  => $this->markReturned($latest?->description ?? ''),
+            ShipmentStatus::CANCELLED => $this->markCancelled($latest?->description ?? ''),
+            default                   => null,
+        };
     }
 
     protected function trackingEventSignature(array $event): string
