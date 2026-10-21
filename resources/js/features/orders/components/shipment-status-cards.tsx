@@ -71,7 +71,7 @@ export function ShipmentStatusCardsView({
 }) {
   if (loading) {
     return (
-      <div className='grid gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5'>
+      <div className='grid gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6'>
         {[...Array(5)].map((_, i) => (
           <ShipmentStatusCardSkeleton key={i} />
         ))}
@@ -100,7 +100,7 @@ export function ShipmentStatusCardsView({
     .sort((a, b) => a.order - b.order)
 
   return (
-    <div className='grid gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5'>
+    <div className='grid gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6'>
       {orderedStatuses.map(({ key, label, icon: Icon, color, gradient, count }) => {
         const Tile = onStatusClick ? 'button' : 'div'
         return (
