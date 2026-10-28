@@ -1,0 +1,1 @@
+import{t as e}from"./jsx-runtime-Wy9s6hX0.js";import t from"./Error-ZDP2gvpY.js";var n=e();function r(){return(0,n.jsx)(t,{status:404})}export{r as default};

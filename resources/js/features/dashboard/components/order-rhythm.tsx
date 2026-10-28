@@ -185,7 +185,8 @@ export function OrderRhythm({ rhythm, loading }: { rhythm: Rhythm | null; loadin
 function RhythmClock({ data, view, total, peak }: { data: Point[]; view: View; total: number; peak: Point }) {
   const uid = useId().replace(/:/g, '')
   const reduce = useReducedMotion() ?? false
-  const [active, setActive] = useState<number | null>(null)
+  const [hovered, setHovered] = useState<number | null>(null)
+  const [selected, setSelected] = useState<number | null>(null)
   // 0 → 1 as the curve grows out of the centre.
   const [grow, setGrow] = useState(reduce ? 1 : 0)
 
@@ -204,12 +205,12 @@ function RhythmClock({ data, view, total, peak }: { data: Point[]; view: View; t
   const curve = smoothClosed(data.map((p, i) => polar(R0 + (radius(p.orders) - R0) * grow, angleOf(i, n))))
   const baseline = smoothClosed(data.map((_, i) => polar(R0, angleOf(i, n))))
 
-  const focus = active !== null ? data[active] : null
+  const focus = selected !== null ? data[selected] : null
   const half = Math.PI / n
 
   return (
     <div className='relative mx-auto w-full max-w-[320px]'>
-      <svg viewBox={`0 0 ${SIZE} ${SIZE}`} className='h-auto w-full select-none' onMouseLeave={() => setActive(null)}>
+      <svg viewBox={`0 0 ${SIZE} ${SIZE}`} className='h-auto w-full select-none' onMouseLeave={() => setHovered(null)}>
         <defs>
           <radialGradient id={`fill-${uid}`} cx={C} cy={C} r={R1} gradientUnits='userSpaceOnUse'>
             <stop offset={`${(R0 / R1) * 100}%`} stopColor='var(--viz-c1)' stopOpacity={0.05} />
@@ -261,7 +262,7 @@ function RhythmClock({ data, view, total, peak }: { data: Point[]; view: View; t
           const [x1, y1] = polar(R1 + 4, a)
           const [x2, y2] = polar(R1 + (major ? 10 : 7), a)
           const [lx, ly] = polar(R1 + 24, a)
-          const isActive = active === i
+          const isActive = hovered === i || selected === i
           return (
             <g key={p.key}>
               <line x1={x1} y1={y1} x2={x2} y2={y2} className={isActive ? 'stroke-foreground' : 'stroke-muted-foreground/50'} strokeWidth={major ? 1.25 : 0.75} />
@@ -294,11 +295,11 @@ function RhythmClock({ data, view, total, peak }: { data: Point[]; view: View; t
         />
         {grow < 0.02 && <path d={baseline} fill='none' className='stroke-border' />}
 
-        {/* The hovered hour: a spoke out to its value. */}
-        {focus && active !== null && (
+        {/* The selected hour: a spoke out to its value. */}
+        {focus && selected !== null && (
           <g className='pointer-events-none'>
             {(() => {
-              const a = angleOf(active, n)
+              const a = angleOf(selected, n)
               const [x0, y0] = polar(R0, a)
               const [x1, y1] = polar(radius(focus.orders), a)
               return (
@@ -335,7 +336,8 @@ function RhythmClock({ data, view, total, peak }: { data: Point[]; view: View; t
               key={`hit-${p.key}`}
               d={sector(R0 - 6, R1 + 30, a - half, a + half)}
               fill='transparent'
-              onMouseEnter={() => setActive(i)}
+              onMouseEnter={() => setHovered(i)}
+              onClick={() => setSelected((current) => (current === i ? null : i))}
             />
           )
         })}

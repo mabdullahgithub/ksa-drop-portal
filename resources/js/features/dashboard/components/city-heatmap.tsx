@@ -30,7 +30,8 @@ export function CityHeatmap({
   const [activeCity, setActiveCity] = useState<string | null>(null)
   const [hoverRegion, setHoverRegion] = useState<Region | 'other' | null>(null)
   const [pinnedRegion, setPinnedRegion] = useState<Region | 'other' | null>(null)
-  const region = hoverRegion ?? pinnedRegion
+  const region = pinnedRegion
+  const highlightedRegion = hoverRegion ?? pinnedRegion
 
   const { all, mapped, slices, max, total, replayKey } = useMemo(() => {
     const items = cities?.items ?? []
@@ -98,7 +99,7 @@ export function CityHeatmap({
         <div className='grid items-start gap-6 lg:grid-cols-[1.45fr_1fr]'>
           <SaudiHeatMap
             cities={mapped}
-            region={region}
+            region={highlightedRegion}
             activeCity={activeCity}
             onActiveCity={setActiveCity}
             total={total}
@@ -166,7 +167,7 @@ export function CityHeatmap({
                         <Cell
                           key={s.key}
                           fill={s.color}
-                          opacity={region === null || region === s.key ? 1 : 0.25}
+                          opacity={highlightedRegion === null || highlightedRegion === s.key ? 1 : 0.25}
                           className='outline-none transition-opacity duration-100'
                         />
                       ))}
@@ -211,8 +212,8 @@ export function CityHeatmap({
                         onClick={() => setPinnedRegion((current) => (current === s.key ? null : s.key))}
                         className={cn(
                           'grid w-full grid-cols-[auto_1fr_auto] items-center gap-x-2 rounded-md px-1.5 py-1 text-left transition-all duration-100',
-                          region === s.key ? 'bg-muted' : 'hover:bg-muted/60',
-                          region !== null && region !== s.key && 'opacity-50'
+                          highlightedRegion === s.key ? 'bg-muted' : 'hover:bg-muted/60',
+                          highlightedRegion !== null && highlightedRegion !== s.key && 'opacity-50'
                         )}
                       >
                         <span className='size-2 rounded-[3px]' style={{ background: s.color }} />

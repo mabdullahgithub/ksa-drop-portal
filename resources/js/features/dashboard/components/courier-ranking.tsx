@@ -97,7 +97,8 @@ export function CourierRanking({
     couriers: CourierInsight[] | null;
     loading: boolean;
 }) {
-    const [active, setActive] = useState<string | null>(null);
+    const [hovered, setHovered] = useState<string | null>(null);
+    const [selected, setSelected] = useState<string | null>(null);
     const list = couriers ?? [];
     // New figures replay the sweep.
     const replayKey = list
@@ -132,8 +133,10 @@ export function CourierRanking({
                         <Rings
                             key={replayKey}
                             couriers={list}
-                            active={active}
-                            onActive={setActive}
+                            hovered={hovered}
+                            selected={selected}
+                            onHover={setHovered}
+                            onSelect={setSelected}
                         />
 
                         <div key={`rows-${replayKey}`}>
@@ -143,8 +146,10 @@ export function CourierRanking({
                                         key={c.courier}
                                         courier={c}
                                         index={i}
-                                        active={active}
-                                        onActive={setActive}
+                                        hovered={hovered}
+                                        selected={selected}
+                                        onHover={setHovered}
+                                        onSelect={setSelected}
                                     />
                                 ))}
                             </ol>
@@ -182,12 +187,16 @@ export function CourierRanking({
  */
 function Rings({
     couriers,
-    active,
-    onActive,
+    hovered,
+    selected,
+    onHover,
+    onSelect,
 }: {
     couriers: CourierInsight[];
-    active: string | null;
-    onActive: (courier: string | null) => void;
+    hovered: string | null;
+    selected: string | null;
+    onHover: (courier: string | null) => void;
+    onSelect: (courier: string | null) => void;
 }) {
     const uid = useId().replace(/:/g, "");
     const reduce = useReducedMotion() ?? false;
@@ -197,7 +206,7 @@ function Rings({
     const radiusOf = (i: number) => OUTER - width / 2 - i * (width + gap);
 
     const leader = couriers[0];
-    const focus = couriers.find((c) => c.courier === active) ?? leader;
+    const focus = couriers.find((c) => c.courier === selected) ?? leader;
     const focusMeta = courierMeta(focus.courier);
 
     return (
@@ -205,7 +214,7 @@ function Rings({
             <svg
                 viewBox={`0 0 ${SIZE} ${SIZE}`}
                 className="size-full"
-                onMouseLeave={() => onActive(null)}
+                onMouseLeave={() => onHover(null)}
             >
                 <defs>
                     {couriers.map((c) => {
@@ -259,7 +268,7 @@ function Rings({
                     const r = radiusOf(i);
                     const frac = c.delivery_rate / 100;
                     const color = courierMeta(c.courier).color;
-                    const dim = active !== null && active !== c.courier;
+                    const dim = hovered !== null && hovered !== c.courier;
                     const [ex, ey] = arcEnd(r, frac);
                     const delay = reduce ? 0 : 0.2 + i * 0.14;
 
@@ -268,7 +277,8 @@ function Rings({
                             key={c.courier}
                             animate={{ opacity: dim ? 0.28 : 1 }}
                             transition={{ duration: 0.12 }}
-                            onMouseEnter={() => onActive(c.courier)}
+                            onMouseEnter={() => onHover(c.courier)}
+                            onClick={() => onSelect(selected === c.courier ? null : c.courier)}
                         >
                             {/* Track: the full circle, i.e. 100%. */}
                             <circle
@@ -298,7 +308,7 @@ function Rings({
                                         animate={{
                                             pathLength: 1,
                                             opacity:
-                                                active === c.courier
+                                                hovered === c.courier || selected === c.courier
                                                     ? 0.6
                                                     : 0.3,
                                         }}
@@ -399,24 +409,28 @@ function Rings({
 function CourierRow({
     courier: c,
     index,
-    active,
-    onActive,
+    hovered,
+    selected,
+    onHover,
+    onSelect,
 }: {
     courier: CourierInsight;
     index: number;
-    active: string | null;
-    onActive: (courier: string | null) => void;
+    hovered: string | null;
+    selected: string | null;
+    onHover: (courier: string | null) => void;
+    onSelect: (courier: string | null) => void;
 }) {
     const reduce = useReducedMotion() ?? false;
     const meta = courierMeta(c.courier);
-    const isActive = active === c.courier;
+    const isActive = hovered === c.courier || selected === c.courier;
     const delay = reduce ? 0 : 0.35 + index * 0.1;
     const [entered, setEntered] = useState(reduce);
 
     return (
         <motion.li
             initial={{ opacity: 0, x: 12 }}
-            animate={{ opacity: active !== null && !isActive ? 0.5 : 1, x: 0 }}
+            animate={{ opacity: hovered !== null && hovered !== c.courier ? 0.5 : 1, x: 0 }}
             // The entrance is slow and staggered; hovering after it is instant.
             transition={
                 entered
@@ -424,8 +438,9 @@ function CourierRow({
                     : { duration: 0.5, delay, ease: EASE }
             }
             onAnimationComplete={() => setEntered(true)}
-            onMouseEnter={() => onActive(c.courier)}
-            onMouseLeave={() => onActive(null)}
+            onMouseEnter={() => onHover(c.courier)}
+            onMouseLeave={() => onHover(null)}
+            onClick={() => onSelect(selected === c.courier ? null : c.courier)}
             className={cn(
                 "relative grid grid-cols-[auto_1fr_auto] items-center gap-x-3 overflow-hidden rounded-xl px-2.5 py-2 transition-colors duration-100",
                 isActive ? "bg-muted" : "hover:bg-muted/50",
