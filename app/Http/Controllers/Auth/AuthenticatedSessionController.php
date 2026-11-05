@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Auth;
 
+use App\Exceptions\ClientPortalBlocked;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\LoginRequest;
 use App\Support\UserPresence;
@@ -43,6 +44,14 @@ class AuthenticatedSessionController extends Controller
 
         $user = $request->user();
         if ($user->hasRole('client')) {
+            if (ClientPortalBlocked::enabled()) {
+                Auth::guard('web')->logout();
+                $request->session()->invalidate();
+                $request->session()->regenerateToken();
+
+                throw new ClientPortalBlocked();
+            }
+
             $client = $user->client;
 
             if (!$client || $client->status !== 'active') {

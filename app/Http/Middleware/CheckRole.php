@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Exceptions\ClientPortalBlocked;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -29,6 +30,20 @@ class CheckRole
                 return redirect()->route('portal.dashboard');
             }
             return $next($request);
+        }
+
+        // Client portal switched off: end any impersonation or client session
+        // already in progress and show the 500 page.
+        if ($role === 'client' && ClientPortalBlocked::enabled()) {
+            if (session()->has('impersonate.admin_id')) {
+                session()->forget(['impersonate.admin_id', 'impersonate.client_id', 'impersonate.client_name']);
+            } elseif (auth()->user()->hasRole('client')) {
+                auth()->guard('web')->logout();
+                $request->session()->invalidate();
+                $request->session()->regenerateToken();
+            }
+
+            throw new ClientPortalBlocked();
         }
 
         // Allow admins impersonating a client to access portal routes

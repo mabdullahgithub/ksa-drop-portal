@@ -8,6 +8,10 @@ type Props = {
   status: number
   /** Log correlation id, safe to show in production. */
   reference?: string | null
+  /** Server-supplied description that replaces the default copy for the status. */
+  message?: string | null
+  /** Server override for whether a "Try again" button makes sense. */
+  retryable?: boolean
 }
 
 /**
@@ -17,8 +21,16 @@ type Props = {
  * Deliberately not named `Error` — importing it under that name would shadow the
  * global `Error` constructor in the consuming module.
  */
-export default function ErrorStatusPage({ status, reference }: Props) {
-  const { title, description, retryable } = copyForStatus(status)
+export default function ErrorStatusPage({
+  status,
+  reference,
+  message,
+  retryable: retryableOverride,
+}: Props) {
+  const copy = copyForStatus(status)
+  const title = copy.title
+  const description = message ?? copy.description
+  const retryable = retryableOverride ?? copy.retryable
   const fallbackRoute = useDefaultRoute()
 
   // On a 403, don't dead-end the user: if they can view some other page, send

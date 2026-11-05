@@ -126,6 +126,18 @@ return [
     |
     */
 
+    /*
+    |--------------------------------------------------------------------------
+    | Client Portal Block
+    |--------------------------------------------------------------------------
+    |
+    | When true, clients cannot sign in, admins cannot impersonate a client,
+    | and the client portal answers with a 500 "contact KSA Drop admin" page.
+    |
+    */
+
+    'client_portal_blocked' => (bool) env('CLIENT_PORTAL_BLOCKED', true),
+
     'maintenance' => [
         'driver' => env('APP_MAINTENANCE_DRIVER', 'file'),
         'store' => env('APP_MAINTENANCE_STORE', 'database'),

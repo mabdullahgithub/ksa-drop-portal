@@ -111,6 +111,17 @@ return Application::configure(basePath: dirname(__DIR__))
                 return $response;
             }
 
+            // Deliberate block, not a fault: fixed message, nothing to log.
+            if ($exception instanceof \App\Exceptions\ClientPortalBlocked) {
+                return Inertia::render('Errors/Error', [
+                    'status' => $status,
+                    'message' => $exception->getMessage(),
+                    'retryable' => false,
+                ])
+                    ->toResponse($request)
+                    ->setStatusCode($status);
+            }
+
             $reference = null;
 
             if ($status >= 500) {

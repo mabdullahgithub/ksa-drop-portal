@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Exceptions\ClientPortalBlocked;
 use App\Models\Client;
 use Illuminate\Http\Request;
 
@@ -11,6 +12,10 @@ class ImpersonateController extends Controller
     {
         if (!auth()->user()->can('impersonate client')) {
             abort(403);
+        }
+
+        if (ClientPortalBlocked::enabled()) {
+            throw new ClientPortalBlocked();
         }
 
         if (!$client->user_id) {
