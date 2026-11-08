@@ -173,12 +173,17 @@ return [
         // ("only status 200, its send one time"), so this log is the only
         // record of a push we failed to process — worth keeping longer than
         // the other courier webhook logs.
-        'logestechs_webhooks' => [
+        //
+        // Switched off (no file is written) unless LOGESTECHS_LOGS_ENABLED=true.
+        'logestechs_webhooks' => env('LOGESTECHS_LOGS_ENABLED', false) ? [
             'driver' => 'daily',
             'path' => storage_path('logs/logestechs-webhooks.log'),
             'level' => 'debug',
             'days' => 60,
             'replace_placeholders' => true,
+        ] : [
+            'driver' => 'monolog',
+            'handler' => NullHandler::class,
         ],
 
         // Outbound LogesTechs API traffic (the above is inbound only). Split
@@ -187,12 +192,17 @@ return [
         // debug from, so LogesTechsDriver logs the payload on a server error.
         // Keeping that out of the shared app log makes it findable, and bounds
         // how long recipient names/phones/addresses linger in plain text.
-        'logestechs' => [
+        //
+        // Switched off (no file is written) unless LOGESTECHS_LOGS_ENABLED=true.
+        'logestechs' => env('LOGESTECHS_LOGS_ENABLED', false) ? [
             'driver' => 'daily',
             'path' => storage_path('logs/logestechs-api.log'),
             'level' => 'debug',
             'days' => 30,
             'replace_placeholders' => true,
+        ] : [
+            'driver' => 'monolog',
+            'handler' => NullHandler::class,
         ],
 
         // Everything Shopify — OAuth/token exchange, webhook delivery and
