@@ -1,11 +1,18 @@
-import { useState } from 'react'
+import { Suspense, lazy, useState } from 'react'
 import { cn } from '@/lib/utils'
 import { usePermissions } from '@/hooks/use-permissions'
 import { type InsightRange, useDashboardInsights } from '@/hooks/useDashboardInsights'
-import { CityHeatmap } from './city-heatmap'
+import { CityHeatmapFallback, StoreRankingFallback } from './chart-fallbacks'
 import { CourierRanking } from './courier-ranking'
 import { OrderRhythm } from './order-rhythm'
-import { StoreRanking } from './store-ranking'
+
+// These two pull in the charting library (recharts, ~100 KB gzip). Loading them
+// on demand keeps it out of the dashboard's first load; the insights request
+// starts in this component at the same moment, so the code and the data arrive
+// in parallel. The data itself is still fetched live on every load — nothing
+// here caches it. The fallbacks match each card's loading state exactly.
+const CityHeatmap = lazy(() => import('./city-heatmap').then((m) => ({ default: m.CityHeatmap })))
+const StoreRanking = lazy(() => import('./store-ranking').then((m) => ({ default: m.StoreRanking })))
 
 const RANGES: Array<{ value: InsightRange; label: string }> = [
   { value: 7, label: '7D' },
@@ -58,7 +65,11 @@ export function InsightsSection() {
       </div>
 
       <div className='space-y-4'>
-        {canCities && <CityHeatmap cities={data.cities} loading={loading} />}
+        {canCities && (
+          <Suspense fallback={<CityHeatmapFallback />}>
+            <CityHeatmap cities={data.cities} loading={loading} />
+          </Suspense>
+        )}
 
         {(canCouriers || canRhythm) && (
           <div className={cn('grid gap-4', canCouriers && canRhythm && 'xl:grid-cols-2')}>
@@ -67,7 +78,11 @@ export function InsightsSection() {
           </div>
         )}
 
-        {canStores && <StoreRanking stores={data.stores} loading={loading} range={range} storeHref={storeHref} />}
+        {canStores && (
+          <Suspense fallback={<StoreRankingFallback />}>
+            <StoreRanking stores={data.stores} loading={loading} range={range} storeHref={storeHref} />
+          </Suspense>
+        )}
       </div>
     </section>
   )
