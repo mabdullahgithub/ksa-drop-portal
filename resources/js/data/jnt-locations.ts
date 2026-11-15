@@ -331,7 +331,7 @@ export const JNT_LOCATIONS: Record<string, JntCity[]> = {
     { en: "Buraydah", ar: "بريدة", sla: "T+1" },
     { en: "Dariyah", ar: "ضرية", sla: "T+3" },
     { en: "Dayida", ar: "ضيدة", sla: "T+3" },
-    { en: "Deli Rashid", ar: "ضليع رشيد", sla: "T+3" },
+    { en: "Dulay Rasheed", ar: "ضليع رشيد", sla: "T+3" },
     { en: "Dremeha", ar: "دريميحة", sla: "T+1" },
     { en: "Duhknah", ar: "دخنة", sla: "T+3" },
     { en: "Ghaf Al Jawa", ar: "روض الجواء", sla: "T+1" },
