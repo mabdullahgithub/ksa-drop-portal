@@ -37,6 +37,15 @@ export type PageProps<
             client_id: number;
             client_name: string;
         } | null;
+        /** Present when this person is in the partner program (applicants too). */
+        partner?: {
+            id: number;
+            code: string;
+            status: 'pending' | 'approved' | 'rejected' | 'suspended';
+            tier: 'bronze' | 'silver' | 'gold';
+            points_balance: number;
+            display_name: string;
+        } | null;
         client?: {
             id: number;
             company_name: string;

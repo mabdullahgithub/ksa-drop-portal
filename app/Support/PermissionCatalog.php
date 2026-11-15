@@ -229,6 +229,28 @@ final class PermissionCatalog
             ],
         ],
 
+        'partners' => [
+            'label' => 'Partners',
+            'description' => 'The partner program: applications, referrals, points and payouts.',
+            'groups' => [
+                'Page' => [
+                    'view partners' => ['Open the partners page', 'See the Partners page and its list.', null],
+                    'view partner stats' => ['Partner numbers', 'The cards above the partner list.'],
+                    'view partner documents' => ['View ID documents', 'Open the identity document a partner uploaded.'],
+                    'view partner leads' => ['Leads tab', 'The sellers partners have sent in.'],
+                    'view partner payouts' => ['Payouts tab', 'Payout requests and their history.'],
+                ],
+                'Actions' => [
+                    'review partner applications' => ['Approve / reject', 'Decide on a partner application.'],
+                    'edit partners' => ['Edit partner', 'Change a partner\'s details, code or tier.'],
+                    'suspend partners' => ['Suspend / reactivate', 'Suspend a partner or switch them back on.'],
+                    'adjust partner points' => ['Adjust points', 'Add or remove points by hand, with a note.'],
+                    'handle partner payouts' => ['Handle payouts', 'Approve, pay or reject a payout request.', 'view partner payouts'],
+                    'edit partner settings' => ['Program settings', 'Points per event, tiers, minimum redemption.'],
+                ],
+            ],
+        ],
+
         'inventory' => [
             'label' => 'Inventory',
             'description' => 'The product catalogue.',

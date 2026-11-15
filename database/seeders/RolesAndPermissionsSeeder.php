@@ -43,6 +43,9 @@ class RolesAndPermissionsSeeder extends Seeder
         // Client — portal access only, section access controlled via portal_features column
         $this->createRole('client', []);
 
+        // Partner — the partner area only; staff permissions gate the admin side.
+        $this->createRole('partner', []);
+
         app(PermissionRegistrar::class)->forgetCachedPermissions();
 
         // Create admin user if not exists

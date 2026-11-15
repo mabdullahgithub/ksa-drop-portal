@@ -100,9 +100,19 @@ class ClientController extends Controller
             'charges.vat' => 'nullable|numeric|min:0|max:100',
             'charges.other' => 'nullable|numeric|min:0',
             'notes' => 'nullable|string',
+            // Partner attribution: a referral code typed in, or the lead the
+            // seller sent through a partner's referral page.
+            'partner_code' => 'nullable|string|max:20',
+            'lead_id' => 'nullable|integer|exists:partner_leads,id',
         ], [
             'email.unique' => "You can't create an account with this email.",
         ]);
+
+        $referral = $this->resolveReferral($validated['partner_code'] ?? null, $validated['lead_id'] ?? null);
+        if ($referral instanceof \Illuminate\Http\JsonResponse) {
+            return $referral;
+        }
+        [$partner, $lead] = $referral;
 
         $password = GeneratedPassword::make();
 
@@ -135,7 +145,13 @@ class ClientController extends Controller
             'portal_features' => $validated['portal_features'] ?? ['orders', 'inventory', 'revenue'],
             'charges' => $validated['charges'] ?? null,
             'notes' => $validated['notes'] ?? null,
+            'partner_id' => $partner?->id,
+            'referred_at' => $partner ? now() : null,
         ]);
+
+        if ($lead) {
+            $lead->forceFill(['status' => 'converted', 'client_id' => $client->id])->save();
+        }
 
         // Someone limited to their own clients keeps the one they just made.
         // One of the type they already handle in full needs no row for it.
@@ -633,6 +649,31 @@ class ClientController extends Controller
         ]);
     }
 
+    /**
+     * The partner (and lead) a new client is credited to. A lead names its
+     * partner; a code must belong to an approved partner.
+     *
+     * @return array{0: ?\App\Models\Partner, 1: ?\App\Models\PartnerLead}|\Illuminate\Http\JsonResponse
+     */
+    private function resolveReferral(?string $code, ?int $leadId): array|\Illuminate\Http\JsonResponse
+    {
+        $lead = $leadId ? \App\Models\PartnerLead::with('partner')->find($leadId) : null;
+        $partner = $lead?->partner;
+
+        if (! $partner && $code) {
+            $partner = \App\Services\Partners\PartnerCode::find($code);
+
+            if (! $partner) {
+                return response()->json([
+                    'message' => 'No approved partner has that referral code.',
+                    'errors' => ['partner_code' => ['No approved partner has that referral code.']],
+                ], 422);
+            }
+        }
+
+        return [$partner, $lead];
+    }
+
     private function formatClient(Client $client): array
     {
         return [
@@ -659,6 +700,13 @@ class ClientController extends Controller
             'type_label' => $client->type_label,
             'is_dropshipper' => $client->is_dropshipper,
             'is_fulfilment' => $client->is_fulfilment,
+            'partner' => $client->partner_id && $client->partner ? [
+                'id' => $client->partner->id,
+                'code' => $client->partner->code,
+                'display_name' => $client->partner->display_name,
+            ] : null,
+            'referred_at' => $client->referred_at,
+            'partner_activated_at' => $client->partner_activated_at,
             'user' => $client->user ? [
                 'id' => $client->user->id,
                 'name' => $client->user->name,

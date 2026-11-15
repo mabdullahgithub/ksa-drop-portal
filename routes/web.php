@@ -10,6 +10,10 @@ use App\Http\Controllers\Api\LogesTechsController;
 use App\Http\Controllers\Api\LogesTechsWebhookController;
 use App\Http\Controllers\Api\InvoiceController;
 use App\Http\Controllers\Api\OrderController;
+use App\Http\Controllers\Api\PartnerController;
+use App\Http\Controllers\Api\PartnerPayoutController;
+use App\Http\Controllers\Partners\PartnerAreaController;
+use App\Http\Controllers\Partners\PublicPartnerController;
 use App\Http\Controllers\Api\RiderController;
 use App\Http\Controllers\Api\RiderPaymentController;
 use App\Http\Controllers\Api\StockScanController;
@@ -171,6 +175,31 @@ Route::middleware(['auth', 'verified', 'role:!client', 'client.access'])->group(
     });
 
     // Shipment analytics
+    // Partner program — staff side. The page is one permission; each tab and
+    // button on it has its own.
+    Route::get('/partners-admin', [PartnerController::class, 'page'])->middleware('permission:view partners')->name('partners.admin');
+    Route::prefix('api/partners')->group(function () {
+        Route::get('/', [PartnerController::class, 'index'])->middleware('permission:view partners')->name('api.partners.index');
+        Route::get('/settings', [PartnerController::class, 'settings'])->middleware('permission:edit partner settings')->name('api.partners.settings');
+        Route::put('/settings', [PartnerController::class, 'updateSettings'])->middleware('permission:edit partner settings')->name('api.partners.settings.update');
+        Route::get('/leads', [PartnerController::class, 'leads'])->middleware('permission:view partner leads')->name('api.partners.leads');
+        Route::patch('/leads/{lead}', [PartnerController::class, 'updateLead'])->middleware('permission:view partner leads')->name('api.partners.leads.update');
+        Route::get('/payouts', [PartnerPayoutController::class, 'index'])->middleware('permission:view partner payouts')->name('api.partners.payouts.index');
+        Route::post('/payouts/{payout}/approve', [PartnerPayoutController::class, 'approve'])->middleware('permission:handle partner payouts')->name('api.partners.payouts.approve');
+        Route::post('/payouts/{payout}/pay', [PartnerPayoutController::class, 'pay'])->middleware('permission:handle partner payouts')->name('api.partners.payouts.pay');
+        Route::post('/payouts/{payout}/reject', [PartnerPayoutController::class, 'reject'])->middleware('permission:handle partner payouts')->name('api.partners.payouts.reject');
+        Route::get('/payouts/{payout}/proof', [PartnerPayoutController::class, 'proof'])->middleware('permission:view partner payouts')->name('api.partners.payouts.proof');
+        Route::get('/{partner}', [PartnerController::class, 'show'])->middleware('permission:view partners')->name('api.partners.show');
+        Route::get('/{partner}/transactions', [PartnerController::class, 'transactions'])->middleware('permission:view partners')->name('api.partners.transactions');
+        Route::get('/{partner}/document', [PartnerController::class, 'document'])->middleware('permission:view partner documents')->name('api.partners.document');
+        Route::get('/{partner}/logo', [PartnerController::class, 'logo'])->middleware('permission:view partners')->name('api.partners.logo');
+        Route::post('/{partner}/approve', [PartnerController::class, 'approve'])->middleware('permission:review partner applications')->name('api.partners.approve');
+        Route::post('/{partner}/reject', [PartnerController::class, 'reject'])->middleware('permission:review partner applications')->name('api.partners.reject');
+        Route::post('/{partner}/status', [PartnerController::class, 'status'])->middleware('permission:suspend partners')->name('api.partners.status');
+        Route::patch('/{partner}', [PartnerController::class, 'update'])->middleware('permission:edit partners')->name('api.partners.update');
+        Route::post('/{partner}/points', [PartnerController::class, 'adjustPoints'])->middleware('permission:adjust partner points')->name('api.partners.points');
+    });
+
     Route::get('/api/shipments-analytics', [ShipmentAnalyticsController::class, 'index'])->middleware('permission:view shipment analytics')->name('api.shipments.analytics');
 
     // J&T API health check
@@ -423,6 +452,8 @@ Route::middleware(['auth', 'verified', 'role:!client', 'client.access'])->group(
 Route::middleware(['auth', 'verified', 'client.access'])->group(function () {
     Route::post('/impersonate/leave', [ImpersonateController::class, 'leave'])->name('impersonate.leave');
     Route::post('/impersonate/{client}', [ImpersonateController::class, 'impersonate'])->name('impersonate.start');
+    // A reload or "Try again" on a failed impersonation re-requests this URL with GET; send them back instead of a 405.
+    Route::get('/impersonate/{any}', fn () => redirect()->route('client'))->where('any', '.*');
 });
 
 // Shared API endpoints
@@ -492,6 +523,10 @@ Route::prefix('portal')->middleware(['auth', 'verified', 'role:client', 'client.
     Route::get('/api/finance', [PortalController::class, 'finance'])->name('portal.api.finance');
     Route::get('/api/invoices/{invoice}/preview', [InvoiceController::class, 'portalPreview'])->name('portal.api.invoices.preview');
     Route::get('/api/invoices/{invoice}/download', [InvoiceController::class, 'portalDownload'])->name('portal.api.invoices.download');
+    // Refer & earn: the client's partner-program home, and joining it.
+    Route::get('/refer-and-earn', [PartnerAreaController::class, 'referAndEarn'])->name('portal.refer');
+    Route::get('/partner/join', [PartnerAreaController::class, 'joinForm'])->name('portal.partner.join');
+    Route::post('/partner/join', [PartnerAreaController::class, 'join'])->name('portal.partner.join.store');
     Route::post('/settings/company-profile', [PortalController::class, 'updateCompanyProfile'])->name('portal.settings.company-profile.update');
     Route::post('/settings/logo', [PortalController::class, 'updateLogo'])->name('portal.settings.logo.update');
     Route::delete('/settings/logo', [PortalController::class, 'removeLogo'])->name('portal.settings.logo.remove');
@@ -518,6 +553,39 @@ Route::prefix('portal')->middleware(['auth', 'verified', 'role:client', 'client.
     Route::post('/api/shopify/failures/retry-all', [ShopifySyncFailureController::class, 'retryAll'])->name('portal.shopify.failures.retry-all');
     Route::post('/api/shopify/failures/{failureId}/retry', [ShopifySyncFailureController::class, 'retry'])->name('portal.shopify.failures.retry');
     Route::delete('/api/shopify/failures/{failureId}', [ShopifySyncFailureController::class, 'discard'])->name('portal.shopify.failures.discard');
+});
+
+// Partner program — public pages. Forms are throttled per IP: they are open
+// to the internet and write to the database.
+Route::get('/partners', [PublicPartnerController::class, 'landing'])->name('partners.landing');
+Route::get('/partners/apply', [PublicPartnerController::class, 'applyForm'])->name('partners.apply');
+Route::post('/partners/apply', [PublicPartnerController::class, 'apply'])->middleware('throttle:5,10')->name('partners.apply.store');
+Route::get('/partners/logo/{code}', [PublicPartnerController::class, 'logo'])->name('partners.public.logo');
+Route::get('/r/{code}', [PublicPartnerController::class, 'referral'])->middleware('throttle:60,1')->name('partners.referral');
+Route::post('/r/{code}/lead', [PublicPartnerController::class, 'lead'])->middleware('throttle:5,10')->name('partners.referral.lead');
+
+// Partner program — the partner's own area. Status page for anyone with
+// the role; the rest only once approved.
+Route::middleware(['auth', 'verified', 'role:partner'])->prefix('partners')->group(function () {
+    Route::get('/pending', [PartnerAreaController::class, 'pending'])->name('partners.pending');
+
+    // Open to pending applicants too, so they can explore while they wait.
+    Route::middleware('partner.approved:pending')->group(function () {
+        Route::get('/dashboard', [PartnerAreaController::class, 'dashboard'])->name('partners.dashboard');
+        Route::get('/referrals', [PartnerAreaController::class, 'referrals'])->name('partners.referrals');
+        Route::get('/points', [PartnerAreaController::class, 'points'])->name('partners.points');
+        Route::get('/payouts', [PartnerAreaController::class, 'payouts'])->name('partners.payouts');
+        Route::get('/assets', [PartnerAreaController::class, 'assets'])->name('partners.assets');
+        Route::get('/profile', [PartnerAreaController::class, 'profile'])->name('partners.profile');
+        Route::post('/profile', [PartnerAreaController::class, 'updateProfile'])->name('partners.profile.update');
+        Route::post('/profile/payout-method', [PartnerAreaController::class, 'updatePayoutMethod'])->name('partners.profile.payout-method');
+    });
+
+    // Approved partners only: this moves money.
+    Route::middleware('partner.approved')->group(function () {
+        Route::post('/code', [PartnerAreaController::class, 'updateCode'])->middleware('throttle:10,1')->name('partners.code.update');
+        Route::post('/payouts', [PartnerAreaController::class, 'requestPayout'])->name('partners.payouts.request');
+    });
 });
 
 // Merchant pricing & off-platform billing disclosure — public, no auth.

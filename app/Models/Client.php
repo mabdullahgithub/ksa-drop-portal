@@ -20,6 +20,9 @@ class Client extends Model
     }
 
     protected $fillable = [
+        'partner_id',
+        'referred_at',
+        'partner_activated_at',
         'user_id',
         'created_by',
         'client_types',
@@ -42,6 +45,8 @@ class Client extends Model
     ];
 
     protected $casts = [
+        'referred_at' => 'datetime',
+        'partner_activated_at' => 'datetime',
         'client_types' => 'array',
         'portal_features' => 'array',
         'charges' => 'array',
@@ -71,6 +76,18 @@ class Client extends Model
     public function clientProducts(): HasMany
     {
         return $this->hasMany(ClientProduct::class);
+    }
+
+    /** The partner who brought this client in, if any. */
+    public function partner(): BelongsTo
+    {
+        return $this->belongsTo(Partner::class);
+    }
+
+    /** This client's own partner-program membership, if they joined. */
+    public function partnerAccount(): HasOne
+    {
+        return $this->hasOne(Partner::class, 'client_id');
     }
 
     public function payments(): HasMany

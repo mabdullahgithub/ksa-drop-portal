@@ -82,6 +82,17 @@ class HandleInertiaRequests extends Middleware
                 'roles' => $user ? $user->getRoleNames() : [],
                 'portal_features' => $client?->portal_features,
                 'impersonating' => $impersonating,
+                // The partner program: present when this person is a partner
+                // (an applicant too), so the sidebar and the client portal
+                // can link to their area.
+                'partner' => fn () => $user && $user->hasRole('partner') && ($partner = $user->partner) ? [
+                    'id' => $partner->id,
+                    'code' => $partner->code,
+                    'status' => $partner->status,
+                    'tier' => $partner->tier,
+                    'points_balance' => $partner->points_balance,
+                    'display_name' => $partner->display_name,
+                ] : null,
                 'client' => $client ? [
                     'id' => $client->id,
                     'company_name' => $client->company_name,

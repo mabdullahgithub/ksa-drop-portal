@@ -417,6 +417,25 @@ class Shipment extends Model
 
         if (! $alreadyDelivered) {
             $this->notifyAdminsOfDelivery();
+            $this->awardPartnerPoints();
+        }
+    }
+
+    /**
+     * A referred client's delivery earns their partner points. Queued, and
+     * only when the client came through a partner, so the courier webhook
+     * is never slowed by it.
+     */
+    protected function awardPartnerPoints(): void
+    {
+        try {
+            $this->loadMissing('order');
+
+            if ($this->order?->client_id && \App\Models\Client::whereKey($this->order->client_id)->whereNotNull('partner_id')->exists()) {
+                \App\Jobs\AwardPartnerPointsForDelivery::dispatch($this);
+            }
+        } catch (\Throwable $e) {
+            \Log::warning('Partner points dispatch failed for shipment ' . $this->id . ': ' . $e->getMessage());
         }
     }
 

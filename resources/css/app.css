@@ -135,3 +135,22 @@
 [data-impersonating='true'] [data-slot='sidebar-inset']:has([data-layout='fixed']) {
   height: calc(100svh - var(--impersonate-bar-height));
 }
+
+/* Light sweep across the partner referral tile on hover. */
+@keyframes referral-shine {
+  from { transform: translateX(0) skewX(-12deg); }
+  to { transform: translateX(520%) skewX(-12deg); }
+}
+
+/* Animated progress bar (partner points card): sliding stripes and a pulsing end knob. */
+@keyframes progress-stripes {
+  from { background-position: 0 0; }
+  to { background-position: 28px 0; }
+}
+@keyframes progress-knob {
+  0%, 100% { box-shadow: 0 0 0 0 rgb(255 255 255 / 0.55); }
+  50% { box-shadow: 0 0 0 7px rgb(255 255 255 / 0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .progress-stripes, .progress-knob { animation: none !important; }
+}

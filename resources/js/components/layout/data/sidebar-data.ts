@@ -1,4 +1,5 @@
 import {
+  Gift,
   LayoutDashboard,
   HelpCircle,
   Bell,
@@ -24,6 +25,11 @@ import {
   Trash2,
   Bike,
   ClipboardCheck,
+  Handshake,
+  Link2,
+  Coins,
+  Banknote,
+  Megaphone,
 } from 'lucide-react'
 import { type SidebarData } from '../types'
 
@@ -89,6 +95,12 @@ export const sidebarData: SidebarData = {
           permission: 'view riders',
         },
         {
+          title: 'Partners',
+          url: '/partners-admin',
+          icon: Handshake,
+          permission: 'view partners',
+        },
+        {
           title: 'Tags',
           url: '/tags',
           icon: Tag,
@@ -137,6 +149,47 @@ export const sidebarData: SidebarData = {
           url: '/team-management/permissions',
           icon: Lock,
           permission: 'view permissions',
+        },
+      ],
+    },
+    {
+      title: 'Partner Program',
+      items: [
+        {
+          title: 'Dashboard',
+          url: '/partners/dashboard',
+          icon: LayoutDashboard,
+          role: 'partner',
+        },
+        {
+          title: 'Referrals',
+          url: '/partners/referrals',
+          icon: Link2,
+          role: 'partner',
+        },
+        {
+          title: 'Points',
+          url: '/partners/points',
+          icon: Coins,
+          role: 'partner',
+        },
+        {
+          title: 'Payouts',
+          url: '/partners/payouts',
+          icon: Banknote,
+          role: 'partner',
+        },
+        {
+          title: 'Marketing Assets',
+          url: '/partners/assets',
+          icon: Megaphone,
+          role: 'partner',
+        },
+        {
+          title: 'Partner Profile',
+          url: '/partners/profile',
+          icon: UserCircle,
+          role: 'partner',
         },
       ],
     },
@@ -190,6 +243,12 @@ export const sidebarData: SidebarData = {
           title: 'Finance',
           url: '/portal/finance',
           icon: Wallet,
+          role: 'client',
+        },
+        {
+          title: 'Refer & Earn',
+          url: '/portal/refer-and-earn',
+          icon: Gift,
           role: 'client',
         },
         {

@@ -56,6 +56,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'client.access' => \App\Http\Middleware\RestrictToAssignedClients::class,
             'permission' => \App\Http\Middleware\CheckPermission::class,
             'role' => \App\Http\Middleware\CheckRole::class,
+            'partner.approved' => \App\Http\Middleware\EnsurePartnerApproved::class,
             'shopify.session' => \App\Http\Middleware\VerifyShopifySessionToken::class,
             'shopify.csp' => \App\Http\Middleware\ShopifyEmbeddedCsp::class,
             'recyclebin.unlocked' => \App\Http\Middleware\EnsureRecycleBinUnlocked::class,

@@ -91,6 +91,11 @@ class User extends Authenticatable
         return $this->hasOne(Client::class);
     }
 
+    public function partner(): HasOne
+    {
+        return $this->hasOne(Partner::class);
+    }
+
     public function hasFullAccess(): bool
     {
         return $this->hasAnyRole(self::FULL_ACCESS_ROLES);
@@ -123,6 +128,10 @@ class User extends Authenticatable
     {
         if ($this->hasRole('client')) {
             return 'portal.dashboard';
+        }
+
+        if ($this->hasRole('partner')) {
+            return 'partners.dashboard';
         }
 
         // permission => route name, in sidebar order.

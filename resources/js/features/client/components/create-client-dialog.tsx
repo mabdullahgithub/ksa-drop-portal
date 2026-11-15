@@ -146,6 +146,7 @@ export function CreateClientDialog({ open, onOpenChange, onSuccess }: CreateClie
     other: '',
   })
   const [notes, setNotes] = useState('')
+  const [partnerCode, setPartnerCode] = useState('')
 
   useEffect(() => {
     if (!clientIdManual && companyName) {
@@ -208,6 +209,7 @@ export function CreateClientDialog({ open, onOpenChange, onSuccess }: CreateClie
     const chargesPayload = buildChargesPayload()
     if (chargesPayload) payload.charges = chargesPayload
     if (notes) payload.notes = notes
+    if (partnerCode.trim()) payload.partner_code = partnerCode.trim().toUpperCase()
 
     const result = await createClient(payload)
     if (result === true) {
@@ -240,6 +242,7 @@ export function CreateClientDialog({ open, onOpenChange, onSuccess }: CreateClie
     setPortalFeatures(['orders', 'revenue', 'finance'])
     setCharges({ delivery: '', return: '', cod: '', warehousing: '', call_confirmation: '', vat: '', other: '' })
     setNotes('')
+    setPartnerCode('')
   }
 
   return (
@@ -469,7 +472,20 @@ export function CreateClientDialog({ open, onOpenChange, onSuccess }: CreateClie
           {/* Notes */}
           <div>
             <h4 className='text-sm font-semibold mb-3'>Notes</h4>
-            <div className='grid gap-1.5'>
+            <div className='grid gap-3'>
+              <div className='grid gap-1.5'>
+                <Label htmlFor='cc-partner-code'>Referred by partner (code)</Label>
+                <Input
+                  id='cc-partner-code'
+                  value={partnerCode}
+                  onChange={(e) => setPartnerCode(e.target.value.toUpperCase())}
+                  placeholder='e.g. AHMED20 — leave empty if none'
+                  className='font-mono uppercase'
+                />
+                <p className='text-xs text-muted-foreground'>
+                  Credits this client to the partner with that code. They earn points once the client starts shipping.
+                </p>
+              </div>
               <Label htmlFor='cc-notes'>General Notes</Label>
               <Input id='cc-notes' value={notes} onChange={(e) => setNotes(e.target.value)} />
             </div>
