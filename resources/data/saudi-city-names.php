@@ -322,7 +322,7 @@ return [
     ['Buraydah', 'بريدة'],
     ['Dariyah', 'ضرية'],
     ['Dayida', 'ضيدة'],
-    ['Deli Rashid', 'ضليع رشيد'],
+    ['Dulay Rasheed', 'ضليع رشيد'],
     ['Dremeha', 'دريميحة'],
     ['Duhknah', 'دخنة'],
     ['Ghaf Al Jawa', 'روض الجواء'],
