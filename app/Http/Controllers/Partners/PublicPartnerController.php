@@ -201,6 +201,7 @@ class PublicPartnerController extends Controller
             'milestone_deliveries' => $s['milestone_deliveries'],
             'milestone_points' => $s['milestone_points'],
             'min_redeem_points' => $s['min_redeem_points'],
+            'points_per_sar' => $s['points_per_sar'],
             'tiers' => [
                 ['name' => 'Bronze', 'min_active_clients' => 0, 'multiplier' => 1.0],
                 ['name' => 'Silver', 'min_active_clients' => $s['silver_min_active_clients'], 'multiplier' => $s['silver_multiplier']],

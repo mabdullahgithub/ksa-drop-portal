@@ -141,7 +141,7 @@ export default function PartnerJoin({ program, suggestedCode, client }: Props) {
               <CardHeader><CardTitle className='text-base'>What you earn</CardTitle></CardHeader>
               <CardContent>
                 <ProgramTable program={program} compact />
-                <p className='mt-3 text-xs text-muted-foreground'>Redeem from {formatPoints(program.min_redeem_points)} points. 1 point ≈ 1 SAR at payout.</p>
+                <p className='mt-3 text-xs text-muted-foreground'>Redeem from {formatPoints(program.min_redeem_points)} points. {formatPoints(program.points_per_sar)} points ≈ 1 SAR at payout.</p>
               </CardContent>
             </Card>
             <Card>

@@ -105,7 +105,7 @@ export function PayoutsTab({ payouts, canHandle, onChanged }: { payouts: PayoutR
                         <Button size='sm' disabled={busy} onClick={() => run(() => axios.post(`/api/partners/payouts/${r.id}/approve`))}>Approve</Button>
                       )}
                       {r.status === 'approved' && (
-                        <Button size='sm' disabled={busy} onClick={() => { setPaying(r); setPay({ amount: String(r.points), currency: 'SAR', note: '', proof: null }) }}>Mark paid</Button>
+                        <Button size='sm' disabled={busy} onClick={() => { setPaying(r); setPay({ amount: String(r.sar_value), currency: 'SAR', note: '', proof: null }) }}>Mark paid</Button>
                       )}
                       {(r.status === 'requested' || r.status === 'approved') && (
                         <Button size='sm' variant='outline' disabled={busy} onClick={() => { setRejecting(r); setReason('') }}>Reject</Button>

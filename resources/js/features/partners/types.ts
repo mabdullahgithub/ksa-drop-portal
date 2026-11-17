@@ -10,6 +10,7 @@ export type ProgramSummary = {
   milestone_deliveries: number
   milestone_points: number
   min_redeem_points: number
+  points_per_sar: number
   tiers: { name: string; min_active_clients: number; multiplier: number }[]
   terms_version: string
 }

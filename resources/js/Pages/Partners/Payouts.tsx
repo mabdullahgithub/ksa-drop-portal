@@ -14,12 +14,13 @@ type Props = {
   partner: PartnerSummary
   available: number
   minRedeem: number
+  pointsPerSar: number
   hasPayoutMethod: boolean
   payoutMethod: PayoutMethod
   requests: PayoutRequestRow[]
 }
 
-export default function Payouts({ partner, available, minRedeem, hasPayoutMethod, payoutMethod, requests }: Props) {
+export default function Payouts({ partner, available, minRedeem, pointsPerSar, hasPayoutMethod, payoutMethod, requests }: Props) {
   const open = requests.some((r) => r.status === 'requested' || r.status === 'approved')
   const { data, setData, post, processing, errors } = useForm({ points: available >= minRedeem ? available : minRedeem, note: '' })
 
@@ -43,7 +44,7 @@ export default function Payouts({ partner, available, minRedeem, hasPayoutMethod
           <CardHeader>
             <CardTitle>Request a payout</CardTitle>
             <CardDescription>
-              Available: <strong>{formatPoints(available)}</strong> points · minimum {formatPoints(minRedeem)}. One point is valued at one SAR.
+              Available: <strong>{formatPoints(available)}</strong> points · minimum {formatPoints(minRedeem)}. {formatPoints(pointsPerSar)} points are valued at 1 SAR.
             </CardDescription>
           </CardHeader>
           <CardContent>

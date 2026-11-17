@@ -323,6 +323,26 @@ class PartnerProgramTest extends TestCase
         app(PartnerPayouts::class)->request($partner->fresh(), 300);
     }
 
+    public function test_points_convert_to_sar_at_the_admin_set_rate(): void
+    {
+        // Default: every 2 points are 1 SAR.
+        $this->assertSame(2.0, (float) PartnerSetting::get('points_per_sar'));
+        $this->assertSame(50.0, PartnerSetting::sarFor(100));
+        $this->assertSame(0.5, PartnerSetting::sarFor(1));
+
+        $admin = $this->fullAccessUser();
+        $settings = PartnerSetting::all_();
+
+        $this->actingAs($admin)->putJson('/api/partners/settings', [...$settings, 'points_per_sar' => 4])
+            ->assertOk()
+            ->assertJsonPath('settings.points_per_sar', 4);
+
+        $this->assertSame(25.0, PartnerSetting::sarFor(100));
+
+        $this->actingAs($admin)->putJson('/api/partners/settings', [...$settings, 'points_per_sar' => 0])
+            ->assertStatus(422)->assertJsonValidationErrors('points_per_sar');
+    }
+
     // ── access control ──────────────────────────────────────────────────────
 
     public function test_partner_only_user_lands_in_partner_area(): void

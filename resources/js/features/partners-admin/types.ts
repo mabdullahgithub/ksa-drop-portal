@@ -78,6 +78,7 @@ export type LeadRow = {
 }
 
 export type PayoutRow = {
+  sar_value: number
   id: number
   points: number
   status: 'requested' | 'approved' | 'paid' | 'rejected'

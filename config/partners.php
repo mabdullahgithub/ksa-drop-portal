@@ -6,8 +6,9 @@
  * these seed that table and are the fallback for a key that was never saved.
  */
 return [
-    // Points per event. One point is treated as one SAR when a payout is
-    // valued; what points convert to is decided at payout time, by a person.
+    // Points per event. Points convert to SAR at this rate when a payout is
+    // valued (2 points = 1 SAR); a person still transfers the money by hand.
+    'points_per_sar' => (float) env('PARTNERS_POINTS_PER_SAR', 2),
     'approval_bonus_points' => (int) env('PARTNERS_APPROVAL_BONUS', 50),
     'activation_points' => (int) env('PARTNERS_ACTIVATION_POINTS', 150),
     'delivery_points' => (int) env('PARTNERS_DELIVERY_POINTS', 1),

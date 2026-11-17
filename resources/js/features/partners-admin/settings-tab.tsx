@@ -19,9 +19,36 @@ const FIELDS: { key: string; label: string; hint: string; step?: string }[] = [
   { key: 'gold_min_active_clients', label: 'Gold from (active clients)', hint: '' },
   { key: 'gold_multiplier', label: 'Gold multiplier', hint: '', step: '0.05' },
   { key: 'min_redeem_points', label: 'Minimum redemption (points)', hint: 'The smallest payout a partner can request.' },
+  { key: 'points_per_sar', label: 'Points per 1 SAR', hint: 'Conversion rate used to value a payout. 2 means every 2 points are worth 1 SAR.', step: '0.01' },
   { key: 'cookie_days', label: 'Referral cookie (days)', hint: 'How long a visitor who opened a referral link stays attributed.' },
   { key: 'terms_version', label: 'Terms version', hint: 'Shown on the application form and stored with each acceptance.' },
 ]
+
+function RatePreview({ values }: { values: Record<string, string> }) {
+  const rate = Number(values.points_per_sar)
+  if (!rate || rate <= 0) return null
+  const sar = (p: string) => (Number(p || 0) / rate).toLocaleString(undefined, { maximumFractionDigits: 2 })
+  const rows: [string, string][] = [
+    ['Welcome bonus', values.approval_bonus_points],
+    ['Activation', values.activation_points],
+    ['Per delivered shipment', values.delivery_points],
+    ['Milestone bonus', values.milestone_points],
+    ['Minimum redemption', values.min_redeem_points],
+  ]
+  return (
+    <div className='rounded-lg border bg-muted/40 p-4 text-sm'>
+      <div className='mb-2 font-medium'>Value at {rate} points = 1 SAR</div>
+      <ul className='grid gap-1 sm:grid-cols-2'>
+        {rows.map(([label, pts]) => (
+          <li key={label} className='flex justify-between gap-3'>
+            <span className='text-muted-foreground'>{label}</span>
+            <span className='tabular-nums'>{pts || 0} pts ≈ {sar(pts)} SAR</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
 
 export function SettingsTab({ settings }: { settings: Settings }) {
   const [values, setValues] = useState<Record<string, string>>(Object.fromEntries(Object.entries(settings).map(([k, v]) => [k, String(v)])))
@@ -71,6 +98,7 @@ export function SettingsTab({ settings }: { settings: Settings }) {
             </div>
           ))}
         </div>
+        <RatePreview values={values} />
         <Button onClick={save} disabled={busy}>{busy ? 'Saving…' : 'Save settings'}</Button>
       </CardContent>
     </Card>

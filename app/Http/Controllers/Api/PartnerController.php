@@ -179,6 +179,7 @@ class PartnerController extends Controller
             'milestone_deliveries' => ['required', 'integer', 'min:0', 'max:100000'],
             'milestone_points' => ['required', 'integer', 'min:0', 'max:100000'],
             'min_redeem_points' => ['required', 'integer', 'min:1', 'max:1000000'],
+            'points_per_sar' => ['required', 'numeric', 'min:0.01', 'max:100000'],
             'cookie_days' => ['required', 'integer', 'min:1', 'max:365'],
             'silver_min_active_clients' => ['required', 'integer', 'min:1', 'max:10000'],
             'silver_multiplier' => ['required', 'numeric', 'min:1', 'max:10'],

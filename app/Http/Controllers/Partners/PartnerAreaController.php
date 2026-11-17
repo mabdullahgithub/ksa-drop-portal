@@ -75,6 +75,7 @@ class PartnerAreaController extends Controller
                 'multiplier' => $points->multiplierFor($partner->tier),
                 'next_tier' => $nextTier,
                 'min_redeem_points' => $settings['min_redeem_points'],
+                'points_per_sar' => $settings['points_per_sar'],
             ],
             'recent' => $partner->transactions()->latest('created_at')->limit(8)->get()
                 ->map(fn ($t) => $this->transactionRow($t)),
@@ -216,6 +217,7 @@ class PartnerAreaController extends Controller
             'partner' => $this->summary($partner),
             'available' => $payouts->available($partner),
             'minRedeem' => (int) PartnerSetting::get('min_redeem_points'),
+            'pointsPerSar' => PartnerSetting::get('points_per_sar'),
             'hasPayoutMethod' => ! empty($partner->payout_method['type']),
             'payoutMethod' => ! empty($partner->payout_method['type']) ? $partner->payout_method : null,
             'requests' => $partner->payoutRequests()->latest()->get()->map(fn ($r) => [
@@ -385,6 +387,7 @@ class PartnerAreaController extends Controller
                 'multiplier' => $points->multiplierFor($partner->tier),
                 'next_tier' => $nextTier,
                 'min_redeem_points' => (int) $settings['min_redeem_points'],
+                'points_per_sar' => $settings['points_per_sar'],
                 'total_paid_points' => (int) $partner->payoutRequests()->where('status', 'paid')->sum('points'),
             ],
             'hasPayoutMethod' => ! empty($partner->payout_method['type']),

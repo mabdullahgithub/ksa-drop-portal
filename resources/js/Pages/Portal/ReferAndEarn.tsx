@@ -39,6 +39,7 @@ type Props = {
     multiplier: number
     next_tier: { name: string; at: number } | null
     min_redeem_points: number
+    points_per_sar: number
     total_paid_points: number
   }
   hasPayoutMethod?: boolean
@@ -386,7 +387,7 @@ function EarningsTab({ partner, stats, hasPayoutMethod, clients = [], payouts = 
             <span>{reached ? 'Minimum reached' : `${formatPoints(min - stats.available_points)} to go`} · minimum {formatPoints(min)}</span>
           </div>
         </div>
-        <p className='text-xs text-muted-foreground'>One point is valued at one SAR. Our team transfers by hand and marks each request paid.</p>
+        <p className='text-xs text-muted-foreground'>{formatPoints(stats.points_per_sar)} points are valued at 1 SAR. Our team transfers by hand and marks each request paid.</p>
       </Card>
 
       <Card className='gap-0 p-0'>
@@ -482,7 +483,7 @@ function ProgramContent({ program, partner }: { program: ProgramSummary; partner
     { icon: PackageCheck, title: 'Recurring on deliveries', body: `${formatPoints(program.delivery_points)} point × your tier on every delivery, for ${program.delivery_months} months after their first one.` },
     { icon: TrendingUp, title: 'Milestone bonus', body: `${formatPoints(program.milestone_points)} points when a referred seller reaches ${formatPoints(program.milestone_deliveries)} delivered shipments.` },
     { icon: Handshake, title: 'Tiers', body: 'Silver and Gold multiply your per-delivery points as your active sellers grow.' },
-    { icon: Clock, title: 'Simple payouts', body: `Redeem from ${formatPoints(program.min_redeem_points)} points. One point is valued at one SAR.` },
+    { icon: Clock, title: 'Simple payouts', body: `Redeem from ${formatPoints(program.min_redeem_points)} points. ${formatPoints(program.points_per_sar)} points are valued at 1 SAR.` },
   ]
 
   return (

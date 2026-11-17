@@ -29,7 +29,7 @@ class PartnerSetting extends Model
     ];
 
     /** Keys that are decimals. */
-    public const FLOAT_KEYS = ['silver_multiplier', 'gold_multiplier'];
+    public const FLOAT_KEYS = ['silver_multiplier', 'gold_multiplier', 'points_per_sar'];
 
     public const STRING_KEYS = ['terms_version'];
 
@@ -58,6 +58,14 @@ class PartnerSetting extends Model
         Cache::forget(self::CACHE_KEY);
     }
 
+    /** What a number of points is worth in SAR at the current rate. */
+    public static function sarFor(int|float $points): float
+    {
+        $rate = (float) self::get('points_per_sar');
+
+        return $rate > 0 ? round($points / $rate, 2) : 0.0;
+    }
+
     public static function forget(): void
     {
         Cache::forget(self::CACHE_KEY);
@@ -76,6 +84,7 @@ class PartnerSetting extends Model
             'milestone_deliveries' => $config['milestone_deliveries'],
             'milestone_points' => $config['milestone_points'],
             'min_redeem_points' => $config['min_redeem_points'],
+            'points_per_sar' => $config['points_per_sar'],
             'cookie_days' => $config['cookie_days'],
             'terms_version' => $config['terms_version'],
             'silver_min_active_clients' => $config['tiers']['silver']['min_active_clients'],

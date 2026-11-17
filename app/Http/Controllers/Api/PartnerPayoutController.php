@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Mail\Partners\PartnerPayoutPaidMail;
 use App\Models\PartnerPayoutRequest;
+use App\Models\PartnerSetting;
 use App\Services\EmailService;
 use App\Services\Partners\PartnerPayouts;
 use Illuminate\Http\JsonResponse;
@@ -78,6 +79,7 @@ class PartnerPayoutController extends Controller
         return [
             'id' => $r->id,
             'points' => $r->points,
+            'sar_value' => PartnerSetting::sarFor($r->points),
             'status' => $r->status,
             'payout_method' => $r->payout_method,
             'partner_note' => $r->partner_note,
