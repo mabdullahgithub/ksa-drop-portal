@@ -11,6 +11,7 @@ import {
   ClipboardCheck,
   Zap,
   Store,
+  Activity,
 } from 'lucide-react'
 import { Header } from '@/components/layout/header'
 import { NotificationsDropdown } from '@/components/layout/notifications-dropdown'
@@ -169,6 +170,8 @@ function ShopifyConnectorCard({
     updatingSyncMode,
     retryWebhooks,
     retrying,
+    testConnection,
+    testing,
   } = useShopifyConnection()
 
   const connected = !!connector.client_connected
@@ -184,6 +187,12 @@ function ShopifyConnectorCard({
     } else {
       toast.error(message || 'Could not enable live order sync.')
     }
+  }
+
+  const handleTest = async () => {
+    const { ok, message } = await testConnection()
+    if (ok) toast.success(message || 'Connection OK.')
+    else toast.error(message || 'Connection test failed.')
   }
 
   const handleDisconnect = async () => {
@@ -283,6 +292,22 @@ function ShopifyConnectorCard({
               : 'New orders appear in your orders list automatically.'}
           </p>
         </div>
+
+        {/* Live check against the Shopify Admin API */}
+        <Button
+          size='sm'
+          variant='outline'
+          className='mt-3 w-full'
+          disabled={testing}
+          onClick={handleTest}
+        >
+          {testing ? (
+            <Loader2 className='h-3.5 w-3.5 animate-spin' />
+          ) : (
+            <Activity className='h-3.5 w-3.5' />
+          )}
+          Test connection
+        </Button>
 
         {/* Webhook setup warning — live order sync not active yet */}
         {!webhooksOk && (

@@ -425,6 +425,49 @@ class ShopifyController extends Controller
     }
 
     /**
+     * Live connection check, triggered by the "Test connection" button. Makes
+     * real Admin API calls from this server (the same path order sync uses), so
+     * it also proves the server's IP passes the app's IP allowlist.
+     */
+    public function testConnection(Request $request)
+    {
+        $client = $this->resolveClient();
+        $connection = $client?->shopifyConnection;
+
+        if (! $connection) {
+            return response()->json(['ok' => false, 'message' => 'No Shopify store is connected.'], 404);
+        }
+
+        try {
+            $token = $this->shopify->getValidToken($connection);
+            $data  = $this->shopify->graphql($connection->shop_domain, $token, '{ shop { name myshopifyDomain } }');
+            $shop  = $data['shop']['name'] ?? $connection->shop_domain;
+
+            $webhooks = $this->shopify->listWebhookSubscriptions($connection->shop_domain, $token);
+
+            return response()->json([
+                'ok'            => true,
+                'shop'          => $shop,
+                'webhook_count' => count($webhooks),
+                'message'       => "Connection OK — reached {$shop} on the Shopify Admin API.",
+            ]);
+        } catch (\Throwable $e) {
+            Log::channel('shopify')->warning('Shopify connection test failed', [
+                'shop' => $connection->shop_domain, 'error' => $e->getMessage(),
+            ]);
+
+            $error = $e->getMessage();
+            $hint  = match (true) {
+                str_contains($error, '401')                                   => 'Shopify rejected the access token. Reconnect the store from Shopify Admin.',
+                str_contains($error, '403') || stripos($error, 'allowlist') !== false => 'Shopify blocked the request (403). Check the app\'s IP allowlist includes this server\'s IPv4 and IPv6 addresses.',
+                default                                                       => 'Could not reach the Shopify Admin API. Please try again.',
+            };
+
+            return response()->json(['ok' => false, 'message' => $hint], 422);
+        }
+    }
+
+    /**
      * Switch between auto_sync and manual_approval.
      */
     public function updateSyncMode(Request $request)

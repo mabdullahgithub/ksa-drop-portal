@@ -72,6 +72,24 @@ export function useShopifyConnection() {
     }
   }, [])
 
+  const [testing, setTesting] = useState(false)
+
+  const testConnection = useCallback(async (): Promise<{ ok: boolean; message?: string }> => {
+    setTesting(true)
+    try {
+      const res = await fetch('/portal/api/shopify/test', {
+        method: 'POST',
+        headers: { Accept: 'application/json', 'X-CSRF-TOKEN': getCsrfToken() },
+      })
+      const data = await res.json().catch(() => ({}))
+      return { ok: res.ok && data?.ok === true, message: data?.message }
+    } catch {
+      return { ok: false, message: 'Network error. Please try again.' }
+    } finally {
+      setTesting(false)
+    }
+  }, [])
+
   const updateSyncMode = useCallback(async (mode: SyncMode): Promise<boolean> => {
     setUpdatingSyncMode(true)
     try {
@@ -97,6 +115,8 @@ export function useShopifyConnection() {
     updatingSyncMode,
     retryWebhooks,
     retrying,
+    testConnection,
+    testing,
     claimStore,
     claiming,
   }
