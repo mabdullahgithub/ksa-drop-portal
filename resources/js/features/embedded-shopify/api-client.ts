@@ -137,3 +137,43 @@ export interface SettingsData {
     sync_mode: 'auto_sync' | 'manual_approval'
     sync_filters: SyncFilters
 }
+
+export interface BillingState {
+    plan: { name: string; price: number; currency: string }
+    /** Shopify's purchase status: pending, active, declined, expired; null if never started. */
+    status: string | null
+    purchased: boolean
+    purchased_at: string | null
+    /** Only present on the response to startPlanPurchase(). */
+    confirmation_url?: string
+}
+
+export function fetchBilling(): Promise<BillingState> {
+    return embeddedFetch<BillingState>('/billing')
+}
+
+export function startPlanPurchase(): Promise<BillingState> {
+    return embeddedFetch<BillingState>('/billing/purchase', { method: 'POST' })
+}
+
+export interface CatalogProduct {
+    id: number
+    title: string
+    sku: string | null
+    price: string | null
+    image: string | null
+    in_stock: boolean
+}
+
+export interface ProductsPage {
+    data: CatalogProduct[]
+    current_page: number
+    last_page: number
+    total: number
+}
+
+export function fetchProducts(page = 1, search = ''): Promise<ProductsPage> {
+    const params = new URLSearchParams({ page: String(page) })
+    if (search) params.set('search', search)
+    return embeddedFetch<ProductsPage>(`/products?${params}`)
+}

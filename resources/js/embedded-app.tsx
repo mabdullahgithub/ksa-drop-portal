@@ -21,6 +21,7 @@ import { SettingsSkeleton } from "@/features/embedded-shopify/settings/settings-
  */
 function EmbeddedApp() {
     const isSettings = window.location.pathname.endsWith("/settings");
+    const isProducts = window.location.pathname.endsWith("/products");
 
     return (
         <>
@@ -28,10 +29,15 @@ function EmbeddedApp() {
                 <a href="/embedded/shopify" rel="home">
                     Dashboard
                 </a>
+                <a href="/embedded/shopify/products">Products</a>
                 <a href="/embedded/shopify/settings">Settings</a>
             </ui-nav-menu>
 
-            {isSettings ? (
+            {isProducts ? (
+                <Suspense fallback={null}>
+                    <ProductsPage />
+                </Suspense>
+            ) : isSettings ? (
                 <Suspense fallback={<SettingsSkeleton />}>
                     <SettingsPage />
                 </Suspense>
@@ -45,6 +51,12 @@ function EmbeddedApp() {
 const SettingsPage = lazy(() =>
     import("@/features/embedded-shopify/settings/settings-page").then((m) => ({
         default: m.SettingsPage,
+    })),
+);
+
+const ProductsPage = lazy(() =>
+    import("@/features/embedded-shopify/products/products-page").then((m) => ({
+        default: m.ProductsPage,
     })),
 );
 

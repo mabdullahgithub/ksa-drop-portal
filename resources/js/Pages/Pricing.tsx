@@ -155,7 +155,7 @@ const ONBOARDING_STEPS: { title: string; body: string }[] = [
   },
   {
     title: 'Your account is created',
-    body: 'Once you accept the rates we create your portal account and email your login details. You then install the free app and connect your store.',
+    body: 'Once you accept the rates we create your portal account and email your login details. You then install the app (Free, with an optional one-time Pro upgrade) and connect your store.',
   },
   {
     title: 'You start shipping',
@@ -166,11 +166,11 @@ const ONBOARDING_STEPS: { title: string; body: string }[] = [
 const FAQS: { q: string; a: string }[] = [
   {
     q: 'Will these charges appear on my Shopify bill?',
-    a: 'No. Fulfillment and shipping fees are billed directly by KSA Drop and are settled outside of Shopify. They will not appear on your Shopify invoice, and Shopify is not involved in collecting, refunding, or disputing them.',
+    a: 'Only the optional Pro plan does. Pro is a single $19 USD payment billed through Shopify, so it appears on your Shopify invoice and Shopify handles any refund of it. Fulfillment and shipping fees are different: they are billed directly by KSA Drop, settled outside of Shopify, and never appear on your Shopify invoice.',
   },
   {
     q: 'Does the KSADrop Portal app itself cost anything?',
-    a: 'No. Installing and using the app is free, with no subscription, per-seat, or per-order software fee. You pay only for physical logistics services you actually use.',
+    a: 'The Free plan costs nothing: install it and sync your orders with no subscription, per-seat, or per-order software fee. The optional Pro plan is a one-time $19 USD payment, with no recurring charge, and adds one-click product add and access to all products available in the app. Apart from Pro, you pay only for physical logistics services you actually use.',
   },
   {
     q: 'How do I pay for goods I source from your catalogue?',
@@ -178,7 +178,7 @@ const FAQS: { q: string; a: string }[] = [
   },
   {
     q: 'Does the app take payments or store my card?',
-    a: 'No. The app and portal do not process payments at all. Invoices are settled outside the app — by bank transfer to our company account, or by netting against cash-on-delivery funds we hold for you. No card details are ever entered into, transmitted by, or stored in our system.',
+    a: 'No. The only payment taken in the app is the optional Pro plan, and that goes through Shopify, so card details are entered on Shopify, never in our system. Logistics invoices are settled outside the app — by bank transfer to our company account, or by netting against cash-on-delivery funds we hold for you. No card details are ever entered into, transmitted by, or stored in our system.',
   },
   {
     q: 'Why are rates not published on this page?',
@@ -186,7 +186,7 @@ const FAQS: { q: string; a: string }[] = [
   },
   {
     q: 'When am I first charged?',
-    a: 'Not until your first shipment is picked up. Opening an account, installing the app, and connecting your store are all free, and no payment details are taken up front.',
+    a: 'Not until your first shipment is picked up. Opening an account, installing the app, and connecting your store are all free, and no payment details are taken up front. The optional Pro plan is charged only if you choose to upgrade.',
   },
   {
     q: 'What happens if I uninstall the app?',
@@ -224,7 +224,7 @@ export default function Pricing() {
         <title>Pricing &amp; Billing — KSA Drop</title>
         <meta
           name="description"
-          content="How KSA Drop merchants are charged for fulfillment, delivery, and cash-on-delivery services, and why those services are billed outside of Shopify."
+          content="The KSADrop Portal Free and one-time Pro plans, and how fulfillment, delivery, and cash-on-delivery services are billed separately outside of Shopify."
         />
       </Head>
 
@@ -279,12 +279,13 @@ export default function Pricing() {
               Merchant pricing &amp; billing
             </p>
             <h1 className="mt-4 text-4xl font-semibold leading-[1.1] tracking-tight sm:text-5xl">
-              The app is free.
+              Start free.
               <br />
-              You pay only for what you ship.
+              Upgrade once, pay only for what you ship.
             </h1>
             <p className="mt-6 max-w-xl text-lg leading-relaxed text-slate-600 dark:text-slate-400">
-              KSADrop Portal costs nothing to install or use. Fulfillment, delivery, and
+              KSADrop Portal is free to install and syncs your orders at no cost. The optional Pro
+              plan is a one-time $19 USD payment through Shopify. Fulfillment, delivery, and
               cash-on-delivery services are provided and billed separately by {COMPANY.name}, at
               rates quoted to you in writing before your account is opened.
             </p>
@@ -311,19 +312,31 @@ export default function Pricing() {
           {/* ── Off-platform billing disclosure ───────────────────── */}
           <section className="py-8">
             <div className="rounded-2xl bg-slate-50 p-8 dark:bg-slate-900/60">
-              <h2 className="text-lg font-semibold tracking-tight">
-                Charges are billed outside of Shopify
+              <h2 className="text-lg font-semibold tracking-tight">App plans</h2>
+              <ul className="mt-4 space-y-3 leading-relaxed text-slate-600 dark:text-slate-400">
+                <li>
+                  <strong className="text-slate-900 dark:text-slate-100">Free</strong> — order sync
+                  to KSA Drop. No charge.
+                </li>
+                <li>
+                  <strong className="text-slate-900 dark:text-slate-100">Pro — $19 USD, one time</strong>{' '}
+                  — everything in Free, plus one-click product add and access to all products
+                  available in the app. Billed once through the Shopify Billing API; no recurring
+                  charge.
+                </li>
+              </ul>
+              <h2 className="mt-8 text-lg font-semibold tracking-tight">
+                Logistics services are billed outside of Shopify
               </h2>
               <p className="mt-4 leading-relaxed text-slate-600 dark:text-slate-400">
-                The KSADrop Portal app is free. The fulfillment, delivery, and cash-on-delivery
-                services described on this page are provided by {COMPANY.legalName} and are billed
-                directly to you — not through the Shopify Billing API, and not on your Shopify
-                invoice.
+                The fulfillment, delivery, and cash-on-delivery services described on this page are
+                provided by {COMPANY.legalName} and are billed directly to you — not through the
+                Shopify Billing API, and not on your Shopify invoice.
               </p>
               <ul className="mt-6 space-y-3 text-sm leading-relaxed text-slate-600 dark:text-slate-400">
                 {[
-                  'These fees never appear on your Shopify bill or Shopify payout statement.',
-                  'Shopify does not collect, refund, or arbitrate these charges.',
+                  'These logistics fees never appear on your Shopify bill or Shopify payout statement.',
+                  'Shopify does not collect, refund, or arbitrate these logistics charges.',
                   'You receive a written rate card covering every applicable fee before your account is opened.',
                   'Nothing is charged until your first shipment is picked up.',
                 ].map(line => (
@@ -490,7 +503,7 @@ export default function Pricing() {
               <h2 className="text-2xl font-semibold tracking-tight">Talk to our sales team</h2>
               <p className="mt-4 max-w-xl leading-relaxed text-slate-600 dark:text-slate-400">
                 Tell us what you ship and where, and we will send you a full rate card. Opening an
-                account is free and there is nothing to pay until your first shipment.
+                account is free and there is nothing to pay for logistics until your first shipment.
               </p>
 
               <div className="mt-8 flex flex-wrap items-center gap-x-6 gap-y-3">

@@ -125,6 +125,12 @@
                     <div class="eb-skeleton-section"><div class="eb-skeleton-card eb-skeleton-block"></div></div>
                     <div class="eb-skeleton-section"><div class="eb-skeleton-card eb-skeleton-block"></div></div>
                 </div>
+            @elseif ($view === 'products')
+                <div class="eb-skeleton">
+                    <h1 class="eb-skeleton-title">Products</h1>
+                    <p class="eb-skeleton-subtitle">Products available from KSA Drop.</p>
+                    <div class="eb-skeleton-section"><div class="eb-skeleton-card eb-skeleton-block"></div></div>
+                </div>
             @else
                 <div class="eb-skeleton">
                     <h1 class="eb-skeleton-title">Order Sync</h1>

@@ -40,6 +40,8 @@ use App\Http\Controllers\TagController;
 use App\Http\Controllers\TeamController;
 use App\Http\Controllers\ConnectorController;
 use App\Http\Controllers\Embedded\EmbeddedAppController;
+use App\Http\Controllers\Embedded\EmbeddedBillingController;
+use App\Http\Controllers\Embedded\EmbeddedProductsController;
 use App\Http\Controllers\Embedded\EmbeddedDashboardController;
 use App\Http\Controllers\Embedded\EmbeddedSettingsController;
 use App\Http\Controllers\ShopifyController;
@@ -697,6 +699,7 @@ Route::prefix('webhooks/shopify/fulfillment')
 Route::prefix('embedded/shopify')->middleware('shopify.csp')->group(function () {
     Route::get('/', [EmbeddedAppController::class, 'index'])->name('embedded.shopify.index');
     Route::get('/settings', [EmbeddedAppController::class, 'index'])->name('embedded.shopify.settings');
+    Route::get('/products', [EmbeddedAppController::class, 'index'])->name('embedded.shopify.products');
 
     // Verifies the session token itself rather than via shopify.session —
     // that middleware requires an already-linked client, which an unlinked
@@ -707,6 +710,12 @@ Route::prefix('embedded/shopify')->middleware('shopify.csp')->group(function () 
         Route::get('/dashboard', [EmbeddedDashboardController::class, 'index'])->name('embedded.shopify.dashboard');
         Route::get('/settings', [EmbeddedSettingsController::class, 'show'])->name('embedded.shopify.settings.show');
         Route::put('/settings', [EmbeddedSettingsController::class, 'update'])->name('embedded.shopify.settings.update');
+
+        Route::get('/products', [EmbeddedProductsController::class, 'index'])->name('embedded.shopify.products.index');
+
+        // One-time plan, billed through the Shopify Billing API.
+        Route::get('/billing', [EmbeddedBillingController::class, 'show'])->name('embedded.shopify.billing.show');
+        Route::post('/billing/purchase', [EmbeddedBillingController::class, 'purchase'])->name('embedded.shopify.billing.purchase');
 
         // The merchant asking us for an order, from our own app rather than
         // from Shopify admin's Request fulfillment action. Both end at the same

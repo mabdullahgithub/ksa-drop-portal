@@ -675,6 +675,68 @@ class ShopifyService
         return $json['data'] ?? [];
     }
 
+    // ─────────────────────────────────────────────────────────────────────────
+    //  Billing — one-time plan
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Create the one-time plan charge and return Shopify's confirmation URL,
+     * where the merchant approves (or declines) it. Needs no access scope.
+     *
+     * @return array{id: string, confirmation_url: string}
+     */
+    public function createPlanPurchase(ClientShopifyConnection $connection): array
+    {
+        $plan = config('services.shopify.plan');
+
+        $data = $this->graphql(
+            $connection->shop_domain,
+            $this->getValidToken($connection),
+            'mutation($name: String!, $price: MoneyInput!, $returnUrl: URL!, $test: Boolean) {
+                appPurchaseOneTimeCreate(name: $name, price: $price, returnUrl: $returnUrl, test: $test) {
+                    appPurchaseOneTime { id }
+                    confirmationUrl
+                    userErrors { field message }
+                }
+            }',
+            [
+                'name'      => $plan['name'],
+                'price'     => ['amount' => number_format($plan['price'], 2, '.', ''), 'currencyCode' => $plan['currency']],
+                'returnUrl' => $this->adminAppUrl($connection->shop_domain),
+                'test'      => (bool) $plan['test'],
+            ]
+        );
+
+        $result = $data['appPurchaseOneTimeCreate'] ?? [];
+
+        if (! empty($result['userErrors']) || empty($result['confirmationUrl']) || empty($result['appPurchaseOneTime']['id'])) {
+            throw new RuntimeException('Shopify plan purchase failed: ' . json_encode($result['userErrors'] ?? $result));
+        }
+
+        return [
+            'id'               => $result['appPurchaseOneTime']['id'],
+            'confirmation_url' => $result['confirmationUrl'],
+        ];
+    }
+
+    /**
+     * Shopify's current status for a purchase, lower-cased (pending, active,
+     * declined, expired), or null if Shopify no longer knows the purchase.
+     */
+    public function fetchPurchaseStatus(ClientShopifyConnection $connection, string $purchaseGid): ?string
+    {
+        $data = $this->graphql(
+            $connection->shop_domain,
+            $this->getValidToken($connection),
+            'query($id: ID!) { node(id: $id) { ... on AppPurchaseOneTime { status } } }',
+            ['id' => $purchaseGid]
+        );
+
+        $status = $data['node']['status'] ?? null;
+
+        return $status ? strtolower($status) : null;
+    }
+
     /**
      * The endpoint Shopify is told to deliver to. Also what the health check
      * compares against — a subscription pointing somewhere else (an old ngrok

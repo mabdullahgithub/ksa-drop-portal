@@ -168,6 +168,17 @@ return [
         // shopify:fulfillment-stock-sync. Off until a store has shown the
         // import-time lookup actually happens.
         'stock_sync'        => (bool) env('SHOPIFY_FULFILLMENT_STOCK_SYNC', false),
+
+        // One-time plan charged through the Shopify Billing API. `test` makes
+        // Shopify create a non-chargeable purchase (required on development
+        // stores); it defaults on everywhere except production so a staging
+        // run can never bill a real merchant.
+        'plan' => [
+            'name'     => env('SHOPIFY_PLAN_NAME', 'KSADrop Pro – One-time plan'),
+            'price'    => (float) env('SHOPIFY_PLAN_PRICE', 19),
+            'currency' => env('SHOPIFY_PLAN_CURRENCY', 'USD'),
+            'test'     => (bool) env('SHOPIFY_BILLING_TEST', env('APP_ENV') !== 'production'),
+        ],
     ],
 
     /*

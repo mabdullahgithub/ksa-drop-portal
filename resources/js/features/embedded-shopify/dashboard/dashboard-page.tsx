@@ -12,6 +12,7 @@ import { BOOTSTRAP_DASHBOARD, LINKED_HINT } from "../bootstrap";
 import { PORTAL_URL } from "../config";
 import { StoreNotConnected } from "../store-not-connected";
 import { DashboardSkeleton } from "./dashboard-skeleton";
+import { PlanCard } from "./plan-card";
 
 /**
  * recharts is ~335 KB — an order of magnitude more than the rest of this app,
@@ -204,6 +205,8 @@ export function DashboardPage() {
                     </s-stack>
                 </s-banner>
             </s-section>
+
+            <PlanCard />
 
             {stats.pending_review > 0 && (
                 <s-section>

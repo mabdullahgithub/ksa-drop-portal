@@ -58,7 +58,11 @@ class EmbeddedAppController extends Controller
 
         // Both embedded routes render this same shell; the view decides which
         // skeleton paints and which payload is worth inlining.
-        $view = $request->routeIs('embedded.shopify.settings') ? 'settings' : 'dashboard';
+        $view = match (true) {
+            $request->routeIs('embedded.shopify.settings') => 'settings',
+            $request->routeIs('embedded.shopify.products') => 'products',
+            default                                        => 'dashboard',
+        };
 
         $bootstrap = $this->bootstrap($request, $connection, $view);
 
@@ -119,6 +123,11 @@ class EmbeddedAppController extends Controller
         }
 
         if (! $this->isLinked($connection)) {
+            return null;
+        }
+
+        // The products list is fetched, not inlined: it is paged and searchable.
+        if ($view === 'products') {
             return null;
         }
 

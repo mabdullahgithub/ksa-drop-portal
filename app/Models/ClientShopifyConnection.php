@@ -23,6 +23,9 @@ class ClientShopifyConnection extends Model
         'fulfillment_service_handle',
         'fulfillment_location_id',
         'fulfillment_registered_at',
+        'plan_purchase_id',
+        'plan_status',
+        'plan_purchased_at',
         'last_synced_at',
         'connected_at',
     ];
@@ -35,6 +38,7 @@ class ClientShopifyConnection extends Model
         'sync_filters'             => 'array',
         'webhooks_registered'      => 'boolean',
         'fulfillment_registered_at' => 'datetime',
+        'plan_purchased_at'        => 'datetime',
         'last_synced_at'           => 'datetime',
         'connected_at'             => 'datetime',
     ];
@@ -119,5 +123,11 @@ class ClientShopifyConnection extends Model
     public function hasFulfillmentService(): bool
     {
         return filled($this->fulfillment_service_id) && filled($this->fulfillment_location_id);
+    }
+
+    /** The one-time plan was approved and paid through Shopify Billing. */
+    public function hasPaidPlan(): bool
+    {
+        return $this->plan_status === 'active';
     }
 }
