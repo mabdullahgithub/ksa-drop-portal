@@ -1,6 +1,7 @@
 import { type ChangeEvent, useState } from 'react'
 import { router } from '@inertiajs/react'
-import { Loader2, Settings } from 'lucide-react'
+import { Activity, Loader2, Settings } from 'lucide-react'
+import { toast } from 'sonner'
 import { Input } from '@/components/ui/input'
 import { Separator } from '@/components/ui/separator'
 import { Header } from '@/components/layout/header'
@@ -127,6 +128,30 @@ interface ConnectorCardProps {
 
 function ConnectorCard({ connector, logo, canEdit, showPartnerBadge }: ConnectorCardProps) {
   const settingsRoute = settingsRouteMap[connector.key]
+  const { can } = usePermissions()
+  const [testing, setTesting] = useState(false)
+  const canTest = connector.key === 'shopify' && can('test connector connection')
+
+  const handleTest = async () => {
+    setTesting(true)
+    try {
+      const res = await fetch(`/api/connectors/${connector.id}/test`, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'X-CSRF-TOKEN':
+            document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
+        },
+      })
+      const data = await res.json().catch(() => ({}))
+      if (res.ok && data?.success) toast.success(data.message || 'Connection successful.')
+      else toast.error(data?.message || 'Connection test failed.')
+    } catch {
+      toast.error('Network error. Please try again.')
+    } finally {
+      setTesting(false)
+    }
+  }
 
   return (
     <li className='rounded-lg border p-4 hover:shadow-md'>
@@ -148,6 +173,17 @@ function ConnectorCard({ connector, logo, canEdit, showPartnerBadge }: Connector
           alt='Official Shopify Partner'
           className='mt-3 h-6 w-auto'
         />
+      )}
+      {canTest && (
+        <button
+          type='button'
+          disabled={testing}
+          onClick={handleTest}
+          className='mt-4 inline-flex w-full items-center justify-center gap-2 rounded-md border px-3 py-1.5 text-xs font-medium transition-colors hover:bg-muted disabled:opacity-60'
+        >
+          {testing ? <Loader2 className='h-3.5 w-3.5 animate-spin' /> : <Activity className='h-3.5 w-3.5' />}
+          Test connection
+        </button>
       )}
       {settingsRoute && canEdit && (
         <button

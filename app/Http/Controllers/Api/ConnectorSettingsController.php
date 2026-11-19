@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Connector;
+use App\Models\ClientShopifyConnection;
+use App\Services\ShopifyService;
 use App\Models\ConnectorSetting;
 use App\Services\Shipping\CourierManager;
 use App\Services\WhatsApp\MetaWhatsAppService;
@@ -131,6 +133,10 @@ class ConnectorSettingsController extends Controller
             return $this->testWhatsApp();
         }
 
+        if ($connector->key === 'shopify') {
+            return $this->testShopify();
+        }
+
         $courierLabels = [
             'jnt_express' => 'J&T Express',
             'imile' => 'iMile',
@@ -158,6 +164,50 @@ class ConnectorSettingsController extends Controller
                 'message' => $e->getMessage(),
             ]);
         }
+    }
+
+    /**
+     * Prove this server can reach the Shopify Admin API (and so passes the
+     * app's IP allowlist). The allowlist is app-wide, so one working store is
+     * enough: stores are tried in turn until one answers, and a store that
+     * fails for its own reasons (uninstalled, bad token) does not mask the rest.
+     */
+    private function testShopify()
+    {
+        $shopify = app(ShopifyService::class);
+        $connections = ClientShopifyConnection::where('status', 'active')->latest('id')->limit(5)->get();
+
+        if ($connections->isEmpty()) {
+            return response()->json(['success' => false, 'message' => 'No connected Shopify store to test with.']);
+        }
+
+        $failures = [];
+
+        foreach ($connections as $connection) {
+            try {
+                $token = $shopify->getValidToken($connection);
+                $data  = $shopify->graphql($connection->shop_domain, $token, '{ shop { name } }');
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Connection successful! Reached ' . ($data['shop']['name'] ?? $connection->shop_domain) . ' on the Shopify Admin API.',
+                ]);
+            } catch (\Throwable $e) {
+                Log::channel('shopify')->warning('Shopify connection test failed', [
+                    'shop' => $connection->shop_domain, 'error' => $e->getMessage(),
+                ]);
+                $failures[] = $e->getMessage();
+            }
+        }
+
+        $blocked = collect($failures)->contains(fn ($m) => str_contains($m, '403') || stripos($m, 'allowlist') !== false);
+
+        return response()->json([
+            'success' => false,
+            'message' => $blocked
+                ? 'Shopify blocked the request (403). Check the app IP allowlist includes this server\'s IPv4 and IPv6 addresses.'
+                : 'Could not reach the Shopify Admin API from any connected store. See the shopify log.',
+        ]);
     }
 
     /**
