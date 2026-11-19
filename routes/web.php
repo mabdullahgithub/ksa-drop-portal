@@ -627,8 +627,25 @@ Route::prefix('webhooks/shopify/fulfillment')
 // No Laravel session: the shell loads publicly (App Bridge boots it), and the
 // API routes are authenticated per-request via App Bridge session tokens (JWT).
 Route::prefix('embedded/shopify')->middleware('shopify.csp')->group(function () {
-    Route::get('/', [EmbeddedAppController::class, 'index'])->name('embedded.shopify.index');
-    Route::get('/settings', [EmbeddedAppController::class, 'index'])->name('embedded.shopify.settings');
+    // The shell never reads or writes the session (it is authenticated by the
+    // id_token in the URL). Inside Shopify's iframe the session cookie is
+    // normally not sent back, so with the web group's StartSession every load
+    // minted a new row in the `sessions` table before any HTML went out, and
+    // answered with two Set-Cookie headers nothing uses.
+    Route::withoutMiddleware([
+        \Illuminate\Cookie\Middleware\EncryptCookies::class,
+        \Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse::class,
+        \Illuminate\Session\Middleware\StartSession::class,
+        \Illuminate\View\Middleware\ShareErrorsFromSession::class,
+        \Illuminate\Foundation\Http\Middleware\PreventRequestForgery::class,
+        // Both only matter for a signed-in portal user / an Inertia page; this
+        // route has neither, and TrackUserPresence needs the session to ask.
+        \App\Http\Middleware\TrackUserPresence::class,
+        \App\Http\Middleware\HandleInertiaRequests::class,
+    ])->group(function () {
+        Route::get('/', [EmbeddedAppController::class, 'index'])->name('embedded.shopify.index');
+        Route::get('/settings', [EmbeddedAppController::class, 'index'])->name('embedded.shopify.settings');
+    });
 
     // Verifies the session token itself rather than via shopify.session —
     // that middleware requires an already-linked client, which an unlinked
