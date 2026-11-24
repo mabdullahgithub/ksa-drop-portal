@@ -841,7 +841,8 @@ function CreateOrderDialog({
   const handleSkuClear = (key: number) =>
     patchLine(key, { selected: null, name: '', sku: '', unit_price: 0 })
 
-  const addLine = () => updateLines([...lines, newLine()])
+  // New lines go on top, so the one being filled in is always in view.
+  const addLine = () => updateLines([newLine(), ...lines])
 
   const removeLine = (key: number) =>
     updateLines(lines.length > 1 ? lines.filter((l) => l.key !== key) : [newLine()])
@@ -963,9 +964,20 @@ function CreateOrderDialog({
 
           {/* Products — one row per product / SKU on this order */}
           <div>
-            <p className='text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2'>
-              Products <span className='normal-case font-normal text-muted-foreground'>(optional)</span>
-            </p>
+            <div className='flex items-center justify-between mb-2'>
+              <p className='text-xs font-semibold text-muted-foreground uppercase tracking-wide'>
+                Products <span className='normal-case font-normal text-muted-foreground'>(optional)</span>
+              </p>
+              <Button
+                type='button'
+                size='sm'
+                onClick={addLine}
+                className='h-7 px-2.5 bg-zinc-900 text-white hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300'
+              >
+                <Plus className='h-3.5 w-3.5' />
+                Add another
+              </Button>
+            </div>
             <div className='space-y-3'>
               {lines.map((line, index) => (
                 <div key={line.key} className='rounded-md border p-3 space-y-3'>
@@ -1074,16 +1086,6 @@ function CreateOrderDialog({
                   </div>
                 </div>
               ))}
-
-              <Button
-                type='button'
-                size='sm'
-                onClick={addLine}
-                className='w-full bg-zinc-900 text-white hover:bg-zinc-800 border border-zinc-700'
-              >
-                <Plus className='h-3.5 w-3.5 mr-1.5' />
-                Add another product
-              </Button>
             </div>
           </div>
 
