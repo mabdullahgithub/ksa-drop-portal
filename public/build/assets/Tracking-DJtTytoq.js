@@ -1,1 +1,0 @@
-function e(){return typeof window<`u`&&window.location.replace(`/track`),null}export{e as default};
