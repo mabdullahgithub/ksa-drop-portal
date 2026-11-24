@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button'
 import { ChevronLeft, ChevronRight, Package, Tag, Globe, BarChart3, Info } from 'lucide-react'
 import { type Product } from '@/types/product'
 import { useProduct } from '@/hooks/useProducts'
+import { sanitizeHtml } from '@/lib/sanitize-html'
 
 const statusColorMap: Record<string, string> = {
   active: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
@@ -191,7 +192,7 @@ export function ProductDetailsDialog({ product, open, onOpenChange }: ProductDet
                     <p className='text-[10px] text-muted-foreground mb-1.5 font-medium uppercase tracking-wide'>Description</p>
                     <div
                       className='text-xs text-muted-foreground leading-relaxed max-h-28 overflow-y-auto prose-sm'
-                      dangerouslySetInnerHTML={{ __html: product.body_html }}
+                      dangerouslySetInnerHTML={{ __html: sanitizeHtml(product.body_html) }}
                     />
                   </div>
                 )}

@@ -22,7 +22,11 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         // Trust the ngrok / reverse-proxy forwarded headers so Laravel detects
         // the original HTTPS scheme instead of the proxied HTTP request.
-        $middleware->trustProxies(at: '*');
+        // Only trust forwarded headers from the reverse proxy (Coolify/Traefik
+        // sits on a private Docker network). Override with TRUSTED_PROXIES=
+        // (comma separated IPs/CIDRs, or * for ngrok-style local tunnels).
+        $trusted = env('TRUSTED_PROXIES', '10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,127.0.0.1');
+        $middleware->trustProxies(at: $trusted === '*' ? '*' : array_map('trim', explode(',', $trusted)));
 
         $middleware->validateCsrfTokens(except: [
             'webhooks/*',
@@ -30,6 +34,7 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
 
         $middleware->web(append: [
+            \App\Http\Middleware\SecurityHeaders::class,
             \App\Http\Middleware\HandleInertiaRequests::class,
             \App\Http\Middleware\AddLinkHeadersForPreloadedAssetsUnlessInertia::class,
             \App\Http\Middleware\TrackUserPresence::class,

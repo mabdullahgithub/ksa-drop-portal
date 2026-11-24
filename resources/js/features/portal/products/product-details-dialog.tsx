@@ -8,6 +8,7 @@ import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import { usePortalProduct } from '@/hooks/usePortal'
 import type { Product } from '@/types/product'
+import { sanitizeHtml } from '@/lib/sanitize-html'
 
 const stockColor = (qty: number) => {
   if (qty === 0) return 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
@@ -183,7 +184,7 @@ export function PortalProductDetailsDialog({ product, open, onOpenChange }: Prop
                         <p className='mb-1.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground'>Description</p>
                         <div
                           className='prose-sm max-h-28 overflow-y-auto text-xs leading-relaxed text-muted-foreground'
-                          dangerouslySetInnerHTML={{ __html: p.body_html }}
+                          dangerouslySetInnerHTML={{ __html: sanitizeHtml(p.body_html) }}
                         />
                       </div>
                     )}

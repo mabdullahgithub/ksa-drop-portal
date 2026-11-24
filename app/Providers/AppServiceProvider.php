@@ -53,6 +53,8 @@ class AppServiceProvider extends ServiceProvider
     {
         Vite::prefetch(concurrency: 3);
 
+        \Illuminate\Validation\Rules\Password::defaults(fn () => \Illuminate\Validation\Rules\Password::min(12)->letters()->mixedCase()->numbers());
+
         // superadmin and developer can do everything, always -- including a
         // permission added a minute ago that no seeder has granted yet.
         Gate::before(fn ($user) => $user instanceof User && $user->hasFullAccess() ? true : null);
