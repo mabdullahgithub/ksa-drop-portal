@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react'
-import { Download, Upload, CheckCircle2, AlertCircle, FileSpreadsheet, X, Package, DollarSign, Clock, TruckIcon, Copy, XCircle, ShoppingBag, PlusCircle, MessageSquare, HelpCircle, ChevronsUpDown, Check } from 'lucide-react'
+import { Download, Upload, CheckCircle2, AlertCircle, FileSpreadsheet, X, Package, DollarSign, Clock, TruckIcon, Copy, XCircle, ShoppingBag, PlusCircle, MessageSquare, HelpCircle, ChevronsUpDown, Check, Plus, Trash2 } from 'lucide-react'
 import {
   flexRender,
   getCoreRowModel,
@@ -770,6 +770,18 @@ function OrderStatCards({ stats, loading }: { stats: any; loading: boolean }) {
 
 // ─── create order dialog ─────────────────────────────────────────────────────
 
+type OrderLine = {
+  key: number
+  selected: SkuItem | null
+  name: string
+  sku: string
+  quantity: string
+  unit_price: number
+}
+
+let lineKey = 0
+const newLine = (): OrderLine => ({ key: ++lineKey, selected: null, name: '', sku: '', quantity: '1', unit_price: 0 })
+
 const EMPTY_FORM = {
   customer_name: '',
   customer_phone: '',
@@ -779,11 +791,6 @@ const EMPTY_FORM = {
   shipping_city: '',
   shipping_country: 'SA',
   payment_method: '',
-  lineitem_name: '',
-  lineitem_quantity: '1',
-  lineitem_sku: '',
-  lineitem_client_product_id: '' as string,
-  lineitem_product_id: '' as string,
   total: '',
 }
 
@@ -800,8 +807,10 @@ function CreateOrderDialog({
   const { items: skuItems, loading: skuLoading, search: skuSearch } = usePortalSkuSearch()
   const [saving, setSaving] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
-  const [skuOpen, setSkuOpen] = useState(false)
-  const [selectedSku, setSelectedSku] = useState<SkuItem | null>(null)
+  const [lines, setLines] = useState<OrderLine[]>(() => [newLine()])
+  const [openLine, setOpenLine] = useState<number | null>(null)
+  // Once the client types their own total, stop overwriting it with the sum.
+  const [totalTouched, setTotalTouched] = useState(false)
   const [form, setForm] = useState({ ...EMPTY_FORM })
 
   useEffect(() => {
@@ -809,41 +818,41 @@ function CreateOrderDialog({
   }, [open, skuSearch])
 
   const set = (field: string, value: string) => {
+    if (field === 'total') setTotalTouched(true)
     setForm((prev) => ({ ...prev, [field]: value }))
     setErrors((prev) => { const e = { ...prev }; delete e[field]; return e })
   }
 
-  const handleSkuSelect = (item: SkuItem) => {
-    setSelectedSku(item)
-    setForm((prev) => ({
-      ...prev,
-      lineitem_name: item.name,
-      lineitem_sku: item.sku ?? '',
-      lineitem_client_product_id: item.type === 'client_product' ? String(item.id) : '',
-      lineitem_product_id: item.type === 'product' ? String(item.id) : '',
-      // pre-fill total from the product's catalogue price (client can override)
-      total: item.unit_price > 0 ? String(item.unit_price) : prev.total,
-    }))
-    setSkuOpen(false)
+  const updateLines = (next: OrderLine[]) => {
+    setLines(next)
+    if (totalTouched) return
+    const sum = next.reduce((acc, l) => acc + l.unit_price * Math.max(parseInt(l.quantity) || 1, 1), 0)
+    setForm((prev) => ({ ...prev, total: sum > 0 ? String(Math.round(sum * 100) / 100) : '' }))
   }
 
-  const handleSkuClear = () => {
-    setSelectedSku(null)
-    setForm((prev) => ({
-      ...prev,
-      lineitem_name: '',
-      lineitem_sku: '',
-      lineitem_client_product_id: '',
-      lineitem_product_id: '',
-    }))
+  const patchLine = (key: number, patch: Partial<OrderLine>) =>
+    updateLines(lines.map((l) => (l.key === key ? { ...l, ...patch } : l)))
+
+  const handleSkuSelect = (key: number, item: SkuItem) => {
+    patchLine(key, { selected: item, name: item.name, sku: item.sku ?? '', unit_price: item.unit_price })
+    setOpenLine(null)
   }
+
+  const handleSkuClear = (key: number) =>
+    patchLine(key, { selected: null, name: '', sku: '', unit_price: 0 })
+
+  const addLine = () => updateLines([...lines, newLine()])
+
+  const removeLine = (key: number) =>
+    updateLines(lines.length > 1 ? lines.filter((l) => l.key !== key) : [newLine()])
 
   const handleClose = () => {
     if (saving) return
     setForm({ ...EMPTY_FORM })
+    setLines([newLine()])
+    setTotalTouched(false)
     setErrors({})
-    setSelectedSku(null)
-    setSkuOpen(false)
+    setOpenLine(null)
     onOpenChange(false)
   }
 
@@ -865,11 +874,16 @@ function CreateOrderDialog({
         shipping_country: form.shipping_country.trim() || undefined,
         total: form.total ? parseFloat(form.total) : undefined,
         payment_method: form.payment_method.trim() || undefined,
-        lineitem_name: form.lineitem_name.trim() || undefined,
-        lineitem_quantity: form.lineitem_name.trim() ? parseInt(form.lineitem_quantity || '1') : undefined,
-        lineitem_sku: form.lineitem_sku.trim() || undefined,
-        lineitem_client_product_id: form.lineitem_client_product_id ? parseInt(form.lineitem_client_product_id) : undefined,
-        lineitem_product_id: form.lineitem_product_id ? parseInt(form.lineitem_product_id) : undefined,
+        items: lines
+          .filter((l) => l.name.trim())
+          .map((l) => ({
+            name: l.name.trim(),
+            quantity: Math.max(parseInt(l.quantity) || 1, 1),
+            sku: l.sku.trim() || undefined,
+            unit_price: l.unit_price > 0 ? l.unit_price : undefined,
+            client_product_id: l.selected?.type === 'client_product' ? l.selected.id : undefined,
+            product_id: l.selected?.type === 'product' ? l.selected.id : undefined,
+          })),
       }
       const result = await createOrder(payload)
       if (result?.success) {
@@ -947,100 +961,124 @@ function CreateOrderDialog({
             </div>
           </div>
 
-          {/* Product — SKU-linked */}
+          {/* Products — one row per product / SKU on this order */}
           <div>
             <p className='text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2'>
-              Product <span className='normal-case font-normal text-muted-foreground'>(optional)</span>
+              Products <span className='normal-case font-normal text-muted-foreground'>(optional)</span>
             </p>
             <div className='space-y-3'>
+              {lines.map((line, index) => (
+                <div key={line.key} className='rounded-md border p-3 space-y-3'>
+                  <div className='flex items-center justify-between'>
+                    <span className='text-xs font-medium text-muted-foreground'>Item {index + 1}</span>
+                    {(lines.length > 1 || line.name || line.sku) && (
+                      <button
+                        type='button'
+                        onClick={() => removeLine(line.key)}
+                        aria-label={`Remove item ${index + 1}`}
+                        className='text-muted-foreground hover:text-destructive'
+                      >
+                        <Trash2 className='h-3.5 w-3.5' />
+                      </button>
+                    )}
+                  </div>
 
-              {/* Searchable SKU dropdown */}
-              <div className='space-y-1'>
-                <Label className='text-xs font-medium'>Select from your inventory</Label>
-                <Popover open={skuOpen} onOpenChange={setSkuOpen}>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant='outline'
-                      role='combobox'
-                      aria-expanded={skuOpen}
-                      className='w-full h-9 text-sm justify-between font-normal'
-                    >
-                      {selectedSku
-                        ? <span className='truncate flex items-center gap-1.5'>
-                            <Package className='h-3.5 w-3.5 text-primary shrink-0' />
-                            {selectedSku.sku ? `[${selectedSku.sku}]  ` : ''}{selectedSku.name}
-                          </span>
-                        : <span className='text-muted-foreground'>Search by product name or SKU…</span>}
-                      <ChevronsUpDown className='ml-2 h-3.5 w-3.5 shrink-0 opacity-50' />
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className='w-[var(--radix-popover-trigger-width)] p-0' align='start'>
-                    <Command>
-                      <CommandInput
-                        placeholder='Search by name or SKU…'
-                        onValueChange={(v) => skuSearch(v)}
-                      />
-                      <CommandList>
-                        {skuLoading && (
-                          <div className='py-6 text-center text-sm text-muted-foreground'>Loading…</div>
-                        )}
-                        {!skuLoading && skuItems.length === 0 && (
-                          <CommandEmpty>No verified products found.</CommandEmpty>
-                        )}
-                        {!skuLoading && skuItems.length > 0 && (
-                          <CommandGroup>
-                            {skuItems.map((item) => (
-                              <CommandItem
-                                key={`${item.type}-${item.id}`}
-                                value={`${item.sku ?? ''} ${item.name}`}
-                                onSelect={() => handleSkuSelect(item)}
-                              >
-                                <Check className={cn('mr-2 h-3.5 w-3.5 shrink-0', selectedSku?.id === item.id && selectedSku?.type === item.type ? 'opacity-100' : 'opacity-0')} />
-                                <div className='flex-1 min-w-0'>
-                                  <span className='font-medium'>{item.name}</span>
-                                  {item.sku && <span className='ml-2 text-xs text-muted-foreground'>{item.sku}</span>}
-                                </div>
-                                {item.unit_price > 0 && (
-                                  <span className='ml-3 text-xs text-muted-foreground shrink-0'>
-                                    SAR {item.unit_price.toFixed(2)}
-                                  </span>
-                                )}
-                              </CommandItem>
-                            ))}
-                          </CommandGroup>
-                        )}
-                      </CommandList>
-                    </Command>
-                  </PopoverContent>
-                </Popover>
-                {selectedSku && (
-                  <button type='button' onClick={handleSkuClear}
-                    className='text-xs text-muted-foreground hover:text-destructive underline'>
-                    Clear selection
-                  </button>
-                )}
-              </div>
+                  {/* Searchable SKU dropdown */}
+                  <div className='space-y-1'>
+                    <Label className='text-xs font-medium'>Select from your inventory</Label>
+                    <Popover open={openLine === line.key} onOpenChange={(o) => setOpenLine(o ? line.key : null)}>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant='outline'
+                          role='combobox'
+                          aria-expanded={openLine === line.key}
+                          className='w-full h-9 text-sm justify-between font-normal'
+                        >
+                          {line.selected
+                            ? <span className='truncate flex items-center gap-1.5'>
+                                <Package className='h-3.5 w-3.5 text-primary shrink-0' />
+                                {line.selected.sku ? `[${line.selected.sku}]  ` : ''}{line.selected.name}
+                              </span>
+                            : <span className='text-muted-foreground'>Search by product name or SKU…</span>}
+                          <ChevronsUpDown className='ml-2 h-3.5 w-3.5 shrink-0 opacity-50' />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className='w-[var(--radix-popover-trigger-width)] p-0' align='start'>
+                        <Command>
+                          <CommandInput
+                            placeholder='Search by name or SKU…'
+                            onValueChange={(v) => skuSearch(v)}
+                          />
+                          <CommandList>
+                            {skuLoading && (
+                              <div className='py-6 text-center text-sm text-muted-foreground'>Loading…</div>
+                            )}
+                            {!skuLoading && skuItems.length === 0 && (
+                              <CommandEmpty>No verified products found.</CommandEmpty>
+                            )}
+                            {!skuLoading && skuItems.length > 0 && (
+                              <CommandGroup>
+                                {skuItems.map((item) => (
+                                  <CommandItem
+                                    key={`${item.type}-${item.id}`}
+                                    value={`${item.sku ?? ''} ${item.name}`}
+                                    onSelect={() => handleSkuSelect(line.key, item)}
+                                  >
+                                    <Check className={cn('mr-2 h-3.5 w-3.5 shrink-0', line.selected?.id === item.id && line.selected?.type === item.type ? 'opacity-100' : 'opacity-0')} />
+                                    <div className='flex-1 min-w-0'>
+                                      <span className='font-medium'>{item.name}</span>
+                                      {item.sku && <span className='ml-2 text-xs text-muted-foreground'>{item.sku}</span>}
+                                    </div>
+                                    {item.unit_price > 0 && (
+                                      <span className='ml-3 text-xs text-muted-foreground shrink-0'>
+                                        SAR {item.unit_price.toFixed(2)}
+                                      </span>
+                                    )}
+                                  </CommandItem>
+                                ))}
+                              </CommandGroup>
+                            )}
+                          </CommandList>
+                        </Command>
+                      </PopoverContent>
+                    </Popover>
+                    {line.selected && (
+                      <button type='button' onClick={() => handleSkuClear(line.key)}
+                        className='text-xs text-muted-foreground hover:text-destructive underline'>
+                        Clear selection
+                      </button>
+                    )}
+                  </div>
 
-              {/* Product name — auto-filled from selection, editable */}
-              {field('Product Name', 'co-item-name', {
-                placeholder: 'e.g. T-Shirt – Blue / L',
-                value: form.lineitem_name,
-                onChange: (e) => set('lineitem_name', e.target.value),
-              })}
+                  {/* Product name — auto-filled from selection, editable */}
+                  {field('Product Name', `co-item-name-${line.key}`, {
+                    placeholder: 'e.g. T-Shirt – Blue / L',
+                    value: line.name,
+                    onChange: (e) => patchLine(line.key, { name: e.target.value }),
+                    error: errors[`items.${index}.name`],
+                  })}
 
-              <div className='grid grid-cols-2 gap-3'>
-                {field('Qty', 'co-item-qty', {
-                  type: 'number',
-                  min: '1',
-                  value: form.lineitem_quantity,
-                  onChange: (e) => set('lineitem_quantity', e.target.value),
-                })}
-                {field('SKU', 'co-item-sku', {
-                  placeholder: 'Auto-filled or enter manually',
-                  value: form.lineitem_sku,
-                  onChange: (e) => set('lineitem_sku', e.target.value),
-                })}
-              </div>
+                  <div className='grid grid-cols-2 gap-3'>
+                    {field('Qty', `co-item-qty-${line.key}`, {
+                      type: 'number',
+                      min: '1',
+                      value: line.quantity,
+                      onChange: (e) => patchLine(line.key, { quantity: e.target.value }),
+                      error: errors[`items.${index}.quantity`],
+                    })}
+                    {field('SKU', `co-item-sku-${line.key}`, {
+                      placeholder: 'Auto-filled or enter manually',
+                      value: line.sku,
+                      onChange: (e) => patchLine(line.key, { sku: e.target.value }),
+                    })}
+                  </div>
+                </div>
+              ))}
+
+              <Button type='button' variant='outline' size='sm' onClick={addLine} className='w-full'>
+                <Plus className='h-3.5 w-3.5 mr-1.5' />
+                Add another product
+              </Button>
             </div>
           </div>
 

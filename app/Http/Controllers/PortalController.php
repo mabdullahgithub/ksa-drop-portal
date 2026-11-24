@@ -649,7 +649,18 @@ class PortalController extends Controller
             'lineitem_sku'               => 'nullable|string|max:255',
             'lineitem_client_product_id' => 'nullable|integer|exists:client_products,id',
             'lineitem_product_id'        => 'nullable|integer|exists:products,id',
+            // Several products / SKUs on one order. When present it replaces the
+            // single lineitem_* fields above, which stay for older callers.
+            'items'                      => 'nullable|array|max:50',
+            'items.*.name'               => 'required_with:items|string|max:500',
+            'items.*.quantity'           => 'nullable|integer|min:1|max:9999',
+            'items.*.sku'                => 'nullable|string|max:255',
+            'items.*.unit_price'         => 'nullable|numeric|min:0',
+            'items.*.client_product_id'  => 'nullable|integer|exists:client_products,id',
+            'items.*.product_id'         => 'nullable|integer|exists:products,id',
         ]);
+
+        $lines = $this->orderLinesFromRequest($validated);
 
         $prefix      = $client->short_id ?: 'CL' . $client->id;
         $orderNumber = $this->generateOrderNumber($prefix);
@@ -675,22 +686,19 @@ class PortalController extends Controller
             'tags'            => $this->defaultOrderTags(),
         ]);
 
-        if (!empty($validated['lineitem_name'])) {
-            $qty   = max((int) ($validated['lineitem_quantity'] ?? 1), 1);
-            $total = (float) ($validated['total'] ?? 0);
-            // Derive unit price from the order total the client entered
-            $unitPrice = $qty > 0 ? round($total / $qty, 2) : 0;
+        $prices = $this->allocateLinePrices($lines, (float) ($validated['total'] ?? 0));
 
+        foreach ($lines as $i => $line) {
             $order->items()->create([
-                'lineitem_name'               => $validated['lineitem_name'],
-                'lineitem_quantity'           => $qty,
-                'lineitem_price'              => $unitPrice,
-                'lineitem_sku'                => $validated['lineitem_sku'] ?? null,
+                'lineitem_name'               => $line['name'],
+                'lineitem_quantity'           => $line['quantity'],
+                'lineitem_price'              => $prices[$i],
+                'lineitem_sku'                => $line['sku'],
                 'lineitem_requires_shipping'  => true,
                 'lineitem_taxable'            => false,
                 'lineitem_fulfillment_status' => 'unfulfilled',
-                'client_product_id'           => $validated['lineitem_client_product_id'] ?? null,
-                'product_id'                  => $validated['lineitem_product_id'] ?? null,
+                'client_product_id'           => $line['client_product_id'],
+                'product_id'                  => $line['product_id'],
             ]);
         }
 
@@ -699,6 +707,80 @@ class PortalController extends Controller
             'message'      => 'Order created successfully.',
             'order_number' => $orderNumber,
         ]);
+    }
+
+    /**
+     * Normalise the order's products into one list, whether the caller sent the
+     * new `items` array or the original single lineitem_* fields.
+     *
+     * @return array<int, array{name: string, quantity: int, sku: ?string, unit_price: ?float, client_product_id: ?int, product_id: ?int}>
+     */
+    private function orderLinesFromRequest(array $validated): array
+    {
+        $raw = $validated['items'] ?? null;
+
+        if (empty($raw)) {
+            if (empty($validated['lineitem_name'])) {
+                return [];
+            }
+
+            $raw = [[
+                'name'              => $validated['lineitem_name'],
+                'quantity'          => $validated['lineitem_quantity'] ?? 1,
+                'sku'               => $validated['lineitem_sku'] ?? null,
+                'client_product_id' => $validated['lineitem_client_product_id'] ?? null,
+                'product_id'        => $validated['lineitem_product_id'] ?? null,
+            ]];
+        }
+
+        return array_map(fn (array $item) => [
+            'name'              => $item['name'],
+            'quantity'          => max((int) ($item['quantity'] ?? 1), 1),
+            'sku'               => ($item['sku'] ?? null) ?: null,
+            'unit_price'        => isset($item['unit_price']) ? (float) $item['unit_price'] : null,
+            'client_product_id' => $item['client_product_id'] ?? null,
+            'product_id'        => $item['product_id'] ?? null,
+        ], array_values($raw));
+    }
+
+    /**
+     * Unit price for each line, so the lines add back up to the order total the
+     * client entered (the total stays authoritative: it is the COD amount).
+     *
+     * Split in proportion to catalogue price x quantity when every line has a
+     * catalogue price, otherwise by quantity alone. Cents lost to rounding go on
+     * the last line, so the sum is exact.
+     *
+     * @param  array<int, array{quantity: int, unit_price: ?float}>  $lines
+     * @return array<int, float>
+     */
+    private function allocateLinePrices(array $lines, float $total): array
+    {
+        if ($lines === []) {
+            return [];
+        }
+
+        $priced = collect($lines)->every(fn ($l) => ($l['unit_price'] ?? 0) > 0);
+        $weights = array_map(
+            fn ($l) => $l['quantity'] * ($priced ? $l['unit_price'] : 1),
+            $lines
+        );
+        $weightSum = array_sum($weights);
+
+        $prices = [];
+        $allocated = 0.0;
+        $last = array_key_last($lines);
+
+        foreach ($lines as $i => $line) {
+            $lineTotal = $i === $last
+                ? round($total - $allocated, 2)
+                : round($total * $weights[$i] / $weightSum, 2);
+
+            $allocated += $lineTotal;
+            $prices[$i] = round($lineTotal / $line['quantity'], 2);
+        }
+
+        return $prices;
     }
 
     public function ordersImportTemplate(Request $request)
