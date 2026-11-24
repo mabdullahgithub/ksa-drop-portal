@@ -979,15 +979,18 @@ function CreateOrderDialog({
               </Button>
             </div>
             <div className='space-y-3'>
-              {lines.map((line, index) => (
+              {lines.map((line, index) => {
+                // Newest is on top, so number from the bottom: the first item added is always Item 1.
+                const itemNumber = lines.length - index
+                return (
                 <div key={line.key} className='rounded-md border p-3 space-y-3'>
                   <div className='flex items-center justify-between'>
-                    <span className='text-xs font-medium text-muted-foreground'>Item {index + 1}</span>
+                    <span className='text-xs font-medium text-muted-foreground'>Item {itemNumber}</span>
                     {(lines.length > 1 || line.name || line.sku) && (
                       <button
                         type='button'
                         onClick={() => removeLine(line.key)}
-                        aria-label={`Remove item ${index + 1}`}
+                        aria-label={`Remove item ${itemNumber}`}
                         className='text-muted-foreground hover:text-destructive'
                       >
                         <Trash2 className='h-3.5 w-3.5' />
@@ -1085,7 +1088,8 @@ function CreateOrderDialog({
                     })}
                   </div>
                 </div>
-              ))}
+                )
+              })}
             </div>
           </div>
 
