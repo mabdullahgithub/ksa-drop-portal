@@ -1075,7 +1075,12 @@ function CreateOrderDialog({
                 </div>
               ))}
 
-              <Button type='button' variant='outline' size='sm' onClick={addLine} className='w-full'>
+              <Button
+                type='button'
+                size='sm'
+                onClick={addLine}
+                className='w-full bg-zinc-900 text-white hover:bg-zinc-800 border border-zinc-700'
+              >
                 <Plus className='h-3.5 w-3.5 mr-1.5' />
                 Add another product
               </Button>
