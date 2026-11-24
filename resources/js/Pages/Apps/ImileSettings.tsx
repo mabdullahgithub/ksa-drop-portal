@@ -58,6 +58,7 @@ export default function ImileSettings() {
   const [connectorId, setConnectorId] = useState<number | null>(null)
   const [settings, setSettings] = useState({
     customer_id: '',
+    webhook_partner_codes: '',
     api_key: '',
     base_url: 'https://openapi.imile.com',
     time_zone: '+3',
@@ -88,6 +89,7 @@ export default function ImileSettings() {
       setSettings((prev) => ({
         ...prev,
         customer_id: data.customer_id?.value || '',
+        webhook_partner_codes: data.webhook_partner_codes?.value || '',
         api_key: data.api_key?.value || '',
         base_url: data.base_url?.value || 'https://openapi.imile.com',
         time_zone: data.time_zone?.value || '+3',
@@ -106,6 +108,7 @@ export default function ImileSettings() {
       await axios.put(`/api/connectors/${connectorId}/settings`, {
         settings: [
           { key: 'customer_id', value: settings.customer_id, is_encrypted: false },
+          { key: 'webhook_partner_codes', value: settings.webhook_partner_codes.trim(), is_encrypted: false },
           { key: 'api_key', value: settings.api_key, is_encrypted: true },
           { key: 'base_url', value: settings.base_url, is_encrypted: false },
           { key: 'time_zone', value: settings.time_zone, is_encrypted: false },
@@ -300,6 +303,22 @@ export default function ImileSettings() {
                     placeholder='+3'
                   />
                 </div>
+              </div>
+
+              <div className='space-y-2'>
+                <div className='flex items-center gap-1.5'>
+                  <Label htmlFor='webhook_partner_codes'>Extra webhook partner codes</Label>
+                  <FieldInfo title='Webhook partner codes'>
+                    <p>iMile stamps each tracking push with a <code>partnerCode</code>. We accept pushes that match the Customer ID above.</p>
+                    <p>If iMile keeps sending a different code (for example the old Customer ID after the credentials were changed), add it here so those updates are accepted instead of rejected. Separate several codes with commas.</p>
+                  </FieldInfo>
+                </div>
+                <Input
+                  id='webhook_partner_codes'
+                  value={settings.webhook_partner_codes}
+                  onChange={(e) => setSettings({ ...settings, webhook_partner_codes: e.target.value })}
+                  placeholder='Optional, e.g. C2102192601'
+                />
               </div>
 
               <div className='rounded-md bg-muted p-3 text-xs text-muted-foreground'>

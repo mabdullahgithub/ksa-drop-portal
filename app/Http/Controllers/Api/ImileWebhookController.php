@@ -271,16 +271,38 @@ class ImileWebhookController extends Controller
         $expectedPartnerCode = ConnectorSetting::getForConnector('imile', 'customer_id')
             ?: config('services.imile.customer_id');
 
-        if ($expectedPartnerCode && ! hash_equals((string) $expectedPartnerCode, $partnerCode)) {
-            Log::channel('imile_webhooks')->warning('iMile webhook: partnerCode mismatch', [
-                'received' => $partnerCode,
-                'ip'       => $ip,
-            ]);
+        // iMile stamps webhooks with the partnerCode of the account that
+        // booked the shipment, which is not always the CustomerID the API
+        // currently signs with (e.g. after the API credentials were rotated,
+        // iMile kept pushing the old code). Extra codes can be listed in the
+        // `webhook_partner_codes` setting, comma or space separated.
+        $accepted = array_filter(array_map('trim', preg_split(
+            '/[\s,]+/',
+            (string) ConnectorSetting::getForConnector('imile', 'webhook_partner_codes'),
+        ) ?: []));
 
-            return false;
+        if ($expectedPartnerCode) {
+            $accepted[] = (string) $expectedPartnerCode;
         }
 
-        return true;
+        // Nothing configured at all: keep the original behaviour of letting
+        // the push through rather than dropping tracking on a fresh install.
+        if ($accepted === []) {
+            return true;
+        }
+
+        foreach ($accepted as $code) {
+            if (hash_equals($code, $partnerCode)) {
+                return true;
+            }
+        }
+
+        Log::channel('imile_webhooks')->warning('iMile webhook: partnerCode mismatch', [
+            'received' => $partnerCode,
+            'ip'       => $ip,
+        ]);
+
+        return false;
     }
 
     /**
