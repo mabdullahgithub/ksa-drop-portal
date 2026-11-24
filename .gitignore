@@ -39,3 +39,7 @@ Thumbs.db
 # line when mobile-app is merged, or new files in the folder will be ignored.
 /rider-native
 /n8n
+# Local tooling, not for deploy
+.agent
+.agents
+.shopify
