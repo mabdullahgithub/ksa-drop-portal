@@ -10,8 +10,8 @@ export function AppLogo() {
   const isCollapsed = state === 'collapsed' && !isMobile
 
   const logoSrc = isDark
-    ? '/ksa-al-logo-files/Logo/KSA Drop Logo PNG-03.png'
-    : '/ksa-al-logo-files/Logo/ksa_drop_logo.png.png'
+    ? '/ksa-al-logo-files/Logo/ksa-drop-logo-dark.webp'
+    : '/ksa-al-logo-files/Logo/ksa-drop-logo-light.webp'
 
   return (
     <div
@@ -23,6 +23,10 @@ export function AppLogo() {
       <img
         src={logoSrc}
         alt='KSA Logo'
+        width={640}
+        height={160}
+        fetchPriority='high'
+        decoding='async'
         className={cn(
           'object-contain transition-all duration-200',
           isCollapsed ? 'h-8 w-8' : 'h-10 w-auto max-w-full'

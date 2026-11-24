@@ -2,16 +2,21 @@ import { Suspense, lazy, useState } from 'react'
 import { cn } from '@/lib/utils'
 import { usePermissions } from '@/hooks/use-permissions'
 import { type InsightRange, useDashboardInsights } from '@/hooks/useDashboardInsights'
-import { CityHeatmapFallback, StoreRankingFallback } from './chart-fallbacks'
-import { CourierRanking } from './courier-ranking'
-import { OrderRhythm } from './order-rhythm'
+import {
+  CityHeatmapFallback,
+  CourierRankingFallback,
+  OrderRhythmFallback,
+  StoreRankingFallback,
+} from './chart-fallbacks'
 
-// These two pull in the charting library (recharts, ~100 KB gzip). Loading them
+// These four pull in the charting library (recharts) and framer-motion. Loading them
 // on demand keeps it out of the dashboard's first load; the insights request
 // starts in this component at the same moment, so the code and the data arrive
 // in parallel. The data itself is still fetched live on every load — nothing
 // here caches it. The fallbacks match each card's loading state exactly.
 const CityHeatmap = lazy(() => import('./city-heatmap').then((m) => ({ default: m.CityHeatmap })))
+const CourierRanking = lazy(() => import('./courier-ranking').then((m) => ({ default: m.CourierRanking })))
+const OrderRhythm = lazy(() => import('./order-rhythm').then((m) => ({ default: m.OrderRhythm })))
 const StoreRanking = lazy(() => import('./store-ranking').then((m) => ({ default: m.StoreRanking })))
 
 const RANGES: Array<{ value: InsightRange; label: string }> = [
@@ -73,8 +78,16 @@ export function InsightsSection() {
 
         {(canCouriers || canRhythm) && (
           <div className={cn('grid gap-4', canCouriers && canRhythm && 'xl:grid-cols-2')}>
-            {canCouriers && <CourierRanking couriers={data.couriers} loading={loading} />}
-            {canRhythm && <OrderRhythm rhythm={data.rhythm} loading={loading} />}
+            {canCouriers && (
+              <Suspense fallback={<CourierRankingFallback />}>
+                <CourierRanking couriers={data.couriers} loading={loading} />
+              </Suspense>
+            )}
+            {canRhythm && (
+              <Suspense fallback={<OrderRhythmFallback />}>
+                <OrderRhythm rhythm={data.rhythm} loading={loading} />
+              </Suspense>
+            )}
           </div>
         )}
 

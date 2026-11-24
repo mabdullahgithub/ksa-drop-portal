@@ -27,6 +27,15 @@
 
                 document.documentElement.classList.add(resolvedTheme);
 
+                // Preload the sidebar/auth logo for the active theme so it is not
+                // discovered only after the JS bundle boots (LCP candidate).
+                var logo = document.createElement('link');
+                logo.rel = 'preload';
+                logo.as = 'image';
+                logo.href = '/ksa-al-logo-files/Logo/ksa-drop-logo-' + (resolvedTheme === 'dark' ? 'dark' : 'light') + '.webp';
+                logo.setAttribute('fetchpriority', 'high');
+                document.head.appendChild(logo);
+
                 // Apply background color immediately to prevent flicker
                 if (resolvedTheme === 'dark') {
                     document.documentElement.style.backgroundColor = 'oklch(0.129 0.042 264.695)';
@@ -51,7 +60,9 @@
 
         <!-- Fonts -->
         <link rel="preconnect" href="https://fonts.bunny.net">
-        <link href="https://fonts.bunny.net/css?family=inter:300,400,500,600,700|manrope:400,500,600,700&display=swap" rel="stylesheet" />
+        <!-- Non-render-blocking: loads as print, swaps to all on load (manrope is unused; inter 300 dropped) -->
+        <link href="https://fonts.bunny.net/css?family=inter:400,500,600,700&display=swap" rel="stylesheet" media="print" onload="this.media='all'" />
+        <noscript><link href="https://fonts.bunny.net/css?family=inter:400,500,600,700&display=swap" rel="stylesheet" /></noscript>
 
         <!-- Scripts -->
         @routes
