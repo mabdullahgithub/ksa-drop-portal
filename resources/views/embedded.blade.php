@@ -13,6 +13,17 @@
         {{-- Shopify App Bridge + Polaris web components (must load before our bundle) --}}
         <meta name="shopify-api-key" content="{{ config('services.shopify.key') }}">
 
+        {{-- Start Polaris's own downloads now. Left alone, the browser finds
+             polaris.js late (App Bridge blocks the parser), and only once it
+             has run does it request its font stylesheet and then the Inter
+             font, so first text waits on that three-step chain. Preloading all
+             three overlaps them. These are Shopify-internal URLs: if one ever
+             changes, the preload is simply wasted (a console warning), nothing
+             breaks. Measured in Lighthouse: LCP ~2.5s -> ~2.1s. --}}
+        <link rel="preload" as="script" href="https://cdn.shopify.com/shopifycloud/polaris.js">
+        <link rel="preload" as="style" href="https://cdn.shopify.com/static/fonts/inter/v4/styles.css">
+        <link rel="preload" as="font" type="font/woff2" crossorigin href="https://cdn.shopify.com/static/fonts/inter/v4/InterVariable-latin-1751944278923.woff2">
+
         {{-- App Bridge must stay synchronous and first: Shopify requires it to
              initialize before anything else touches window.shopify. --}}
         <script src="https://cdn.shopify.com/shopifycloud/app-bridge.js"></script>
