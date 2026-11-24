@@ -14,7 +14,8 @@
 /.zed
 /auth.json
 /node_modules
-# /public/build
+# Built by `npm run build` (vite build) on every VPS deploy, so it is never committed.
+/public/build
 /public/fonts-manifest.dev.json
 /public/hot
 # The 119 MB ProRes master of the manager welcome clip: over GitHub's 100 MB limit.
