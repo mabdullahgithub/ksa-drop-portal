@@ -2,6 +2,8 @@
 
 namespace App\Http\Middleware;
 
+use App\Logging\AmbientContext;
+use App\Logging\Enums\ActorType;
 use App\Models\ClientShopifyConnection;
 use App\Services\ShopifyService;
 use Closure;
@@ -53,6 +55,9 @@ class VerifyShopifySessionToken
         }
 
         $request->attributes->set('shopify_connection', $connection);
+
+        AmbientContext::setActor(ActorType::SHOPIFY_EMBEDDED, $connection->id);
+        AmbientContext::setClient($connection->client_id);
 
         return $next($request);
     }

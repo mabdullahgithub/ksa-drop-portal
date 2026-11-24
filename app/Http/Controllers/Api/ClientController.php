@@ -3,25 +3,31 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Logging\AppLog;
+use App\Logging\Enums\ModelType;
+use App\Logging\Events\AuditEvent;
+use App\Logging\Events\AuthEvent;
+use App\Logging\Events\ClientEvent;
+use App\Logging\ExternalId;
 use App\Mail\Auth\PasswordChangedMail;
 use App\Mail\Clients\WelcomeClientMail;
 use App\Models\Client;
 use App\Models\ClientProduct;
 use App\Models\ClientProductImage;
 use App\Models\User;
-use Illuminate\Support\Facades\Storage;
 use App\Notifications\ClientCreatedNotification;
 use App\Notifications\ClientStatusChangedNotification;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Password;
-use Illuminate\Validation\Rules\Password as PasswordRule;
 use App\Services\EmailService;
 use App\Services\Inventory\ClientProductReviewer;
 use App\Support\ClientAccess;
 use App\Support\GeneratedPassword;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Password;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\Rules\Password as PasswordRule;
 
 class ClientController extends Controller
 {
@@ -154,7 +160,7 @@ class ClientController extends Controller
                 Mail::to($user->email)->send(new WelcomeClientMail($client, $password));
             }
         } catch (\Exception $e) {
-            \Log::error('WelcomeClientMail failed for client ' . $client->id . ': ' . $e->getMessage());
+            AppLog::failure(ClientEvent::WELCOME_MAIL_FAILED, $e, cli: $client->id);
         }
 
         // Notify all admins and superadmins
@@ -163,7 +169,7 @@ class ClientController extends Controller
                 fn ($adminUser) => $adminUser->notify(new ClientCreatedNotification($client))
             );
         } catch (\Exception $e) {
-            \Log::error('ClientCreatedNotification failed for client ' . $client->id . ': ' . $e->getMessage());
+            AppLog::failure(ClientEvent::CREATED_NOTIFICATION_FAILED, $e, cli: $client->id);
         }
 
         $client->load('user');
@@ -309,7 +315,7 @@ class ClientController extends Controller
                 Mail::to($user->email)->send(new PasswordChangedMail($user, $request->ip()));
             }
         } catch (\Exception $e) {
-            \Log::error('PasswordChangedMail failed for client ' . $client->id . ': ' . $e->getMessage());
+            AppLog::failure(ClientEvent::PASSWORD_CHANGED_MAIL_FAILED, $e, cli: $client->id);
         }
 
         return response()->json([
@@ -336,11 +342,7 @@ class ClientController extends Controller
             // A transport failure here would otherwise surface as a bare 500.
             // The cause chain is already in storage/logs/mail-*.log via the
             // report handler in bootstrap/app.php.
-            \Log::channel('mail')->error('Password reset link failed for client ' . $client->id, [
-                'client_id' => $client->id,
-                'email' => $user->email,
-                'error' => $e->getMessage(),
-            ]);
+            AppLog::failure(AuthEvent::PASSWORD_RESET_LINK_FAILED, $e, usr: $user->id, cli: $client->id);
 
             return response()->json([
                 'message' => 'Could not send the reset link: ' . $e->getMessage(),
@@ -348,21 +350,14 @@ class ClientController extends Controller
         }
 
         if ($status === Password::RESET_LINK_SENT) {
-            \Log::channel('mail')->info('Password reset link sent for client ' . $client->id, [
-                'client_id' => $client->id,
-                'email' => $user->email,
-            ]);
+            AppLog::emit(AuthEvent::PASSWORD_RESET_LINK_SENT, usr: $user->id, cli: $client->id);
 
             return response()->json([
                 'message' => 'Password reset link sent to ' . $user->email . '.',
             ]);
         }
 
-        \Log::channel('mail')->warning('Password reset link not sent for client ' . $client->id, [
-            'client_id' => $client->id,
-            'email' => $user->email,
-            'status' => $status,
-        ]);
+        AppLog::emit(AuthEvent::PASSWORD_RESET_LINK_NOT_SENT, usr: $user->id, cli: $client->id, vcd: ExternalId::orNull($status));
 
         return response()->json([
             'message' => trans($status),
@@ -386,6 +381,11 @@ class ClientController extends Controller
         $status = $statusMap[$validated['action']];
 
         Client::whereIn('id', $validated['client_ids'])->update(['status' => $status]);
+
+        // A query-builder update fires no model events: record each row.
+        foreach ($validated['client_ids'] as $clientId) {
+            AppLog::emit(AuditEvent::RECORD_UPDATED, mdl: ModelType::CLIENT, rid: (int) $clientId, fld: 'status', cli: (int) $clientId);
+        }
 
         return response()->json([
             'message' => count($validated['client_ids']) . ' clients updated successfully',

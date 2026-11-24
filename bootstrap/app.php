@@ -1,12 +1,15 @@
 <?php
 
+use App\Logging\AmbientContext;
+use App\Logging\AppLog;
+use App\Logging\Events\MailEvent;
+use App\Logging\Events\SystemEvent;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Str;
 use Inertia\Inertia;
+use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Mailer\Exception\TransportExceptionInterface;
 
@@ -33,6 +36,10 @@ return Application::configure(basePath: dirname(__DIR__))
             'embedded/shopify/api/*', // session-token (JWT) authenticated, no Laravel session
         ]);
 
+        // Trace ID first, so every log line of a request (and of the jobs it
+        // dispatches) shares it. Echoed back as X-Request-Id.
+        $middleware->prepend(\App\Http\Middleware\AssignTraceContext::class);
+
         $middleware->web(append: [
             \App\Http\Middleware\SecurityHeaders::class,
             \App\Http\Middleware\HandleInertiaRequests::class,
@@ -44,6 +51,7 @@ return Application::configure(basePath: dirname(__DIR__))
         // session, so no session and no CSRF token — writes are checked by
         // Origin instead. See App\Services\Riders\RiderAuthService.
         $middleware->group('rider', [
+            \App\Http\Middleware\AssignTraceContext::class,
             \Illuminate\Cookie\Middleware\EncryptCookies::class,
             \Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse::class,
             \App\Http\Middleware\VerifyRiderOrigin::class,
@@ -78,30 +86,23 @@ return Application::configure(basePath: dirname(__DIR__))
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         // Any mail transport failure (SMTP auth refused, TLS handshake, host
-        // unreachable, message rejected) gets its full cause chain recorded in
-        // the mail channel before the exception continues on its way.
+        // unreachable, message rejected) is logged as MailEvent::TRANSPORT_FAILED;
+        // the mailer settings and full cause chain go to the exceptions log
+        // under the fingerprint, not into the event.
         $exceptions->report(function (TransportExceptionInterface $e) {
-            $causes = [];
+            AppLog::failure(MailEvent::TRANSPORT_FAILED, $e);
+        })->stop();
 
-            for ($current = $e; $current !== null; $current = $current->getPrevious()) {
-                $causes[] = $current::class.': '.$current->getMessage();
-            }
-
-            Log::channel('mail')->error('Mail transport failed', [
-                'transport' => config('mail.default'),
-                'host' => config('mail.mailers.'.config('mail.default').'.host'),
-                'port' => config('mail.mailers.'.config('mail.default').'.port'),
-                'username' => config('mail.mailers.'.config('mail.default').'.username'),
-                'encryption' => config('mail.mailers.'.config('mail.default').'.encryption'),
-                'causes' => $causes,
-                'trace' => $e->getTraceAsString(),
-            ]);
-        });
+        // Every other reported exception: one coded line, detail in the
+        // exceptions log. Replaces the framework's default prose log record.
+        $exceptions->report(function (Throwable $e) {
+            AppLog::failure(SystemEvent::EXCEPTION_REPORTED, $e);
+        })->stop();
 
         // Every browser-facing error gets our designed page and nothing else:
         // no exception class, message or stack trace ever reaches the screen,
-        // even with APP_DEBUG on. The cause goes to the log instead, under a
-        // reference the user can quote to support.
+        // even with APP_DEBUG on. The cause goes to the log instead, under the
+        // request's trace ID, which the user can quote to support.
         $exceptions->respond(function (Response $response, Throwable $exception, Request $request) {
             $status = $response->getStatusCode();
 
@@ -130,16 +131,13 @@ return Application::configure(basePath: dirname(__DIR__))
             $reference = null;
 
             if ($status >= 500) {
-                $reference = Str::upper(Str::random(10));
+                $reference = AmbientContext::trace();
 
-                Log::error("Unhandled exception [{$reference}]", [
-                    'reference' => $reference,
-                    'exception' => $exception::class,
-                    'message' => $exception->getMessage(),
-                    'location' => $exception->getFile().':'.$exception->getLine(),
-                    'url' => $request->fullUrl(),
-                    'user_id' => $request->user()?->id,
-                ]);
+                // Reported exceptions were already logged by report(); an HTTP
+                // exception (abort(503)) never is, so record the page served.
+                if ($exception instanceof HttpExceptionInterface) {
+                    AppLog::failure(SystemEvent::SERVER_ERROR_PAGE_SERVED, $exception, hst: $status);
+                }
             }
 
             return Inertia::render('Errors/Error', [

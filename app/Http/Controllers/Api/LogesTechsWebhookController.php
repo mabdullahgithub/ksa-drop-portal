@@ -3,6 +3,9 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Logging\AppLog;
+use App\Logging\Events\LogesTechsEvent;
+use App\Logging\ExternalId;
 use App\Models\ConnectorSetting;
 use App\Models\Shipment;
 use App\Services\Shipping\Drivers\LogesTechsDriver;
@@ -11,7 +14,6 @@ use App\Services\Shipping\Enums\ShipmentStatus;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
 use Throwable;
 
 /**
@@ -51,7 +53,7 @@ class LogesTechsWebhookController extends Controller
         $payload = $request->json()->all();
 
         if (! is_array($payload) || $payload === []) {
-            Log::channel('logestechs_webhooks')->warning('LogesTechs webhook: empty or non-JSON body');
+            AppLog::emit(LogesTechsEvent::WEBHOOK_BODY_INVALID);
 
             return $this->failure(400, 'Invalid payload');
         }
@@ -65,18 +67,15 @@ class LogesTechsWebhookController extends Controller
         $rawStatus = $this->stringOrNull($payload['newStatus'] ?? $payload['status'] ?? null);
 
         if ($barcode === null && $supplierInvoice === null) {
-            Log::channel('logestechs_webhooks')->warning('LogesTechs webhook missing barcode/supplierInvoice', [
-                'payload' => $this->redact($payload),
-            ]);
+            AppLog::emit(LogesTechsEvent::WEBHOOK_FIELD_MISSING);
+            AppLog::payload(LogesTechsEvent::WEBHOOK_FIELD_MISSING, $this->redact($payload));
 
             return $this->failure(400, 'Missing barcode/supplierInvoice');
         }
 
         if ($rawStatus === null) {
-            Log::channel('logestechs_webhooks')->warning('LogesTechs webhook carried no status', [
-                'barcode' => $barcode,
-                'payload' => $this->redact($payload),
-            ]);
+            AppLog::emit(LogesTechsEvent::WEBHOOK_STATUS_MISSING, trk: ExternalId::orNull($barcode));
+            AppLog::payload(LogesTechsEvent::WEBHOOK_STATUS_MISSING, $this->redact($payload));
 
             return $this->failure(400, 'Missing newStatus');
         }
@@ -89,11 +88,12 @@ class LogesTechsWebhookController extends Controller
                 // their side — but log it, because a push for a package we
                 // don't recognise usually means a mismatched supplierInvoice
                 // rather than someone else's parcel.
-                Log::channel('logestechs_webhooks')->warning('LogesTechs webhook for unknown shipment', [
-                    'barcode' => $barcode,
-                    'supplier_invoice' => $supplierInvoice,
-                    'status' => $rawStatus,
-                ]);
+                AppLog::emit(
+                    LogesTechsEvent::TRACKING_UNKNOWN_SHIPMENT,
+                    trk: ExternalId::orNull($barcode),
+                    xid: ExternalId::orNull($supplierInvoice),
+                    vcd: ExternalId::orNull($rawStatus),
+                );
 
                 return $this->success();
             }
@@ -126,24 +126,18 @@ class LogesTechsWebhookController extends Controller
                 };
             });
 
-            Log::channel('logestechs_webhooks')->info('LogesTechs webhook processed', [
-                'tracking' => $shipment->tracking_number,
-                'raw_status' => $event->rawStatus,
-                'status' => $event->status->value,
-            ]);
+            AppLog::emit(LogesTechsEvent::TRACKING_PROCESSED, shp: $shipment->id, sts: $event->status, vcd: ExternalId::orNull($event->rawStatus));
         } catch (Throwable $e) {
             // No retry is coming — capture everything needed to replay this by
             // hand or confirm it via Get Package Status.
-            Log::channel('logestechs_webhooks')->error('LogesTechs webhook failed — push will NOT be retried', [
-                'barcode' => $barcode,
-                'supplier_invoice' => $supplierInvoice,
-                'status' => $rawStatus,
-                'error' => $e->getMessage(),
-                'exception' => get_class($e),
-                'file' => $e->getFile(),
-                'line' => $e->getLine(),
-                'payload' => $this->redact($payload),
-            ]);
+            AppLog::failure(
+                LogesTechsEvent::WEBHOOK_PROCESSING_FAILED,
+                $e,
+                trk: ExternalId::orNull($barcode),
+                xid: ExternalId::orNull($supplierInvoice),
+                vcd: ExternalId::orNull($rawStatus),
+            );
+            AppLog::payload(LogesTechsEvent::WEBHOOK_PROCESSING_FAILED, $this->redact($payload));
 
             return $this->failure(500, 'Internal error');
         }
@@ -271,11 +265,7 @@ class LogesTechsWebhookController extends Controller
         // any caller able to guess the URL, and a forged DELIVERED push would
         // silently mark a real order fulfilled.
         if ($expectedUsername === '' || $expectedPassword === '') {
-            Log::channel('logestechs_webhooks')->error(
-                'LogesTechs webhook rejected: no webhook_username/webhook_password configured. '
-                . 'Set them in Apps → LogesTechs Settings to match the values in LogesTechs\' webhook panel.',
-                ['ip' => $ip]
-            );
+            AppLog::emit(LogesTechsEvent::WEBHOOK_CREDENTIALS_NOT_CONFIGURED);
 
             return false;
         }
@@ -284,10 +274,7 @@ class LogesTechsWebhookController extends Controller
         $password = (string) ($payload['webhookPassword'] ?? '');
 
         if (! hash_equals($expectedUsername, $username) || ! hash_equals($expectedPassword, $password)) {
-            Log::channel('logestechs_webhooks')->warning('LogesTechs webhook: credential mismatch', [
-                'received_username' => $username,
-                'ip' => $ip,
-            ]);
+            AppLog::emit(LogesTechsEvent::WEBHOOK_CREDENTIALS_MISMATCH, acc: ExternalId::orNull($username));
 
             return false;
         }

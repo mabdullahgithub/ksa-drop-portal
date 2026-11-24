@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Logging\AppLog;
+use App\Logging\Events\JntEvent;
 use App\Models\ConnectorSetting;
 use App\Models\Shipment;
 use App\Services\Shipping\Drivers\JntExpressDriver;
@@ -12,7 +14,6 @@ use App\Services\Shipping\Enums\ShipmentStatus;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
 use Throwable;
 
 class WebhookController extends Controller
@@ -37,7 +38,7 @@ class WebhookController extends Controller
         $txlogisticId   = $data['txlogisticId'] ?? null;
 
         if (! $trackingNumber && ! $txlogisticId) {
-            Log::channel('jnt_webhooks')->warning('J&T tracking webhook missing billCode/txlogisticId', ['data' => $data]);
+            AppLog::emit(JntEvent::WEBHOOK_FIELD_MISSING, tpc: 'tracking');
             return $this->failure(JntErrorCode::ILLEGAL_PARAMETERS, 'Missing billCode');
         }
 
@@ -45,10 +46,7 @@ class WebhookController extends Controller
             $shipment = $this->resolveShipment($trackingNumber, $txlogisticId);
 
             if (! $shipment) {
-                Log::channel('jnt_webhooks')->info('J&T tracking webhook for unknown shipment', [
-                    'tracking'      => $trackingNumber,
-                    'txlogistic_id' => $txlogisticId,
-                ]);
+                AppLog::emit(JntEvent::TRACKING_UNKNOWN_SHIPMENT, trk: $trackingNumber, xid: $txlogisticId);
                 // Acknowledge so J&T stops retrying a waybill we don't own.
                 return $this->success();
             }
@@ -56,9 +54,7 @@ class WebhookController extends Controller
             $events = $this->extractTrackingEvents($data);
 
             if ($events === []) {
-                Log::channel('jnt_webhooks')->info('J&T tracking webhook carried no scan details', [
-                    'tracking' => $shipment->tracking_number,
-                ]);
+                AppLog::emit(JntEvent::TRACKING_NO_SCANS, shp: $shipment->id);
                 return $this->success();
             }
 
@@ -96,20 +92,10 @@ class WebhookController extends Controller
                 };
             });
 
-            Log::channel('jnt_webhooks')->info('J&T tracking webhook processed', [
-                'tracking'    => $shipment->tracking_number,
-                'status'      => $latest->status->value,
-                'scan_events' => count($events),
-            ]);
+            AppLog::emit(JntEvent::TRACKING_PROCESSED, shp: $shipment->id, sts: $latest->status, cnt: count($events));
         } catch (Throwable $e) {
-            Log::channel('jnt_webhooks')->error('J&T tracking webhook failed', [
-                'tracking'  => $trackingNumber,
-                'error'     => $e->getMessage(),
-                'exception' => get_class($e),
-                'file'      => $e->getFile(),
-                'line'      => $e->getLine(),
-                'payload'   => $data,
-            ]);
+            AppLog::failure(JntEvent::WEBHOOK_PROCESSING_FAILED, $e, tpc: 'tracking', trk: $trackingNumber);
+            AppLog::payload(JntEvent::WEBHOOK_PROCESSING_FAILED, $data);
 
             return $this->failure(JntErrorCode::INTERNAL_CALL_EXCEPTION, 'Internal error');
         }
@@ -132,7 +118,7 @@ class WebhookController extends Controller
         $txlogisticId   = $data['txlogisticId'] ?? null;
 
         if (! $trackingNumber && ! $txlogisticId) {
-            Log::channel('jnt_webhooks')->warning('J&T return webhook missing tracking number', ['data' => $data]);
+            AppLog::emit(JntEvent::WEBHOOK_FIELD_MISSING, tpc: 'return');
             return $this->failure(JntErrorCode::ILLEGAL_PARAMETERS, 'Missing billCode');
         }
 
@@ -140,7 +126,7 @@ class WebhookController extends Controller
             $shipment = $this->resolveShipment($trackingNumber, $txlogisticId);
 
             if (! $shipment) {
-                Log::channel('jnt_webhooks')->info('J&T return webhook for unknown shipment', ['tracking' => $trackingNumber]);
+                AppLog::emit(JntEvent::RETURN_UNKNOWN_SHIPMENT, trk: $trackingNumber, xid: $txlogisticId);
                 return $this->success();
             }
 
@@ -161,19 +147,10 @@ class WebhookController extends Controller
                 $shipment->markReturned($reason);
             });
 
-            Log::channel('jnt_webhooks')->info('J&T return webhook processed', [
-                'tracking' => $trackingNumber,
-                'reason'   => $reason,
-            ]);
+            AppLog::emit(JntEvent::RETURN_PROCESSED, shp: $shipment->id);
         } catch (Throwable $e) {
-            Log::channel('jnt_webhooks')->error('J&T return webhook failed', [
-                'tracking'  => $trackingNumber,
-                'error'     => $e->getMessage(),
-                'exception' => get_class($e),
-                'file'      => $e->getFile(),
-                'line'      => $e->getLine(),
-                'payload'   => $data,
-            ]);
+            AppLog::failure(JntEvent::WEBHOOK_PROCESSING_FAILED, $e, tpc: 'return', trk: $trackingNumber);
+            AppLog::payload(JntEvent::WEBHOOK_PROCESSING_FAILED, $data);
 
             return $this->failure(JntErrorCode::INTERNAL_CALL_EXCEPTION, 'Internal error');
         }
@@ -201,7 +178,7 @@ class WebhookController extends Controller
         }
 
         if (empty($wayNos)) {
-            Log::channel('jnt_webhooks')->warning('J&T COD webhook missing waybill numbers', ['data' => $data]);
+            AppLog::emit(JntEvent::WEBHOOK_FIELD_MISSING, tpc: 'cod');
             return $this->failure(JntErrorCode::ILLEGAL_PARAMETERS, 'Missing waybill numbers');
         }
 
@@ -217,12 +194,12 @@ class WebhookController extends Controller
                 $shipment = Shipment::with('order')->where('tracking_number', $trackingNumber)->first();
 
                 if (! $shipment) {
-                    Log::channel('jnt_webhooks')->info('J&T COD webhook: unknown shipment in batch', ['tracking' => $trackingNumber]);
+                    AppLog::emit(JntEvent::COD_UNKNOWN_SHIPMENT, trk: $trackingNumber, bat: $batchId);
                     continue;
                 }
 
                 if (! $shipment->order) {
-                    Log::channel('jnt_webhooks')->warning('J&T COD webhook: shipment has no associated order (possibly deleted)', ['tracking' => $trackingNumber]);
+                    AppLog::emit(JntEvent::COD_SHIPMENT_WITHOUT_ORDER, shp: $shipment->id, bat: $batchId);
                     continue;
                 }
 
@@ -233,28 +210,22 @@ class WebhookController extends Controller
                     'cod_collected_at'     => $remitTime,
                 ]);
 
+                AppLog::emit(JntEvent::COD_ORDER_PAID, ord: $shipment->order->id, shp: $shipment->id, bat: $batchId);
+
                 $updated++;
             } catch (Throwable $e) {
                 $failed++;
-                Log::channel('jnt_webhooks')->error('J&T COD webhook: failed to update order', [
-                    'tracking'  => $trackingNumber,
-                    'batch_id'  => $batchId,
-                    'error'     => $e->getMessage(),
-                    'exception' => get_class($e),
-                    'file'      => $e->getFile(),
-                    'line'      => $e->getLine(),
-                ]);
+                AppLog::failure(JntEvent::COD_ORDER_UPDATE_FAILED, $e, trk: $trackingNumber, bat: $batchId);
             }
         }
 
-        Log::channel('jnt_webhooks')->info('J&T COD webhook processed', [
-            'batch_id'      => $batchId,
-            'total_amount'  => $totalAmount,
-            'remit_time'    => $remitTime,
-            'waybill_count' => count($wayNos),
-            'updated'       => $updated,
-            'failed'        => $failed,
-        ]);
+        AppLog::emit(
+            JntEvent::COD_PROCESSED,
+            cnt: $updated,
+            fct: $failed,
+            bat: $batchId,
+            amt: is_numeric($totalAmount) ? (int) round((float) $totalAmount * 100) : null,
+        );
 
         if ($failed > 0 && $updated === 0) {
             return $this->failure(JntErrorCode::INTERNAL_CALL_EXCEPTION, 'All updates failed');
@@ -278,7 +249,7 @@ class WebhookController extends Controller
         $txlogisticId   = $data['txlogisticId'] ?? null;
 
         if (! $trackingNumber && ! $txlogisticId) {
-            Log::channel('jnt_webhooks')->warning('J&T OTP webhook missing tracking number', ['data' => $data]);
+            AppLog::emit(JntEvent::WEBHOOK_FIELD_MISSING, tpc: 'otp');
             return $this->failure(JntErrorCode::ILLEGAL_PARAMETERS, 'Missing billCode');
         }
 
@@ -286,7 +257,7 @@ class WebhookController extends Controller
             $shipment = $this->resolveShipment($trackingNumber, $txlogisticId);
 
             if (! $shipment) {
-                Log::channel('jnt_webhooks')->info('J&T OTP webhook for unknown shipment', ['tracking' => $trackingNumber]);
+                AppLog::emit(JntEvent::OTP_UNKNOWN_SHIPMENT, trk: $trackingNumber, xid: $txlogisticId);
                 return $this->success();
             }
 
@@ -308,16 +279,10 @@ class WebhookController extends Controller
                 $shipment->markDelivered();
             });
 
-            Log::channel('jnt_webhooks')->info('J&T OTP webhook processed', ['tracking' => $trackingNumber]);
+            AppLog::emit(JntEvent::OTP_PROCESSED, shp: $shipment->id);
         } catch (Throwable $e) {
-            Log::channel('jnt_webhooks')->error('J&T OTP webhook failed', [
-                'tracking'  => $trackingNumber,
-                'error'     => $e->getMessage(),
-                'exception' => get_class($e),
-                'file'      => $e->getFile(),
-                'line'      => $e->getLine(),
-                'payload'   => $data,
-            ]);
+            AppLog::failure(JntEvent::WEBHOOK_PROCESSING_FAILED, $e, tpc: 'otp', trk: $trackingNumber);
+            AppLog::payload(JntEvent::WEBHOOK_PROCESSING_FAILED, $data);
 
             return $this->failure(JntErrorCode::INTERNAL_CALL_EXCEPTION, 'Internal error');
         }
@@ -504,30 +469,21 @@ class WebhookController extends Controller
             $bizContentString = is_string($raw) ? $raw : json_encode($raw);
 
             if (! $this->verifyJntSignature($bizContentString, $fullBody, $digest, $apiAccount, $type)) {
-                Log::channel('jnt_webhooks')->warning("J&T {$type} webhook signature verification failed", [
-                    'ip'             => $request->ip(),
-                    'digest_present' => ! empty($digest),
-                    'body_length'    => strlen($fullBody),
-                ]);
+                AppLog::emit(JntEvent::WEBHOOK_SIGNATURE_INVALID, tpc: $type);
                 return [null, $this->failure(JntErrorCode::HEADER_SIGNATURE_INVALID)];
             }
 
             $data = is_string($raw) ? json_decode($raw, true) : (array) $raw;
 
             if (! is_array($data) || $data === []) {
-                Log::channel('jnt_webhooks')->warning("J&T {$type} webhook empty or invalid bizContent", [
-                    'raw_preview' => substr((string) $raw, 0, 200),
-                ]);
+                AppLog::emit(JntEvent::WEBHOOK_BIZCONTENT_INVALID, tpc: $type);
+                AppLog::payload(JntEvent::WEBHOOK_BIZCONTENT_INVALID, $raw);
                 return [null, $this->failure(JntErrorCode::ILLEGAL_PARAMETERS, 'Invalid bizContent')];
             }
 
             return [$data, null];
         } catch (Throwable $e) {
-            Log::channel('jnt_webhooks')->error("J&T {$type} webhook parse error", [
-                'error'     => $e->getMessage(),
-                'exception' => get_class($e),
-                'ip'        => $request->ip(),
-            ]);
+            AppLog::failure(JntEvent::WEBHOOK_PARSE_FAILED, $e, tpc: $type);
             return [null, $this->failure(JntErrorCode::SYSTEM_ERROR, 'Parse error')];
         }
     }
@@ -540,7 +496,7 @@ class WebhookController extends Controller
         string $type = '',
     ): bool {
         if (! $digest) {
-            Log::channel('jnt_webhooks')->debug('J&T webhook: no digest header received');
+            AppLog::emit(JntEvent::WEBHOOK_DIGEST_MISSING);
             return false;
         }
 
@@ -549,7 +505,7 @@ class WebhookController extends Controller
         $expectedAccount = $creds['api_account'] ?? config('services.jnt_express.api_account') ?? '';
 
         if (! $privateKey) {
-            Log::channel('jnt_webhooks')->warning('J&T webhook: private_key not configured in connector_settings');
+            AppLog::emit(JntEvent::WEBHOOK_PRIVATE_KEY_MISSING);
             return false;
         }
 
@@ -557,15 +513,13 @@ class WebhookController extends Controller
         // test key, not your production private key. Enable only during
         // sandbox joint-debugging — never in production.
         if (config('services.jnt.skip_webhook_verification', false)) {
-            Log::channel('jnt_webhooks')->info("J&T {$type} webhook: signature verification bypassed (sandbox mode)");
+            AppLog::emit(JntEvent::WEBHOOK_SIGNATURE_BYPASSED, tpc: $type);
             return true;
         }
 
         // The pushing account must match our configured J&T account.
         if ($expectedAccount && $apiAccount && ! hash_equals((string) $expectedAccount, (string) $apiAccount)) {
-            Log::channel('jnt_webhooks')->warning('J&T webhook: apiAccount mismatch', [
-                'received' => $apiAccount,
-            ]);
+            AppLog::emit(JntEvent::WEBHOOK_ACCOUNT_MISMATCH, acc: $apiAccount);
             return false;
         }
 
@@ -585,12 +539,7 @@ class WebhookController extends Controller
             }
         }
 
-        Log::channel('jnt_webhooks')->debug('J&T webhook signature mismatch', [
-            'type'               => $type,
-            'private_key_length' => strlen($privateKey),
-            'biz_length'         => strlen($bizContent),
-            'body_length'        => strlen($fullBody),
-        ]);
+        AppLog::emit(JntEvent::WEBHOOK_SIGNATURE_MISMATCH, tpc: $type);
 
         return false;
     }

@@ -1,9 +1,14 @@
 <?php
 
+use App\Logging\Monolog\UseCodedFormat;
 use Monolog\Handler\NullHandler;
 use Monolog\Handler\StreamHandler;
 use Monolog\Handler\SyslogUdpHandler;
 use Monolog\Processor\PsrLogMessageProcessor;
+
+// Operational log files are deleted after this many days (log:prune and each
+// channel's rotation). History events live in storage/logs/history instead.
+$prunableDays = (int) env('LOG_PRUNABLE_DAYS', 45);
 
 return [
 
@@ -50,6 +55,19 @@ return [
     |
     */
 
+    // Raw webhook/API bodies behind coded events (AppLog::payload). Off by
+    // default: they can hold customer PII. Switch on briefly to debug an
+    // integration; files are kept 14 days.
+    'payloads_enabled' => (bool) env('LOG_PAYLOADS', false),
+
+    // Two retention classes, chosen per event (App\Logging\Enums\Retention):
+    // prunable lines are deleted after `prunable_days`; history lines are kept
+    // for `history_days`, where 0 means forever. See docs/logging/README.md.
+    'retention' => [
+        'prunable_days' => $prunableDays,
+        'history_days' => (int) env('LOG_HISTORY_DAYS', 0),
+    ],
+
     'channels' => [
 
         'stack' => [
@@ -60,6 +78,7 @@ return [
 
         'single' => [
             'driver' => 'single',
+            'tap' => [UseCodedFormat::class],
             'path' => storage_path('logs/laravel.log'),
             'level' => env('LOG_LEVEL', 'debug'),
             'replace_placeholders' => true,
@@ -67,9 +86,10 @@ return [
 
         'daily' => [
             'driver' => 'daily',
+            'tap' => [UseCodedFormat::class],
             'path' => storage_path('logs/laravel.log'),
             'level' => env('LOG_LEVEL', 'debug'),
-            'days' => env('LOG_DAILY_DAYS', 14),
+            'days' => $prunableDays,
             'replace_placeholders' => true,
         ],
 
@@ -102,6 +122,7 @@ return [
                 'stream' => 'php://stderr',
             ],
             'formatter' => env('LOG_STDERR_FORMATTER'),
+            'tap' => [UseCodedFormat::class],
             'processors' => [PsrLogMessageProcessor::class],
         ],
 
@@ -129,23 +150,24 @@ return [
 
         'jnt_webhooks' => [
             'driver' => 'daily',
+            'tap' => [UseCodedFormat::class],
             'path' => storage_path('logs/jnt-webhooks.log'),
             'level' => 'debug',
-            'days' => 30,
+            'days' => $prunableDays,
             'replace_placeholders' => true,
         ],
 
         // Outbound sends and agent replies for the WhatsApp order-confirmation
         // flow: SendWhatsAppOrderMessageJob, ProcessWhatsAppFollowUps, the agent
-        // reply endpoint. Kept 60 days: this is the only record of what we told
-        // a customer and when, which is what ops relies on when a delivery is
-        // disputed. Inbound traffic is split out to `whatsapp_webhooks` below —
+        // reply endpoint. What we told a customer and when is a HISTORY event
+        // (storage/logs/history); this file holds the operational lines. Inbound traffic is split out to `whatsapp_webhooks` below —
         // same separation this file already uses for iMile and J&T.
         'whatsapp' => [
             'driver' => 'daily',
+            'tap' => [UseCodedFormat::class],
             'path' => storage_path('logs/whatsapp.log'),
             'level' => 'debug',
-            'days' => 60,
+            'days' => $prunableDays,
             'replace_placeholders' => true,
         ],
 
@@ -155,31 +177,34 @@ return [
         // file for while wiring up a new webhook URL.
         'whatsapp_webhooks' => [
             'driver' => 'daily',
+            'tap' => [UseCodedFormat::class],
             'path' => storage_path('logs/whatsapp-webhooks.log'),
             'level' => 'debug',
-            'days' => 60,
+            'days' => $prunableDays,
             'replace_placeholders' => true,
         ],
 
         'imile_webhooks' => [
             'driver' => 'daily',
+            'tap' => [UseCodedFormat::class],
             'path' => storage_path('logs/imile-webhooks.log'),
             'level' => 'debug',
-            'days' => 30,
+            'days' => $prunableDays,
             'replace_placeholders' => true,
         ],
 
         // LogesTechs pushes each status change exactly once with no retry
         // ("only status 200, its send one time"), so this log is the only
-        // record of a push we failed to process — worth keeping longer than
-        // the other courier webhook logs.
+        // record of a push we failed to process. A failed push is logged as an
+        // event with its body in the payloads log when LOG_PAYLOADS=true.
         //
         // Switched off (no file is written) unless LOGESTECHS_LOGS_ENABLED=true.
         'logestechs_webhooks' => env('LOGESTECHS_LOGS_ENABLED', false) ? [
             'driver' => 'daily',
+            'tap' => [UseCodedFormat::class],
             'path' => storage_path('logs/logestechs-webhooks.log'),
             'level' => 'debug',
-            'days' => 60,
+            'days' => $prunableDays,
             'replace_placeholders' => true,
         ] : [
             'driver' => 'monolog',
@@ -196,9 +221,10 @@ return [
         // Switched off (no file is written) unless LOGESTECHS_LOGS_ENABLED=true.
         'logestechs' => env('LOGESTECHS_LOGS_ENABLED', false) ? [
             'driver' => 'daily',
+            'tap' => [UseCodedFormat::class],
             'path' => storage_path('logs/logestechs-api.log'),
             'level' => 'debug',
-            'days' => 30,
+            'days' => $prunableDays,
             'replace_placeholders' => true,
         ] : [
             'driver' => 'monolog',
@@ -207,25 +233,62 @@ return [
 
         // Everything Shopify — OAuth/token exchange, webhook delivery and
         // registration, order sync, and the GDPR compliance topics — lands here
-        // rather than in the shared app log. Kept 90 days so the compliance
-        // records (customers/redact, shop/redact) outlive their action window.
+        // rather than in the shared app log. The GDPR compliance topics
+        // (customers/redact, shop/redact) are HISTORY events, kept in
+        // storage/logs/history beyond this file's prunable window.
         // Every outbound email — the message envelope on the way out, the
         // confirmed handoff to the transport, and any transport failure with
         // its full exception chain. Split out from the app log because SMTP
         // failures are otherwise buried under unrelated stack traces.
         'mail' => [
             'driver' => 'daily',
+            'tap' => [UseCodedFormat::class],
             'path' => storage_path('logs/mail.log'),
             'level' => 'debug',
-            'days' => 30,
+            'days' => $prunableDays,
+            'replace_placeholders' => true,
+        ],
+
+        'payloads' => env('LOG_PAYLOADS', false) ? [
+            'driver' => 'daily',
+            'tap' => [UseCodedFormat::class],
+            'path' => storage_path('logs/payloads.log'),
+            'level' => 'debug',
+            'days' => 14,
+        ] : [
+            'driver' => 'monolog',
+            'handler' => NullHandler::class,
+        ],
+
+        // Business history (Retention::HISTORY events): who did what to which
+        // record. IDs only. One file per day, never pruned unless
+        // LOG_HISTORY_DAYS is set; back this folder up off-server.
+        'history' => [
+            'driver' => 'daily',
+            'tap' => [UseCodedFormat::class],
+            'path' => storage_path('logs/history/history.log'),
+            'level' => 'debug',
+            'days' => (int) env('LOG_HISTORY_DAYS', 0),
+        ],
+
+        // Exception detail (class, message, location, trace) behind the
+        // fingerprint `exf` of a coded line. Written once per fingerprint per
+        // day. This is the only log that may hold prose.
+        'exceptions' => [
+            'driver' => 'daily',
+            'tap' => [UseCodedFormat::class],
+            'path' => storage_path('logs/exceptions.log'),
+            'level' => 'debug',
+            'days' => $prunableDays,
             'replace_placeholders' => true,
         ],
 
         'shopify' => [
             'driver' => 'daily',
+            'tap' => [UseCodedFormat::class],
             'path' => storage_path('logs/shopify.log'),
             'level' => 'debug',
-            'days' => 90,
+            'days' => $prunableDays,
             'replace_placeholders' => true,
         ],
 

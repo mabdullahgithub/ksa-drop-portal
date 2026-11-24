@@ -2,12 +2,14 @@
 
 namespace App\Services;
 
+use App\Logging\AppLog;
+use App\Logging\Events\ShopifyEvent;
+use App\Logging\ExternalId;
 use App\Models\Client;
 use App\Models\ClientShopifyConnection;
 use App\Models\Tag;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Log;
 use RuntimeException;
 
 /**
@@ -234,7 +236,7 @@ class ShopifyService
         try {
             $token = $this->exchangeSessionToken($shop, $sessionToken);
         } catch (\Throwable $e) {
-            Log::channel('shopify')->error('Shopify token exchange failed', ['shop' => $shop, 'error' => $e->getMessage()]);
+            AppLog::failure(ShopifyEvent::TOKEN_EXCHANGE_FAILED, $e, shd: ExternalId::orNull($shop));
 
             return $connection;
         }
@@ -266,13 +268,10 @@ class ShopifyService
             $results = $this->registerWebhooks($shop, $token['access_token']);
             $connection->update(['webhooks_registered' => ! in_array(false, $results, true)]);
         } catch (\Throwable $e) {
-            Log::channel('shopify')->warning('Shopify webhook registration error', ['shop' => $shop, 'error' => $e->getMessage()]);
+            AppLog::failure(ShopifyEvent::WEBHOOK_REGISTRATION_FAILED, $e, shd: ExternalId::orNull($shop));
         }
 
-        Log::channel('shopify')->info('Shopify install completed via token exchange', [
-            'shop'      => $shop,
-            'client_id' => $connection->client_id,
-        ]);
+        AppLog::emit(ShopifyEvent::INSTALL_COMPLETED, con: $connection->id, cli: $connection->client_id);
 
         return $connection;
     }
@@ -294,10 +293,7 @@ class ShopifyService
         try {
             $token = $this->exchangeSessionToken($shop, $sessionToken);
         } catch (\Throwable $e) {
-            Log::channel('shopify')->warning('Shopify grant refresh failed — keeping the existing token', [
-                'shop'  => $shop,
-                'error' => $e->getMessage(),
-            ]);
+            AppLog::failure(ShopifyEvent::GRANT_REFRESH_FAILED, $e, shd: $shop);
 
             return $connection;
         }
@@ -310,11 +306,7 @@ class ShopifyService
             'scope'                    => $token['scope'] ?: $connection->scope,
         ]);
 
-        Log::channel('shopify')->info('Shopify grant refreshed after scope change', [
-            'shop'             => $shop,
-            'scope'            => $connection->scope,
-            'fulfillment_ready' => $connection->hasFulfillmentScopes(),
-        ]);
+        AppLog::emit(ShopifyEvent::GRANT_REFRESHED, con: $connection->id);
 
         return $connection;
     }
@@ -913,9 +905,7 @@ class ShopifyService
                 'refresh_token' => $connection->refresh_token,
             ]);
         } catch (\Throwable $e) {
-            Log::channel('shopify')->warning('Shopify install check could not reach the token endpoint', [
-                'shop' => $connection->shop_domain, 'error' => $e->getMessage(),
-            ]);
+            AppLog::failure(ShopifyEvent::INSTALL_CHECK_UNREACHABLE, $e, shd: $connection->shop_domain);
 
             return null;
         }
@@ -930,9 +920,7 @@ class ShopifyService
         $token = $response->successful() ? $response->json('access_token') : null;
 
         if (! is_string($token) || $token === '') {
-            Log::channel('shopify')->warning('Shopify install check renewal inconclusive', [
-                'shop' => $connection->shop_domain, 'status' => $response->status(),
-            ]);
+            AppLog::emit(ShopifyEvent::INSTALL_CHECK_INCONCLUSIVE, shd: $connection->shop_domain, hst: $response->status());
 
             return null;
         }
@@ -962,9 +950,7 @@ class ShopifyService
                 ['query' => '{ shop { name } }', 'variables' => (object) []]
             );
         } catch (\Throwable $e) {
-            Log::channel('shopify')->warning('Shopify install check failed to reach the API', [
-                'shop' => $shop, 'error' => $e->getMessage(),
-            ]);
+            AppLog::failure(ShopifyEvent::INSTALL_CHECK_UNREACHABLE, $e, shd: $shop);
 
             return null;
         }
@@ -977,9 +963,7 @@ class ShopifyService
             return true;
         }
 
-        Log::channel('shopify')->warning('Shopify install check inconclusive', [
-            'shop' => $shop, 'status' => $response->status(),
-        ]);
+        AppLog::emit(ShopifyEvent::INSTALL_CHECK_INCONCLUSIVE, shd: $shop, hst: $response->status());
 
         return null;
     }
@@ -1046,17 +1030,14 @@ class ShopifyService
                         ? collect($userErrors)->pluck('message')->filter()->implode('; ')
                         : 'Shopify created no subscription and returned no error';
 
-                    Log::channel('shopify')->warning('Shopify webhook registration userError', [
-                        'shop' => $shop, 'topic' => $topic, 'errors' => $userErrors,
-                    ]);
+                    AppLog::emit(ShopifyEvent::WEBHOOK_REGISTRATION_USER_ERROR, shd: $shop, tpc: $topic);
+                    AppLog::payload(ShopifyEvent::WEBHOOK_REGISTRATION_USER_ERROR, $userErrors);
                 }
             } catch (\Throwable $e) {
                 $results[$topic]  = false;
                 $errors[$topic] = $e->getMessage();
 
-                Log::channel('shopify')->warning('Shopify webhook registration failed', [
-                    'shop' => $shop, 'topic' => $topic, 'error' => $e->getMessage(),
-                ]);
+                AppLog::failure(ShopifyEvent::WEBHOOK_REGISTRATION_FAILED, $e, shd: $shop, tpc: $topic);
             }
         }
 

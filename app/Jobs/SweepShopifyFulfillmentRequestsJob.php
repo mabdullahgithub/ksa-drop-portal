@@ -2,6 +2,8 @@
 
 namespace App\Jobs;
 
+use App\Logging\AppLog;
+use App\Logging\Events\ShopifyEvent;
 use App\Models\ClientShopifyConnection;
 use App\Models\Order;
 use App\Services\ShopifyFulfillmentService;
@@ -10,7 +12,6 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
-use Illuminate\Support\Facades\Log;
 
 /**
  * Accept every fulfillment request Shopify is holding for one store.
@@ -57,10 +58,7 @@ class SweepShopifyFulfillmentRequestsJob implements ShouldQueue
         }
 
         if ($outstanding !== []) {
-            Log::channel('shopify')->info('Swept outstanding fulfillment requests', [
-                'shop'  => $this->shopDomain,
-                'count' => count($outstanding),
-            ]);
+            AppLog::emit(ShopifyEvent::FULFILLMENT_REQUESTS_SWEPT, cnt: count($outstanding), shd: $this->shopDomain);
         }
     }
 

@@ -2,13 +2,16 @@
 
 namespace App\Http\Controllers;
 
+use App\Logging\AppLog;
+use App\Logging\Enums\Reason;
+use App\Logging\Events\ShopifyEvent;
+use App\Logging\ExternalId;
 use App\Models\Client;
 use App\Models\ClientShopifyConnection;
 use App\Services\ShopifyFulfillmentService;
 use App\Services\ShopifyMerchantMailer;
 use App\Services\ShopifyService;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Log;
 
 class ShopifyController extends Controller
 {
@@ -50,13 +53,8 @@ class ShopifyController extends Controller
         // no portal session (install started inside the Shopify admin) lands
         // on the login page with the reason — never a bare error page, and
         // never back into the admin app, which would restart the OAuth hop.
-        $reject = function (string $reason, string $message) use ($request, $shop) {
-            Log::channel('shopify')->warning('Shopify OAuth callback rejected', [
-                'reason'        => $reason,
-                'shop'          => $shop,
-                'state_present' => $request->filled('state'),
-                'user_id'       => auth()->id(),
-            ]);
+        $reject = function (Reason $reason, string $message) use ($shop) {
+            AppLog::emit(ShopifyEvent::OAUTH_CALLBACK_REJECTED, rsn: $reason, shd: ExternalId::orNull($shop));
 
             if (auth()->check()) {
                 return redirect()->route('portal.connectors')->with('error', $message);
@@ -69,7 +67,7 @@ class ShopifyController extends Controller
         };
 
         if (! $this->shopify->isValidShopDomain($shop)) {
-            return $reject('invalid_shop', 'Shopify sent back an invalid store domain. Please try again.');
+            return $reject(Reason::INVALID_SHOP_DOMAIN, 'Shopify sent back an invalid store domain. Please try again.');
         }
 
         // CSRF: the state is a signed "shop|timestamp" token minted by us at
@@ -77,7 +75,7 @@ class ShopifyController extends Controller
         // so no session storage is needed (the embedded-install flow has none).
         if (! $this->shopify->verifyState((string) $request->state, $shop)) {
             return $reject(
-                'state_invalid',
+                Reason::STATE_INVALID,
                 'Your connection attempt expired or was tampered with. Please reopen the app from Shopify Admin and try again.'
             );
         }
@@ -87,22 +85,22 @@ class ShopifyController extends Controller
         // off the server bag, not getQueryString(), which re-encodes and sorts.
         if (! $this->shopify->verifyOauthHmac($request->query(), $request->server('QUERY_STRING'))) {
             return $reject(
-                'hmac_failed',
+                Reason::SIGNATURE_INVALID,
                 'We could not verify the response from Shopify. Please try connecting again.'
             );
         }
 
         // A logged-in portal user with no linked client can't own a connection.
         if (auth()->check() && ! $client) {
-            return $reject('no_client', 'No client account is linked to your login. Please contact support.');
+            return $reject(Reason::NO_LINKED_CLIENT, 'No client account is linked to your login. Please contact support.');
         }
 
         try {
             $token = $this->shopify->exchangeCodeForToken($shop, (string) $request->code);
         } catch (\Throwable $e) {
-            Log::channel('shopify')->error('Shopify OAuth exchange failed', ['shop' => $shop, 'error' => $e->getMessage()]);
+            AppLog::failure(ShopifyEvent::TOKEN_EXCHANGE_FAILED, $e, shd: ExternalId::orNull($shop));
 
-            return $reject('exchange_failed', 'Failed to connect Shopify store. Please try again.');
+            return $reject(Reason::VENDOR_REJECTED, 'Failed to connect Shopify store. Please try again.');
         }
 
         // A portal session happened to be active in the same browser (e.g. the
@@ -180,10 +178,7 @@ class ShopifyController extends Controller
             ->where('id', '!=', $connection->id)
             ->get()
             ->each(function (ClientShopifyConnection $old) use ($client) {
-                Log::channel('shopify')->warning('Shopify store unlinked in favor of a new claim', [
-                    'shop'      => $old->shop_domain,
-                    'client_id' => $client->id,
-                ]);
+                AppLog::emit(ShopifyEvent::CONNECTION_UNLINKED_FOR_NEW_CLAIM, shd: $old->shop_domain, cli: $client->id);
 
                 $old->delete();
             });
@@ -192,10 +187,7 @@ class ShopifyController extends Controller
 
         // Syncing starts here. Orders placed before the store was connected stay
         // in Shopify by design — nothing was held for them.
-        Log::channel('shopify')->info('Shopify connection claimed by client', [
-            'shop'      => $shop,
-            'client_id' => $client->id,
-        ]);
+        AppLog::emit(ShopifyEvent::CONNECTION_CLAIMED, shd: $shop, cli: $client->id);
 
         $this->merchantMailer->storeConnected($client, $shop);
 
@@ -225,12 +217,7 @@ class ShopifyController extends Controller
             ->where('client_id', '!=', $client->id)
             ->get()
             ->each(function (ClientShopifyConnection $old) use ($shop, $client) {
-                Log::channel('shopify')->warning('Shopify store reassigned to a new client', [
-                    'shop'           => $shop,
-                    'from_client_id' => $old->client_id,
-                    'to_client_id'   => $client->id,
-                    'by_user_id'     => auth()->id(),
-                ]);
+                AppLog::emit(ShopifyEvent::STORE_REASSIGNED, shd: $shop, cli: $client->id, pcl: $old->client_id);
 
                 $old->delete();
             });
@@ -286,10 +273,7 @@ class ShopifyController extends Controller
 
         $this->armConnection($connection, $shop, $token['access_token']);
 
-        Log::channel('shopify')->info('Shopify store relinked via admin re-grant', [
-            'shop'      => $shop,
-            'client_id' => $connection->client_id,
-        ]);
+        AppLog::emit(ShopifyEvent::STORE_RELINKED, shd: $shop, cli: $connection->client_id);
 
         return redirect()->away($this->shopify->adminAppUrl($shop));
     }
@@ -318,7 +302,7 @@ class ShopifyController extends Controller
 
         $this->armConnection($connection, $shop, $token['access_token']);
 
-        Log::channel('shopify')->info('Shopify install completed for unlinked store — token stored', ['shop' => $shop]);
+        AppLog::emit(ShopifyEvent::INSTALL_UNLINKED_STORE, shd: $shop);
 
         return redirect()->away($this->shopify->adminAppUrl($shop));
     }
@@ -339,7 +323,7 @@ class ShopifyController extends Controller
             $results = $this->shopify->registerWebhooks($shop, $accessToken);
             $connection->update(['webhooks_registered' => ! in_array(false, $results, true)]);
         } catch (\Throwable $e) {
-            Log::channel('shopify')->warning('Shopify webhook registration error', ['shop' => $shop, 'error' => $e->getMessage()]);
+            AppLog::failure(ShopifyEvent::WEBHOOK_REGISTRATION_FAILED, $e, shd: ExternalId::orNull($shop));
         }
 
         // Logs and returns false on its own failures — a store that ends up
@@ -416,9 +400,7 @@ class ShopifyController extends Controller
                     : 'Some webhooks could not be registered. Check that the app is approved for protected customer data.',
             ], $allOk ? 200 : 422);
         } catch (\Throwable $e) {
-            Log::channel('shopify')->warning('Shopify retryWebhooks failed', [
-                'shop' => $connection->shop_domain, 'error' => $e->getMessage(),
-            ]);
+            AppLog::failure(ShopifyEvent::WEBHOOK_REGISTRATION_FAILED, $e, shd: $connection->shop_domain);
 
             return response()->json(['message' => 'Could not register webhooks. Please try again.'], 422);
         }

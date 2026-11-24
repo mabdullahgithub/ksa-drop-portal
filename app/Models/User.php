@@ -3,6 +3,8 @@
 namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
+use App\Logging\AppLog;
+use App\Logging\Events\AuthEvent;
 use App\Mail\Auth\ResetPasswordMail;
 use App\Services\EmailService;
 use Database\Factories\UserFactory;
@@ -162,10 +164,7 @@ class User extends Authenticatable
 
         if (! $emailService->isEnabled()) {
             // Silent no-op otherwise: the broker still reports "link sent".
-            \Log::channel('mail')->warning('Password reset notification skipped — email is disabled', [
-                'user_id' => $this->id,
-                'email' => $this->email,
-            ]);
+            AppLog::emit(AuthEvent::PASSWORD_RESET_SKIPPED_EMAIL_DISABLED, usr: $this->id);
 
             return;
         }
@@ -182,14 +181,7 @@ class User extends Authenticatable
             60
         );
 
-        \Log::channel('mail')->info('Password reset notification dispatched', [
-            'user_id' => $this->id,
-            'email' => $this->email,
-            // ResetPasswordMail is a ShouldQueue mailable, so this only reaches
-            // the transport once a queue worker picks it up.
-            'queued' => true,
-            'queue_connection' => config('queue.default'),
-        ]);
+        AppLog::emit(AuthEvent::PASSWORD_RESET_MAIL_QUEUED, usr: $this->id);
 
         Mail::to($this->email)->send(
             new ResetPasswordMail($this, $resetUrl, $expireMinutes.' minutes')

@@ -2,8 +2,10 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
+use App\Logging\AppLog;
+use App\Logging\Events\MailEvent;
 use Illuminate\Database\Eloquent\Casts\Attribute;
+use Illuminate\Database\Eloquent\Model;
 
 class EmailSetting extends Model
 {
@@ -76,10 +78,7 @@ class EmailSetting extends Model
             try {
                 $password = decrypt($this->password);
             } catch (\Exception $e) {
-                \Log::error('Failed to decrypt email password for mail config', [
-                    'error' => $e->getMessage(),
-                    'setting_id' => $this->id,
-                ]);
+                AppLog::failure(MailEvent::PASSWORD_DECRYPT_FAILED, $e, est: $this->id);
             }
         }
 
@@ -111,10 +110,7 @@ class EmailSetting extends Model
                 try {
                     return decrypt($value);
                 } catch (\Exception $e) {
-                    \Log::error('Failed to decrypt email password', [
-                        'error' => $e->getMessage(),
-                        'setting_id' => $this->id,
-                    ]);
+                    AppLog::failure(MailEvent::PASSWORD_DECRYPT_FAILED, $e, est: $this->id);
 
                     return null;
                 }

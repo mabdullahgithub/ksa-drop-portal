@@ -2,10 +2,11 @@
 
 namespace App\Console\Commands;
 
+use App\Logging\AppLog;
+use App\Logging\Events\ShopifyEvent;
 use App\Models\ClientShopifyConnection;
 use App\Services\ShopifyService;
 use Illuminate\Console\Command;
-use Illuminate\Support\Facades\Log;
 
 /**
  * Check that Shopify still holds a webhook subscription for every topic we
@@ -89,11 +90,7 @@ class VerifyShopifyWebhooks extends Command
                 $this->error('    These fail on every order and count towards the rate that gets subscriptions deleted.');
                 $this->error('    Remove them in the Partner Dashboard — this command will not delete them for you.');
 
-                Log::channel('shopify')->error('Shopify stale webhook subscriptions found', [
-                    'shop'     => $shop,
-                    'urls'     => array_keys($stale),
-                    'expected' => $expectedUrl,
-                ]);
+                AppLog::emit(ShopifyEvent::STALE_WEBHOOK_SUBSCRIPTIONS, shd: $shop, cnt: count($stale));
             }
 
             if ($missing === []) {
@@ -126,7 +123,7 @@ class VerifyShopifyWebhooks extends Command
 
                 $this->info("    re-registered {$shop}");
 
-                Log::channel('shopify')->info('Shopify webhook subscriptions restored', ['shop' => $shop]);
+                AppLog::emit(ShopifyEvent::WEBHOOKS_RESTORED, shd: $shop);
 
                 continue;
             }

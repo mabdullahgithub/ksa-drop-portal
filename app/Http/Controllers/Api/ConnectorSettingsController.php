@@ -3,15 +3,18 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\Connector;
+use App\Logging\AppLog;
+use App\Logging\Events\SettingsEvent;
+use App\Logging\Events\ShopifyEvent;
+use App\Logging\ExternalId;
 use App\Models\ClientShopifyConnection;
-use App\Services\ShopifyService;
+use App\Models\Connector;
 use App\Models\ConnectorSetting;
 use App\Services\Shipping\CourierManager;
+use App\Services\ShopifyService;
 use App\Services\WhatsApp\MetaWhatsAppService;
 use App\Support\PermissionCatalog;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Log;
 
 class ConnectorSettingsController extends Controller
 {
@@ -112,13 +115,7 @@ class ConnectorSettingsController extends Controller
             return response()->json(['message' => 'Setting not found.'], 404);
         }
 
-        Log::info('Connector secret revealed', [
-            'connector'    => $connector->key,
-            'setting_key'  => $setting->key,
-            'user_id'      => $request->user()?->id,
-            'user_email'   => $request->user()?->email,
-            'ip'           => $request->ip(),
-        ]);
+        AppLog::emit(SettingsEvent::CONNECTOR_SECRET_REVEALED, cnr: $connector->id, stk: ExternalId::orNull($setting->key));
 
         return response()->json(['value' => $setting->value]);
     }
@@ -193,9 +190,7 @@ class ConnectorSettingsController extends Controller
                     'message' => 'Connection successful! Reached ' . ($data['shop']['name'] ?? $connection->shop_domain) . ' on the Shopify Admin API.',
                 ]);
             } catch (\Throwable $e) {
-                Log::channel('shopify')->warning('Shopify connection test failed', [
-                    'shop' => $connection->shop_domain, 'error' => $e->getMessage(),
-                ]);
+                AppLog::failure(ShopifyEvent::CONNECTION_TEST_FAILED, $e, con: $connection->id);
                 $failures[] = $e->getMessage();
             }
         }

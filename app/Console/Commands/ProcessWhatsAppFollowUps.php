@@ -3,13 +3,14 @@
 namespace App\Console\Commands;
 
 use App\Jobs\SendWhatsAppOrderMessageJob;
+use App\Logging\AppLog;
+use App\Logging\Events\WhatsAppEvent;
 use App\Models\Order;
 use App\Models\Tag;
 use App\Models\WhatsAppMessage;
 use App\Services\WhatsApp\MetaWhatsAppService;
 use App\Support\WhatsAppMessaging;
 use Illuminate\Console\Command;
-use Illuminate\Support\Facades\Log;
 
 /**
  * Advances the WhatsApp confirmation conversation on its 24h clock.
@@ -72,10 +73,7 @@ class ProcessWhatsAppFollowUps extends Command
                 $order->forceFill(['whatsapp_status' => Order::WHATSAPP_FAILED])->saveQuietly();
                 $this->applyTag($order, 'WhatsApp Unreachable', '#ef4444', 'WhatsApp could not deliver — call again');
 
-                Log::channel('whatsapp')->info('Skipping follow-up — initial message undeliverable', [
-                    'order_id' => $order->id,
-                    'order_number' => $order->order_number,
-                ]);
+                AppLog::emit(WhatsAppEvent::FOLLOWUP_SKIPPED_UNDELIVERABLE, ord: $order->id);
 
                 continue;
             }
@@ -103,10 +101,7 @@ class ProcessWhatsAppFollowUps extends Command
             $order->forceFill(['whatsapp_status' => Order::WHATSAPP_GRAVEYARD])->saveQuietly();
             $this->applyTag($order, 'Graveyard', '#6b7280', 'No response after two WhatsApp attempts');
 
-            Log::channel('whatsapp')->info('Order moved to graveyard', [
-                'order_id' => $order->id,
-                'order_number' => $order->order_number,
-            ]);
+            AppLog::emit(WhatsAppEvent::ORDER_MOVED_TO_GRAVEYARD, ord: $order->id);
         }
 
         return $orders->count();

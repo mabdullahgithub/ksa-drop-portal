@@ -2,11 +2,13 @@
 
 namespace App\Services;
 
+use App\Logging\AppLog;
+use App\Logging\Events\ShopifyEvent;
+use App\Logging\ExternalId;
 use App\Mail\Shopify\ShopifyStoreConnectedMail;
 use App\Mail\Shopify\ShopifyStoreDisconnectedMail;
 use App\Models\Client;
 use Illuminate\Mail\Mailable;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 
 /**
@@ -43,12 +45,7 @@ class ShopifyMerchantMailer
                 Mail::to($client->user->email)->send($mail);
             }
         } catch (\Throwable $e) {
-            Log::channel('shopify')->error('Shopify merchant email failed', [
-                'mail'      => class_basename($mail),
-                'shop'      => $shop,
-                'client_id' => $client->id,
-                'error'     => $e->getMessage(),
-            ]);
+            AppLog::failure(ShopifyEvent::MERCHANT_EMAIL_FAILED, $e, cli: $client->id, shd: ExternalId::orNull($shop));
         }
     }
 }

@@ -2,12 +2,15 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Client;
 use App\Jobs\RequestShopifyFulfillmentJob;
+use App\Logging\AppLog;
+use App\Logging\Enums\ModelType;
+use App\Logging\Events\AuditEvent;
+use App\Models\Client;
 use App\Models\Order;
 use App\Services\ShopifyFulfillmentService;
-use Illuminate\Http\Request;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Http\Request;
 
 class ShopifyPendingOrderController extends Controller
 {
@@ -106,6 +109,11 @@ class ShopifyPendingOrderController extends Controller
         $submitted = $this->pendingQuery($client)
             ->whereIn('id', $validated['ids'])
             ->update(['shopify_sync_status' => 'approved']);
+
+        // A query-builder update fires no model events: record each row.
+        foreach ($orders as $order) {
+            AppLog::emit(AuditEvent::RECORD_UPDATED, mdl: ModelType::ORDER, rid: $order->id, fld: 'shopify_sync_status', cli: $client->id);
+        }
 
         // One job per order rather than one for the batch: each is an
         // independent call to Shopify, and a store-wide failure should not cost

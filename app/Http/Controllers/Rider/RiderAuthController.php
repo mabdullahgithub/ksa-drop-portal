@@ -3,6 +3,9 @@
 namespace App\Http\Controllers\Rider;
 
 use App\Http\Controllers\Controller;
+use App\Logging\AppLog;
+use App\Logging\Events\RiderEvent;
+use App\Logging\ExternalId;
 use App\Models\RiderDevice;
 use App\Services\Riders\RiderAuthService;
 use App\Services\Riders\RiderPresence;
@@ -26,10 +29,14 @@ class RiderAuthController extends Controller
         ]);
 
         try {
-            [, $plain] = $this->auth->claimActivation($validated['token'], $request);
+            [$device, $plain] = $this->auth->claimActivation($validated['token'], $request);
         } catch (RiderSignInRefused $e) {
+            AppLog::emit(RiderEvent::SIGN_IN_REFUSED, src: 'link', vcd: ExternalId::orNull($e->reason) ?? 'unknown');
+
             return response()->json(['message' => $e->getMessage(), 'code' => $e->reason], 422);
         }
+
+        AppLog::emit(RiderEvent::SIGNED_IN, rdr: $device->rider_id, src: 'link');
 
         return response()
             ->json(['redirect' => RiderAppController::START_URL])
@@ -48,10 +55,14 @@ class RiderAuthController extends Controller
         ]);
 
         try {
-            [, $plain] = $this->auth->signInWithPin($validated['phone'], $validated['pin'], $request);
+            [$device, $plain] = $this->auth->signInWithPin($validated['phone'], $validated['pin'], $request);
         } catch (RiderSignInRefused $e) {
+            AppLog::emit(RiderEvent::SIGN_IN_REFUSED, src: 'pin', vcd: ExternalId::orNull($e->reason) ?? 'unknown');
+
             return response()->json(['message' => $e->getMessage(), 'code' => $e->reason], 422);
         }
+
+        AppLog::emit(RiderEvent::SIGNED_IN, rdr: $device->rider_id, src: 'pin');
 
         return response()
             ->json(['redirect' => RiderAppController::START_URL])
@@ -68,6 +79,7 @@ class RiderAuthController extends Controller
         $device = $request->attributes->get('rider_device');
         $device->forceFill(['revoked_at' => now(), 'revoked_reason' => RiderDevice::REVOKED_BY_RIDER])->save();
         RiderPresence::forget($device->rider);
+        AppLog::emit(RiderEvent::SIGNED_OUT, rdr: $device->rider_id);
 
         return response()
             ->json(['redirect' => RiderAppController::START_URL])

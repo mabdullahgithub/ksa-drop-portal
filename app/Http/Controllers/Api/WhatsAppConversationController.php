@@ -4,14 +4,17 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Http\Middleware\EnsureWhatsAppUnlocked;
+use App\Logging\AppLog;
+use App\Logging\Events\AccessEvent;
+use App\Logging\Enums\Reason;
+use App\Logging\Events\WhatsAppEvent;
 use App\Models\Order;
 use App\Models\WhatsAppMessage;
 use App\Services\WhatsApp\MetaWhatsAppService;
 use App\Support\WhatsAppMessaging;
-use Illuminate\Support\Facades\Log;
-use Throwable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Throwable;
 
 /**
  * Read model behind the WhatsApp inbox.
@@ -36,10 +39,7 @@ class WhatsAppConversationController extends Controller
         $expected = (string) config('recyclebin.pin');
 
         if ($expected === '' || ! hash_equals($expected, $validated['pin'])) {
-            Log::warning('WhatsApp inbox unlock failed', [
-                'user_id' => $request->user()?->id,
-                'ip' => $request->ip(),
-            ]);
+            AppLog::emit(AccessEvent::SCREEN_UNLOCK_FAILED, src: 'whatsapp', rsn: Reason::CREDENTIALS_INVALID);
 
             return response()->json(['message' => 'Incorrect PIN.'], 422);
         }
@@ -68,9 +68,7 @@ class WhatsAppConversationController extends Controller
 
         WhatsAppMessaging::set($validated['enabled']);
 
-        Log::channel('whatsapp')->info('WhatsApp messaging switched ' . ($validated['enabled'] ? 'on' : 'off'), [
-            'user_id' => $request->user()?->id,
-        ]);
+        AppLog::emit(WhatsAppEvent::MESSAGING_SWITCHED, on: (bool) $validated['enabled']);
 
         return response()->json(['enabled' => WhatsAppMessaging::enabled()]);
     }
@@ -233,19 +231,12 @@ class WhatsAppConversationController extends Controller
         try {
             $message = $whatsapp->sendFreeform($order, trim($validated['body']), $request->user()?->id);
         } catch (Throwable $e) {
-            Log::channel('whatsapp')->error('Agent reply failed', [
-                'order_id' => $order->id,
-                'user_id' => $request->user()?->id,
-                'error' => $e->getMessage(),
-            ]);
+            AppLog::failure(WhatsAppEvent::AGENT_REPLY_FAILED, $e, ord: $order->id);
 
             return response()->json(['message' => 'Could not send: ' . $e->getMessage()], 502);
         }
 
-        Log::channel('whatsapp')->info('Agent reply sent', [
-            'order_id' => $order->id,
-            'user_id' => $request->user()?->id,
-        ]);
+        AppLog::emit(WhatsAppEvent::AGENT_REPLY_SENT, ord: $order->id, wam: $message->id);
 
         return response()->json([
             'message' => 'Reply sent',

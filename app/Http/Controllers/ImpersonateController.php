@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Exceptions\ClientPortalBlocked;
+use App\Logging\AppLog;
+use App\Logging\Events\AccessEvent;
 use App\Models\Client;
 use Illuminate\Http\Request;
 
@@ -28,11 +30,18 @@ class ImpersonateController extends Controller
             'impersonate.client_name' => $client->company_name,
         ]);
 
+        AppLog::emit(AccessEvent::IMPERSONATION_STARTED, cli: $client->id);
+
         return redirect()->route('portal.dashboard');
     }
 
     public function leave()
     {
+        $clientId = session('impersonate.client_id');
+        if (is_numeric($clientId)) {
+            AppLog::emit(AccessEvent::IMPERSONATION_ENDED, cli: (int) $clientId);
+        }
+
         session()->forget(['impersonate.admin_id', 'impersonate.client_id', 'impersonate.client_name']);
 
         return redirect()->route('client');

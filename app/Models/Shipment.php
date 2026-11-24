@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Logging\AppLog;
+use App\Logging\Events\ShippingEvent;
 use App\Models\Concerns\RestrictedByClientAccess;
 use App\Services\Shipping\DTOs\TrackingEvent;
 use App\Services\Shipping\DTOs\TrackingResult;
@@ -429,7 +431,7 @@ class Shipment extends Model
                 fn ($admin) => $admin->notify(new \App\Notifications\ShipmentDeliveredNotification($this))
             );
         } catch (\Throwable $e) {
-            \Illuminate\Support\Facades\Log::error('ShipmentDeliveredNotification failed for shipment ' . $this->id . ': ' . $e->getMessage());
+            AppLog::failure(ShippingEvent::DELIVERED_NOTIFICATION_FAILED, $e, shp: $this->id);
         }
     }
 
@@ -495,7 +497,7 @@ class Shipment extends Model
                 fn ($admin) => $admin->notify(new \App\Notifications\ShipmentExceptionNotification($this))
             );
         } catch (\Throwable $e) {
-            \Illuminate\Support\Facades\Log::error('ShipmentExceptionNotification failed for shipment ' . $this->id . ': ' . $e->getMessage());
+            AppLog::failure(ShippingEvent::EXCEPTION_NOTIFICATION_FAILED, $e, shp: $this->id);
         }
     }
 

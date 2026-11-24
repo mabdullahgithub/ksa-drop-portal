@@ -135,7 +135,7 @@ return [
      *
      * To enable, set to true, and then create listeners to watch these events.
      */
-    'events_enabled' => false,
+    'events_enabled' => true, // role/permission grants are written to the history log (App\Listeners\LogAuthEvents)
 
     /*
      * Teams Feature.

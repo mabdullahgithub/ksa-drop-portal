@@ -3,10 +3,11 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Logging\AppLog;
+use App\Logging\Events\LogesTechsEvent;
 use App\Services\Shipping\Drivers\LogesTechsDriver;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Log;
 
 /**
  * LogesTechs-specific lookups backing the Create Shipment dialog.
@@ -36,7 +37,7 @@ class LogesTechsController extends Controller
                 'villages' => [],
             ], 422);
         } catch (\Throwable $e) {
-            Log::error('LogesTechs village lookup failed', ['error' => $e->getMessage()]);
+            AppLog::failure(LogesTechsEvent::VILLAGE_LOOKUP_FAILED, $e);
 
             return response()->json([
                 'message' => 'Could not load districts from LogesTechs.',

@@ -3,8 +3,12 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\Order;
 use App\Jobs\PushShopifyFulfillmentJob;
+use App\Logging\AppLog;
+use App\Logging\Enums\Courier;
+use App\Logging\Events\ShippingEvent;
+use App\Logging\ExternalId;
+use App\Models\Order;
 use App\Models\Shipment;
 use App\Models\Warehouse;
 use App\Services\Shipping\CourierManager;
@@ -16,7 +20,6 @@ use App\Services\Shipping\Enums\ShipmentStatus;
 use App\Services\Shipping\RiderActionRefused;
 use App\Services\Shipping\ShipmentEventRecorder;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Log;
 
 class ShipmentController extends Controller
 {
@@ -146,13 +149,14 @@ class ShipmentController extends Controller
             // The courier has already booked and printed this waybill, so a
             // failure here loses a real parcel unless someone is told which
             // one. Surface the number instead of a bare 500.
-            Log::error('Shipment booked at courier but not saved', [
-                'order_id' => $order->id,
-                'courier' => $courier,
-                'tracking_number' => $result->trackingNumber,
-                'txlogistic_id' => $shipmentData->txlogisticId,
-                'error' => $e->getMessage(),
-            ]);
+            AppLog::failure(
+                ShippingEvent::BOOKED_BUT_NOT_SAVED,
+                $e,
+                ord: $order->id,
+                trk: ExternalId::orNull($result->trackingNumber),
+                crr: Courier::fromSlug($courier),
+                xid: ExternalId::orNull($shipmentData->txlogisticId),
+            );
 
             return response()->json([
                 'message' => "{$this->courierLabel($courier)} created waybill {$result->trackingNumber}, but it could not be saved. Record it manually before booking again.",
@@ -288,13 +292,14 @@ class ShipmentController extends Controller
             } catch (\Throwable $e) {
                 // Already booked at the courier — name the waybill in the
                 // failure row so it isn't lost, and carry on with the batch.
-                Log::error('Shipment booked at courier but not saved', [
-                    'order_id' => $order->id,
-                    'courier' => $courier,
-                    'tracking_number' => $result->trackingNumber,
-                    'txlogistic_id' => $shipmentData->txlogisticId,
-                    'error' => $e->getMessage(),
-                ]);
+                AppLog::failure(
+                    ShippingEvent::BOOKED_BUT_NOT_SAVED,
+                    $e,
+                    ord: $order->id,
+                    trk: ExternalId::orNull($result->trackingNumber),
+                    crr: Courier::fromSlug($courier),
+                    xid: ExternalId::orNull($shipmentData->txlogisticId),
+                );
 
                 $failed[] = [
                     'order_id' => $orderId,

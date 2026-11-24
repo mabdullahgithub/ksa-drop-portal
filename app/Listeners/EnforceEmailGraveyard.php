@@ -2,10 +2,11 @@
 
 namespace App\Listeners;
 
+use App\Logging\AppLog;
+use App\Logging\Events\MailEvent;
 use App\Models\EmailGraveyard;
 use App\Services\Mail\BounceReport;
 use Illuminate\Mail\Events\MessageSending;
-use Illuminate\Support\Facades\Log;
 use Symfony\Component\Mime\Email;
 
 /**
@@ -33,9 +34,7 @@ class EnforceEmailGraveyard
         } catch (\Throwable $e) {
             // The graveyard must never be the reason mail stops going out —
             // a missing table after a deploy, say. Send as if it were empty.
-            Log::channel('mail')->warning('Graveyard check failed — sending anyway', [
-                'error' => $e->getMessage(),
-            ]);
+            AppLog::failure(MailEvent::GRAVEYARD_CHECK_FAILED, $e);
         }
 
         // Everyone this message was for is buried: there is nothing to send.
@@ -81,10 +80,7 @@ class EnforceEmailGraveyard
 
         EmailGraveyard::whereIn('email', $buried)->increment('blocked_count', 1, ['last_blocked_at' => now()]);
 
-        Log::channel('mail')->info('Mail not sent to graveyard address', [
-            'subject' => $message->getSubject(),
-            'blocked' => $buried,
-        ]);
+        AppLog::emit(MailEvent::GRAVEYARD_RECIPIENTS_BLOCKED, cnt: count($buried));
     }
 
     /**

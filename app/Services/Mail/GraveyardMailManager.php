@@ -2,9 +2,10 @@
 
 namespace App\Services\Mail;
 
+use App\Logging\AppLog;
+use App\Logging\Events\MailEvent;
 use App\Services\EmailService;
 use Illuminate\Mail\MailManager;
-use Illuminate\Support\Facades\Log;
 
 /**
  * The framework's mail manager, with every mailer's transport wrapped so a
@@ -28,9 +29,7 @@ class GraveyardMailManager extends MailManager
                 $this->app->make(EmailService::class)->configureMailer();
             } catch (\Throwable $e) {
                 // No settings to read (say, no table yet): the .env values stand.
-                Log::channel('mail')->warning('Could not apply the saved email settings', [
-                    'error' => $e->getMessage(),
-                ]);
+                AppLog::failure(MailEvent::SAVED_SETTINGS_NOT_APPLIED, $e);
             }
         }
 

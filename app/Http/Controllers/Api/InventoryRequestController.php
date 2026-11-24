@@ -4,6 +4,9 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Http\Middleware\EnsureRequestsUnlocked;
+use App\Logging\AppLog;
+use App\Logging\Enums\Reason;
+use App\Logging\Events\AccessEvent;
 use App\Models\Client;
 use App\Models\ClientProduct;
 use App\Models\InventoryRequest;
@@ -15,7 +18,6 @@ use App\Services\Inventory\RequestQueues;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
 
 /**
@@ -49,10 +51,7 @@ class InventoryRequestController extends Controller
         $expected = (string) config('recyclebin.pin');
 
         if ($expected === '' || ! hash_equals($expected, $validated['pin'])) {
-            Log::warning('Requests page unlock failed', [
-                'user_id' => $request->user()?->id,
-                'ip' => $request->ip(),
-            ]);
+            AppLog::emit(AccessEvent::SCREEN_UNLOCK_FAILED, src: 'requests', rsn: Reason::CREDENTIALS_INVALID);
 
             return response()->json(['message' => 'Incorrect PIN.'], 422);
         }

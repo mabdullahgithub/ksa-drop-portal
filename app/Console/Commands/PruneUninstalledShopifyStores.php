@@ -2,10 +2,11 @@
 
 namespace App\Console\Commands;
 
+use App\Logging\AppLog;
+use App\Logging\Events\ShopifyEvent;
 use App\Models\ClientShopifyConnection;
 use App\Services\ShopifyService;
 use Illuminate\Console\Command;
-use Illuminate\Support\Facades\Log;
 
 /**
  * Find connections whose store has actually uninstalled the app, and close them.
@@ -91,10 +92,7 @@ class PruneUninstalledShopifyStores extends Command
                 'webhooks_registered' => false,
             ]);
 
-            Log::channel('shopify')->info('Shopify connection closed — store had uninstalled', [
-                'shop'      => $shop,
-                'client_id' => $connection->client_id,
-            ]);
+            AppLog::emit(ShopifyEvent::CONNECTION_CLOSED_UNINSTALLED, con: $connection->id, shd: $shop, cli: $connection->client_id);
         }
 
         $verb = $dryRun ? 'would be closed' : 'closed';

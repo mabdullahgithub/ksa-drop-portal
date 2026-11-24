@@ -2,6 +2,9 @@
 
 namespace App\Console\Commands;
 
+use App\Logging\AppLog;
+use App\Logging\Events\MailEvent;
+use App\Logging\ExternalId;
 use App\Models\EmailGraveyard;
 use App\Services\EmailService;
 use App\Services\Mail\AddressNotFound;
@@ -9,7 +12,6 @@ use App\Services\Mail\BounceReport;
 use App\Services\Mail\ImapMailbox;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\Log;
 
 /**
  * Reads "address not found" bounce emails out of the sending mailbox and
@@ -88,11 +90,7 @@ class ProcessMailBounces extends Command
                 Cache::forever($cursorKey, ['uidvalidity' => $folder['uidvalidity'], 'uid' => $position]);
             }
         } catch (\Throwable $e) {
-            Log::channel('mail')->warning('Bounce check failed', [
-                'host' => $settings['host'],
-                'username' => $settings['username'],
-                'error' => $e->getMessage(),
-            ]);
+            AppLog::failure(MailEvent::BOUNCE_CHECK_FAILED, $e);
 
             $this->error('Bounce check failed: '.$e->getMessage());
 
@@ -136,10 +134,7 @@ class ProcessMailBounces extends Command
             if ($recipient === null) {
                 // No token of ours quoted back: either it predates the token
                 // header or somebody wrote this report by hand.
-                Log::channel('mail')->warning('Bounce ignored — cannot confirm we sent the message', [
-                    'uid' => $uid,
-                    'recipients' => $failure['recipients'],
-                ]);
+                AppLog::emit(MailEvent::BOUNCE_IGNORED_UNCONFIRMED, vcd: ExternalId::orNull($uid));
                 $rows[] = [$uid, $named, $status, 'ignored — cannot confirm we sent the message'];
 
                 continue;

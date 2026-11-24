@@ -2,6 +2,8 @@
 
 namespace App\Services\Shipping\Drivers;
 
+use App\Logging\AppLog;
+use App\Logging\Events\JntEvent;
 use App\Models\ConnectorSetting;
 use App\Services\Shipping\Contracts\CourierDriver;
 use App\Services\Shipping\DTOs\CancelResult;
@@ -12,7 +14,6 @@ use App\Services\Shipping\DTOs\TrackingResult;
 use App\Services\Shipping\Enums\JntErrorCode;
 use App\Services\Shipping\Enums\ShipmentStatus;
 use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\RateLimiter;
 
 class JntExpressDriver implements CourierDriver
@@ -103,11 +104,7 @@ class JntExpressDriver implements CourierDriver
             $bizContent['priceCurrency'] = $data->codCurrency;
         }
 
-        Log::info('J&T Express COD decision', [
-            'txlogistic_id' => $data->txlogisticId,
-            'cod_amount'    => $data->codAmount,
-            'sent_cod'      => $data->codAmount > 0,
-        ]);
+        AppLog::emit(JntEvent::COD_DECISION, xid: $data->txlogisticId, amt: (int) round(max(0, $data->codAmount) * 100));
 
         if ($data->billCode) {
             $bizContent['billCode'] = $data->billCode;
@@ -157,12 +154,8 @@ class JntExpressDriver implements CourierDriver
             );
         }
 
-        Log::error('J&T Express shipment creation failed', [
-            'txlogistic_id' => $data->txlogisticId,
-            'response_code' => $response['code'] ?? null,
-            'response_msg' => $response['msg'] ?? null,
-            'full_response' => $response,
-        ]);
+        AppLog::emit(JntEvent::SHIPMENT_CREATE_FAILED, xid: $data->txlogisticId, vcd: $code !== '' ? $code : null);
+        AppLog::payload(JntEvent::SHIPMENT_CREATE_FAILED, $response);
 
         return ShipmentResult::failure(
             errorMessage: $this->friendlyError($code, $response['msg'] ?? null),
@@ -250,11 +243,7 @@ class JntExpressDriver implements CourierDriver
             $code = (string) ($response['code'] ?? '');
 
             if ($code !== '1') {
-                Log::debug('J&T getLabel: endpoint failed', [
-                    'endpoint' => $endpoint,
-                    'code'     => $code,
-                    'msg'      => $response['msg'] ?? null,
-                ]);
+                AppLog::emit(JntEvent::LABEL_ENDPOINT_FAILED, enp: $endpoint, vcd: $code !== '' ? $code : null);
                 continue;
             }
 
@@ -270,9 +259,7 @@ class JntExpressDriver implements CourierDriver
 
         // All J&T endpoints unavailable — generate a minimal HTML waybill from
         // the data we already have so operators can still print something.
-        Log::warning('J&T getLabel: all endpoints failed, generating HTML fallback', [
-            'tracking' => $trackingNumber,
-        ]);
+        AppLog::emit(JntEvent::LABEL_FALLBACK_GENERATED, trk: $trackingNumber);
 
         return [
             'success'       => true,
@@ -669,7 +656,7 @@ HTML;
         $rateLimitKey = 'jnt_express:api';
 
         if (RateLimiter::tooManyAttempts($rateLimitKey, 30)) {
-            Log::warning('J&T Express API rate limit reached');
+            AppLog::emit(JntEvent::API_RATE_LIMITED);
             return null;
         }
 
@@ -682,14 +669,8 @@ HTML;
                 $digest      = $this->buildDigest($bizContent);
                 $timestamp   = (string) round(microtime(true) * 1000);
 
-                Log::debug('J&T Express request details', [
-                    'endpoint'        => $endpoint,
-                    'bizContent'      => $bizContent,
-                    'computed_digest' => $digest,
-                    'timestamp'       => $timestamp,
-                    'api_account'     => $credentials['api_account'],
-                    'attempt'         => $attempt + 1,
-                ]);
+                AppLog::emit(JntEvent::API_REQUEST_SENT, enp: $endpoint, att: $attempt + 1);
+                AppLog::payload(JntEvent::API_REQUEST_SENT, $bizContent);
 
                 $response = Http::asForm()
                     ->withHeaders([
@@ -704,11 +685,7 @@ HTML;
 
                 RateLimiter::hit($rateLimitKey, 60);
 
-                Log::info('J&T Express API call', [
-                    'endpoint' => $endpoint,
-                    'status'   => $response->status(),
-                    'attempt'  => $attempt + 1,
-                ]);
+                AppLog::emit(JntEvent::API_CALLED, enp: $endpoint, hst: $response->status(), att: $attempt + 1);
 
                 // Only retry on server-side 5xx or connection-level failures.
                 if ($response->serverError()) {
@@ -719,16 +696,10 @@ HTML;
             } catch (\Exception $e) {
                 $attempt++;
 
-                Log::warning('J&T Express API error (attempt ' . $attempt . ')', [
-                    'endpoint' => $endpoint,
-                    'error'    => $e->getMessage(),
-                ]);
+                AppLog::failure(JntEvent::API_ATTEMPT_FAILED, $e, enp: $endpoint, att: $attempt);
 
                 if ($attempt > $maxRetries) {
-                    Log::error('J&T Express API failed after ' . $attempt . ' attempts', [
-                        'endpoint' => $endpoint,
-                        'error'    => $e->getMessage(),
-                    ]);
+                    AppLog::failure(JntEvent::API_GAVE_UP, $e, enp: $endpoint, att: $attempt);
                     return null;
                 }
 

@@ -2,14 +2,16 @@
 
 namespace App\Listeners;
 
+use App\Logging\AppLog;
+use App\Logging\Events\MailEvent;
+use App\Logging\ExternalId;
 use Illuminate\Mail\Events\MessageSending;
 use Illuminate\Mail\Events\MessageSent;
-use Illuminate\Support\Facades\Log;
 use Symfony\Component\Mime\Email;
 
 /**
- * Mirrors every outbound message into the dedicated "mail" log channel so a
- * failed send can be traced without digging through the shared app log.
+ * Records every outbound message as coded events: which mailable and how many
+ * recipients. Never addresses or subjects; those stay out of the logs.
  */
 class LogMailActivity
 {
@@ -18,12 +20,7 @@ class LogMailActivity
      */
     public function sending(MessageSending $event): void
     {
-        Log::channel('mail')->info('Mail sending', $this->context($event->message) + [
-            'mailer' => $event->data['__laravel_mailable'] ?? null,
-            'transport' => config('mail.default'),
-            'host' => config('mail.mailers.'.config('mail.default').'.host'),
-            'port' => config('mail.mailers.'.config('mail.default').'.port'),
-        ]);
+        AppLog::emit(MailEvent::MESSAGE_SENDING, cnt: $this->recipients($event->message), mtp: $this->mailable($event->data));
     }
 
     /**
@@ -31,31 +28,19 @@ class LogMailActivity
      */
     public function sent(MessageSent $event): void
     {
-        Log::channel('mail')->info('Mail sent', $this->context($event->message) + [
-            'message_id' => $event->sent->getMessageId(),
-        ]);
+        AppLog::emit(MailEvent::MESSAGE_SENT, cnt: $this->recipients($event->message), mtp: $this->mailable($event->data));
     }
 
-    /**
-     * Envelope details, without the message body.
-     */
-    protected function context(Email $message): array
+    private function recipients(Email $message): int
     {
-        return [
-            'subject' => $message->getSubject(),
-            'from' => $this->addresses($message->getFrom()),
-            'to' => $this->addresses($message->getTo()),
-            'cc' => $this->addresses($message->getCc()),
-            'bcc' => $this->addresses($message->getBcc()),
-        ];
+        return count($message->getTo()) + count($message->getCc()) + count($message->getBcc());
     }
 
-    /**
-     * @param  array<int, \Symfony\Component\Mime\Address>  $addresses
-     * @return array<int, string>
-     */
-    protected function addresses(array $addresses): array
+    /** @param array<string, mixed> $data */
+    private function mailable(array $data): ?string
     {
-        return array_map(fn ($address) => $address->getAddress(), $addresses);
+        $class = $data['__laravel_mailable'] ?? null;
+
+        return is_string($class) ? ExternalId::orNull(class_basename($class)) : null;
     }
 }

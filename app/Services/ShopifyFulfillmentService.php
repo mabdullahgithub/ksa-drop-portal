@@ -2,11 +2,13 @@
 
 namespace App\Services;
 
+use App\Logging\AppLog;
+use App\Logging\Events\ShopifyEvent;
+use App\Logging\ExternalId;
 use App\Models\ClientShopifyConnection;
 use App\Models\Order;
 use App\Models\Shipment;
 use App\Models\Warehouse;
-use Illuminate\Support\Facades\Log;
 
 /**
  * Everything the app does as a Shopify *fulfillment service*.
@@ -119,19 +121,11 @@ class ShopifyFulfillmentService
                 $this->describeLocation($shop, $token, $connection->fulfillment_location_id);
             }
 
-            Log::channel('shopify')->info('Shopify fulfillment service ready', [
-                'shop'        => $shop,
-                'service_id'  => $service['id'],
-                'location_id' => $service['location']['id'] ?? null,
-                'adopted'     => $service['adopted'] ?? false,
-            ]);
+            AppLog::emit(ShopifyEvent::FULFILLMENT_SERVICE_READY, shd: $shop);
 
             return $connection->hasFulfillmentService();
         } catch (\Throwable $e) {
-            Log::channel('shopify')->error('Shopify fulfillment service registration failed', [
-                'shop'  => $shop,
-                'error' => $e->getMessage(),
-            ]);
+            AppLog::failure(ShopifyEvent::FULFILLMENT_SERVICE_REGISTER_FAILED, $e, shd: $shop);
 
             return false;
         }
@@ -170,7 +164,6 @@ class ShopifyFulfillmentService
             $mutation,
             ['id' => $connection->fulfillment_service_id, 'inventoryManagement' => $enabled],
             'fulfillmentServiceUpdate',
-            ['inventory_management' => $enabled],
         );
     }
 
@@ -267,10 +260,8 @@ class ShopifyFulfillmentService
         ])['fulfillmentServiceCreate'] ?? [];
 
         if (! empty($payload['userErrors'])) {
-            Log::channel('shopify')->error('Shopify fulfillmentServiceCreate rejected', [
-                'shop'   => $shop,
-                'errors' => $payload['userErrors'],
-            ]);
+            AppLog::emit(ShopifyEvent::FULFILLMENT_SERVICE_CREATE_REJECTED, shd: $shop);
+            AppLog::payload(ShopifyEvent::FULFILLMENT_SERVICE_CREATE_REJECTED, $payload['userErrors']);
 
             return null;
         }
@@ -336,16 +327,11 @@ class ShopifyFulfillmentService
             ])['locationEdit'] ?? [];
 
             if (! empty($payload['userErrors'])) {
-                Log::channel('shopify')->warning('Shopify locationEdit rejected', [
-                    'shop'   => $shop,
-                    'errors' => $payload['userErrors'],
-                ]);
+                AppLog::emit(ShopifyEvent::LOCATION_EDIT_REJECTED, shd: $shop);
+                AppLog::payload(ShopifyEvent::LOCATION_EDIT_REJECTED, $payload['userErrors']);
             }
         } catch (\Throwable $e) {
-            Log::channel('shopify')->warning('Shopify locationEdit failed', [
-                'shop'  => $shop,
-                'error' => $e->getMessage(),
-            ]);
+            AppLog::failure(ShopifyEvent::LOCATION_EDIT_FAILED, $e, shd: $shop);
         }
     }
 
@@ -431,12 +417,12 @@ class ShopifyFulfillmentService
         if ($this->awaitingPayment($order)) {
             // Logged rather than silent: "why has this order not gone to the
             // courier" is a support question, and this is the answer to it.
-            Log::channel('shopify')->info('Fulfillment request withheld — order not paid', [
-                'order_id'         => $order->id,
-                'shopify_order_id' => $order->shopify_order_id,
-                'financial_status' => $financial,
-                'payment_method'   => $order->payment_method,
-            ]);
+            AppLog::emit(
+                ShopifyEvent::FULFILLMENT_REQUEST_WITHHELD_UNPAID,
+                ord: $order->id,
+                xid: ExternalId::orNull($order->shopify_order_id),
+                vcd: ExternalId::orNull($financial),
+            );
 
             return self::REQUEST_AWAITING_PAYMENT;
         }
@@ -452,12 +438,7 @@ class ShopifyFulfillmentService
                 // variants still stock at the merchant's own location, so
                 // Shopify never assigned us anything — and without a line here
                 // it is indistinguishable from nothing having happened.
-                Log::channel('shopify')->warning('Fulfillment request found nothing to request', [
-                    'shop'             => $connection->shop_domain,
-                    'order_id'         => $order->id,
-                    'shopify_order_id' => $order->shopify_order_id,
-                    'hint'             => 'No open fulfillment order at the KSADrop location — check the variants were imported with the KSADrop fulfillment service.',
-                ]);
+                AppLog::emit(ShopifyEvent::FULFILLMENT_REQUEST_NOTHING_OPEN, con: $connection->id, ord: $order->id, xid: ExternalId::orNull($order->shopify_order_id));
 
                 return self::REQUEST_NO_FULFILLMENT_ORDER;
             }
@@ -477,12 +458,8 @@ class ShopifyFulfillmentService
             ])['fulfillmentOrderSubmitFulfillmentRequest'] ?? [];
 
             if (! empty($payload['userErrors'])) {
-                Log::channel('shopify')->error('fulfillmentOrderSubmitFulfillmentRequest rejected', [
-                    'shop'             => $connection->shop_domain,
-                    'order_id'         => $order->id,
-                    'fulfillment_order' => $fulfillmentOrderId,
-                    'errors'           => $payload['userErrors'],
-                ]);
+                AppLog::emit(ShopifyEvent::FULFILLMENT_REQUEST_REJECTED, con: $connection->id, ord: $order->id, xfo: ExternalId::orNull($fulfillmentOrderId));
+                AppLog::payload(ShopifyEvent::FULFILLMENT_REQUEST_REJECTED, $payload['userErrors']);
 
                 return self::REQUEST_FAILED;
             }
@@ -493,18 +470,11 @@ class ShopifyFulfillmentService
                 'shopify_fulfillment_requested_at' => now(),
             ])->save();
 
-            Log::channel('shopify')->info('Fulfillment requested', [
-                'shop'              => $connection->shop_domain,
-                'order_id'          => $order->id,
-                'fulfillment_order' => $fulfillmentOrderId,
-            ]);
+            AppLog::emit(ShopifyEvent::FULFILLMENT_REQUESTED, con: $connection->id, ord: $order->id, xfo: ExternalId::orNull($fulfillmentOrderId));
 
             return self::REQUEST_SENT;
         } catch (\Throwable $e) {
-            Log::channel('shopify')->error('Fulfillment request failed', [
-                'order_id' => $order->id,
-                'error'    => $e->getMessage(),
-            ]);
+            AppLog::failure(ShopifyEvent::FULFILLMENT_REQUEST_FAILED, $e, ord: $order->id);
 
             return self::REQUEST_FAILED;
         }
@@ -603,7 +573,7 @@ class ShopifyFulfillmentService
             $mutation,
             ['id' => $fulfillmentOrderId, 'message' => 'Accepted by KSA Drop.'],
             'fulfillmentOrderAcceptFulfillmentRequest',
-            ['fulfillment_order' => $fulfillmentOrderId],
+            ['xfo' => ExternalId::orNull($fulfillmentOrderId)],
         );
     }
 
@@ -631,7 +601,7 @@ class ShopifyFulfillmentService
             $mutation,
             ['id' => $fulfillmentOrderId, 'message' => $message, 'reason' => $reason],
             'fulfillmentOrderRejectFulfillmentRequest',
-            ['fulfillment_order' => $fulfillmentOrderId, 'reason' => $reason],
+            ['xfo' => ExternalId::orNull($fulfillmentOrderId), 'vcd' => ExternalId::orNull($reason)],
         );
     }
 
@@ -676,11 +646,7 @@ class ShopifyFulfillmentService
                 'orderId' => $node['order']['id'] ?? null,
             ], $nodes);
         } catch (\Throwable $e) {
-            Log::channel('shopify')->error('Listing assigned fulfillment orders failed', [
-                'shop'   => $connection->shop_domain,
-                'status' => $assignmentStatus,
-                'error'  => $e->getMessage(),
-            ]);
+            AppLog::failure(ShopifyEvent::ASSIGNED_FULFILLMENT_ORDERS_FAILED, $e, con: $connection->id, vcd: ExternalId::orNull($assignmentStatus));
 
             return [];
         }
@@ -710,7 +676,8 @@ class ShopifyFulfillmentService
      * Run one fulfillment-order mutation, reporting a Shopify refusal and a
      * transport failure the same way: logged, and false. Callers are webhook
      * handlers and queued jobs, and neither has anything better to do with an
-     * exception than park it.
+     * exception than park it. `$context` is keyed by App\Logging\Enums\Ctx
+     * short keys (xfo, shp, vcd).
      */
     private function runFulfillmentOrderMutation(
         ClientShopifyConnection $connection,
@@ -729,24 +696,17 @@ class ShopifyFulfillmentService
             $payload = $this->shopify->graphql($connection->shop_domain, $token, $mutation, $variables)[$field] ?? [];
 
             if (! empty($payload['userErrors'])) {
-                Log::channel('shopify')->error("{$field} rejected", array_merge($context, [
-                    'shop'   => $connection->shop_domain,
-                    'errors' => $payload['userErrors'],
-                ]));
+                AppLog::emit(ShopifyEvent::FULFILLMENT_MUTATION_REJECTED, ...['con' => $connection->id, 'enp' => $field, ...$context]);
+                AppLog::payload(ShopifyEvent::FULFILLMENT_MUTATION_REJECTED, $payload['userErrors']);
 
                 return false;
             }
 
-            Log::channel('shopify')->info("{$field} succeeded", array_merge($context, [
-                'shop' => $connection->shop_domain,
-            ]));
+            AppLog::emit(ShopifyEvent::FULFILLMENT_MUTATION_SUCCEEDED, ...['con' => $connection->id, 'enp' => $field, ...$context]);
 
             return true;
         } catch (\Throwable $e) {
-            Log::channel('shopify')->error("{$field} failed", array_merge($context, [
-                'shop'  => $connection->shop_domain,
-                'error' => $e->getMessage(),
-            ]));
+            AppLog::failure(ShopifyEvent::FULFILLMENT_MUTATION_FAILED, $e, ...['con' => $connection->id, 'enp' => $field, ...$context]);
 
             return false;
         }
@@ -841,11 +801,8 @@ class ShopifyFulfillmentService
             ])['fulfillmentCreate'] ?? [];
 
             if (! empty($payload['userErrors'])) {
-                Log::channel('shopify')->error('fulfillmentCreate rejected', [
-                    'shop'        => $connection->shop_domain,
-                    'shipment_id' => $shipment->id,
-                    'errors'      => $payload['userErrors'],
-                ]);
+                AppLog::emit(ShopifyEvent::FULFILLMENT_CREATE_REJECTED, con: $connection->id, shp: $shipment->id);
+                AppLog::payload(ShopifyEvent::FULFILLMENT_CREATE_REJECTED, $payload['userErrors']);
 
                 return false;
             }
@@ -859,20 +816,17 @@ class ShopifyFulfillmentService
             $shipment->forceFill(['shopify_fulfillment_id' => $fulfillmentId])->save();
             $order->forceFill(['shopify_fulfillment_status' => 'fulfilled'])->save();
 
-            Log::channel('shopify')->info('Shopify fulfillment created', [
-                'shop'        => $connection->shop_domain,
-                'order_id'    => $order->id,
-                'shipment_id' => $shipment->id,
-                'tracking'    => $shipment->tracking_number,
-            ]);
+            AppLog::emit(
+                ShopifyEvent::FULFILLMENT_CREATED,
+                con: $connection->id,
+                ord: $order->id,
+                shp: $shipment->id,
+                trk: ExternalId::orNull($shipment->tracking_number),
+            );
 
             return true;
         } catch (\Throwable $e) {
-            Log::channel('shopify')->error('fulfillmentCreate failed', [
-                'shop'        => $connection->shop_domain,
-                'shipment_id' => $shipment->id,
-                'error'       => $e->getMessage(),
-            ]);
+            AppLog::failure(ShopifyEvent::FULFILLMENT_CREATE_FAILED, $e, con: $connection->id, shp: $shipment->id);
 
             return false;
         }
@@ -917,7 +871,7 @@ class ShopifyFulfillmentService
             $mutation,
             ['id' => $shipment->shopify_fulfillment_id],
             'fulfillmentCancel',
-            ['shipment_id' => $shipment->id],
+            ['shp' => $shipment->id],
         );
 
         if ($cancelled) {
@@ -960,7 +914,7 @@ class ShopifyFulfillmentService
             $mutation,
             ['id' => $fulfillmentOrderId, 'message' => $message],
             $accept ? 'fulfillmentOrderAcceptCancellationRequest' : 'fulfillmentOrderRejectCancellationRequest',
-            ['fulfillment_order' => $fulfillmentOrderId],
+            ['xfo' => ExternalId::orNull($fulfillmentOrderId)],
         );
     }
 

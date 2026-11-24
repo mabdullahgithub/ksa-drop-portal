@@ -2,6 +2,8 @@
 
 namespace App\Console\Commands;
 
+use App\Logging\AppLog;
+use App\Logging\Events\ReportingEvent;
 use App\Models\Client;
 use App\Models\Order;
 use App\Models\StockScan;
@@ -10,7 +12,6 @@ use Carbon\CarbonImmutable;
 use Illuminate\Console\Command;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Log;
 
 /**
  * Post yesterday's warehouse scans to Slack.
@@ -86,11 +87,8 @@ class SendDailyStockReport extends Command
 
             if ($response->failed()) {
                 // Slack answers a bad webhook with a plain-text body, not JSON.
-                Log::error('Daily stock report could not be posted to Slack', [
-                    'channel' => $this->destination(),
-                    'status'  => $response->status(),
-                    'body'    => $response->body(),
-                ]);
+                AppLog::emit(ReportingEvent::SLACK_POST_FAILED, hst: $response->status());
+                AppLog::payload(ReportingEvent::SLACK_POST_FAILED, $response->body());
 
                 $this->error("Slack rejected the report: {$response->status()} {$response->body()}");
 

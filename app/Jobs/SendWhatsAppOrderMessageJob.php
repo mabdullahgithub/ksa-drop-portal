@@ -2,6 +2,10 @@
 
 namespace App\Jobs;
 
+use App\Logging\AppLog;
+use App\Logging\Enums\Reason;
+use App\Logging\Events\WhatsAppEvent;
+use App\Logging\ExternalId;
 use App\Models\Order;
 use App\Services\WhatsApp\MetaWhatsAppService;
 use App\Support\PhoneNumber;
@@ -11,7 +15,6 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
-use Illuminate\Support\Facades\Log;
 use Throwable;
 
 /**
@@ -41,10 +44,7 @@ class SendWhatsAppOrderMessageJob implements ShouldQueue
         // Checked here as well as at dispatch, so a job queued before
         // messaging was switched off still sends nothing.
         if (! WhatsAppMessaging::enabled()) {
-            Log::channel('whatsapp')->info('Skipping WhatsApp send — messaging is switched off', [
-                'order_id' => $this->orderId,
-                'template' => $this->templateKey,
-            ]);
+            AppLog::emit(WhatsAppEvent::SEND_SKIPPED_DISABLED, ord: $this->orderId, vcd: ExternalId::orNull($this->templateKey));
 
             return;
         }
@@ -62,11 +62,7 @@ class SendWhatsAppOrderMessageJob implements ShouldQueue
         $phone = PhoneNumber::toE164($order->customer_phone ?: $order->shipping_phone);
 
         if (! $phone) {
-            Log::channel('whatsapp')->warning('Skipping WhatsApp send — no usable phone number', [
-                'order_id' => $order->id,
-                'order_number' => $order->order_number,
-                'raw_phone' => $order->customer_phone,
-            ]);
+            AppLog::emit(WhatsAppEvent::SEND_SKIPPED_NO_PHONE, ord: $order->id, rsn: Reason::PHONE_UNUSABLE);
 
             $order->forceFill(['whatsapp_status' => Order::WHATSAPP_FAILED])->save();
 
@@ -83,11 +79,7 @@ class SendWhatsAppOrderMessageJob implements ShouldQueue
         try {
             $whatsapp->sendTemplate($order, $this->templateKey, $this->variablesFor($order));
         } catch (Throwable $e) {
-            Log::channel('whatsapp')->error('WhatsApp send failed', [
-                'order_id' => $order->id,
-                'template' => $this->templateKey,
-                'error' => $e->getMessage(),
-            ]);
+            AppLog::failure(WhatsAppEvent::SEND_FAILED, $e, ord: $order->id, vcd: ExternalId::orNull($this->templateKey), att: $this->attempts());
 
             // Only give up once Laravel has exhausted the retries; a transient
             // Meta 5xx on attempt 1 shouldn't strand the order as failed.
@@ -103,11 +95,7 @@ class SendWhatsAppOrderMessageJob implements ShouldQueue
             : ['whatsapp_status' => Order::WHATSAPP_SENT, 'whatsapp_sent_at' => now()]
         )->save();
 
-        Log::channel('whatsapp')->info('WhatsApp message sent', [
-            'order_id' => $order->id,
-            'order_number' => $order->order_number,
-            'template' => $this->templateKey,
-        ]);
+        AppLog::emit(WhatsAppEvent::MESSAGE_SENT, ord: $order->id, vcd: ExternalId::orNull($this->templateKey));
     }
 
     /**

@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Logging\AppLog;
+use App\Logging\Events\ImileEvent;
 use App\Models\ConnectorSetting;
 use App\Models\Shipment;
 use App\Services\Shipping\Drivers\ImileDriver;
@@ -11,7 +13,6 @@ use App\Services\Shipping\Enums\ShipmentStatus;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
 use Throwable;
 
 /**
@@ -47,11 +48,7 @@ class ImileWebhookController extends Controller
         $param       = $payload['param'] ?? null;
 
         if (! $partnerCode || ! $timestamp || ! is_array($param)) {
-            Log::channel('imile_webhooks')->warning('iMile webhook: missing required envelope fields', [
-                'has_partner_code' => (bool) $partnerCode,
-                'has_timestamp'    => (bool) $timestamp,
-                'has_param'        => is_array($param),
-            ]);
+            AppLog::emit(ImileEvent::WEBHOOK_ENVELOPE_INCOMPLETE);
 
             return $this->failure(400, '400', 'Missing required fields (partnerCode/param/timestamp)');
         }
@@ -66,7 +63,8 @@ class ImileWebhookController extends Controller
         $txlogisticId   = $param['orderNo'] ?? null;
 
         if (! $trackingNumber && ! $txlogisticId) {
-            Log::channel('imile_webhooks')->warning('iMile webhook missing billNo/orderNo', ['param' => $param]);
+            AppLog::emit(ImileEvent::WEBHOOK_FIELD_MISSING);
+            AppLog::payload(ImileEvent::WEBHOOK_FIELD_MISSING, $param);
 
             return $this->failure(400, '400', 'Missing billNo/orderNo');
         }
@@ -75,10 +73,7 @@ class ImileWebhookController extends Controller
             $shipment = $this->resolveShipment($trackingNumber, $txlogisticId);
 
             if (! $shipment) {
-                Log::channel('imile_webhooks')->info('iMile webhook for unknown shipment', [
-                    'tracking'      => $trackingNumber,
-                    'txlogistic_id' => $txlogisticId,
-                ]);
+                AppLog::emit(ImileEvent::TRACKING_UNKNOWN_SHIPMENT, trk: $trackingNumber, xid: $txlogisticId);
 
                 // Acknowledge so iMile stops retrying a waybill we don't own.
                 return $this->success();
@@ -87,9 +82,7 @@ class ImileWebhookController extends Controller
             $events = $this->extractTrackingEvents($param);
 
             if ($events === []) {
-                Log::channel('imile_webhooks')->info('iMile webhook carried no locus details', [
-                    'tracking' => $shipment->tracking_number,
-                ]);
+                AppLog::emit(ImileEvent::TRACKING_NO_SCANS, shp: $shipment->id);
 
                 return $this->success();
             }
@@ -128,20 +121,10 @@ class ImileWebhookController extends Controller
                 };
             });
 
-            Log::channel('imile_webhooks')->info('iMile webhook processed', [
-                'tracking'    => $shipment->tracking_number,
-                'status'      => $latest->status->value,
-                'scan_events' => count($events),
-            ]);
+            AppLog::emit(ImileEvent::TRACKING_PROCESSED, shp: $shipment->id, sts: $latest->status, cnt: count($events));
         } catch (Throwable $e) {
-            Log::channel('imile_webhooks')->error('iMile webhook failed', [
-                'tracking'  => $trackingNumber,
-                'error'     => $e->getMessage(),
-                'exception' => get_class($e),
-                'file'      => $e->getFile(),
-                'line'      => $e->getLine(),
-                'payload'   => $param,
-            ]);
+            AppLog::failure(ImileEvent::WEBHOOK_PROCESSING_FAILED, $e, trk: $trackingNumber);
+            AppLog::payload(ImileEvent::WEBHOOK_PROCESSING_FAILED, $param);
 
             return $this->failure(500, '500', 'Internal error');
         }
@@ -297,10 +280,7 @@ class ImileWebhookController extends Controller
             }
         }
 
-        Log::channel('imile_webhooks')->warning('iMile webhook: partnerCode mismatch', [
-            'received' => $partnerCode,
-            'ip'       => $ip,
-        ]);
+        AppLog::emit(ImileEvent::WEBHOOK_PARTNER_CODE_MISMATCH, acc: $partnerCode);
 
         return false;
     }

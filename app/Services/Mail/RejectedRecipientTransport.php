@@ -2,8 +2,9 @@
 
 namespace App\Services\Mail;
 
+use App\Logging\AppLog;
+use App\Logging\Events\MailEvent;
 use App\Models\EmailGraveyard;
-use Illuminate\Support\Facades\Log;
 use Symfony\Component\Mailer\Envelope;
 use Symfony\Component\Mailer\Exception\TransportExceptionInterface;
 use Symfony\Component\Mailer\SentMessage;
@@ -33,9 +34,7 @@ class RejectedRecipientTransport implements TransportInterface
             } catch (\Throwable $recording) {
                 // Losing the graveyard entry is fine; hiding the real mail
                 // failure behind a database error is not.
-                Log::channel('mail')->warning('Could not record rejected recipient', [
-                    'error' => $recording->getMessage(),
-                ]);
+                AppLog::failure(MailEvent::REJECTED_RECIPIENT_NOT_RECORDED, $recording);
             }
 
             throw $e;

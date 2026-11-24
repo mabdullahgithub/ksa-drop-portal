@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use App\Logging\AppLog;
+use App\Logging\Events\MailEvent;
 use App\Notifications\SettingsUpdatedNotification;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -388,11 +390,7 @@ class SettingsController extends Controller
         $settings->fill($validated);
         $settings->save();
 
-        \Log::info('Email settings updated from user settings', [
-            'user_id' => auth()->id(),
-            'driver' => $validated['driver'],
-            'is_active' => $validated['is_active'],
-        ]);
+        AppLog::emit(MailEvent::SETTINGS_UPDATED, est: $settings->id, on: (bool) $validated['is_active'], vcd: $validated['driver']);
 
         return back()->with('success', 'Email settings updated successfully.');
     }

@@ -3,6 +3,9 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Logging\AppLog;
+use App\Logging\Events\WhatsAppEvent;
+use App\Logging\ExternalId;
 use App\Models\Order;
 use App\Models\Tag;
 use App\Models\WhatsAppMessage;
@@ -12,7 +15,6 @@ use App\Support\PhoneNumber;
 use App\Support\WhatsAppMessaging;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
-use Illuminate\Support\Facades\Log;
 
 /**
  * Meta's single WhatsApp Cloud API webhook.
@@ -52,7 +54,7 @@ class MetaWhatsAppWebhookController extends Controller
         $expected = $this->whatsapp->webhookVerifyToken();
 
         if (! $expected) {
-            Log::channel('whatsapp_webhooks')->error('Webhook verification rejected — no verify token configured');
+            AppLog::emit(WhatsAppEvent::VERIFY_TOKEN_NOT_CONFIGURED);
 
             return response('Verify token not configured', 403);
         }
@@ -62,12 +64,12 @@ class MetaWhatsAppWebhookController extends Controller
         $challenge = $request->query('hub_challenge');
 
         if ($mode !== 'subscribe' || ! is_string($token) || ! hash_equals($expected, $token)) {
-            Log::channel('whatsapp_webhooks')->warning('Webhook verification rejected — token mismatch');
+            AppLog::emit(WhatsAppEvent::VERIFY_TOKEN_MISMATCH);
 
             return response('Forbidden', 403);
         }
 
-        Log::channel('whatsapp_webhooks')->info('Webhook subscription verified');
+        AppLog::emit(WhatsAppEvent::WEBHOOK_VERIFIED);
 
         return response((string) $challenge, 200)->header('Content-Type', 'text/plain');
     }
@@ -127,13 +129,6 @@ class MetaWhatsAppWebhookController extends Controller
         $providerId = $message['id'] ?? null;
         $body = $this->extractBody($message);
 
-        Log::channel('whatsapp_webhooks')->info('Inbound WhatsApp message', [
-            'from' => $from,
-            'id' => $providerId,
-            'type' => $message['type'] ?? null,
-            'body' => $body,
-        ]);
-
         if (! $from || ! $providerId) {
             return;
         }
@@ -141,7 +136,7 @@ class MetaWhatsAppWebhookController extends Controller
         $order = $this->resolveOrder($from);
 
         if (! $order) {
-            Log::channel('whatsapp_webhooks')->info('Inbound WhatsApp message matched no order', ['from' => $from]);
+            AppLog::emit(WhatsAppEvent::INBOUND_UNMATCHED);
 
             return;
         }
@@ -149,7 +144,7 @@ class MetaWhatsAppWebhookController extends Controller
         // Meta redelivers a webhook until it gets a 2xx, and can deliver the
         // same message in more than one batch; the unique provider_message_id
         // keeps that from duplicating the conversation history.
-        WhatsAppMessage::updateOrCreate(
+        $stored = WhatsAppMessage::updateOrCreate(
             ['provider_message_id' => $providerId],
             [
                 'order_id' => $order->id,
@@ -159,6 +154,13 @@ class MetaWhatsAppWebhookController extends Controller
                 'from_number' => $from,
                 'status' => 'received',
             ]
+        );
+
+        AppLog::emit(
+            WhatsAppEvent::INBOUND_MESSAGE_RECEIVED,
+            ord: $order->id,
+            wam: $stored->id,
+            vcd: ExternalId::orNull($message['type'] ?? null),
         );
 
         // With messaging switched off the reply is still kept for the inbox,
@@ -226,12 +228,12 @@ class MetaWhatsAppWebhookController extends Controller
             }
         }
 
-        Log::channel('whatsapp_webhooks')->info('WhatsApp status update', [
-            'id' => $providerId,
-            'status' => $state,
-            'order_id' => $message->order_id,
-            'error_code' => $status['errors'][0]['code'] ?? null,
-        ]);
+        AppLog::emit(
+            WhatsAppEvent::MESSAGE_STATUS_UPDATED,
+            wam: $message->id,
+            vcd: ExternalId::orNull($state),
+            ord: $message->order_id,
+        );
     }
 
     /**
@@ -310,11 +312,7 @@ class MetaWhatsAppWebhookController extends Controller
             $order->forceFill(['call_status' => Order::CALL_CONFIRMED])->saveQuietly();
         }
 
-        Log::channel('whatsapp_webhooks')->info('WhatsApp reply processed', [
-            'order_id' => $order->id,
-            'order_number' => $order->order_number,
-            'intent' => $intent,
-        ]);
+        AppLog::emit(WhatsAppEvent::REPLY_CLASSIFIED, ord: $order->id, vcd: $intent);
     }
 
     /**
@@ -326,7 +324,7 @@ class MetaWhatsAppWebhookController extends Controller
         $secret = $this->whatsapp->appSecret();
 
         if (! $secret) {
-            Log::channel('whatsapp_webhooks')->error('WhatsApp webhook rejected — app secret not configured');
+            AppLog::emit(WhatsAppEvent::APP_SECRET_NOT_CONFIGURED);
 
             return false;
         }

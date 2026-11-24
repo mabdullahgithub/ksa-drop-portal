@@ -2,6 +2,8 @@
 
 namespace App\Services\Shipping\Drivers;
 
+use App\Logging\AppLog;
+use App\Logging\Events\ImileEvent;
 use App\Models\ConnectorSetting;
 use App\Services\Shipping\Contracts\CourierDriver;
 use App\Services\Shipping\DTOs\CancelResult;
@@ -14,7 +16,6 @@ use App\Services\Shipping\Enums\ShipmentStatus;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\RateLimiter;
 
 /**
@@ -161,12 +162,8 @@ class ImileDriver implements CourierDriver
             );
         }
 
-        Log::error('iMile shipment creation failed', [
-            'order_no' => $data->txlogisticId,
-            'response_code' => $code,
-            'response_message' => $response['message'] ?? null,
-            'full_response' => $response,
-        ]);
+        AppLog::emit(ImileEvent::SHIPMENT_CREATE_FAILED, xid: $data->txlogisticId, vcd: $code !== '' ? $code : null);
+        AppLog::payload(ImileEvent::SHIPMENT_CREATE_FAILED, $response);
 
         return ShipmentResult::failure(
             errorMessage: ImileErrorCode::resolve($code, $response['message'] ?? null),
@@ -504,7 +501,7 @@ class ImileDriver implements CourierDriver
                 $body,
             );
         } catch (\Exception $e) {
-            Log::error('iMile token grant request failed', ['error' => $e->getMessage()]);
+            AppLog::failure(ImileEvent::TOKEN_REQUEST_FAILED, $e);
 
             return null;
         }
@@ -513,12 +510,7 @@ class ImileDriver implements CourierDriver
         $code = (string) ($json['code'] ?? '');
 
         if ($code !== '200' || empty($json['data']['accessToken'])) {
-            Log::error('iMile token grant rejected', [
-                'code' => $code,
-                'message' => $json['message'] ?? null,
-                'customer_id' => $credentials['customer_id'],
-                'sign_length' => strlen($credentials['api_key']),
-            ]);
+            AppLog::emit(ImileEvent::TOKEN_REJECTED, vcd: $code !== '' ? $code : null, acc: $credentials['customer_id'] ?: null);
 
             return null;
         }
@@ -536,7 +528,7 @@ class ImileDriver implements CourierDriver
         $rateLimitKey = 'imile:api';
 
         if (RateLimiter::tooManyAttempts($rateLimitKey, 30)) {
-            Log::warning('iMile API rate limit reached');
+            AppLog::emit(ImileEvent::API_RATE_LIMITED);
 
             return null;
         }
@@ -572,11 +564,7 @@ class ImileDriver implements CourierDriver
 
                 RateLimiter::hit($rateLimitKey, 60);
 
-                Log::info('iMile API call', [
-                    'endpoint' => $endpoint,
-                    'status' => $response->status(),
-                    'attempt' => $attempt + 1,
-                ]);
+                AppLog::emit(ImileEvent::API_CALLED, enp: $endpoint, hst: $response->status(), att: $attempt + 1);
 
                 if ($response->serverError()) {
                     throw new \RuntimeException('iMile server error: ' . $response->status());
@@ -602,16 +590,10 @@ class ImileDriver implements CourierDriver
             } catch (\Exception $e) {
                 $attempt++;
 
-                Log::warning('iMile API error (attempt ' . $attempt . ')', [
-                    'endpoint' => $endpoint,
-                    'error' => $e->getMessage(),
-                ]);
+                AppLog::failure(ImileEvent::API_ATTEMPT_FAILED, $e, enp: $endpoint, att: $attempt);
 
                 if ($attempt > $maxRetries) {
-                    Log::error('iMile API failed after ' . $attempt . ' attempts', [
-                        'endpoint' => $endpoint,
-                        'error' => $e->getMessage(),
-                    ]);
+                    AppLog::failure(ImileEvent::API_GAVE_UP, $e, enp: $endpoint, att: $attempt);
 
                     return null;
                 }

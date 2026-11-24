@@ -3,11 +3,13 @@
 namespace App\Http\Controllers;
 
 use App\Jobs\SweepShopifyFulfillmentRequestsJob;
+use App\Logging\AppLog;
+use App\Logging\Events\ShopifyEvent;
+use App\Logging\ExternalId;
 use App\Models\ClientShopifyConnection;
 use App\Models\Product;
 use App\Services\ShopifyService;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Log;
 
 /**
  * The three endpoints Shopify calls on a registered fulfillment service.
@@ -47,9 +49,7 @@ class ShopifyFulfillmentCallbackController extends Controller
     public function notification(Request $request)
     {
         if (! $this->shopify->verifyWebhookHmac($request->getContent(), (string) $request->header('X-Shopify-Hmac-Sha256', ''))) {
-            Log::channel('shopify')->warning('Fulfillment notification rejected — HMAC mismatch', [
-                'shop' => $request->header('X-Shopify-Shop-Domain'),
-            ]);
+            AppLog::emit(ShopifyEvent::FULFILLMENT_NOTIFICATION_REJECTED_HMAC, shd: ExternalId::orNull($request->header('X-Shopify-Shop-Domain')));
 
             return response('Unauthorized', 401);
         }
@@ -57,10 +57,7 @@ class ShopifyFulfillmentCallbackController extends Controller
         $shop = (string) $request->header('X-Shopify-Shop-Domain', '');
         $kind = (string) $request->input('kind');
 
-        Log::channel('shopify')->info('Fulfillment order notification received', [
-            'shop' => $shop,
-            'kind' => $kind,
-        ]);
+        AppLog::emit(ShopifyEvent::FULFILLMENT_NOTIFICATION_RECEIVED, shd: ExternalId::orNull($shop), vcd: ExternalId::orNull($kind));
 
         // Queued, and driven by what Shopify says is outstanding rather than by
         // this body: the point of the sweep is to catch the requests whose own
@@ -98,7 +95,7 @@ class ShopifyFulfillmentCallbackController extends Controller
         $signed = $request->query('hmac') !== null;
 
         if ($signed && ! $this->shopify->verifyOauthHmac($request->query(), $request->server('QUERY_STRING'))) {
-            Log::channel('shopify')->warning('fetch_stock rejected — HMAC mismatch', ['shop' => $shop]);
+            AppLog::emit(ShopifyEvent::FETCH_STOCK_REJECTED_HMAC, shd: ExternalId::orNull($shop));
 
             return response('Unauthorized', 401);
         }
@@ -108,10 +105,7 @@ class ShopifyFulfillmentCallbackController extends Controller
             : null;
 
         if (! $connection || ! $connection->hasFulfillmentService()) {
-            Log::channel('shopify')->info('fetch_stock ignored — not a connected KSADrop store', [
-                'shop'   => $shop,
-                'signed' => $signed,
-            ]);
+            AppLog::emit(ShopifyEvent::FETCH_STOCK_IGNORED, shd: ExternalId::orNull($shop));
 
             return response()->json((object) []);
         }
@@ -129,13 +123,7 @@ class ShopifyFulfillmentCallbackController extends Controller
         // Every call is logged, not just failures. Which requests Shopify makes,
         // and when, is exactly what its documentation leaves out — this is how
         // we find out whether an import triggers a lookup at all.
-        Log::channel('shopify')->info('fetch_stock served', [
-            'shop'      => $shop,
-            'sku'       => $sku,
-            'skus_sent' => count($stock),
-            'signed'    => $signed,
-            'params'    => array_keys($request->query()),
-        ]);
+        AppLog::emit(ShopifyEvent::FETCH_STOCK_SERVED, cnt: count($stock), shd: ExternalId::orNull($shop));
 
         return response()->json((object) $stock);
     }

@@ -4,6 +4,9 @@ namespace App\Http\Controllers;
 
 use App\Http\Concerns\InteractsWithTrashedRecords;
 use App\Http\Middleware\EnsureRecycleBinUnlocked;
+use App\Logging\AppLog;
+use App\Logging\Enums\Reason;
+use App\Logging\Events\AccessEvent;
 use App\Models\Client;
 use App\Models\ClientPayment;
 use App\Models\ClientProduct;
@@ -17,7 +20,6 @@ use App\Support\ClientAccess;
 use App\Support\PhoneNumber;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
 use Inertia\Inertia;
 
 /**
@@ -54,10 +56,7 @@ class RecycleBinController extends Controller
         $expected = (string) config('recyclebin.pin');
 
         if ($expected === '' || ! hash_equals($expected, $validated['pin'])) {
-            Log::warning('Recycle bin unlock failed', [
-                'user_id' => $request->user()?->id,
-                'ip' => $request->ip(),
-            ]);
+            AppLog::emit(AccessEvent::SCREEN_UNLOCK_FAILED, src: 'recycle_bin', rsn: Reason::CREDENTIALS_INVALID);
 
             return response()->json(['message' => 'Incorrect PIN.'], 422);
         }

@@ -11,6 +11,10 @@ Artisan::command('inspire', function () {
 // Email log cleanup - runs daily at 2:00 AM, keeps logs for 180 days
 Schedule::command('email:cleanup-logs --days=180')->dailyAt('02:00');
 
+// Delete operational log files past LOG_PRUNABLE_DAYS (45). History logs in
+// storage/logs/history are kept unless LOG_HISTORY_DAYS is set.
+Schedule::command('log:prune')->dailyAt('02:10');
+
 // Bury addresses that bounced. Gmail accepts mail for an address that does not
 // exist and reports it afterwards as an "Address not found" email, so nothing
 // fails while sending; this reads those reports out of the sending mailbox.

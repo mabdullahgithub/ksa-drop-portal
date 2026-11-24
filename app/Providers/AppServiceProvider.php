@@ -3,7 +3,12 @@
 namespace App\Providers;
 
 use App\Listeners\EnforceEmailGraveyard;
+use App\Listeners\LogAuthEvents;
 use App\Listeners\LogMailActivity;
+use App\Logging\AmbientContext;
+use App\Logging\Enums\ActorType;
+use App\Logging\Enums\ModelType;
+use App\Logging\ModelHistoryObserver;
 use App\Models\Client;
 use App\Models\ClientProduct;
 use App\Models\Order;
@@ -20,9 +25,11 @@ use App\Services\Mail\GraveyardMailManager;
 use App\Support\ClientAccess;
 use App\Support\PhoneNumber;
 use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Console\Events\ScheduledTaskStarting;
 use Illuminate\Http\Request;
 use Illuminate\Mail\Events\MessageSending;
 use Illuminate\Mail\Events\MessageSent;
+use Illuminate\Queue\Events\JobProcessing;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\RateLimiter;
@@ -52,6 +59,8 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         Vite::prefetch(concurrency: 3);
+
+        $this->registerLoggingContext();
 
         \Illuminate\Validation\Rules\Password::defaults(fn () => \Illuminate\Validation\Rules\Password::min(12)->letters()->mixedCase()->numbers());
 
@@ -97,5 +106,38 @@ class AppServiceProvider extends ServiceProvider
             Limit::perMinute(10)->by('ip:' . $request->ip()),
             Limit::perMinutes(15, 5)->by('phone:' . (PhoneNumber::normalize((string) $request->input('phone')) ?? $request->ip())),
         ]);
+    }
+
+    /**
+     * History observers and listeners, and who a log line is attributed to
+     * inside queue workers and the scheduler.
+     * The trace itself is inherited from the dispatching request by Laravel's
+     * Context; a job with no inherited trace (dispatched from the console or
+     * the scheduler) gets a fresh one. Sync jobs run inside the request that
+     * dispatched them, so they keep that request's actor.
+     */
+    private function registerLoggingContext(): void
+    {
+        // History of every business record (see App\Logging\Enums\ModelType)
+        // and of access: sign-ins, password resets, roles and permissions.
+        foreach (ModelType::cases() as $type) {
+            $type->modelClass()::observe(ModelHistoryObserver::class);
+        }
+
+        LogAuthEvents::register();
+
+        Event::listen(JobProcessing::class, function (JobProcessing $event) {
+            if ($event->connectionName === 'sync') {
+                return;
+            }
+
+            AmbientContext::trace();
+            AmbientContext::setActor(ActorType::QUEUE);
+        });
+
+        Event::listen(ScheduledTaskStarting::class, function () {
+            AmbientContext::startTrace();
+            AmbientContext::setActor(ActorType::SCHEDULER);
+        });
     }
 }

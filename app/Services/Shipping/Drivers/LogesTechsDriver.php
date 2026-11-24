@@ -2,6 +2,8 @@
 
 namespace App\Services\Shipping\Drivers;
 
+use App\Logging\AppLog;
+use App\Logging\Events\LogesTechsEvent;
 use App\Models\ConnectorSetting;
 use App\Services\Shipping\Contracts\CourierDriver;
 use App\Services\Shipping\DTOs\CancelResult;
@@ -11,7 +13,6 @@ use App\Services\Shipping\DTOs\TrackingEvent;
 use App\Services\Shipping\DTOs\TrackingResult;
 use App\Services\Shipping\Enums\ShipmentStatus;
 use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\RateLimiter;
 
 /**
@@ -228,11 +229,8 @@ class LogesTechsDriver implements CourierDriver
             );
         }
 
-        Log::channel('logestechs')->error('LogesTechs shipment creation failed', [
-            'supplier_invoice' => $data->txlogisticId,
-            'http_ok' => $ok,
-            'response' => $body,
-        ]);
+        AppLog::emit(LogesTechsEvent::SHIPMENT_CREATE_FAILED, xid: $data->txlogisticId);
+        AppLog::payload(LogesTechsEvent::SHIPMENT_CREATE_FAILED, ['http_ok' => $ok, 'response' => $body]);
 
         return ShipmentResult::failure(
             errorMessage: $this->extractErrorMessage($body, 'LogesTechs rejected the shipment.'),
@@ -404,10 +402,8 @@ class LogesTechsDriver implements CourierDriver
         [$ok, $body] = $response;
 
         if (! $ok) {
-            Log::channel('logestechs')->warning('LogesTechs label generation failed', [
-                'package_ids' => $packageIds,
-                'response' => $body,
-            ]);
+            AppLog::emit(LogesTechsEvent::LABEL_FAILED, cnt: count($packageIds));
+            AppLog::payload(LogesTechsEvent::LABEL_FAILED, ['package_ids' => $packageIds, 'response' => $body]);
 
             return null;
         }
@@ -791,7 +787,7 @@ class LogesTechsDriver implements CourierDriver
         // LogesTechs publishes no rate limit; this mirrors the conservative
         // ceiling already applied to iMile rather than assuming none exists.
         if (RateLimiter::tooManyAttempts($rateLimitKey, 30)) {
-            Log::channel('logestechs')->warning('LogesTechs API rate limit reached');
+            AppLog::emit(LogesTechsEvent::API_RATE_LIMITED);
             $this->lastTransportError = 'local rate limit reached — too many requests in the last minute';
 
             return null;
@@ -816,21 +812,15 @@ class LogesTechsDriver implements CourierDriver
 
                 RateLimiter::hit($rateLimitKey, 60);
 
-                Log::channel('logestechs')->info('LogesTechs API call', [
-                    'endpoint' => $endpoint,
-                    'method' => $method,
-                    'status' => $response->status(),
-                    'attempt' => $attempt + 1,
-                ]);
+                AppLog::emit(LogesTechsEvent::API_CALLED, enp: $endpoint, hst: $response->status(), att: $attempt + 1);
 
                 if ($response->serverError()) {
                     // LogesTechs publishes no error catalogue and a 5xx body is
                     // usually empty, so the request we sent is the only clue as
                     // to what upset them — log it (minus the credentials) or
                     // there is nothing to debug from.
-                    Log::channel('logestechs')->warning('LogesTechs server error — request payload', [
-                        'endpoint' => $endpoint,
-                        'status' => $response->status(),
+                    AppLog::emit(LogesTechsEvent::API_SERVER_ERROR, enp: $endpoint, hst: $response->status());
+                    AppLog::payload(LogesTechsEvent::API_SERVER_ERROR, [
                         'body' => mb_substr($response->body(), 0, 1000),
                         'payload' => $this->redactCredentials($payload),
                     ]);
@@ -845,16 +835,10 @@ class LogesTechsDriver implements CourierDriver
                 $attempt++;
                 $this->lastTransportError = $e->getMessage();
 
-                Log::channel('logestechs')->warning('LogesTechs API error (attempt ' . $attempt . ')', [
-                    'endpoint' => $endpoint,
-                    'error' => $e->getMessage(),
-                ]);
+                AppLog::failure(LogesTechsEvent::API_ATTEMPT_FAILED, $e, enp: $endpoint, att: $attempt);
 
                 if ($attempt > $maxRetries) {
-                    Log::channel('logestechs')->error('LogesTechs API failed after ' . $attempt . ' attempts', [
-                        'endpoint' => $endpoint,
-                        'error' => $e->getMessage(),
-                    ]);
+                    AppLog::failure(LogesTechsEvent::API_GAVE_UP, $e, enp: $endpoint, att: $attempt);
 
                     return null;
                 }

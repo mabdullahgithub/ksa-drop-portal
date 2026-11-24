@@ -3,9 +3,10 @@
 namespace App\Console\Commands;
 
 use App\Jobs\ProcessShopifyWebhookJob;
+use App\Logging\AppLog;
+use App\Logging\Events\ShopifyEvent;
 use App\Models\ShopifySyncFailure;
 use Illuminate\Console\Command;
-use Illuminate\Support\Facades\Log;
 
 /**
  * Drain the Shopify dead-letter queue: replay every parked webhook whose
@@ -70,10 +71,7 @@ class RetryShopifySyncFailures extends Command
 
         $abandoned = $failures->where('status', ShopifySyncFailure::STATUS_ABANDONED)->count();
 
-        Log::channel('shopify')->info('Shopify sync failure retry sweep', [
-            'replayed'  => $failures->count(),
-            'abandoned' => $abandoned,
-        ]);
+        AppLog::emit(ShopifyEvent::SYNC_RETRY_SWEEP, cnt: $failures->count(), fct: $abandoned);
 
         if ($abandoned > 0) {
             $this->warn("{$abandoned} failure(s) reached the final attempt and will not be retried automatically again.");

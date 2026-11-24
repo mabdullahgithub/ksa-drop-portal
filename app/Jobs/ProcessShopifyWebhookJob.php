@@ -2,6 +2,9 @@
 
 namespace App\Jobs;
 
+use App\Logging\AppLog;
+use App\Logging\Events\ShopifyEvent;
+use App\Logging\ExternalId;
 use App\Models\ClientShopifyConnection;
 use App\Models\Order;
 use App\Models\ShopifySyncFailure;
@@ -14,7 +17,6 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
-use Illuminate\Support\Facades\Log;
 
 class ProcessShopifyWebhookJob implements ShouldQueue
 {
@@ -119,11 +121,7 @@ class ProcessShopifyWebhookJob implements ShouldQueue
             // Still logged, because "the merchant installed us and is wondering
             // why nothing appears" is a real support case, and this line is what
             // answers it.
-            Log::channel('shopify')->info('Shopify webhook ignored — store not connected to a client yet', [
-                'shop'             => $this->shopDomain,
-                'topic'            => $this->topic,
-                'connection_found' => (bool) $connection,
-            ]);
+            AppLog::emit(ShopifyEvent::WEBHOOK_IGNORED_NOT_CONNECTED, tpc: $this->topic, shd: ExternalId::orNull($this->shopDomain));
 
             return;
         }
@@ -170,12 +168,12 @@ class ProcessShopifyWebhookJob implements ShouldQueue
      */
     private function logDataRequest(): void
     {
-        Log::channel('shopify')->info('Shopify GDPR customers/data_request received', [
-            'shop'             => $this->shopDomain,
-            'customer_id'      => $this->payload['customer']['id'] ?? null,
-            'customer_email'   => $this->payload['customer']['email'] ?? null,
-            'orders_requested' => $this->payload['orders_requested'] ?? [],
-        ]);
+        AppLog::emit(
+            ShopifyEvent::GDPR_DATA_REQUESTED,
+            shd: $this->shopDomain,
+            cnt: count((array) ($this->payload['orders_requested'] ?? [])),
+            xcu: ExternalId::orNull($this->payload['customer']['id'] ?? null),
+        );
     }
 
     /**
@@ -193,10 +191,7 @@ class ProcessShopifyWebhookJob implements ShouldQueue
             ->whereIn('shopify_order_id', $orderIds)
             ->update(self::PII_REDACTIONS);
 
-        Log::channel('shopify')->info('Shopify GDPR customers/redact processed', [
-            'shop'            => $this->shopDomain,
-            'orders_redacted' => $count,
-        ]);
+        AppLog::emit(ShopifyEvent::GDPR_CUSTOMER_REDACTED, shd: $this->shopDomain, cnt: $count);
     }
 
     /**
@@ -235,10 +230,7 @@ class ProcessShopifyWebhookJob implements ShouldQueue
             }
         }
 
-        Log::channel('shopify')->info('Shopify app/uninstalled processed', [
-            'shop'        => $this->shopDomain,
-            'connections' => $connections->count(),
-        ]);
+        AppLog::emit(ShopifyEvent::UNINSTALLED, shd: $this->shopDomain, cnt: $connections->count());
     }
 
     /**
@@ -262,11 +254,7 @@ class ProcessShopifyWebhookJob implements ShouldQueue
             $connection->delete();
         }
 
-        Log::channel('shopify')->info('Shopify GDPR shop/redact processed', [
-            'shop'            => $this->shopDomain,
-            'connections'     => $connections->count(),
-            'orders_redacted' => $redacted,
-        ]);
+        AppLog::emit(ShopifyEvent::GDPR_SHOP_REDACTED, shd: $this->shopDomain, cnt: $redacted);
     }
 
     private function upsertOrder(ShopifyService $shopify, ClientShopifyConnection $connection): void
@@ -282,12 +270,13 @@ class ProcessShopifyWebhookJob implements ShouldQueue
 
         $this->requestFulfillmentIfAutoSync($order, $connection);
 
-        Log::channel('shopify')->info('Shopify order synced from webhook', [
-            'shop'         => $connection->shop_domain,
-            'topic'        => $this->topic,
-            'order_number' => $data['order_number'] ?? null,
-            'sync_status'  => $data['shopify_sync_status'] ?? 'processed',
-        ]);
+        AppLog::emit(
+            ShopifyEvent::ORDER_SYNCED,
+            con: $connection->id,
+            ord: $order->id,
+            tpc: $this->topic,
+            vcd: ExternalId::orNull($data['shopify_sync_status'] ?? 'processed'),
+        );
     }
 
     /**
@@ -401,11 +390,9 @@ class ProcessShopifyWebhookJob implements ShouldQueue
             $e ? $e::class . ': ' . $e->getMessage() : 'Job failed with no exception reported.',
         );
 
-        Log::channel('shopify')->error('Shopify webhook sync failed — parked for retry', [
-            'shop'  => $this->shopDomain,
-            'topic' => $this->topic,
-            'error' => $e?->getMessage(),
-        ]);
+        $e !== null
+            ? AppLog::failure(ShopifyEvent::WEBHOOK_SYNC_PARKED, $e, tpc: $this->topic, shd: ExternalId::orNull($this->shopDomain))
+            : AppLog::emit(ShopifyEvent::WEBHOOK_SYNC_PARKED, tpc: $this->topic, shd: ExternalId::orNull($this->shopDomain));
     }
 
     /**

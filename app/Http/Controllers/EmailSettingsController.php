@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use App\Logging\AppLog;
+use App\Logging\Events\MailEvent;
 use App\Models\EmailGraveyard;
 use App\Models\EmailLog;
 use App\Models\EmailSetting;
@@ -51,10 +53,7 @@ class EmailSettingsController extends Controller
     {
         $entry->delete();
 
-        \Log::channel('mail')->info('Address restored from graveyard', [
-            'user_id' => auth()->id(),
-            'email' => $entry->email,
-        ]);
+        AppLog::emit(MailEvent::GRAVEYARD_ADDRESS_RESTORED, egv: $entry->id);
 
         return back()->with('success', "{$entry->email} can receive email again.");
     }
@@ -84,11 +83,7 @@ class EmailSettingsController extends Controller
         $settings->save();
 
         // Log configuration change
-        \Log::info('Email settings updated', [
-            'user_id' => auth()->id(),
-            'driver' => $validated['driver'],
-            'is_active' => $validated['is_active'],
-        ]);
+        AppLog::emit(MailEvent::SETTINGS_UPDATED, est: $settings->id, on: (bool) $validated['is_active'], vcd: $validated['driver']);
 
         return back()->with('success', 'Email settings updated successfully.');
     }
@@ -114,11 +109,7 @@ class EmailSettingsController extends Controller
         $result = $this->emailService->testConnection($settings, auth()->id());
 
         // Log test attempt
-        \Log::info('Email test connection attempted', [
-            'user_id' => auth()->id(),
-            'test_email' => $request->test_email,
-            'success' => $result['success'],
-        ]);
+        AppLog::emit(MailEvent::TEST_CONNECTION_ATTEMPTED, ok: (bool) $result['success']);
 
         return response()->json($result);
     }

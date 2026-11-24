@@ -2,6 +2,9 @@
 
 namespace App\Services;
 
+use App\Logging\AppLog;
+use App\Logging\Events\MailEvent;
+use App\Logging\ExternalId;
 use App\Models\EmailLog;
 use App\Models\EmailSetting;
 use App\Models\User;
@@ -103,10 +106,7 @@ class EmailService
         // Rate limiting: 20 emails per user per hour
         $rateLimitKey = 'email:send:'.$user->id;
         if (RateLimiter::tooManyAttempts($rateLimitKey, 20)) {
-            \Log::warning('Email rate limit exceeded', [
-                'user_id' => $user->id,
-                'email_type' => $emailType,
-            ]);
+            AppLog::emit(MailEvent::RATE_LIMITED, usr: $user->id, mtp: ExternalId::orNull($emailType));
 
             return false;
         }

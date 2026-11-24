@@ -2,11 +2,12 @@
 
 namespace App\Console\Commands;
 
+use App\Logging\AppLog;
+use App\Logging\Events\ShopifyEvent;
 use App\Models\ClientShopifyConnection;
 use App\Services\ShopifyOrderWriter;
 use App\Services\ShopifyService;
 use Illuminate\Console\Command;
-use Illuminate\Support\Facades\Log;
 
 /**
  * Pull recent orders from the Admin API and import whatever is missing.
@@ -114,10 +115,7 @@ class ReconcileShopifyOrders extends Command
             try {
                 $page = $shopify->fetchOrdersSince($shop, $token, $since, $cursor);
             } catch (\Throwable $e) {
-                Log::channel('shopify')->error('Shopify reconciliation fetch failed', [
-                    'shop'  => $shop,
-                    'error' => $e->getMessage(),
-                ]);
+                AppLog::failure(ShopifyEvent::RECONCILIATION_FETCH_FAILED, $e, shd: $shop);
 
                 $this->warn("  {$shop}: fetch failed — {$e->getMessage()}");
 
@@ -178,11 +176,7 @@ class ReconcileShopifyOrders extends Command
 
                 $writer->write($data, $shopify->mapLineItems($node, 'graphql'), $connection);
 
-                Log::channel('shopify')->warning('Shopify order recovered by reconciliation', [
-                    'shop'             => $shop,
-                    'order_number'     => $data['order_number'],
-                    'shopify_order_id' => $data['shopify_order_id'],
-                ]);
+                AppLog::emit(ShopifyEvent::ORDER_RECOVERED_BY_RECONCILIATION, shd: $shop, xid: (string) $data['shopify_order_id']);
             }
 
             $cursor = $page['cursor'];

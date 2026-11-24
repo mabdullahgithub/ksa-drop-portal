@@ -2,6 +2,8 @@
 
 namespace App\Http\Middleware;
 
+use App\Logging\AmbientContext;
+use App\Logging\Enums\ActorType;
 use App\Models\RiderDevice;
 use App\Services\Riders\RiderAuthService;
 use Closure;
@@ -37,6 +39,8 @@ class AuthenticateRider
 
         $request->attributes->set('rider', $device->rider);
         $request->attributes->set('rider_device', $device);
+
+        AmbientContext::setActor(ActorType::RIDER, $device->rider->id);
 
         return $next($request);
     }

@@ -2,8 +2,10 @@
 
 namespace App\Models;
 
+use App\Logging\AppLog;
+use App\Logging\Events\MailEvent;
+use App\Logging\ExternalId;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
 /**
@@ -72,12 +74,12 @@ class EmailGraveyard extends Model
         ]);
 
         if ($entry->wasRecentlyCreated) {
-            Log::channel('mail')->warning('Address moved to graveyard', [
-                'email' => $email,
-                'source' => $source,
-                'status_code' => $statusCode,
-                'reason' => $entry->reason,
-            ]);
+            AppLog::emit(
+                MailEvent::GRAVEYARD_ADDRESS_ADDED,
+                egv: $entry->id,
+                src: ExternalId::orNull($source),
+                vcd: ExternalId::orNull($statusCode),
+            );
         }
 
         return $entry;
