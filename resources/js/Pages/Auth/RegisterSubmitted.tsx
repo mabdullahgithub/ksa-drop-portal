@@ -1,5 +1,5 @@
 import { Head, Link } from '@inertiajs/react'
-import { ExternalLink } from 'lucide-react'
+import { ExternalLink, Store } from 'lucide-react'
 import { SuccessCheck } from '@/components/auth/success-check'
 import { ThemeProvider } from '@/context/theme-provider'
 import { ThemeSwitch } from '@/components/theme-switch'
@@ -80,34 +80,25 @@ export default function RegisterSubmitted({
                 </ol>
               </div>
 
-              <div className='overflow-hidden rounded-lg border'>
-                {/* The badge's lettering is white, so it sits on dark in both themes. */}
-                <div className='bg-[#0b0f19] px-3 py-2.5'>
-                  <img
-                    src='/images/integrations/shopify-partner.png'
-                    alt='Shopify Partner'
-                    width={597}
-                    height={162}
-                    className='h-8 w-auto'
-                  />
-                </div>
-                <div className='border-t p-3'>
-                  <h2 className='text-sm font-semibold'>We are a Shopify Partner</h2>
-                  <p className='mt-1 text-sm text-muted-foreground'>
-                    KSA DROP has its own Shopify app. Use KSADrop Portal to connect your store once
-                    your account is approved.
-                  </p>
-                  <a
-                    href={shopifyAppUrl}
-                    target='_blank'
-                    rel='noopener noreferrer'
-                    className='mt-2 inline-flex items-center gap-1.5 text-sm font-medium hover:underline'
-                    style={{ color: BRAND }}
-                  >
-                    View our app on Shopify
-                    <ExternalLink className='h-4 w-4' aria-hidden />
-                  </a>
-                </div>
+              <div className='rounded-lg border p-3'>
+                <h2 className='flex items-center gap-2 text-sm font-semibold'>
+                  <Store className='h-5 w-5 shrink-0' style={{ color: BRAND }} aria-hidden />
+                  We are a Shopify Partner
+                </h2>
+                <p className='mt-1 text-sm text-muted-foreground'>
+                  KSA DROP has its own app on the Shopify App Store. Use KSADrop Portal to connect
+                  your store once your account is approved.
+                </p>
+                <a
+                  href={shopifyAppUrl}
+                  target='_blank'
+                  rel='noopener noreferrer'
+                  className='mt-2 inline-flex items-center gap-1.5 text-sm font-medium hover:underline'
+                  style={{ color: BRAND }}
+                >
+                  View our app on Shopify
+                  <ExternalLink className='h-4 w-4' aria-hidden />
+                </a>
               </div>
 
               <Link
