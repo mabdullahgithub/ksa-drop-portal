@@ -19,6 +19,9 @@ class Client extends Model
         return 'id';
     }
 
+    /** Signed up through the public page and waiting for an admin to activate it. */
+    public const STATUS_PENDING = 'pending';
+
     protected $fillable = [
         'user_id',
         'created_by',
@@ -121,7 +124,7 @@ class Client extends Model
     {
         return match ($this->status) {
             'active' => 'success',
-            'inactive' => 'warning',
+            'inactive', self::STATUS_PENDING => 'warning',
             'suspended' => 'error',
             default => 'default',
         };

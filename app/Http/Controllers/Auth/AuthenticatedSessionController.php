@@ -2,7 +2,7 @@
 
 namespace App\Http\Controllers\Auth;
 
-use App\Exceptions\ClientPortalBlocked;
+use App\Http\Controllers\Auth\Concerns\CompletesLogin;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\LoginRequest;
 use App\Support\UserPresence;
@@ -15,6 +15,8 @@ use Inertia\Response;
 
 class AuthenticatedSessionController extends Controller
 {
+    use CompletesLogin;
+
     /**
      * Display the login view.
      */
@@ -23,6 +25,7 @@ class AuthenticatedSessionController extends Controller
         return Inertia::render('Auth/Login', [
             'canResetPassword' => Route::has('password.request'),
             'status' => session('status'),
+            'googleEnabled' => GoogleAuthController::enabled(),
         ]);
     }
 
@@ -42,38 +45,7 @@ class AuthenticatedSessionController extends Controller
 
         $request->session()->regenerate();
 
-        $user = $request->user();
-        if ($user->hasRole('client')) {
-            if (ClientPortalBlocked::enabled()) {
-                Auth::guard('web')->logout();
-                $request->session()->invalidate();
-                $request->session()->regenerateToken();
-
-                throw new ClientPortalBlocked();
-            }
-
-            $client = $user->client;
-
-            if (!$client || $client->status !== 'active') {
-                Auth::guard('web')->logout();
-                $request->session()->invalidate();
-                $request->session()->regenerateToken();
-
-                $message = match ($client?->status) {
-                    'suspended' => __('Your account has been suspended. Please contact support.'),
-                    'inactive'  => __('Your account is inactive. Please contact support to reactivate it.'),
-                    default     => __('Your account is not active. Please contact support.'),
-                };
-
-                throw \Illuminate\Validation\ValidationException::withMessages([
-                    'email' => $message,
-                ]);
-            }
-
-            return redirect()->intended(route('portal.dashboard', absolute: false));
-        }
-
-        return redirect()->intended(route($user->defaultLandingRoute(), absolute: false));
+        return $this->completeLogin($request);
     }
 
     /**

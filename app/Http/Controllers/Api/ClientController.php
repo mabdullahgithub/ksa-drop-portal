@@ -261,7 +261,7 @@ class ClientController extends Controller
     public function updateStatus(Request $request, Client $client)
     {
         $request->validate([
-            'status' => 'required|in:active,inactive,suspended',
+            'status' => 'required|in:active,inactive,suspended,pending',
         ]);
 
         $oldStatus = $client->status;
@@ -439,6 +439,7 @@ class ClientController extends Controller
         $active = Client::where('status', 'active')->count();
         $inactive = Client::where('status', 'inactive')->count();
         $suspended = Client::where('status', 'suspended')->count();
+        $pending = Client::where('status', Client::STATUS_PENDING)->count();
         $dropshippers = Client::whereJsonContains('client_types', 'dropshipper')->count();
         $fulfilment = Client::whereJsonContains('client_types', 'fulfilment')->count();
 
@@ -447,6 +448,7 @@ class ClientController extends Controller
             'active_clients' => $active,
             'inactive_clients' => $inactive,
             'suspended_clients' => $suspended,
+            'pending_clients' => $pending,
             'dropshippers_count' => $dropshippers,
             'fulfilment_count' => $fulfilment,
         ]);
@@ -457,6 +459,7 @@ class ClientController extends Controller
         return response()->json([
             'statuses' => [
                 ['value' => 'all', 'label' => 'All'],
+                ['value' => 'pending', 'label' => 'Pending approval'],
                 ['value' => 'active', 'label' => 'Active'],
                 ['value' => 'inactive', 'label' => 'Inactive'],
                 ['value' => 'suspended', 'label' => 'Suspended'],

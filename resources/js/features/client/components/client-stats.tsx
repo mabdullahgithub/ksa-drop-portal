@@ -29,7 +29,9 @@ export function ClientStats({ stats, loading }: ClientStatsProps) {
     {
       title: 'Total Clients',
       value: stats.total_clients,
-      subtitle: `${stats.active_clients} active`,
+      subtitle: stats.pending_clients
+        ? `${stats.active_clients} active · ${stats.pending_clients} pending approval`
+        : `${stats.active_clients} active`,
       icon: Users,
     },
     {

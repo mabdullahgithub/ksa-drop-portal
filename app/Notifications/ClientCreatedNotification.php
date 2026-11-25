@@ -33,6 +33,15 @@ class ClientCreatedNotification extends Notification
 
     public function toArray(object $notifiable): array
     {
+        if ($this->client->status === Client::STATUS_PENDING) {
+            return [
+                'title'      => 'New Client Signup',
+                'message'    => "{$this->client->company_name} ({$this->client->client_id}) signed up as {$this->client->type_label} and is waiting for approval.",
+                'icon'       => 'user-circle',
+                'action_url' => "/client/{$this->client->id}",
+            ];
+        }
+
         return [
             'title'      => 'New Client Registered',
             'message'    => "{$this->client->company_name} ({$this->client->client_id}) has joined as {$this->client->type_label}.",

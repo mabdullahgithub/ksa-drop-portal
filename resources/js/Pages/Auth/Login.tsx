@@ -7,6 +7,7 @@ import { PasswordInput } from '@/components/password-input'
 import { ThemeProvider } from '@/context/theme-provider'
 import { ThemeSwitch } from '@/components/theme-switch'
 import { AuthLogo } from '@/components/layout/auth-logo'
+import { AuthDivider, GoogleButton } from '@/components/auth/google-button'
 
 const BRAND = '#f26722'
 const BRAND_HOVER = '#d9591c'
@@ -14,9 +15,11 @@ const BRAND_HOVER = '#d9591c'
 export default function Login({
   status,
   canResetPassword,
+  googleEnabled = false,
 }: {
   status?: string
   canResetPassword: boolean
+  googleEnabled?: boolean
 }) {
   const { data, setData, post, processing, errors, reset } = useForm({
     email: '',
@@ -88,6 +91,13 @@ export default function Login({
               {status && (
                 <div className='mb-4 rounded-md bg-green-50 px-3 py-2 text-sm font-medium text-green-700'>
                   {status}
+                </div>
+              )}
+
+              {googleEnabled && (
+                <div className='mb-6 space-y-6'>
+                  <GoogleButton />
+                  <AuthDivider />
                 </div>
               )}
 
@@ -169,6 +179,17 @@ export default function Login({
                 >
                   {processing ? 'Signing in…' : 'Sign In'}
                 </button>
+
+                <p className='text-center text-sm text-muted-foreground'>
+                  New to KSA DROP?{' '}
+                  <Link
+                    href={route('register')}
+                    className='font-medium hover:underline'
+                    style={{ color: BRAND }}
+                  >
+                    Create an account
+                  </Link>
+                </p>
               </form>
             </div>
           </div>

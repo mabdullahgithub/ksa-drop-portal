@@ -24,7 +24,7 @@ export interface Client {
   postal_code: string | null
   tax_id: string | null
   commercial_registration: string | null
-  status: 'active' | 'inactive' | 'suspended'
+  status: 'active' | 'inactive' | 'suspended' | 'pending'
   status_color: 'success' | 'warning' | 'error' | 'default'
   portal_features: ('orders' | 'inventory' | 'revenue' | 'finance' | 'products')[]
   charges: ClientCharges | null
@@ -155,6 +155,7 @@ export interface ClientStatistics {
   active_clients: number
   inactive_clients: number
   suspended_clients: number
+  pending_clients: number
   dropshippers_count: number
   fulfilment_count: number
 }

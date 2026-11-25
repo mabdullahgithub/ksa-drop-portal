@@ -12,6 +12,7 @@
         "inertiajs/inertia-laravel": "^2.0",
         "laravel/framework": "^13.8",
         "laravel/sanctum": "^4.0",
+        "laravel/socialite": "^5.33",
         "laravel/tinker": "^3.0",
         "picqer/php-barcode-generator": "^3.3",
         "pragmarx/google2fa-laravel": "^3.0",

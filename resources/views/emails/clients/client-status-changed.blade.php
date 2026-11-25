@@ -5,6 +5,7 @@
         'active'    => 'Active',
         'inactive'  => 'Inactive',
         'suspended' => 'Suspended',
+        'pending'   => 'Pending approval',
     ];
     $statusMessages = [
         'active'    => 'Your account is now fully active. You can log in and use all portal features available to you.',

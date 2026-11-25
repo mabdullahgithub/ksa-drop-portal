@@ -6,7 +6,7 @@ Hi {{ $client->contact_person ?? $client->user->name }},
 Your {{ config('app.name') }} account status for {{ $client->company_name }} has been updated.
 
 @php
-    $statusLabels = ['active' => 'Active', 'inactive' => 'Inactive', 'suspended' => 'Suspended'];
+    $statusLabels = ['active' => 'Active', 'inactive' => 'Inactive', 'suspended' => 'Suspended', 'pending' => 'Pending approval'];
     $statusMessages = [
         'active'    => 'Your account is now fully active. You can log in and use all portal features.',
         'inactive'  => 'Your account has been deactivated. Contact support if you have questions.',

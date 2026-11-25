@@ -48,6 +48,7 @@ export function ClientFiltersComponent({ filters, filterOptions, onFiltersChange
         <SelectContent>
           {(filterOptions?.statuses || [
             { value: 'all', label: 'All' },
+            { value: 'pending', label: 'Pending approval' },
             { value: 'active', label: 'Active' },
             { value: 'inactive', label: 'Inactive' },
             { value: 'suspended', label: 'Suspended' },
