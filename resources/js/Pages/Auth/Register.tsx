@@ -1,6 +1,6 @@
 import { Head, Link, useForm } from '@inertiajs/react'
-import { FormEventHandler, ReactNode, useState } from 'react'
-import { ArrowLeft, Check, Copy, PackageOpen, Sparkles, Truck } from 'lucide-react'
+import { FormEventHandler, ReactNode, useEffect, useState } from 'react'
+import { ArrowLeft, Check, Copy, KeyRound, PackageOpen, Sparkles, Truck } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { authSplitLayout } from '@/components/auth/auth-split-layout'
 import { generateStrongPassword } from '@/lib/password-utils'
@@ -60,6 +60,44 @@ const STEPS = [
 
 const LAST_STEP = STEPS.length - 1
 
+/** name@domain.tld: no spaces, one @, and a dot with at least two letters after it. */
+const EMAIL_FORMAT = /^[^\s@]+@[^\s@.]+(\.[^\s@.]+)*\.[a-z]{2,}$/i
+
+/**
+ * What survives a refresh: the step and everything typed so far, except the
+ * passwords, which are never written anywhere. Session storage is per tab and
+ * gone when the tab closes.
+ */
+const DRAFT_KEY = 'ksadrop:signup-draft'
+const DRAFT_FIELDS = ['client_type', 'name', 'company_name', 'phone', 'city', 'email'] as const
+
+type Draft = { step: number; data: Partial<Record<(typeof DRAFT_FIELDS)[number], string>> }
+
+function readDraft(): Draft | null {
+  try {
+    const raw = JSON.parse(sessionStorage.getItem(DRAFT_KEY) ?? 'null')
+    if (!raw || typeof raw !== 'object') return null
+
+    const data: Draft['data'] = {}
+    for (const field of DRAFT_FIELDS) {
+      if (typeof raw.data?.[field] === 'string') data[field] = raw.data[field]
+    }
+    const step = Number.isInteger(raw.step) ? Math.min(Math.max(raw.step, 0), LAST_STEP) : 0
+
+    return { step, data }
+  } catch {
+    return null
+  }
+}
+
+function clearDraft() {
+  try {
+    sessionStorage.removeItem(DRAFT_KEY)
+  } catch {
+    // Storage blocked: there is nothing to clear.
+  }
+}
+
 function Field({
   id,
   label,
@@ -90,6 +128,9 @@ function Field({
 }
 
 export default function Register() {
+  // Read once, on the first render.
+  const [draft] = useState(readDraft)
+
   const { data, setData, post, processing, errors, setError, clearErrors } = useForm({
     name: '',
     company_name: '',
@@ -100,12 +141,16 @@ export default function Register() {
     password: '',
     password_confirmation: '',
     website: '', // honeypot, hidden from people
+    ...draft?.data,
   })
 
-  const [step, setStep] = useState(0)
+  const [step, setStep] = useState(draft?.step ?? 0)
   // Bumped by the generator: remounts the password inputs with the value shown.
   const [generation, setGeneration] = useState(0)
   const [copied, setCopied] = useState(false)
+  // The "save your password" reminder, shown after each generated password
+  // until it is copied or closed.
+  const [reminderClosed, setReminderClosed] = useState(false)
 
   const strength = checkSignupPassword(data.password, data.name, data.email)
   const confirmMatches =
@@ -125,7 +170,7 @@ export default function Register() {
       if (!/^\d{8,15}$/.test(phone)) found.phone = 'Enter a valid phone number.'
     }
     if (index === 2) {
-      if (!/^\S+@\S+\.\S+$/.test(data.email.trim())) found.email = 'Enter a valid email.'
+      if (!EMAIL_FORMAT.test(data.email.trim())) found.email = 'Enter a valid email address.'
       if (!strength.valid) found.password = 'Your password does not meet all the rules yet.'
       if (!confirmMatches) found.password_confirmation = 'Passwords do not match.'
     }
@@ -149,6 +194,8 @@ export default function Register() {
     }
 
     post(route('register'), {
+      // Done: the next visit starts fresh.
+      onSuccess: () => clearDraft(),
       // Open the first step that has something the server refused.
       onError: (failed) => {
         const index = STEPS.findIndex((s) => s.fields.some((field) => field in failed))
@@ -157,18 +204,50 @@ export default function Register() {
     })
   }
 
+  // A refresh comes back to the same step, unless an earlier one is now
+  // incomplete (only the client type, say, survived): then to that one.
+  useEffect(() => {
+    if (step === 0) return
+    const incomplete = STEPS.findIndex(
+      (_, index) => index < step && Object.keys(stepProblems(index)).length > 0,
+    )
+    if (incomplete !== -1) setStep(incomplete)
+    // Only once, for the restored step.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Keep the draft up to date as the person types and moves between steps.
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(
+        DRAFT_KEY,
+        JSON.stringify({
+          step,
+          data: Object.fromEntries(DRAFT_FIELDS.map((field) => [field, data[field]])),
+        }),
+      )
+    } catch {
+      // Storage full or blocked: the form still works, it just won't survive a refresh.
+    }
+  }, [step, data.client_type, data.name, data.company_name, data.phone, data.city, data.email])
+
   const generatePassword = () => {
     const password = generateStrongPassword(16)
     setData((current) => ({ ...current, password, password_confirmation: password }))
     clearErrors('password', 'password_confirmation')
     setGeneration((n) => n + 1)
     setCopied(false)
+    setReminderClosed(false)
   }
+
+  const canCopy = generation > 0 && data.password !== ''
 
   const copyPassword = async () => {
     try {
       await navigator.clipboard.writeText(data.password)
       setCopied(true)
+      // Long enough to read "Copied", then out of the way.
+      setTimeout(() => setReminderClosed(true), 1500)
     } catch {
       // No clipboard access: the password is visible and can be copied by hand.
     }
@@ -176,9 +255,65 @@ export default function Register() {
 
   const servicesError = errors.client_type
 
+  // Checked as it is typed, but only said once typing pauses (or the field is
+  // left), so "nam" is not called wrong halfway through "name@shop.sa".
+  const emailValid = EMAIL_FORMAT.test(data.email.trim())
+  const [emailSettled, setEmailSettled] = useState(false)
+  useEffect(() => {
+    setEmailSettled(false)
+    if (data.email.trim() === '') return
+    const timer = setTimeout(() => setEmailSettled(true), 600)
+    return () => clearTimeout(timer)
+  }, [data.email])
+  const emailFormatError =
+    data.email.trim() !== '' && !emailValid && emailSettled
+      ? 'Enter a valid email address.'
+      : undefined
+  const emailError = errors.email ?? emailFormatError
+  const showReminder = step === LAST_STEP && canCopy && !reminderClosed
+
   return (
     <>
       <Head title='Create an account' />
+
+      {/* Frosted glass, like the stock alert cards. It stays until the
+          password is copied: there is no other way to close it. */}
+      {showReminder && (
+        <div
+          role='status'
+          className='fixed bottom-4 end-4 z-50 w-[min(17rem,calc(100vw-2rem))] overflow-hidden rounded-xl border border-[#f26722]/25 bg-[#f26722]/12 text-foreground shadow-lg backdrop-blur-md backdrop-saturate-150 animate-in fade-in slide-in-from-bottom-2 duration-200 sm:bottom-6 sm:end-6'
+        >
+          <div className='flex items-start gap-2.5 p-3'>
+            <div
+              className='flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#f26722]/15'
+              style={{ color: BRAND }}
+            >
+              <KeyRound className='h-3.5 w-3.5' />
+            </div>
+            <div className='min-w-0 flex-1'>
+              <div
+                className='text-[10px] font-semibold tracking-wide uppercase'
+                style={{ color: BRAND }}
+              >
+                Save your password
+              </div>
+              <div className='text-[13px] font-semibold leading-5'>Copy it before you continue</div>
+              <div className='text-[11px] text-muted-foreground'>
+                Keep it somewhere safe. You will need it to sign in.
+              </div>
+              <button
+                type='button'
+                onClick={copyPassword}
+                className='mt-2 inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-[11px] font-semibold text-white transition-opacity hover:opacity-90'
+                style={{ backgroundColor: BRAND }}
+              >
+                {copied ? <Check className='h-3.5 w-3.5' /> : <Copy className='h-3.5 w-3.5' />}
+                {copied ? 'Copied' : 'Copy password'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <div className='w-full max-w-sm'>
         <div className='mb-7'>
           <h1 className='text-2xl font-semibold tracking-tight'>
@@ -335,57 +470,85 @@ export default function Register() {
 
           {step === 2 && (
             <>
-              <Field id='email' label='Email ID' required error={errors.email}>
-                <Input
-                  id='email'
-                  type='email'
-                  value={data.email}
-                  autoComplete='username'
-                  autoFocus
-                  onChange={(e) => setData('email', e.target.value)}
-                  className={cn(inputClass, errors.email && 'border-destructive')}
-                />
+              <Field id='email' label='Email ID' required error={emailError}>
+                <div className='relative'>
+                  <Input
+                    id='email'
+                    type='email'
+                    value={data.email}
+                    autoComplete='username'
+                    autoFocus
+                    autoCapitalize='none'
+                    spellCheck={false}
+                    aria-invalid={!!emailError}
+                    onBlur={() => data.email.trim() !== '' && setEmailSettled(true)}
+                    onChange={(e) => {
+                      setData('email', e.target.value)
+                      if (errors.email) clearErrors('email')
+                    }}
+                    className={cn(inputClass, 'pe-10', emailError && 'border-destructive')}
+                  />
+                  {emailValid && !errors.email && (
+                    <Check
+                      className='pointer-events-none absolute right-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-green-600 dark:text-green-500'
+                      aria-hidden
+                    />
+                  )}
+                </div>
               </Field>
 
               <Field id='password' label='Password' required error={errors.password}>
-                <PasswordInput
-                  key={generation}
-                  defaultVisible={generation > 0}
-                  id='password'
-                  value={data.password}
-                  autoComplete='new-password'
-                  onChange={(e) => setData('password', e.target.value)}
-                  className={cn(passwordClass, errors.password && '[&>input]:border-destructive')}
-                />
-              </Field>
-
-              <div className='space-y-3'>
-                <div className='flex items-center justify-between gap-3'>
+                {/* The field, and the generator beside it. */}
+                <div className='flex items-center gap-2'>
+                  <div className='relative min-w-0 flex-1'>
+                    <PasswordInput
+                      key={generation}
+                      defaultVisible={generation > 0}
+                      id='password'
+                      value={data.password}
+                      autoComplete='new-password'
+                      onChange={(e) => setData('password', e.target.value)}
+                      className={cn(
+                        passwordClass,
+                        // Room for the icons inside the field, beside show/hide.
+                        canCopy ? '[&>input]:pe-16' : '[&>input]:pe-10',
+                        errors.password && '[&>input]:border-destructive',
+                      )}
+                    />
+                    <div className='absolute inset-y-0 right-8 flex items-center gap-0.5'>
+                      {canCopy && (
+                        <button
+                          type='button'
+                          onClick={copyPassword}
+                          title={copied ? 'Copied' : 'Copy password'}
+                          aria-label={copied ? 'Password copied' : 'Copy password'}
+                          className='flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground'
+                        >
+                          {copied ? <Check className='h-4 w-4' /> : <Copy className='h-4 w-4' />}
+                        </button>
+                      )}
+                    </div>
+                  </div>
                   <button
                     type='button'
                     onClick={generatePassword}
-                    className='flex items-center gap-1.5 text-xs font-medium hover:underline'
+                    title='Generate strong password'
+                    aria-label='Generate strong password'
+                    className='flex h-12 w-12 shrink-0 items-center justify-center rounded-lg border border-input transition-colors hover:bg-muted'
                     style={{ color: BRAND }}
                   >
-                    <Sparkles className='h-3.5 w-3.5' />
-                    {generation > 0 ? 'Generate another' : 'Generate strong password'}
+                    <Sparkles className='h-5 w-5' />
                   </button>
-                  {generation > 0 && data.password !== '' && (
-                    <button
-                      type='button'
-                      onClick={copyPassword}
-                      className='flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground'
-                    >
-                      {copied ? (
-                        <Check className='h-3.5 w-3.5' />
-                      ) : (
-                        <Copy className='h-3.5 w-3.5' />
-                      )}
-                      {copied ? 'Copied' : 'Copy'}
-                    </button>
-                  )}
                 </div>
-                <PasswordStrength result={strength} />
+              </Field>
+
+              <div>
+                {/* Only once something is typed; a fresh field stays clean. */}
+                {data.password !== '' && (
+                  <div className='animate-in fade-in-0 slide-in-from-top-1 duration-300'>
+                    <PasswordStrength result={strength} />
+                  </div>
+                )}
               </div>
 
               <Field
@@ -407,11 +570,6 @@ export default function Register() {
                   )}
                 />
               </Field>
-              {confirmMatches && (
-                <p className='!mt-1.5 flex items-center gap-1.5 text-xs text-green-600 dark:text-green-500'>
-                  <Check className='h-3.5 w-3.5' /> Passwords match
-                </p>
-              )}
             </>
           )}
 
@@ -454,12 +612,6 @@ export default function Register() {
               {step < LAST_STEP ? 'Continue' : processing ? 'Creating account…' : 'Create account'}
             </button>
           </div>
-
-          {step === LAST_STEP && (
-            <p className='text-center text-xs text-muted-foreground'>
-              Our team reviews every signup and emails you once you're approved.
-            </p>
-          )}
 
           <p className='text-center text-sm text-muted-foreground'>
             Already have an account?{' '}
