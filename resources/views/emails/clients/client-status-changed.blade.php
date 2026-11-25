@@ -6,11 +6,13 @@
         'inactive'  => 'Inactive',
         'suspended' => 'Suspended',
         'pending'   => 'Pending approval',
+        'rejected'  => 'Not approved',
     ];
     $statusMessages = [
         'active'    => 'Your account is now fully active. You can log in and use all portal features available to you.',
         'inactive'  => 'Your account has been deactivated. You will not be able to access the portal until it is reactivated. Please contact support if you have questions.',
         'suspended' => 'Your account has been suspended. Access to the portal has been blocked. Please contact our support team to resolve this.',
+        'rejected'  => 'We are unable to approve your signup request at this time.',
     ];
     $alertTypes = [
         'active'    => 'success',
@@ -35,6 +37,9 @@
             <strong>Status changed:</strong>
             {{ ucfirst($statusLabels[$oldStatus] ?? $oldStatus) }} → {{ ucfirst($statusLabels[$newStatus] ?? $newStatus) }}<br><br>
             {{ $statusMessages[$newStatus] ?? "Your account status is now {$newStatus}." }}
+            @if($newStatus === 'rejected' && $client->signup_rejection_reason)
+            <br><br><strong>Reason:</strong> {{ $client->signup_rejection_reason }}
+            @endif
         </p>
     @endcomponent
 

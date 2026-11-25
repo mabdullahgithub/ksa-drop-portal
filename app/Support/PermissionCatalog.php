@@ -252,13 +252,17 @@ final class PermissionCatalog
 
         'requests' => [
             'label' => 'Requests',
-            'description' => 'What clients are waiting on: new products, and changes to verified ones.',
+            'description' => 'What is waiting on the team: new products, stock updates and signups.',
             'groups' => [
                 'Page' => [
                     'view requests' => ['Open the requests page', 'See the Requests page.', null],
                     'view product requests' => ['New products tab', 'Products clients added that await verification.'],
                     'view stock requests' => ['Stock updates tab', 'Stock changes clients asked for on verified products.'],
-                    'view detail requests' => ['Details changes tab', 'Name, SKU, price and image changes clients asked for.'],
+                    'view signup requests' => ['Signup requests tab', 'Merchants who signed up and wait for approval.'],
+                ],
+                'Signup requests' => [
+                    'approve signup requests' => ['Approve signup', 'Activate a new merchant account.', 'view signup requests'],
+                    'reject signup requests' => ['Reject signup', 'Turn a signup down with a reason.', 'view signup requests'],
                 ],
                 'New products' => [
                     'review product requests' => ['Review & verify', 'Verify, reject or keep a new product pending.', 'view product requests'],
@@ -268,12 +272,6 @@ final class PermissionCatalog
                     'reject stock requests' => ['Reject stock update', 'Turn a stock update down with a reason.', 'view stock requests'],
                     'bulk approve stock requests' => ['Approve several', 'Approve the selected stock updates as requested.', 'view stock requests'],
                     'bulk reject stock requests' => ['Reject several', 'Reject the selected stock updates with one reason.', 'view stock requests'],
-                ],
-                'Details changes' => [
-                    'approve detail requests' => ['Approve details change', 'Apply the changes to the product.', 'view detail requests'],
-                    'reject detail requests' => ['Reject details change', 'Turn a details change down with a reason.', 'view detail requests'],
-                    'bulk approve detail requests' => ['Approve several', 'Approve the selected details changes.', 'view detail requests'],
-                    'bulk reject detail requests' => ['Reject several', 'Reject the selected details changes with one reason.', 'view detail requests'],
                 ],
             ],
         ],

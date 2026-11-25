@@ -3,15 +3,18 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
+use App\Mail\Signups\SignupReceivedMail;
 use App\Models\Client;
 use App\Models\User;
 use App\Notifications\ClientCreatedNotification;
+use App\Rules\NotGuessablePassword;
+use App\Services\EmailService;
 use Illuminate\Auth\Events\Registered;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Validation\Rules;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -23,23 +26,14 @@ use Inertia\Response;
  * the client starts as Client::STATUS_PENDING: the person cannot sign in until
  * an admin reviews the account (and sets its charges) and activates it. The
  * activation sends the usual "account status changed" email.
- *
- * Signing up with Google: GoogleAuthController puts the verified Google
- * profile in the session; the name and email come from there, not the form,
- * and no password is asked for.
  */
 class RegisteredUserController extends Controller
 {
-    private const PENDING_MESSAGE = 'Thanks for signing up! Your account is under review. We will email you as soon as it is approved.';
+    private const SUBMITTED_KEY = 'signup_submitted';
 
-    public function create(Request $request): Response
+    public function create(): Response
     {
-        $google = $request->session()->get(GoogleAuthController::SESSION_KEY);
-
-        return Inertia::render('Auth/Register', [
-            'googleEnabled' => GoogleAuthController::enabled(),
-            'google' => $google ? ['name' => $google['name'], 'email' => $google['email']] : null,
-        ]);
+        return Inertia::render('Auth/Register');
     }
 
     public function store(Request $request): RedirectResponse
@@ -47,13 +41,7 @@ class RegisteredUserController extends Controller
         // Honeypot: a field people never see. Bots that fill it get the same
         // success screen, and nothing is created.
         if (filled($request->input('website'))) {
-            return redirect()->route('login')->with('status', self::PENDING_MESSAGE);
-        }
-
-        $google = $request->session()->get(GoogleAuthController::SESSION_KEY);
-
-        if ($google) {
-            $request->merge(['email' => $google['email']]);
+            return $this->toSubmitted($request, (string) $request->string('email'), null);
         }
 
         $validated = $request->validate([
@@ -63,30 +51,29 @@ class RegisteredUserController extends Controller
             'phone' => 'required|string|max:20',
             'city' => 'nullable|string|max:100',
             'client_type' => 'required|in:dropshipper,fulfilment',
-            'password' => $google ? ['exclude'] : ['required', 'confirmed', Rules\Password::defaults()],
+            'password' => [
+                'required',
+                'confirmed',
+                // Stricter than the app default. bcrypt ignores anything past 72 bytes.
+                Rules\Password::min(12)->max(72)->mixedCase()->numbers()->symbols(),
+                new NotGuessablePassword([$request->input('name'), $request->input('email')]),
+            ],
         ], [
             'email.unique' => "You can't create an account with this email.",
             'client_type.required' => 'Choose the service you need.',
             'client_type.in' => 'Choose the service you need.',
         ]);
 
-        $client = DB::transaction(function () use ($validated, $google) {
+        $client = DB::transaction(function () use ($validated) {
             $user = User::create([
                 'name' => $validated['name'],
                 'email' => $validated['email'],
-                // Google signups never use it, but the column is required.
-                'password' => Hash::make($google ? Str::random(64) : $validated['password']),
-                'google_id' => $google['id'] ?? null,
+                'password' => Hash::make($validated['password']),
             ]);
-
-            if ($google) {
-                // Google has already verified this address.
-                $user->forceFill(['email_verified_at' => now()])->save();
-            }
 
             $user->assignRole('client');
 
-            return Client::create([
+            $client = Client::create([
                 'user_id' => $user->id,
                 'created_by' => null,
                 'client_types' => [$validated['client_type']],
@@ -99,21 +86,59 @@ class RegisteredUserController extends Controller
                 'status' => Client::STATUS_PENDING,
                 'portal_features' => ['orders', 'inventory', 'revenue'],
             ]);
-        });
 
-        $request->session()->forget(GoogleAuthController::SESSION_KEY);
+            // Not fillable: only signup and its review write these.
+            $client->forceFill(['signed_up_at' => now()])->save();
+
+            return $client;
+        });
 
         event(new Registered($client->user));
 
+        $this->sendReceivedMail($client);
+
         // Tell the admins there is a signup waiting for review.
         try {
-            User::role(['admin', 'superadmin'])->each(
+            // By name, so a missing role does not stop the others being told.
+            User::whereHas('roles', fn ($query) => $query->whereIn('name', ['admin', 'superadmin']))->get()->each(
                 fn ($admin) => $admin->notify(new ClientCreatedNotification($client))
             );
         } catch (\Throwable $e) {
             report($e);
         }
 
-        return redirect()->route('login')->with('status', self::PENDING_MESSAGE);
+        return $this->toSubmitted($request, $client->user->email, $client->short_id);
+    }
+
+    /** "We received your request", to the applicant. The signup stands if it fails. */
+    private function sendReceivedMail(Client $client): void
+    {
+        try {
+            $emails = app(EmailService::class);
+
+            if ($emails->isEnabled()) {
+                $emails->configureMailer();
+                Mail::to($client->user->email)->send(new SignupReceivedMail($client));
+            }
+        } catch (\Throwable $e) {
+            report($e);
+        }
+    }
+
+    /** The confirmation screen. Held in the session so a refresh keeps it. */
+    public function submitted(Request $request): Response|RedirectResponse
+    {
+        $submitted = $request->session()->get(self::SUBMITTED_KEY);
+
+        return $submitted
+            ? Inertia::render('Auth/RegisterSubmitted', $submitted)
+            : redirect()->route('register');
+    }
+
+    private function toSubmitted(Request $request, string $email, ?string $reference): RedirectResponse
+    {
+        $request->session()->put(self::SUBMITTED_KEY, ['email' => $email, 'reference' => $reference]);
+
+        return redirect()->route('register.submitted');
     }
 }

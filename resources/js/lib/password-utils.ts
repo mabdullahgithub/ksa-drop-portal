@@ -83,23 +83,33 @@ export function generateStrongPassword(length: number = 16): string {
 
   const allChars = lowercase + uppercase + numbers + special
 
+  // The browser's secure random source; Math.random() is predictable.
+  // Values past the last full multiple of `max` are redrawn to avoid bias.
+  const randomIndex = (max: number) => {
+    const limit = Math.floor(0x100000000 / max) * max
+    const buffer = new Uint32Array(1)
+    do {
+      crypto.getRandomValues(buffer)
+    } while (buffer[0] >= limit)
+    return buffer[0] % max
+  }
+  const pick = (from: string) => from[randomIndex(from.length)]
+
   // Ensure at least one character from each category
-  let password = ''
-  password += lowercase[Math.floor(Math.random() * lowercase.length)]
-  password += uppercase[Math.floor(Math.random() * uppercase.length)]
-  password += numbers[Math.floor(Math.random() * numbers.length)]
-  password += special[Math.floor(Math.random() * special.length)]
+  const characters = [pick(lowercase), pick(uppercase), pick(numbers), pick(special)]
 
   // Fill the rest randomly
-  for (let i = password.length; i < length; i++) {
-    password += allChars[Math.floor(Math.random() * allChars.length)]
+  while (characters.length < length) {
+    characters.push(pick(allChars))
   }
 
-  // Shuffle the password
-  return password
-    .split('')
-    .sort(() => Math.random() - 0.5)
-    .join('')
+  // Shuffle (Fisher-Yates)
+  for (let i = characters.length - 1; i > 0; i--) {
+    const j = randomIndex(i + 1)
+    ;[characters[i], characters[j]] = [characters[j], characters[i]]
+  }
+
+  return characters.join('')
 }
 
 export function isDefaultPassword(password: string): boolean {

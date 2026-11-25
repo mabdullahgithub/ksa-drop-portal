@@ -38,7 +38,10 @@ class ClientCreatedNotification extends Notification
                 'title'      => 'New Client Signup',
                 'message'    => "{$this->client->company_name} ({$this->client->client_id}) signed up as {$this->client->type_label} and is waiting for approval.",
                 'icon'       => 'user-circle',
-                'action_url' => "/client/{$this->client->id}",
+                // Straight to the queue for whoever can open it.
+                'action_url' => $notifiable->can('view requests') && $notifiable->can('view signup requests')
+                    ? '/requests?tab=signups'
+                    : "/client/{$this->client->id}",
             ];
         }
 

@@ -24,7 +24,6 @@ class InventoryRequestNotifier
     /** Request type => the permission that opens its tab. */
     private const QUEUE = [
         InventoryRequest::STOCK => 'view stock requests',
-        InventoryRequest::DETAILS => 'view detail requests',
     ];
 
     /**

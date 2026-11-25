@@ -19,11 +19,10 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
 
 /**
- * The Requests page: everything clients are waiting on, in three queues.
+ * The Requests page's inventory queues.
  *
  * New products are client products still pending verification. Stock updates
- * and details changes are what clients asked to change on verified ones
- * (InventoryRequest). Each queue, and each button in it, is a permission of
+ * are quantity changes clients asked for on verified ones (InventoryRequest). Each queue, and each button in it, is a permission of
  * its own; the routes carry them.
  */
 class InventoryRequestController extends Controller
@@ -182,38 +181,6 @@ class InventoryRequestController extends Controller
     public function bulkRejectStock(Request $request): JsonResponse
     {
         return $this->bulkReject($request, InventoryRequest::STOCK);
-    }
-
-    // ------------------------------------------------------- details changes
-
-    public function details(Request $request): JsonResponse
-    {
-        return $this->queue($request, InventoryRequest::DETAILS);
-    }
-
-    public function approveDetails(Request $request, InventoryRequest $inventoryRequest): JsonResponse
-    {
-        $validated = $request->validate(['revision' => 'nullable|integer']);
-
-        return $this->decide(
-            fn () => $this->reviewer->approveDetails($inventoryRequest, $validated['revision'] ?? null),
-            'Details change approved',
-        );
-    }
-
-    public function rejectDetails(Request $request, InventoryRequest $inventoryRequest): JsonResponse
-    {
-        return $this->reject($request, $inventoryRequest, InventoryRequest::DETAILS);
-    }
-
-    public function bulkApproveDetails(Request $request): JsonResponse
-    {
-        return $this->bulk($request, InventoryRequest::DETAILS, fn (InventoryRequest $inventoryRequest) => $this->reviewer->approveDetails($inventoryRequest));
-    }
-
-    public function bulkRejectDetails(Request $request): JsonResponse
-    {
-        return $this->bulkReject($request, InventoryRequest::DETAILS);
     }
 
     // ---------------------------------------------------------------- shared

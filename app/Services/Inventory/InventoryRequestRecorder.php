@@ -12,19 +12,19 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
 
 /**
- * What saving a verified product does for a client: nothing to the product.
+ * What saving a verified product does for a client.
  *
- * A changed quantity becomes a stock request, changed details become a
- * details request, and the team decides each on the Requests page
+ * Changed details (name, SKU, description, price, notes, images) are applied
+ * to the product at once. A changed quantity is not: it becomes a stock
+ * request, which the team decides on the Requests page
  * (InventoryRequestReviewer).
  *
- * A product has one pending request of each type at most. Saving again
- * replaces it, and putting a value back to what the product already has
- * withdraws it.
+ * A product has one pending stock request at most. Saving again replaces it,
+ * and putting the quantity back to what the product has withdraws it.
  */
 class InventoryRequestRecorder
 {
-    /** Most images a product may hold, the ones waiting on approval included. */
+    /** Most images a product may hold. */
     private const MAX_IMAGES = 10;
 
     public const NOTHING = 'none';
@@ -36,8 +36,9 @@ class InventoryRequestRecorder
     /**
      * @param  array<string, mixed>  $input  The validated product form.
      * @param  list<UploadedFile>  $images
-     * @return array{outcome: string, created: list<InventoryRequest>, pending: Collection<int, InventoryRequest>}
-     *         `created` are the new ones, for telling the team; a replaced request is not news.
+     * @return array{outcome: string, details_updated: bool, created: list<InventoryRequest>, pending: Collection<int, InventoryRequest>}
+     *         `outcome` is about the stock request. `created` are the new
+     *         requests, for telling the team; a replaced one is not news.
      */
     public function record(ClientProduct $product, array $input, array $images, ?User $by): array
     {
@@ -46,21 +47,15 @@ class InventoryRequestRecorder
             // "no pending request" and each make one.
             $product = ClientProduct::whereKey($product->id)->lockForUpdate()->firstOrFail();
 
-            $results = [
-                $this->stock($product, $input, $by),
-                $this->details($product, $input, $images, $by),
-            ];
-
-            $outcomes = array_column($results, 'outcome');
+            // Details first: it can refuse the save (too many images).
+            $detailsUpdated = $this->applyDetails($product, $input, $images);
+            $stock = $this->stock($product, $input, $by);
 
             return [
-                'outcome' => match (true) {
-                    in_array(self::SENT, $outcomes, true) => self::SENT,
-                    in_array(self::WITHDRAWN, $outcomes, true) => self::WITHDRAWN,
-                    default => self::NOTHING,
-                },
-                'created' => array_values(array_filter(array_column($results, 'created'))),
-                'pending' => $product->pendingRequests()->with('images')->get(),
+                'outcome' => $stock['outcome'],
+                'details_updated' => $detailsUpdated,
+                'created' => array_values(array_filter([$stock['created']])),
+                'pending' => $product->pendingRequests()->where('type', InventoryRequest::STOCK)->with('images')->get(),
             ];
         });
     }
@@ -117,115 +112,70 @@ class InventoryRequestRecorder
     }
 
     /**
-     * Everything else on the form. Worked out from scratch against the
-     * product on every save: the form sends all its fields, the ones already
-     * waiting included, so what differs from the product is the request.
+     * Everything else on the form, saved to the product. Only what differs is
+     * written.
      *
      * @param  list<UploadedFile>  $images
-     * @return array{outcome: string, created: ?InventoryRequest}
      */
-    private function details(ClientProduct $product, array $input, array $images, ?User $by): array
+    private function applyDetails(ClientProduct $product, array $input, array $images): bool
     {
-        $pending = $this->pending($product, InventoryRequest::DETAILS);
-
         $changes = [];
-        $original = [];
 
         foreach (InventoryRequest::DETAIL_FIELDS as $field) {
             if (! array_key_exists($field, $input)) {
                 continue;
             }
 
-            $now = self::normalise($field, $product->{$field});
             $asked = self::normalise($field, $input[$field]);
 
-            if ($asked !== $now) {
+            if ($asked !== self::normalise($field, $product->{$field})) {
                 $changes[$field] = $asked;
-                $original[$field] = $now;
             }
         }
 
         $remove = $product->images()
             ->whereIn('id', array_map('intval', $input['remove_image_ids'] ?? []))
-            ->pluck('id')
-            ->sort()
-            ->values()
-            ->all();
+            ->get();
 
-        if ($remove !== []) {
-            $changes['remove_image_ids'] = $remove;
-        }
-
-        // Images from an earlier save of this request, less the ones the
-        // client took back out.
-        $dropped = array_map('intval', $input['remove_pending_image_ids'] ?? []);
-        $kept = $pending ? $pending->images->reject(fn ($image) => in_array($image->id, $dropped, true)) : collect();
-
-        if ($product->images()->count() - count($remove) + $kept->count() + count($images) > self::MAX_IMAGES) {
+        if ($product->images()->count() - $remove->count() + count($images) > self::MAX_IMAGES) {
             throw ValidationException::withMessages([
                 'images' => 'A product can have up to ' . self::MAX_IMAGES . ' images.',
             ]);
         }
 
-        if ($changes === [] && $kept->isEmpty() && $images === []) {
-            $pending?->cancel();
-
-            return ['outcome' => $pending ? self::WITHDRAWN : self::NOTHING, 'created' => null];
+        if ($changes === [] && $remove->isEmpty() && $images === []) {
+            return false;
         }
 
-        if ($pending) {
-            $same = $pending->changes == $changes && $images === [] && $kept->count() === $pending->images->count();
+        if ($changes !== []) {
+            $product->update($changes);
+        }
 
-            if ($same) {
-                return ['outcome' => self::NOTHING, 'created' => null];
-            }
+        $position = ($product->images()->max('position') ?? 0) + 1;
 
-            $pending->images->diff($kept)->each(function ($image) {
-                Storage::disk('public')->delete($image->path);
-                $image->delete();
-            });
-
-            $pending->update([
-                'changes' => $changes,
-                'original' => $original,
-                'revision' => $pending->revision + 1,
-                'requested_by' => $by?->id,
+        foreach ($images as $file) {
+            $product->images()->create([
+                'path' => $file->store("client-products/{$product->id}", 'public'),
+                'position' => $position++,
             ]);
-
-            $this->store($pending, $images);
-
-            return ['outcome' => self::SENT, 'created' => null];
         }
 
-        $request = $product->requests()->create([
-            'client_id' => $product->client_id,
-            'type' => InventoryRequest::DETAILS,
-            'changes' => $changes,
-            'original' => $original,
-            'requested_by' => $by?->id,
-        ]);
+        foreach ($remove as $image) {
+            $image->delete();
+            // Only once the save has gone through: a rollback keeps the row.
+            DB::afterCommit(fn () => Storage::disk('public')->delete($image->path));
+        }
 
-        $this->store($request, $images);
+        // A details request left from when these needed approval is out of
+        // date now; approving it later would undo this save.
+        $this->pending($product, InventoryRequest::DETAILS)?->cancel();
 
-        return ['outcome' => self::SENT, 'created' => $request];
+        return true;
     }
 
     private function pending(ClientProduct $product, string $type): ?InventoryRequest
     {
         return $product->pendingRequests()->where('type', $type)->with('images')->latest('id')->first();
-    }
-
-    /** @param  list<UploadedFile>  $images */
-    private function store(InventoryRequest $request, array $images): void
-    {
-        $position = ($request->images()->max('position') ?? 0) + 1;
-
-        foreach ($images as $file) {
-            $request->images()->create([
-                'path' => $file->store(InventoryRequest::imageDirectory($request->id), 'public'),
-                'position' => $position++,
-            ]);
-        }
     }
 
     /**

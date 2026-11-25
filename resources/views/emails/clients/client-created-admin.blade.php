@@ -1,10 +1,14 @@
 @extends('emails.layouts.default')
 
 @section('content')
-    <h1 class="email-title">New Client Registered</h1>
+    <h1 class="email-title">{{ $client->status === 'pending' ? 'New Signup Request' : 'New Client Registered' }}</h1>
 
     <p class="email-text">
+        @if($client->status === 'pending')
+        A new merchant signed up on <strong>{{ config('app.name') }}</strong> and is waiting for approval.
+        @else
         A new client has been registered on <strong>{{ config('app.name') }}</strong> and is ready to be managed.
+        @endif
     </p>
 
     @component('emails.components.alert', ['type' => 'info'])

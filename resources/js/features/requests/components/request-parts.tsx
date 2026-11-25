@@ -107,7 +107,9 @@ export function StockChange({ value }: { value: number | null }) {
 type ToolbarProps = {
   filters: RequestFilters
   onChange: (changed: Partial<RequestFilters>) => void
-  clients: RequestClient[]
+  /** Left out by a queue with nothing to filter by client. */
+  clients?: RequestClient[]
+  searchPlaceholder?: string
   /** value => label; the queue's own statuses. */
   statuses: Record<string, string>
   onRefresh: () => void
@@ -117,7 +119,15 @@ type ToolbarProps = {
 /**
  * The same three filters above every queue: search, client and status.
  */
-export function RequestsToolbar({ filters, onChange, clients, statuses, onRefresh, loading }: ToolbarProps) {
+export function RequestsToolbar({
+  filters,
+  onChange,
+  clients,
+  searchPlaceholder = 'Search product, code, SKU or client…',
+  statuses,
+  onRefresh,
+  loading,
+}: ToolbarProps) {
   const [search, setSearch] = useState(filters.search)
 
   // Typing searches after a pause, not on every key.
@@ -133,7 +143,7 @@ export function RequestsToolbar({ filters, onChange, clients, statuses, onRefres
         <SearchIcon className='absolute left-2.5 top-2.5 z-10 h-4 w-4 text-muted-foreground' />
         <SearchBeam>
           <Input
-            placeholder='Search product, code, SKU or client…'
+            placeholder={searchPlaceholder}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className='h-9 w-[240px] pl-8 lg:w-[300px]'
@@ -141,19 +151,21 @@ export function RequestsToolbar({ filters, onChange, clients, statuses, onRefres
         </SearchBeam>
       </div>
 
-      <Select value={filters.client_id} onValueChange={(value) => onChange({ client_id: value })}>
-        <SelectTrigger className='h-9 w-[200px]'>
-          <SelectValue placeholder='All clients' />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value='all'>All clients</SelectItem>
-          {clients.map((client) => (
-            <SelectItem key={client.id} value={String(client.id)}>
-              {client.company_name}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+      {clients && (
+        <Select value={filters.client_id} onValueChange={(value) => onChange({ client_id: value })}>
+          <SelectTrigger className='h-9 w-[200px]'>
+            <SelectValue placeholder='All clients' />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value='all'>All clients</SelectItem>
+            {clients.map((client) => (
+              <SelectItem key={client.id} value={String(client.id)}>
+                {client.company_name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      )}
 
       <Select value={filters.status} onValueChange={(value) => onChange({ status: value })}>
         <SelectTrigger className='h-9 w-[150px]'>
@@ -175,7 +187,7 @@ export function RequestsToolbar({ filters, onChange, clients, statuses, onRefres
   )
 }
 
-/** The statuses of a stock or details request, for the toolbar. */
+/** The statuses of a stock request, for the toolbar. */
 export const REQUEST_STATUSES: Record<string, string> = {
   pending: 'Pending',
   approved: 'Approved',

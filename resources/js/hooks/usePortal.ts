@@ -46,11 +46,10 @@ export function usePortalInventoryMutations() {
     productId: number,
     payload: Record<string, unknown>,
     images?: File[],
-    removeImageIds?: number[],
-    removePendingImageIds?: number[]
+    removeImageIds?: number[]
   ): Promise<
     | true
-    | { pendingApproval: true; outcome: 'sent' | 'withdrawn' | 'none'; message: string }
+    | { pendingApproval: true; outcome: 'sent' | 'withdrawn' | 'none'; detailsUpdated: boolean; message: string }
     | false
     | { errors: Record<string, string[]> }
     | { message: string }
@@ -65,7 +64,6 @@ export function usePortalInventoryMutations() {
       })
       images?.forEach((f) => form.append('images[]', f))
       removeImageIds?.forEach((id) => form.append('remove_image_ids[]', String(id)))
-      removePendingImageIds?.forEach((id) => form.append('remove_pending_image_ids[]', String(id)))
       form.append('_method', 'PUT')
 
       const response = await fetch(`/portal/api/inventory/${productId}`, {
@@ -81,7 +79,12 @@ export function usePortalInventoryMutations() {
       }
       const data = await response.json()
       if (data.pending_approval) {
-        return { pendingApproval: true, outcome: data.outcome, message: data.message }
+        return {
+          pendingApproval: true,
+          outcome: data.outcome,
+          detailsUpdated: !!data.details_updated,
+          message: data.message,
+        }
       }
       return true
     } catch {

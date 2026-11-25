@@ -2,6 +2,7 @@
 
 namespace App\Services\Inventory;
 
+use App\Models\Client;
 use App\Models\ClientProduct;
 use App\Models\InventoryRequest;
 use App\Models\User;
@@ -19,11 +20,11 @@ class RequestQueues
     public const TABS = [
         'products' => 'view product requests',
         InventoryRequest::STOCK => 'view stock requests',
-        InventoryRequest::DETAILS => 'view detail requests',
+        'signups' => 'view signup requests',
     ];
 
     /**
-     * @return array{products: ?int, stock: ?int, details: ?int}
+     * @return array{products: ?int, stock: ?int, signups: ?int}
      */
     public static function counts(User $user): array
     {
@@ -36,7 +37,9 @@ class RequestQueues
                 ? ClientProduct::pending()->whereHas('client')->count()
                 : null,
             InventoryRequest::STOCK => $user->can(self::TABS[InventoryRequest::STOCK]) ? $waiting(InventoryRequest::STOCK) : null,
-            InventoryRequest::DETAILS => $user->can(self::TABS[InventoryRequest::DETAILS]) ? $waiting(InventoryRequest::DETAILS) : null,
+            'signups' => $user->can(self::TABS['signups'])
+                ? Client::whereNotNull('signed_up_at')->where('status', Client::STATUS_PENDING)->count()
+                : null,
         ];
     }
 

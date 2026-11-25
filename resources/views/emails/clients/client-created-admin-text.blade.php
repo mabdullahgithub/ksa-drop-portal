@@ -1,7 +1,7 @@
 {{ config('app.name') }}
 {{ str_repeat('=', strlen(config('app.name'))) }}
 
-A new client has been registered and is ready to be managed.
+{{ $client->status === 'pending' ? 'A new merchant signed up and is waiting for approval.' : 'A new client has been registered and is ready to be managed.' }}
 
 Client details:
   Company:  {{ $client->company_name }}

@@ -18,13 +18,13 @@ import {
   unlockRequests,
   useRequestCounts,
 } from '@/hooks/useInventoryRequests'
-import { DetailsPanel } from './components/details-panel'
 import { ProductsPanel } from './components/products-panel'
+import { SignupsPanel } from './components/signups-panel'
 import { StockPanel } from './components/stock-panel'
 
 /**
- * Everything clients are waiting on, in three queues: products they added,
- * and the stock and details changes they asked for on verified ones.
+ * Everything waiting on a decision: products clients added, the stock changes
+ * they asked for on verified ones, and new signups.
  */
 export function Requests() {
   const { can } = usePermissions()
@@ -32,7 +32,8 @@ export function Requests() {
   // Each tab is a permission of its own.
   const canProducts = can('view product requests')
   const canStock = can('view stock requests')
-  const canDetails = can('view detail requests')
+
+  const canSignups = can('view signup requests')
 
   // Behind the PIN like the recycle bin and the WhatsApp inbox, unless its
   // lock is switched off in .env. Always starts locked: component state, not
@@ -56,7 +57,7 @@ export function Requests() {
   }, [])
 
   const { counts, clients, refreshCounts } = useRequestCounts(
-    unlocked && (canProducts || canStock || canDetails),
+    unlocked && (canProducts || canStock || canSignups),
     handleLocked
   )
 
@@ -65,9 +66,9 @@ export function Requests() {
       [
         canProducts ? { value: 'products' as const, label: 'New products' } : null,
         canStock ? { value: 'stock' as const, label: 'Stock updates' } : null,
-        canDetails ? { value: 'details' as const, label: 'Details changes' } : null,
+        canSignups ? { value: 'signups' as const, label: 'Signup requests' } : null,
       ].filter((tab): tab is { value: RequestTab; label: string } => tab !== null),
-    [canProducts, canStock, canDetails]
+    [canProducts, canStock, canSignups]
   )
 
   // A notification or a badge elsewhere opens the page on a tab, a client or
@@ -104,7 +105,7 @@ export function Requests() {
         <div>
           <h2 className='text-2xl font-bold tracking-tight'>Requests</h2>
           <p className='text-muted-foreground text-sm'>
-            What clients are waiting on: new products, and changes to verified ones.
+            What is waiting on you: new products, stock updates and merchant signups.
           </p>
         </div>
 
@@ -151,9 +152,9 @@ export function Requests() {
               </TabsContent>
             )}
 
-            {canDetails && (
-              <TabsContent value='details'>
-                <DetailsPanel clients={clients} initialFilters={initialFilters} onChanged={handleChanged} onLocked={handleLocked} />
+            {canSignups && (
+              <TabsContent value='signups'>
+                <SignupsPanel initialFilters={initialFilters} onChanged={handleChanged} onLocked={handleLocked} />
               </TabsContent>
             )}
           </Tabs>

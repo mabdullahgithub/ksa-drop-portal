@@ -1469,9 +1469,6 @@ class PortalController extends Controller
             'images.*'         => 'image|max:5120',
             'remove_image_ids' => 'nullable|array',
             'remove_image_ids.*' => 'integer',
-            // Images from a request still waiting that the client took back out.
-            'remove_pending_image_ids' => 'nullable|array',
-            'remove_pending_image_ids.*' => 'integer',
         ]);
 
         if ($product->verification_status === 'verified') {
@@ -1487,13 +1484,17 @@ class PortalController extends Controller
             }
 
             return response()->json([
-                'message' => match ($result['outcome']) {
-                    InventoryRequestRecorder::SENT => 'Changes sent for approval.',
-                    InventoryRequestRecorder::WITHDRAWN => 'Pending changes withdrawn.',
-                    default => 'No changes to send.',
+                'message' => match (true) {
+                    $result['outcome'] === InventoryRequestRecorder::SENT && $result['details_updated']
+                        => 'Product updated. The stock change was sent for approval.',
+                    $result['outcome'] === InventoryRequestRecorder::SENT => 'Stock change sent for approval.',
+                    $result['outcome'] === InventoryRequestRecorder::WITHDRAWN => 'Pending stock change withdrawn.',
+                    $result['details_updated'] => 'Product updated successfully',
+                    default => 'No changes to save.',
                 },
                 'pending_approval' => true,
                 'outcome' => $result['outcome'],
+                'details_updated' => $result['details_updated'],
                 'requests' => $result['pending']
                     ->map(fn ($pending) => InventoryRequestPresenter::request($pending, forTeam: false))
                     ->values(),
@@ -1542,8 +1543,8 @@ class PortalController extends Controller
             abort(403);
         }
 
-        // On a verified product an image goes the way every other change
-        // does: through the edit form, as a request.
+        // On a verified product images are changed with the rest of the
+        // product, through the edit form.
         if ($product->verification_status === 'verified') {
             abort(422, 'Images of a verified product are changed from the edit form.');
         }

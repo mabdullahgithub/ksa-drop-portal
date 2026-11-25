@@ -102,6 +102,7 @@ function ClientDetailContent({ client }: ClientDetailPageProps) {
     inactive: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400',
     suspended: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400',
     pending: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400',
+    rejected: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400',
   }
 
   const handleStatusUpdate = async (status: string) => {

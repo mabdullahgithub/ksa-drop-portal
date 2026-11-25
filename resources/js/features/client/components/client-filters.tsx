@@ -52,6 +52,7 @@ export function ClientFiltersComponent({ filters, filterOptions, onFiltersChange
             { value: 'active', label: 'Active' },
             { value: 'inactive', label: 'Inactive' },
             { value: 'suspended', label: 'Suspended' },
+            { value: 'rejected', label: 'Rejected' },
           ]).map((opt) => (
             <SelectItem key={opt.value} value={opt.value}>
               {opt.label}

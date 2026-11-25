@@ -9,8 +9,8 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\ValidationException;
 
 /**
- * What happens once a person has proved who they are, by password or by
- * Google: clients are held to the portal switch and their account status,
+ * What happens once a person has proved who they are: clients are held to the
+ * portal switch and their account status,
  * and everyone lands on the first page they may open.
  */
 trait CompletesLogin
@@ -38,6 +38,7 @@ trait CompletesLogin
                 'suspended' => __('Your account has been suspended. Please contact support.'),
                 'inactive' => __('Your account is inactive. Please contact support to reactivate it.'),
                 'pending' => __('Your account is still under review. We will email you once it is approved.'),
+                'rejected' => __('Your signup request was not approved. Please contact support.'),
                 default => __('Your account is not active. Please contact support.'),
             };
 

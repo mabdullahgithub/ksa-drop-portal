@@ -7,7 +7,7 @@ import { type BulkResult, bulkApproveRequests, bulkRejectRequests } from '@/hook
 import { RejectDialog } from './request-parts'
 
 type Props = {
-  type: 'stock' | 'details'
+  type: 'stock'
   ids: number[]
   canApprove: boolean
   canReject: boolean

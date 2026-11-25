@@ -288,7 +288,6 @@ export function PortalInventory() {
                     const isVerified = product.verification_status === 'verified'
                     // What this product has waiting on the team's approval.
                     const stockRequest = product.pending_requests?.find((request) => request.type === 'stock')
-                    const detailsRequest = product.pending_requests?.find((request) => request.type === 'details')
                     const stockChange = stockRequest
                       ? (stockRequest.requested_quantity ?? 0) - (stockRequest.stock_at_request ?? 0)
                       : 0
@@ -373,16 +372,6 @@ export function PortalInventory() {
                               >
                                 <Hourglass className='mr-1 h-3 w-3' />
                                 Stock {stockChange > 0 ? '+' : '−'}{Math.abs(stockChange)} pending
-                              </Badge>
-                            )}
-                            {detailsRequest && (
-                              <Badge
-                                variant='outline'
-                                className='bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400 text-xs'
-                                title='Waiting for our team to approve'
-                              >
-                                <Hourglass className='mr-1 h-3 w-3' />
-                                Details pending
                               </Badge>
                             )}
                           </div>

@@ -38,47 +38,42 @@ export function PortalProductFormDialog({
   onSuccess,
 }: PortalProductFormDialogProps) {
   const isEdit = product !== null
-  // A verified product is not changed by saving: what differs is sent to the
-  // team as a request, and applies once they approve it.
+  // On a verified product a changed quantity is sent to the team and applies
+  // once they approve it; everything else is saved at once.
   const isVerified = product?.verification_status === 'verified'
   const isRejected = product?.verification_status === 'rejected'
-  // What is already waiting on this product. The form opens on it, so saving
+  // A stock change already waiting. The quantity opens on it, so saving
   // again replaces it rather than starting over.
   const pendingStock = product?.pending_requests?.find((request) => request.type === 'stock') ?? null
-  const pendingDetails = product?.pending_requests?.find((request) => request.type === 'details') ?? null
-  const hasPending = !!(pendingStock || pendingDetails)
+  const hasPending = !!pendingStock
 
   const { loading, addProduct, updateProduct } = usePortalInventoryMutations()
   const [form, setForm] = useState(emptyForm)
   const [newImages, setNewImages] = useState<File[]>([])
   const [newPreviews, setNewPreviews] = useState<string[]>([])
   const [removeImageIds, setRemoveImageIds] = useState<number[]>([])
-  const [removePendingImageIds, setRemovePendingImageIds] = useState<number[]>([])
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const quantityChanged =
+    isVerified && product !== null && form.quantity !== String(pendingStock?.requested_quantity ?? product.quantity)
 
   useEffect(() => {
     if (open) {
       if (product) {
-        const asked = pendingDetails?.changes ?? {}
-        const value = (field: 'name' | 'sku' | 'description' | 'unit_price' | 'notes') =>
-          field in asked ? asked[field] ?? '' : product[field] ?? ''
-
         setForm({
-          name: value('name'),
-          sku: value('sku'),
-          description: value('description'),
+          name: product.name,
+          sku: product.sku ?? '',
+          description: product.description ?? '',
           quantity: String(pendingStock?.requested_quantity ?? product.quantity),
-          unit_price: value('unit_price'),
-          notes: value('notes'),
+          unit_price: product.unit_price ?? '',
+          notes: product.notes ?? '',
         })
-        setRemoveImageIds(asked.remove_image_ids ?? [])
+        setRemoveImageIds([])
       } else {
         setForm(emptyForm)
         setRemoveImageIds([])
       }
       setNewImages([])
       setNewPreviews([])
-      setRemovePendingImageIds([])
     }
     // The form is filled when it opens, not while it is being typed in.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -127,22 +122,17 @@ export function PortalProductFormDialog({
         // client changed from stock that moved while the form was open.
         { ...payload, base_quantity: product!.quantity },
         newImages,
-        removeImageIds,
-        removePendingImageIds
+        removeImageIds
       )
       if (result === true) {
         toast.success(isRejected ? 'Product sent back for verification' : 'Product updated successfully')
         onSuccess()
         onOpenChange(false)
       } else if (result && typeof result === 'object' && 'pendingApproval' in result) {
-        if (result.outcome === 'none') {
-          toast.info('No changes to send.')
+        if (result.outcome === 'none' && !result.detailsUpdated) {
+          toast.info(result.message)
         } else {
-          toast.success(
-            result.outcome === 'withdrawn'
-              ? 'Your pending changes were withdrawn.'
-              : 'Changes sent for approval. They apply once our team approves them.'
-          )
+          toast.success(result.message)
           onSuccess()
         }
         onOpenChange(false)
@@ -170,9 +160,7 @@ export function PortalProductFormDialog({
   }
 
   const existingImages = (product?.images ?? []).filter((img) => !removeImageIds.includes(img.id))
-  // Images from a request still waiting, less the ones taken back out here.
-  const pendingImages = (pendingDetails?.images ?? []).filter((img) => !removePendingImageIds.includes(img.id))
-  const totalImages = existingImages.length + pendingImages.length + newImages.length
+  const totalImages = existingImages.length + newImages.length
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -192,8 +180,8 @@ export function PortalProductFormDialog({
             {hasPending ? <Clock className='mt-0.5 h-4 w-4 shrink-0' /> : <Info className='mt-0.5 h-4 w-4 shrink-0' />}
             <span>
               {hasPending
-                ? 'You have changes waiting for approval, shown below. Saving replaces them.'
-                : 'This product is verified. Changes are sent for approval and apply once our team approves them.'}
+                ? 'A stock change is waiting for approval; the quantity below shows it. Other changes are saved right away.'
+                : 'This product is verified. A quantity change needs our approval; other changes are saved right away.'}
             </span>
           </p>
         )}
@@ -311,21 +299,6 @@ export function PortalProductFormDialog({
                     </button>
                   </div>
                 ))}
-                {pendingImages.map((img) => (
-                  <div key={`pending-${img.id}`} className='relative h-20 w-20 overflow-hidden rounded-md border border-yellow-400'>
-                    <img src={img.url} alt='' className='h-full w-full object-cover' />
-                    <span className='absolute inset-x-0 bottom-0 bg-yellow-500 py-0.5 text-center text-[10px] font-medium text-white'>
-                      Waiting
-                    </span>
-                    <button
-                      type='button'
-                      onClick={() => setRemovePendingImageIds((prev) => [...prev, img.id])}
-                      className='absolute right-0.5 top-0.5 rounded-full bg-destructive p-0.5 text-destructive-foreground hover:bg-destructive/80'
-                    >
-                      <X className='h-3 w-3' />
-                    </button>
-                  </div>
-                ))}
                 {newPreviews.map((src, i) => (
                   <div key={i} className='relative h-20 w-20 overflow-hidden rounded-md border'>
                     <img src={src} alt='' className='h-full w-full object-cover' />
@@ -371,7 +344,7 @@ export function PortalProductFormDialog({
             <Button type='submit' disabled={loading}>
               {loading
                 ? isEdit ? 'Saving...' : 'Submitting...'
-                : isVerified ? 'Send for Approval'
+                : quantityChanged ? 'Save & Send Stock for Approval'
                 : isRejected ? 'Resubmit for Verification'
                 : isEdit ? 'Save Changes' : 'Submit for Verification'}
             </Button>

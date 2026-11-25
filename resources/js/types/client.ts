@@ -24,7 +24,7 @@ export interface Client {
   postal_code: string | null
   tax_id: string | null
   commercial_registration: string | null
-  status: 'active' | 'inactive' | 'suspended' | 'pending'
+  status: 'active' | 'inactive' | 'suspended' | 'pending' | 'rejected'
   status_color: 'success' | 'warning' | 'error' | 'default'
   portal_features: ('orders' | 'inventory' | 'revenue' | 'finance' | 'products')[]
   charges: ClientCharges | null

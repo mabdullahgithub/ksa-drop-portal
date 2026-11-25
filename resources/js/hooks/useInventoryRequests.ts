@@ -1,8 +1,25 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ClientProduct, InventoryRequest } from '@/types/client'
 
-/** The three queues of the Requests page. */
-export type RequestTab = 'products' | 'stock' | 'details'
+/** The queues of the Requests page. */
+export type RequestTab = 'products' | 'stock' | 'signups'
+
+/** A merchant who signed up on the public page. `id` is the client's. */
+export type SignupRequest = {
+  id: number
+  reference: string
+  company_name: string
+  contact_person: string | null
+  email: string | null
+  phone: string | null
+  city: string | null
+  client_types: string[]
+  status: 'pending' | 'approved' | 'rejected'
+  signed_up_at: string | null
+  reviewed_at: string | null
+  reviewed_by: string | null
+  rejection_reason: string | null
+}
 
 /** What is waiting in each queue; null for one the person cannot open. */
 export type RequestCounts = Record<RequestTab, number | null>
@@ -94,7 +111,7 @@ export async function lockRequests(): Promise<void> {
  * The tab counts, and the clients to filter by.
  */
 export function useRequestCounts(enabled: boolean, onLocked?: () => void) {
-  const [counts, setCounts] = useState<RequestCounts>({ products: null, stock: null, details: null })
+  const [counts, setCounts] = useState<RequestCounts>({ products: null, stock: null, signups: null })
   const [clients, setClients] = useState<RequestClient[]>([])
 
   const refreshCounts = useCallback(async () => {
@@ -188,6 +205,14 @@ export function useRequestQueue<Row>(tab: RequestTab, initial: Partial<RequestFi
   return { rows, meta, loading, error, filters, updateFilters, refresh: load }
 }
 
+export function approveSignupRequest(id: number) {
+  return post<{ message: string }>(`/api/requests/signups/${id}/approve`)
+}
+
+export function rejectSignupRequest(id: number, reason: string) {
+  return post<{ message: string }>(`/api/requests/signups/${id}/reject`, { reason })
+}
+
 /** Verify, reject or keep pending a product a client added. */
 export function reviewRequestedProduct(
   productId: number,
@@ -220,12 +245,6 @@ export function approveStockRequest(request: InventoryRequest, units: number, ma
   })
 }
 
-export function approveDetailsRequest(request: InventoryRequest) {
-  return post<{ message: string; request: InventoryRequest }>(`/api/requests/details/${request.id}/approve`, {
-    revision: request.revision,
-  })
-}
-
 export function rejectInventoryRequest(request: InventoryRequest, reason: string) {
   return post<{ message: string; request: InventoryRequest }>(`/api/requests/${request.type}/${request.id}/reject`, {
     reason,
@@ -233,10 +252,10 @@ export function rejectInventoryRequest(request: InventoryRequest, reason: string
   })
 }
 
-export function bulkApproveRequests(type: 'stock' | 'details', ids: number[]) {
+export function bulkApproveRequests(type: 'stock', ids: number[]) {
   return post<BulkResult>(`/api/requests/${type}/bulk-approve`, { ids })
 }
 
-export function bulkRejectRequests(type: 'stock' | 'details', ids: number[], reason: string) {
+export function bulkRejectRequests(type: 'stock', ids: number[], reason: string) {
   return post<BulkResult>(`/api/requests/${type}/bulk-reject`, { ids, reason })
 }

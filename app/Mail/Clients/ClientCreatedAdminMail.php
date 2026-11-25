@@ -19,7 +19,7 @@ class ClientCreatedAdminMail extends BaseMailable implements ShouldQueue
     public function envelope(): Envelope
     {
         return new Envelope(
-            subject: 'New client registered: ' . $this->client->company_name,
+            subject: ($this->client->status === Client::STATUS_PENDING ? 'New signup request: ' : 'New client registered: ') . $this->client->company_name,
             replyTo: [config('mail.from.address')],
         );
     }

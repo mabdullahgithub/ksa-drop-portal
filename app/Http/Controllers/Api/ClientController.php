@@ -261,7 +261,7 @@ class ClientController extends Controller
     public function updateStatus(Request $request, Client $client)
     {
         $request->validate([
-            'status' => 'required|in:active,inactive,suspended,pending',
+            'status' => 'required|in:active,inactive,suspended,pending,rejected',
         ]);
 
         $oldStatus = $client->status;
@@ -385,7 +385,28 @@ class ClientController extends Controller
 
         $status = $statusMap[$validated['action']];
 
+        // Signups still waiting on (or refused) a decision: activating them
+        // here is that decision, and the applicant has to hear of it.
+        $approved = $status === 'active'
+            ? Client::with('user')
+                ->whereIn('id', $validated['client_ids'])
+                ->whereNotNull('signed_up_at')
+                ->whereIn('status', [Client::STATUS_PENDING, Client::STATUS_REJECTED])
+                ->get()
+            : collect();
+
         Client::whereIn('id', $validated['client_ids'])->update(['status' => $status]);
+
+        foreach ($approved as $client) {
+            $oldStatus = $client->status;
+            $client->status = $status;
+
+            try {
+                $client->user?->notify(new ClientStatusChangedNotification($client, $oldStatus, $status));
+            } catch (\Throwable $e) {
+                report($e);
+            }
+        }
 
         return response()->json([
             'message' => count($validated['client_ids']) . ' clients updated successfully',
@@ -463,6 +484,7 @@ class ClientController extends Controller
                 ['value' => 'active', 'label' => 'Active'],
                 ['value' => 'inactive', 'label' => 'Inactive'],
                 ['value' => 'suspended', 'label' => 'Suspended'],
+                ['value' => 'rejected', 'label' => 'Rejected'],
             ],
             'types' => [
                 ['value' => 'all', 'label' => 'All Types'],

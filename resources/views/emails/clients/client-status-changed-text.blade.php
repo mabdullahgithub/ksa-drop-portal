@@ -6,16 +6,20 @@ Hi {{ $client->contact_person ?? $client->user->name }},
 Your {{ config('app.name') }} account status for {{ $client->company_name }} has been updated.
 
 @php
-    $statusLabels = ['active' => 'Active', 'inactive' => 'Inactive', 'suspended' => 'Suspended', 'pending' => 'Pending approval'];
+    $statusLabels = ['active' => 'Active', 'inactive' => 'Inactive', 'suspended' => 'Suspended', 'pending' => 'Pending approval', 'rejected' => 'Not approved'];
     $statusMessages = [
         'active'    => 'Your account is now fully active. You can log in and use all portal features.',
         'inactive'  => 'Your account has been deactivated. Contact support if you have questions.',
         'suspended' => 'Your account has been suspended. Contact our support team to resolve this.',
+        'rejected'  => 'We are unable to approve your signup request at this time.',
     ];
 @endphp
 Status changed: {{ ucfirst($statusLabels[$oldStatus] ?? $oldStatus) }} → {{ ucfirst($statusLabels[$newStatus] ?? $newStatus) }}
 
 {{ $statusMessages[$newStatus] ?? "Your account status is now {$newStatus}." }}
+@if($newStatus === 'rejected' && $client->signup_rejection_reason)
+Reason: {{ $client->signup_rejection_reason }}
+@endif
 
 @if($newStatus === 'active')
 Go to portal:

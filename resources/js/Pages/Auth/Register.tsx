@@ -1,14 +1,16 @@
-import { Head, Link, router, useForm } from '@inertiajs/react'
-import { FormEventHandler, ReactNode } from 'react'
-import { Check, PackageOpen, Truck } from 'lucide-react'
+import { Head, Link, useForm } from '@inertiajs/react'
+import { FormEventHandler, ReactNode, useState } from 'react'
+import { ArrowLeft, Check, Copy, PackageOpen, Sparkles, Truck } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { generateStrongPassword } from '@/lib/password-utils'
+import { checkSignupPassword } from '@/lib/signup-password'
+import { PasswordStrength } from '@/components/auth/password-strength'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { PasswordInput } from '@/components/password-input'
 import { ThemeProvider } from '@/context/theme-provider'
 import { ThemeSwitch } from '@/components/theme-switch'
 import { AuthLogo } from '@/components/layout/auth-logo'
-import { AuthDivider, GoogleButton } from '@/components/auth/google-button'
 
 const BRAND = '#f26722'
 const BRAND_HOVER = '#d9591c'
@@ -40,6 +42,26 @@ const inputClass =
 const passwordClass =
   '[&>input]:h-12 [&>input]:rounded-lg [&>input]:border-input [&>input]:px-3.5 [&>input]:focus-visible:border-2 [&>input]:focus-visible:border-foreground [&>input]:focus-visible:ring-0'
 
+const STEPS = [
+  {
+    title: 'Service',
+    description: 'First, tell us which service you need.',
+    fields: ['client_type'],
+  },
+  {
+    title: 'Business',
+    description: 'Tell us about you and your business.',
+    fields: ['name', 'company_name', 'phone', 'city'],
+  },
+  {
+    title: 'Account',
+    description: 'Set the email and password you will sign in with.',
+    fields: ['email', 'password', 'password_confirmation'],
+  },
+] as const
+
+const LAST_STEP = STEPS.length - 1
+
 function Field({
   id,
   label,
@@ -69,19 +91,11 @@ function Field({
   )
 }
 
-type GoogleProfile = { name: string; email: string }
-
-export default function Register({
-  googleEnabled = false,
-  google = null,
-}: {
-  googleEnabled?: boolean
-  google?: GoogleProfile | null
-}) {
-  const { data, setData, post, processing, errors, reset } = useForm({
-    name: google?.name ?? '',
+export default function Register() {
+  const { data, setData, post, processing, errors, setError, clearErrors } = useForm({
+    name: '',
     company_name: '',
-    email: google?.email ?? '',
+    email: '',
     phone: '',
     city: '',
     client_type: '' as ClientType | '',
@@ -90,16 +104,79 @@ export default function Register({
     website: '', // honeypot, hidden from people
   })
 
+  const [step, setStep] = useState(0)
+  // Bumped by the generator: remounts the password inputs with the value shown.
+  const [generation, setGeneration] = useState(0)
+  const [copied, setCopied] = useState(false)
+
+  const strength = checkSignupPassword(data.password, data.name, data.email)
+  const confirmMatches =
+    data.password_confirmation !== '' && data.password === data.password_confirmation
+
+  /** What is still wrong on one step. The server checks everything again. */
+  const stepProblems = (index: number) => {
+    const found: Partial<Record<keyof typeof data, string>> = {}
+
+    if (index === 0 && !data.client_type) {
+      found.client_type = 'Choose the service you need.'
+    }
+    if (index === 1) {
+      if (!data.name.trim()) found.name = 'Enter your full name.'
+      if (!data.company_name.trim()) found.company_name = 'Enter your company or store name.'
+      const phone = data.phone.trim()
+      if (!/^\+?[\d\s-]{8,20}$/.test(phone)) found.phone = 'Enter a valid phone number.'
+    }
+    if (index === 2) {
+      if (!/^\S+@\S+\.\S+$/.test(data.email.trim())) found.email = 'Enter a valid email.'
+      if (!strength.valid) found.password = 'Your password does not meet all the rules yet.'
+      if (!confirmMatches) found.password_confirmation = 'Passwords do not match.'
+    }
+
+    return found
+  }
+
   const submit: FormEventHandler = (e) => {
     e.preventDefault()
+
+    const problems = stepProblems(step)
+    clearErrors()
+    if (Object.keys(problems).length > 0) {
+      setError(problems as Record<keyof typeof data, string>)
+      return
+    }
+
+    if (step < LAST_STEP) {
+      setStep(step + 1)
+      return
+    }
+
     post(route('register'), {
-      onFinish: () => reset('password', 'password_confirmation'),
+      // Open the first step that has something the server refused.
+      onError: (failed) => {
+        const index = STEPS.findIndex((s) => s.fields.some((field) => field in failed))
+        if (index !== -1) setStep(index)
+      },
     })
   }
 
-  const servicesError = errors.client_type
+  const generatePassword = () => {
+    const password = generateStrongPassword(16)
+    setData((current) => ({ ...current, password, password_confirmation: password }))
+    clearErrors('password', 'password_confirmation')
+    setGeneration((n) => n + 1)
+    setCopied(false)
+  }
 
-  const useAnotherMethod = () => router.post(route('auth.google.cancel'))
+  const copyPassword = async () => {
+    try {
+      await navigator.clipboard.writeText(data.password)
+      setCopied(true)
+    } catch {
+      // No clipboard access: the password is visible and can be copied by hand.
+    }
+  }
+
+  const servicesError = errors.client_type
 
   return (
     <ThemeProvider>
@@ -141,165 +218,162 @@ export default function Register({
                 <h1 className='text-2xl font-semibold tracking-tight'>
                   Start selling with KSA DROP <span aria-hidden>🚀</span>
                 </h1>
-                <p className='mt-1.5 text-sm text-muted-foreground'>
-                  {google
-                    ? 'Almost there. Tell us about your business to finish signing up.'
-                    : "Create your merchant account. Our team reviews every signup and emails you once you're approved."}
-                </p>
+                <p className='mt-1.5 text-sm text-muted-foreground'>{STEPS[step].description}</p>
               </div>
 
-              {google ? (
-                <div className='mb-6 flex items-center justify-between gap-3 rounded-lg border border-input bg-muted/40 px-3.5 py-3 text-sm'>
-                  <div className='min-w-0'>
-                    <p className='text-xs text-muted-foreground'>Signing up with Google as</p>
-                    <p className='truncate font-medium'>{google.email}</p>
-                  </div>
-                  <button
-                    type='button'
-                    onClick={useAnotherMethod}
-                    className='shrink-0 text-xs font-medium hover:underline'
-                    style={{ color: BRAND }}
-                  >
-                    Change
-                  </button>
-                </div>
-              ) : (
-                googleEnabled && (
-                  <div className='mb-6 space-y-6'>
-                    <GoogleButton label='Sign up with Google' />
-                    <AuthDivider />
-                  </div>
-                )
-              )}
+              <ol className='mb-7 grid grid-cols-3 gap-2'>
+                {STEPS.map((item, index) => (
+                  <li key={item.title} aria-current={index === step ? 'step' : undefined}>
+                    <span
+                      className={cn('block h-1 rounded-full', index > step && 'bg-muted')}
+                      style={index <= step ? { backgroundColor: BRAND } : undefined}
+                    />
+                    <span
+                      className={cn(
+                        'mt-1.5 block text-xs',
+                        index === step ? 'font-medium text-foreground' : 'text-muted-foreground',
+                      )}
+                    >
+                      {index + 1}. {item.title}
+                    </span>
+                  </li>
+                ))}
+              </ol>
 
               <form onSubmit={submit} className='space-y-5' noValidate>
-                <Field id='name' label='Full name' required error={errors.name}>
-                  <Input
-                    id='name'
-                    value={data.name}
-                    autoComplete='name'
-                    autoFocus
-                    onChange={(e) => setData('name', e.target.value)}
-                    className={cn(inputClass, errors.name && 'border-destructive')}
-                  />
-                </Field>
-
-                <Field
-                  id='company_name'
-                  label='Company / store name'
-                  required
-                  error={errors.company_name}
-                >
-                  <Input
-                    id='company_name'
-                    value={data.company_name}
-                    autoComplete='organization'
-                    onChange={(e) => setData('company_name', e.target.value)}
-                    className={cn(inputClass, errors.company_name && 'border-destructive')}
-                  />
-                </Field>
-
-                {!google && (
-                  <Field id='email' label='Email ID' required error={errors.email}>
-                    <Input
-                      id='email'
-                      type='email'
-                      value={data.email}
-                      autoComplete='email'
-                      onChange={(e) => setData('email', e.target.value)}
-                      className={cn(inputClass, errors.email && 'border-destructive')}
-                    />
-                  </Field>
-                )}
-                {google && errors.email && (
-                  <p className='text-sm text-destructive'>{errors.email}</p>
-                )}
-
-                <div className='grid grid-cols-2 gap-3'>
-                  <Field id='phone' label='Phone' required error={errors.phone}>
-                    <Input
-                      id='phone'
-                      type='tel'
-                      inputMode='tel'
-                      placeholder='05XXXXXXXX'
-                      value={data.phone}
-                      autoComplete='tel'
-                      onChange={(e) => setData('phone', e.target.value)}
-                      className={cn(inputClass, errors.phone && 'border-destructive')}
-                    />
-                  </Field>
-                  <Field id='city' label='City' error={errors.city}>
-                    <Input
-                      id='city'
-                      value={data.city}
-                      autoComplete='address-level2'
-                      onChange={(e) => setData('city', e.target.value)}
-                      className={cn(inputClass, errors.city && 'border-destructive')}
-                    />
-                  </Field>
-                </div>
-
-                <fieldset>
-                  <legend className='mb-2 text-xs font-medium text-muted-foreground'>
-                    Service you need <span style={{ color: BRAND }}>*</span>
-                  </legend>
-                  <div role='radiogroup' className='grid grid-cols-2 gap-3'>
-                    {SERVICES.map((service) => {
-                      const selected = data.client_type === service.value
-                      return (
-                        <button
-                          key={service.value}
-                          type='button'
-                          role='radio'
-                          aria-checked={selected}
-                          onClick={() => setData('client_type', service.value)}
-                          className={cn(
-                            'relative flex flex-col items-start gap-1 rounded-lg border p-3 text-left transition-colors',
-                            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground',
-                            selected ? 'bg-[#f26722]/5' : 'border-input hover:bg-muted/50',
-                            servicesError && !selected && 'border-destructive',
-                          )}
-                          style={
-                            selected
-                              ? {
-                                  borderColor: BRAND,
-                                }
-                              : undefined
-                          }
-                        >
-                          <service.icon
-                            className='h-5 w-5'
-                            style={{
-                              color: selected ? BRAND : undefined,
-                            }}
-                          />
-                          <span className='text-sm font-medium'>{service.title}</span>
-                          <span className='text-xs leading-snug text-muted-foreground'>
-                            {service.description}
-                          </span>
-                          {selected && (
-                            <span
-                              className='absolute right-2 top-2 flex h-4 w-4 items-center justify-center rounded-full text-white'
-                              style={{
-                                backgroundColor: BRAND,
-                              }}
-                            >
-                              <Check className='h-3 w-3' />
-                            </span>
-                          )}
-                        </button>
-                      )
-                    })}
-                  </div>
-                  {servicesError && (
-                    <p className='mt-1.5 text-sm text-destructive'>{servicesError}</p>
-                  )}
-                </fieldset>
-
-                {!google && (
+                {step === 0 && (
                   <>
+                    <fieldset>
+                      <legend className='mb-2 text-xs font-medium text-muted-foreground'>
+                        Service you need <span style={{ color: BRAND }}>*</span>
+                      </legend>
+                      <div role='radiogroup' className='grid grid-cols-2 gap-3'>
+                        {SERVICES.map((service) => {
+                          const selected = data.client_type === service.value
+                          return (
+                            <button
+                              key={service.value}
+                              type='button'
+                              role='radio'
+                              aria-checked={selected}
+                              onClick={() => setData('client_type', service.value)}
+                              className={cn(
+                                'relative flex flex-col items-start gap-1 rounded-lg border p-3 text-left transition-colors',
+                                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground',
+                                selected ? 'bg-[#f26722]/5' : 'border-input hover:bg-muted/50',
+                                servicesError && !selected && 'border-destructive',
+                              )}
+                              style={
+                                selected
+                                  ? {
+                                      borderColor: BRAND,
+                                    }
+                                  : undefined
+                              }
+                            >
+                              <service.icon
+                                className='h-5 w-5'
+                                style={{
+                                  color: selected ? BRAND : undefined,
+                                }}
+                              />
+                              <span className='text-sm font-medium'>{service.title}</span>
+                              <span className='text-xs leading-snug text-muted-foreground'>
+                                {service.description}
+                              </span>
+                              {selected && (
+                                <span
+                                  className='absolute right-2 top-2 flex h-4 w-4 items-center justify-center rounded-full text-white'
+                                  style={{
+                                    backgroundColor: BRAND,
+                                  }}
+                                >
+                                  <Check className='h-3 w-3' />
+                                </span>
+                              )}
+                            </button>
+                          )
+                        })}
+                      </div>
+                      {servicesError && (
+                        <p className='mt-1.5 text-sm text-destructive'>{servicesError}</p>
+                      )}
+                    </fieldset>
+                  </>
+                )}
+
+                {step === 1 && (
+                  <>
+                    <Field id='name' label='Full name' required error={errors.name}>
+                      <Input
+                        id='name'
+                        value={data.name}
+                        autoComplete='name'
+                        autoFocus
+                        onChange={(e) => setData('name', e.target.value)}
+                        className={cn(inputClass, errors.name && 'border-destructive')}
+                      />
+                    </Field>
+
+                    <Field
+                      id='company_name'
+                      label='Company / store name'
+                      required
+                      error={errors.company_name}
+                    >
+                      <Input
+                        id='company_name'
+                        value={data.company_name}
+                        autoComplete='organization'
+                        onChange={(e) => setData('company_name', e.target.value)}
+                        className={cn(inputClass, errors.company_name && 'border-destructive')}
+                      />
+                    </Field>
+
+                    <div className='grid grid-cols-2 gap-3'>
+                      <Field id='phone' label='Phone' required error={errors.phone}>
+                        <Input
+                          id='phone'
+                          type='tel'
+                          inputMode='tel'
+                          placeholder='05XXXXXXXX'
+                          value={data.phone}
+                          autoComplete='tel'
+                          onChange={(e) => setData('phone', e.target.value)}
+                          className={cn(inputClass, errors.phone && 'border-destructive')}
+                        />
+                      </Field>
+                      <Field id='city' label='City' error={errors.city}>
+                        <Input
+                          id='city'
+                          value={data.city}
+                          autoComplete='address-level2'
+                          onChange={(e) => setData('city', e.target.value)}
+                          className={cn(inputClass, errors.city && 'border-destructive')}
+                        />
+                      </Field>
+                    </div>
+                  </>
+                )}
+
+                {step === 2 && (
+                  <>
+                    <Field id='email' label='Email ID' required error={errors.email}>
+                      <Input
+                        id='email'
+                        type='email'
+                        value={data.email}
+                        autoComplete='username'
+                        autoFocus
+                        onChange={(e) => setData('email', e.target.value)}
+                        className={cn(inputClass, errors.email && 'border-destructive')}
+                      />
+                    </Field>
+
                     <Field id='password' label='Password' required error={errors.password}>
                       <PasswordInput
+                        key={generation}
+                        defaultVisible={generation > 0}
                         id='password'
                         value={data.password}
                         autoComplete='new-password'
@@ -311,6 +385,35 @@ export default function Register({
                       />
                     </Field>
 
+                    <div className='space-y-3'>
+                      <div className='flex items-center justify-between gap-3'>
+                        <button
+                          type='button'
+                          onClick={generatePassword}
+                          className='flex items-center gap-1.5 text-xs font-medium hover:underline'
+                          style={{ color: BRAND }}
+                        >
+                          <Sparkles className='h-3.5 w-3.5' />
+                          {generation > 0 ? 'Generate another' : 'Generate strong password'}
+                        </button>
+                        {generation > 0 && data.password !== '' && (
+                          <button
+                            type='button'
+                            onClick={copyPassword}
+                            className='flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground'
+                          >
+                            {copied ? (
+                              <Check className='h-3.5 w-3.5' />
+                            ) : (
+                              <Copy className='h-3.5 w-3.5' />
+                            )}
+                            {copied ? 'Copied' : 'Copy'}
+                          </button>
+                        )}
+                      </div>
+                      <PasswordStrength result={strength} />
+                    </div>
+
                     <Field
                       id='password_confirmation'
                       label='Confirm password'
@@ -318,6 +421,8 @@ export default function Register({
                       error={errors.password_confirmation}
                     >
                       <PasswordInput
+                        key={generation}
+                        defaultVisible={generation > 0}
                         id='password_confirmation'
                         value={data.password_confirmation}
                         autoComplete='new-password'
@@ -328,6 +433,11 @@ export default function Register({
                         )}
                       />
                     </Field>
+                    {confirmMatches && (
+                      <p className='!mt-1.5 flex items-center gap-1.5 text-xs text-green-600 dark:text-green-500'>
+                        <Check className='h-3.5 w-3.5' /> Passwords match
+                      </p>
+                    )}
                   </>
                 )}
 
@@ -344,16 +454,42 @@ export default function Register({
                   />
                 </div>
 
-                <button
-                  type='submit'
-                  disabled={processing}
-                  className='flex h-12 w-full items-center justify-center rounded-lg text-sm font-semibold text-white shadow-sm transition-colors disabled:cursor-not-allowed disabled:opacity-60'
-                  style={{ backgroundColor: BRAND }}
-                  onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = BRAND_HOVER)}
-                  onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = BRAND)}
-                >
-                  {processing ? 'Creating account…' : 'Create account'}
-                </button>
+                <div className='flex gap-3'>
+                  {step > 0 && (
+                    <button
+                      type='button'
+                      onClick={() => {
+                        clearErrors()
+                        setStep(step - 1)
+                      }}
+                      disabled={processing}
+                      className='flex h-12 items-center justify-center gap-1.5 rounded-lg border border-input px-5 text-sm font-medium transition-colors hover:bg-muted/60 disabled:opacity-60'
+                    >
+                      <ArrowLeft className='h-4 w-4' />
+                      Back
+                    </button>
+                  )}
+                  <button
+                    type='submit'
+                    disabled={processing}
+                    className='flex h-12 flex-1 items-center justify-center rounded-lg text-sm font-semibold text-white shadow-sm transition-colors disabled:cursor-not-allowed disabled:opacity-60'
+                    style={{ backgroundColor: BRAND }}
+                    onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = BRAND_HOVER)}
+                    onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = BRAND)}
+                  >
+                    {step < LAST_STEP
+                      ? 'Continue'
+                      : processing
+                        ? 'Creating account…'
+                        : 'Create account'}
+                  </button>
+                </div>
+
+                {step === LAST_STEP && (
+                  <p className='text-center text-xs text-muted-foreground'>
+                    Our team reviews every signup and emails you once you're approved.
+                  </p>
+                )}
 
                 <p className='text-center text-sm text-muted-foreground'>
                   Already have an account?{' '}

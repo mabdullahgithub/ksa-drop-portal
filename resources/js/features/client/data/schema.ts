@@ -7,7 +7,7 @@ export const clientSchema = z.object({
   contact_person: z.string().nullable(),
   phone: z.string().nullable(),
   client_types: z.array(z.enum(['dropshipper', 'fulfilment'])),
-  status: z.enum(['active', 'inactive', 'suspended', 'pending']),
+  status: z.enum(['active', 'inactive', 'suspended', 'pending', 'rejected']),
   status_color: z.enum(['success', 'warning', 'error', 'default']),
   type_label: z.string(),
   portal_features: z.array(z.enum(['orders', 'inventory', 'revenue'])),

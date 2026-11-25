@@ -22,6 +22,9 @@ class Client extends Model
     /** Signed up through the public page and waiting for an admin to activate it. */
     public const STATUS_PENDING = 'pending';
 
+    /** A public signup an admin turned down. */
+    public const STATUS_REJECTED = 'rejected';
+
     protected $fillable = [
         'user_id',
         'created_by',
@@ -49,6 +52,8 @@ class Client extends Model
         'portal_features' => 'array',
         'charges' => 'array',
         'is_isolated' => 'boolean',
+        'signed_up_at' => 'datetime',
+        'signup_reviewed_at' => 'datetime',
     ];
 
     public function user(): BelongsTo
@@ -59,6 +64,11 @@ class Client extends Model
     public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by')->withTrashed();
+    }
+
+    public function signupReviewer(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'signup_reviewed_by')->withTrashed();
     }
 
     public function orders(): HasMany
@@ -125,7 +135,7 @@ class Client extends Model
         return match ($this->status) {
             'active' => 'success',
             'inactive', self::STATUS_PENDING => 'warning',
-            'suspended' => 'error',
+            'suspended', self::STATUS_REJECTED => 'error',
             default => 'default',
         };
     }

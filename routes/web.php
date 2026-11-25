@@ -43,6 +43,7 @@ use App\Http\Controllers\ShopifyWebhookController;
 use App\Http\Controllers\ShopifyFulfillmentCallbackController;
 use App\Http\Controllers\ShopifyPendingOrderController;
 use App\Http\Controllers\ShopifySyncFailureController;
+use App\Http\Controllers\Api\SignupRequestController;
 use App\Http\Controllers\TrackingController;
 use App\Http\Controllers\UserRoleController;
 use Illuminate\Support\Facades\Route;
@@ -266,8 +267,8 @@ Route::middleware(['auth', 'verified', 'role:!client', 'client.access'])->group(
     Route::get('/api/stock-scans', [StockScanController::class, 'index'])->middleware('permission:view stock scans')->name('api.stock-scans.index');
 
     // The Requests page: what clients are waiting on. New products are
-    // client products pending verification; stock and details are changes
-    // asked for on verified ones. Each queue and each button is a permission
+    // client products pending verification; stock updates are changes asked
+    // for on verified ones; signups are new merchants. Each queue and each button is a permission
     // of its own.
     Route::prefix('api/requests')->group(function () {
         // Unlock sits outside the requests.unlocked gate (it is what opens it)
@@ -280,7 +281,11 @@ Route::middleware(['auth', 'verified', 'role:!client', 'client.access'])->group(
 
         // Everything the page shows or does sits behind the PIN.
         Route::middleware('requests.unlocked')->group(function () {
-            Route::get('/counts', [InventoryRequestController::class, 'counts'])->middleware('permission:view product requests|view stock requests|view detail requests')->name('api.requests.counts');
+            Route::get('/counts', [InventoryRequestController::class, 'counts'])->middleware('permission:view product requests|view stock requests|view signup requests')->name('api.requests.counts');
+
+            Route::get('/signups', [SignupRequestController::class, 'index'])->middleware('permission:view signup requests')->name('api.requests.signups');
+            Route::post('/signups/{client}/approve', [SignupRequestController::class, 'approve'])->middleware('permission:approve signup requests')->name('api.requests.signups.approve');
+            Route::post('/signups/{client}/reject', [SignupRequestController::class, 'reject'])->middleware('permission:reject signup requests')->name('api.requests.signups.reject');
 
             Route::get('/products', [InventoryRequestController::class, 'products'])->middleware('permission:view product requests')->name('api.requests.products');
             Route::post('/products/{product}/review', [InventoryRequestController::class, 'reviewProduct'])->middleware('permission:review product requests')->name('api.requests.products.review');
@@ -291,11 +296,6 @@ Route::middleware(['auth', 'verified', 'role:!client', 'client.access'])->group(
             Route::post('/stock/{inventoryRequest}/approve', [InventoryRequestController::class, 'approveStock'])->middleware('permission:approve stock requests')->name('api.requests.stock.approve');
             Route::post('/stock/{inventoryRequest}/reject', [InventoryRequestController::class, 'rejectStock'])->middleware('permission:reject stock requests')->name('api.requests.stock.reject');
 
-            Route::get('/details', [InventoryRequestController::class, 'details'])->middleware('permission:view detail requests')->name('api.requests.details');
-            Route::post('/details/bulk-approve', [InventoryRequestController::class, 'bulkApproveDetails'])->middleware('permission:bulk approve detail requests')->name('api.requests.details.bulk-approve');
-            Route::post('/details/bulk-reject', [InventoryRequestController::class, 'bulkRejectDetails'])->middleware('permission:bulk reject detail requests')->name('api.requests.details.bulk-reject');
-            Route::post('/details/{inventoryRequest}/approve', [InventoryRequestController::class, 'approveDetails'])->middleware('permission:approve detail requests')->name('api.requests.details.approve');
-            Route::post('/details/{inventoryRequest}/reject', [InventoryRequestController::class, 'rejectDetails'])->middleware('permission:reject detail requests')->name('api.requests.details.reject');
         });
     });
 
