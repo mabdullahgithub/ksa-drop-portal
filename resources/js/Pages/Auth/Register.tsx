@@ -124,7 +124,7 @@ export default function Register() {
       if (!data.name.trim()) found.name = 'Enter your full name.'
       if (!data.company_name.trim()) found.company_name = 'Enter your company or store name.'
       const phone = data.phone.trim()
-      if (!/^\+?[\d\s-]{8,20}$/.test(phone)) found.phone = 'Enter a valid phone number.'
+      if (!/^\d{8,15}$/.test(phone)) found.phone = 'Enter a valid phone number.'
     }
     if (index === 2) {
       if (!/^\S+@\S+\.\S+$/.test(data.email.trim())) found.email = 'Enter a valid email.'
@@ -339,7 +339,18 @@ export default function Register() {
                           placeholder='05XXXXXXXX'
                           value={data.phone}
                           autoComplete='tel'
-                          onChange={(e) => setData('phone', e.target.value)}
+                          onChange={(e) =>
+                            // Digits only, typed or pasted. Arabic-Indic digits become 0-9.
+                            setData(
+                              'phone',
+                              e.target.value
+                                .replace(/[\u0660-\u0669\u06F0-\u06F9]/g, (digit) =>
+                                  String(digit.charCodeAt(0) & 0xf),
+                                )
+                                .replace(/\D/g, '')
+                                .slice(0, 15),
+                            )
+                          }
                           className={cn(inputClass, errors.phone && 'border-destructive')}
                         />
                       </Field>

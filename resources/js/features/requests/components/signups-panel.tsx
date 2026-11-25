@@ -1,18 +1,16 @@
 import { useState } from 'react'
 import { Link } from '@inertiajs/react'
 import { toast } from 'sonner'
-import { Check, CheckCircle, Clock, X, XCircle } from 'lucide-react'
-import { Badge } from '@/components/ui/badge'
+import { Check, Eye, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 import { usePermissions } from '@/hooks/use-permissions'
 import {
   type RequestFilters,
@@ -21,36 +19,23 @@ import {
   rejectSignupRequest,
   useRequestQueue,
 } from '@/hooks/useInventoryRequests'
-import { QueueRows, RejectDialog, RequestedAt, RequestsPager, RequestsToolbar } from './request-parts'
+import type { ClientCharges } from '@/types/client'
+import { SignupApproveDialog } from './signup-approve-dialog'
+import { SignupDetailsSheet } from './signup-details-sheet'
+import { SIGNUP_SERVICES, SignupStatusBadge } from './signup-parts'
+import {
+  QueueRows,
+  RejectDialog,
+  RequestedAt,
+  RequestsPager,
+  RequestsToolbar,
+} from './request-parts'
 
 const STATUSES: Record<string, string> = {
   pending: 'Pending',
   approved: 'Approved',
   rejected: 'Rejected',
   all: 'All',
-}
-
-const SERVICES: Record<string, string> = {
-  dropshipper: 'Dropshipping',
-  fulfilment: 'Fulfilment',
-}
-
-const STATUS_STYLE = {
-  pending: {
-    label: 'Pending',
-    icon: Clock,
-    className: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400',
-  },
-  approved: {
-    label: 'Approved',
-    icon: CheckCircle,
-    className: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
-  },
-  rejected: {
-    label: 'Rejected',
-    icon: XCircle,
-    className: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400',
-  },
 }
 
 type Props = {
@@ -70,10 +55,12 @@ export function SignupsPanel({ initialFilters, onChanged, onLocked }: Props) {
   const canApprove = can('approve signup requests')
   const canReject = can('reject signup requests')
   const canOpenClient = can('view client details')
+  const canSetCharges = can('edit client charges')
 
   // A client filter means nothing here: every row is a new client.
   const { rows, meta, loading, error, filters, updateFilters, refresh } =
     useRequestQueue<SignupRequest>('signups', { ...initialFilters, client_id: 'all' }, onLocked)
+  const [viewing, setViewing] = useState<SignupRequest | null>(null)
   const [approving, setApproving] = useState<SignupRequest | null>(null)
   const [rejecting, setRejecting] = useState<SignupRequest | null>(null)
   const [saving, setSaving] = useState(false)
@@ -85,11 +72,11 @@ export function SignupsPanel({ initialFilters, onChanged, onLocked }: Props) {
     onChanged()
   }
 
-  const approve = async () => {
+  const approve = async (charges?: ClientCharges) => {
     if (!approving || saving) return
     setSaving(true)
     try {
-      await approveSignupRequest(approving.id)
+      await approveSignupRequest(approving.id, charges)
       toast.success(`${approving.company_name} approved`)
       setApproving(null)
       decided()
@@ -133,7 +120,7 @@ export function SignupsPanel({ initialFilters, onChanged, onLocked }: Props) {
               <TableHead>Service</TableHead>
               <TableHead>Submitted</TableHead>
               <TableHead>Status</TableHead>
-              <TableHead className='w-44' />
+              <TableHead className='w-64' />
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -146,10 +133,16 @@ export function SignupsPanel({ initialFilters, onChanged, onLocked }: Props) {
               onRetry={refresh}
             >
               {rows.map((signup) => {
-                const status = STATUS_STYLE[signup.status]
-
                 return (
-                  <TableRow key={signup.id}>
+                  // The whole row opens the details; links and buttons in it
+                  // keep their own click.
+                  <TableRow
+                    key={signup.id}
+                    className='cursor-pointer'
+                    onClick={(e) => {
+                      if (!(e.target as HTMLElement).closest('a, button')) setViewing(signup)
+                    }}
+                  >
                     <TableCell>
                       <div className='font-medium'>
                         {canOpenClient ? (
@@ -171,18 +164,20 @@ export function SignupsPanel({ initialFilters, onChanged, onLocked }: Props) {
                     </TableCell>
                     <TableCell className='text-sm'>{signup.city || '—'}</TableCell>
                     <TableCell className='text-sm'>
-                      {signup.client_types.map((type) => SERVICES[type] ?? type).join(', ')}
+                      {signup.client_types.map((type) => SIGNUP_SERVICES[type] ?? type).join(', ')}
                     </TableCell>
                     <TableCell>
-                      <RequestedAt value={signup.signed_up_at} waiting={signup.status === 'pending'} />
+                      <RequestedAt
+                        value={signup.signed_up_at}
+                        waiting={signup.status === 'pending'}
+                      />
                     </TableCell>
                     <TableCell>
-                      <Badge variant='outline' className={`text-xs ${status.className}`}>
-                        <status.icon className='mr-1 h-3 w-3' />
-                        {status.label}
-                      </Badge>
+                      <SignupStatusBadge status={signup.status} />
                       {signup.reviewed_by && (
-                        <div className='mt-1 text-xs text-muted-foreground'>by {signup.reviewed_by}</div>
+                        <div className='mt-1 text-xs text-muted-foreground'>
+                          by {signup.reviewed_by}
+                        </div>
                       )}
                       {signup.status === 'rejected' && signup.rejection_reason && (
                         <div className='mt-1 max-w-56 text-xs text-muted-foreground'>
@@ -191,27 +186,42 @@ export function SignupsPanel({ initialFilters, onChanged, onLocked }: Props) {
                       )}
                     </TableCell>
                     <TableCell>
-                      {signup.status === 'pending' && (
-                        <div className='flex justify-end gap-2'>
-                          {canApprove && (
-                            <Button size='sm' className='h-8' onClick={() => setApproving(signup)}>
-                              <Check className='mr-1.5 h-4 w-4' />
-                              Approve
-                            </Button>
-                          )}
-                          {canReject && (
-                            <Button
-                              variant='outline'
-                              size='sm'
-                              className='h-8'
-                              onClick={() => setRejecting(signup)}
-                            >
-                              <X className='mr-1.5 h-4 w-4' />
-                              Reject
-                            </Button>
-                          )}
-                        </div>
-                      )}
+                      <div className='flex justify-end gap-2'>
+                        <Button
+                          variant='ghost'
+                          size='sm'
+                          className='h-8'
+                          onClick={() => setViewing(signup)}
+                        >
+                          <Eye className='mr-1.5 h-4 w-4' />
+                          View
+                        </Button>
+                        {signup.status === 'pending' && (
+                          <>
+                            {canApprove && (
+                              <Button
+                                size='sm'
+                                className='h-8'
+                                onClick={() => setApproving(signup)}
+                              >
+                                <Check className='mr-1.5 h-4 w-4' />
+                                Approve
+                              </Button>
+                            )}
+                            {canReject && (
+                              <Button
+                                variant='outline'
+                                size='sm'
+                                className='h-8'
+                                onClick={() => setRejecting(signup)}
+                              >
+                                <X className='mr-1.5 h-4 w-4' />
+                                Reject
+                              </Button>
+                            )}
+                          </>
+                        )}
+                      </div>
                     </TableCell>
                   </TableRow>
                 )
@@ -223,30 +233,36 @@ export function SignupsPanel({ initialFilters, onChanged, onLocked }: Props) {
 
       <RequestsPager meta={meta} onPage={(page) => updateFilters({ page })} />
 
-      <Dialog open={!!approving} onOpenChange={(open) => !open && !saving && setApproving(null)}>
-        <DialogContent className='max-w-md'>
-          <DialogHeader>
-            <DialogTitle>Approve {approving?.company_name}?</DialogTitle>
-            <DialogDescription>
-              The account becomes active and the merchant is notified. Check their charges are set on
-              the client page first.
-            </DialogDescription>
-          </DialogHeader>
-          {approving && canOpenClient && (
-            <Link href={`/client/${approving.id}`} className='text-sm underline underline-offset-4'>
-              Open client page
-            </Link>
-          )}
-          <DialogFooter>
-            <Button variant='outline' onClick={() => setApproving(null)} disabled={saving}>
-              Cancel
-            </Button>
-            <Button onClick={approve} disabled={saving}>
-              {saving ? 'Approving…' : 'Approve'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <SignupDetailsSheet
+        signup={viewing}
+        onClose={() => setViewing(null)}
+        canOpenClient={canOpenClient}
+        // The sheet closes first, so only one layer is open at a time.
+        onApprove={
+          canApprove
+            ? (signup) => {
+                setViewing(null)
+                setApproving(signup)
+              }
+            : undefined
+        }
+        onReject={
+          canReject
+            ? (signup) => {
+                setViewing(null)
+                setRejecting(signup)
+              }
+            : undefined
+        }
+      />
+
+      <SignupApproveDialog
+        signup={approving}
+        canSetCharges={canSetCharges}
+        saving={saving}
+        onClose={() => setApproving(null)}
+        onApprove={approve}
+      />
 
       <RejectDialog
         open={!!rejecting}
@@ -254,8 +270,8 @@ export function SignupsPanel({ initialFilters, onChanged, onLocked }: Props) {
         title='Reject signup request'
         description={
           <>
-            {rejecting?.company_name} will not be able to sign in. The reason is included in the email
-            to them.
+            {rejecting?.company_name} will not be able to sign in. The reason is included in the
+            email to them.
           </>
         }
         onConfirm={reject}

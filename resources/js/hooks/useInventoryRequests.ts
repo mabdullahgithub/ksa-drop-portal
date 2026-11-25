@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { ClientProduct, InventoryRequest } from '@/types/client'
+import type { ClientCharges, ClientProduct, InventoryRequest } from '@/types/client'
 
 /** The queues of the Requests page. */
 export type RequestTab = 'products' | 'stock' | 'signups'
@@ -13,7 +13,9 @@ export type SignupRequest = {
   email: string | null
   phone: string | null
   city: string | null
+  country: string | null
   client_types: string[]
+  charges: ClientCharges | null
   status: 'pending' | 'approved' | 'rejected'
   signed_up_at: string | null
   reviewed_at: string | null
@@ -205,8 +207,11 @@ export function useRequestQueue<Row>(tab: RequestTab, initial: Partial<RequestFi
   return { rows, meta, loading, error, filters, updateFilters, refresh: load }
 }
 
-export function approveSignupRequest(id: number) {
-  return post<{ message: string }>(`/api/requests/signups/${id}/approve`)
+export function approveSignupRequest(id: number, charges?: ClientCharges) {
+  return post<{ message: string }>(
+    `/api/requests/signups/${id}/approve`,
+    charges ? { charges } : {},
+  )
 }
 
 export function rejectSignupRequest(id: number, reason: string) {

@@ -35,6 +35,7 @@ class SignupReceivedMail extends BaseMailable implements ShouldQueue
                 'name' => $this->client->contact_person ?? $this->client->user->name,
                 'loginUrl' => rtrim(config('app.url'), '/') . '/login',
                 'recipient' => $this->client->user->email,
+                'shopifyAppUrl' => config('services.shopify_app_store.url'),
             ],
         );
     }

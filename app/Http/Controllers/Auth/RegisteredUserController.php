@@ -48,7 +48,7 @@ class RegisteredUserController extends Controller
             'name' => 'required|string|max:255',
             'company_name' => 'required|string|max:255',
             'email' => 'required|string|lowercase|email|max:255|unique:'.User::class,
-            'phone' => 'required|string|max:20',
+            'phone' => ['required', 'string', 'regex:/^[0-9]{8,15}$/'],
             'city' => 'nullable|string|max:100',
             'client_type' => 'required|in:dropshipper,fulfilment',
             'password' => [
@@ -60,6 +60,7 @@ class RegisteredUserController extends Controller
             ],
         ], [
             'email.unique' => "You can't create an account with this email.",
+            'phone.regex' => 'Enter a phone number using 8 to 15 digits.',
             'client_type.required' => 'Choose the service you need.',
             'client_type.in' => 'Choose the service you need.',
         ]);
@@ -131,7 +132,9 @@ class RegisteredUserController extends Controller
         $submitted = $request->session()->get(self::SUBMITTED_KEY);
 
         return $submitted
-            ? Inertia::render('Auth/RegisterSubmitted', $submitted)
+            ? Inertia::render('Auth/RegisterSubmitted', $submitted + [
+                'shopifyAppUrl' => config('services.shopify_app_store.url'),
+            ])
             : redirect()->route('register');
     }
 

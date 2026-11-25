@@ -49,7 +49,26 @@ class SignupRequestController extends Controller
 
     public function approve(Request $request, Client $client): JsonResponse
     {
-        return $this->decide($request, $client, 'active');
+        $validated = $request->validate([
+            'charges' => 'nullable|array',
+            ...collect(Client::CHARGE_KEYS)->mapWithKeys(fn (string $key) => [
+                "charges.{$key}" => 'nullable|numeric|min:0|max:' . ($key === 'vat' ? 100 : 999999),
+            ])->all(),
+        ]);
+
+        // Only the known keys, as numbers; a blank one is 0.
+        $charges = array_map('floatval', array_intersect_key($validated['charges'] ?? [], array_flip(Client::CHARGE_KEYS)));
+
+        // Approving needs no say over charges, but setting them does. Sending
+        // zeros, or what is already there, changes nothing.
+        abort_if(
+            ! $request->user()->can('edit client charges')
+                && collect($charges)->contains(fn (float $value, string $key) => $value !== (float) ($client->charges[$key] ?? 0)),
+            403,
+            'You do not have permission to set charges.',
+        );
+
+        return $this->decide($request, $client, 'active', charges: $charges);
     }
 
     public function reject(Request $request, Client $client): JsonResponse
@@ -59,14 +78,21 @@ class SignupRequestController extends Controller
         return $this->decide($request, $client, Client::STATUS_REJECTED, $reason);
     }
 
-    private function decide(Request $request, Client $client, string $status, ?string $reason = null): JsonResponse
+    /** @param  ?array<string, float>  $charges  given when approving */
+    private function decide(Request $request, Client $client, string $status, ?string $reason = null, ?array $charges = null): JsonResponse
     {
-        $decided = DB::transaction(function () use ($request, $client, $status, $reason) {
+        $decided = DB::transaction(function () use ($request, $client, $status, $reason, $charges) {
             // Locked so two people cannot decide the same signup.
             $fresh = Client::whereKey($client->id)->lockForUpdate()->first();
 
             if (! $fresh || $fresh->signed_up_at === null || $fresh->status !== Client::STATUS_PENDING) {
                 return null;
+            }
+
+            if ($charges !== null) {
+                // What was entered, over what the client page already had,
+                // over 0 for the rest.
+                $fresh->charges = array_merge(array_fill_keys(Client::CHARGE_KEYS, 0), $fresh->charges ?? [], $charges);
             }
 
             $fresh->forceFill([
@@ -104,7 +130,10 @@ class SignupRequestController extends Controller
             'email' => $client->user?->email,
             'phone' => $client->phone,
             'city' => $client->city,
+            'country' => $client->country === 'SA' ? 'Saudi Arabia' : $client->country,
             'client_types' => $client->client_types ?? [],
+            // To prefill the approval form, for those who may set them.
+            'charges' => request()->user()->can('edit client charges') ? $client->charges : null,
             'status' => match ($client->status) {
                 Client::STATUS_PENDING => 'pending',
                 Client::STATUS_REJECTED => 'rejected',

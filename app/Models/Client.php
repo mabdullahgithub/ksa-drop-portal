@@ -25,6 +25,9 @@ class Client extends Model
     /** A public signup an admin turned down. */
     public const STATUS_REJECTED = 'rejected';
 
+    /** The charges a client can have; one that is not set counts as 0. */
+    public const CHARGE_KEYS = ['delivery', 'return', 'cod', 'warehousing', 'call_confirmation', 'vat', 'other'];
+
     protected $fillable = [
         'user_id',
         'created_by',

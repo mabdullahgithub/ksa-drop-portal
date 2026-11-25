@@ -15,6 +15,9 @@ What happens next:
 2. We email you as soon as a decision is made.
 3. Once approved, you sign in with the email and password you chose.
 
+We are a Shopify Partner. KSA DROP has its own Shopify app. Use KSADrop Portal to connect your store once your account is approved:
+{!! $shopifyAppUrl !!}
+
 There is nothing else you need to do for now. If you did not make this request, reply to this email and let us know.
 
 Best regards,

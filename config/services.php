@@ -14,6 +14,12 @@ return [
     |
     */
 
+    // Our app's listing on the Shopify App Store, linked on the signup
+    // confirmation screen and email.
+    'shopify_app_store' => [
+        'url' => 'https://apps.shopify.com/ksadrop-portal',
+    ],
+
     'postmark' => [
         'key' => env('POSTMARK_API_KEY'),
     ],
