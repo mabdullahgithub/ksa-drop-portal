@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { toast } from 'sonner'
-import { Search as SearchIcon, CheckCircle, Clock, Plus, Lock, ArrowUpDown, ArrowUp, ArrowDown, PackageX, ImageOff, X, ChevronLeft, ChevronRight, Hourglass } from 'lucide-react'
+import { Search as SearchIcon, CheckCircle, Clock, Plus, Lock, ArrowUpDown, ArrowUp, ArrowDown, PackageX, ImageOff, X, ChevronLeft, ChevronRight, Hourglass, LayoutGrid, List } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -41,6 +41,7 @@ import { usePortalInventory, usePortalInventoryMutations, usePortalInventoryRequ
 import { PortalProductFormDialog } from './portal-product-form-dialog'
 import { PortalRequestsTab } from './portal-requests-tab'
 import { PortalProductViewDialog } from './portal-product-view-dialog'
+import { PortalInventoryCardView } from './portal-inventory-card-view'
 import type { PortalInventoryProduct } from '@/types/client'
 import { EmptyState } from '@/components/empty-state'
 import { Pagination } from '@/components/data-table'
@@ -76,6 +77,7 @@ export function PortalInventory() {
   const [viewProduct, setViewProduct] = useState<PortalProduct | null>(null)
   const [galleryProduct, setGalleryProduct] = useState<PortalProduct | null>(null)
   const [galleryIndex, setGalleryIndex] = useState(0)
+  const [viewMode, setViewMode] = useState<'table' | 'card'>('table')
 
   const openGallery = (product: PortalProduct) => {
     if (product.images.length === 0) return
@@ -131,6 +133,23 @@ export function PortalInventory() {
       toast.error('Failed to delete product')
     }
   }
+
+  const emptyState = search || statusFilter !== 'all' ? (
+    <EmptyState bot='square' title='No products match your filters.' />
+  ) : (
+    <EmptyState
+      bot='square'
+      state='sleeping'
+      title="You haven't added any products yet."
+      description='Add your first product to request warehouse intake.'
+      action={
+        <Button variant='outline' size='sm' onClick={openAdd}>
+          <Plus className='mr-2 h-4 w-4' />
+          Add Product
+        </Button>
+      }
+    />
+  )
 
   return (
     <>
@@ -217,8 +236,40 @@ export function PortalInventory() {
                 <SelectItem value='created_at:asc'>Date Added — Oldest</SelectItem>
               </SelectContent>
             </Select>
+
+            {/* View mode toggle */}
+            <div className='ml-auto flex shrink-0 items-center overflow-hidden rounded-md border border-muted/70'>
+              <Button
+                variant={viewMode === 'table' ? 'secondary' : 'ghost'}
+                size='sm'
+                className='h-9 rounded-none px-2.5'
+                onClick={() => setViewMode('table')}
+                title='List view'
+              >
+                <List className='h-4 w-4' />
+              </Button>
+              <Button
+                variant={viewMode === 'card' ? 'secondary' : 'ghost'}
+                size='sm'
+                className='h-9 rounded-none px-2.5'
+                onClick={() => setViewMode('card')}
+                title='Card view'
+              >
+                <LayoutGrid className='h-4 w-4' />
+              </Button>
+            </div>
           </div>
 
+          {viewMode === 'card' ? (
+            <PortalInventoryCardView
+              products={products as PortalProduct[]}
+              loading={loading}
+              empty={emptyState}
+              disabled={mutating}
+              onView={setViewProduct}
+              onEdit={openEdit}
+            />
+          ) : (
           <div className='overflow-hidden rounded-md border'>
             <Table>
               <TableHeader>
@@ -260,22 +311,7 @@ export function PortalInventory() {
                 ) : (products as PortalProduct[]).length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={9} className='h-32 text-center'>
-                      {search || statusFilter !== 'all' ? (
-                        <EmptyState bot='square' title='No products match your filters.' />
-                      ) : (
-                        <EmptyState
-                          bot='square'
-                          state='sleeping'
-                          title="You haven't added any products yet."
-                          description='Add your first product to request warehouse intake.'
-                          action={
-                            <Button variant='outline' size='sm' onClick={openAdd}>
-                              <Plus className='mr-2 h-4 w-4' />
-                              Add Product
-                            </Button>
-                          }
-                        />
-                      )}
+                      {emptyState}
                     </TableCell>
                   </TableRow>
                 ) : (
@@ -411,6 +447,7 @@ export function PortalInventory() {
               </TableBody>
             </Table>
           </div>
+          )}
 
           {meta && (
             <Pagination
