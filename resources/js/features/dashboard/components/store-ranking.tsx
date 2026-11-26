@@ -50,12 +50,24 @@ export function StoreRanking({
   loading,
   range,
   storeHref,
+  title = 'Best stores',
+  description,
+  icon = <Store />,
+  emptyText = 'No store orders in this period.',
+  detail,
 }: {
   stores: StoreInsight[] | null
   loading: boolean
   range: InsightRange
   /** Where a store links to, or undefined when the person cannot open it. */
   storeHref?: (id: number) => string
+  /** The client portal reuses this card for its best products. */
+  title?: string
+  description?: string
+  icon?: React.ReactNode
+  emptyText?: string
+  /** The small line under each name; defaults to orders and delivered share. */
+  detail?: (s: StoreInsight) => string
 }) {
   const [active, setActive] = useState<number | null>(null)
   const list = stores ?? []
@@ -66,13 +78,14 @@ export function StoreRanking({
   return (
     <InsightCard
       eyebrow='Leaderboard'
-      title='Best stores'
+      title={title}
       description={
-        byRevenue
+        description ??
+        (byRevenue
           ? 'Order trend of the top five, and the leaders ranked by order value'
-          : 'Order trend of the top five, and the leaders ranked by orders'
+          : 'Order trend of the top five, and the leaders ranked by orders')
       }
-      icon={<Store />}
+      icon={icon}
       accent={ACCENT}
     >
       {loading ? (
@@ -85,11 +98,11 @@ export function StoreRanking({
           </div>
         </div>
       ) : !list.length ? (
-        <InsightEmpty>No store orders in this period.</InsightEmpty>
+        <InsightEmpty>{emptyText}</InsightEmpty>
       ) : (
         <div key={replayKey} className='grid items-start gap-6 lg:grid-cols-[1.3fr_1fr]'>
           <TrendChart stores={list} range={range} active={active} onActive={setActive} />
-          <Ranking stores={list} byRevenue={byRevenue} active={active} onActive={setActive} storeHref={storeHref} />
+          <Ranking stores={list} byRevenue={byRevenue} active={active} onActive={setActive} storeHref={storeHref} detail={detail} />
         </div>
       )}
     </InsightCard>
@@ -240,12 +253,14 @@ function Ranking({
   active,
   onActive,
   storeHref,
+  detail,
 }: {
   stores: StoreInsight[]
   byRevenue: boolean
   active: number | null
   onActive: (id: number | null) => void
   storeHref?: (id: number) => string
+  detail?: (s: StoreInsight) => string
 }) {
   const reduce = useReducedMotion() ?? false
   const valueOf = (s: StoreInsight) => (byRevenue ? (s.revenue ?? 0) : s.orders)
@@ -302,8 +317,14 @@ function Ranking({
               <span className='min-w-0'>
                 <span className='block truncate text-[12.5px] leading-tight font-medium'>{s.name}</span>
                 <span className='block truncate text-[10px] text-muted-foreground tabular-nums'>
-                  {byRevenue && `${s.orders.toLocaleString()} orders · `}
-                  {percent(s.delivered, s.orders)} delivered
+                  {detail ? (
+                    detail(s)
+                  ) : (
+                    <>
+                      {byRevenue && `${s.orders.toLocaleString()} orders · `}
+                      {percent(s.delivered, s.orders)} delivered
+                    </>
+                  )}
                 </span>
               </span>
 

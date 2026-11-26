@@ -1,4 +1,5 @@
 import { Suspense, lazy, useState } from 'react'
+import { PackageSearch } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { usePermissions } from '@/hooks/use-permissions'
 import { type InsightRange, useDashboardInsights } from '@/hooks/useDashboardInsights'
@@ -18,6 +19,13 @@ const CityHeatmap = lazy(() => import('./city-heatmap').then((m) => ({ default: 
 const CourierRanking = lazy(() => import('./courier-ranking').then((m) => ({ default: m.CourierRanking })))
 const OrderRhythm = lazy(() => import('./order-rhythm').then((m) => ({ default: m.OrderRhythm })))
 const StoreRanking = lazy(() => import('./store-ranking').then((m) => ({ default: m.StoreRanking })))
+
+/** Same rounding as the charts' percent(), kept here so this file stays light. */
+function share(part: number, whole: number) {
+  if (whole <= 0) return '0%'
+  const value = (part / whole) * 100
+  return `${value < 10 && value > 0 ? value.toFixed(1) : Math.round(value)}%`
+}
 
 const RANGES: Array<{ value: InsightRange; label: string }> = [
   { value: 7, label: '7D' },
@@ -43,7 +51,7 @@ export function InsightsSection({
   rhythmSide?: React.ReactNode
 }) {
   const [range, setRange] = useState<InsightRange>(0)
-  const { data, loading, canCities, canCouriers, canRhythm, canStores } = useDashboardInsights(range, scope)
+  const { data, loading, canCities, canCouriers, canRhythm, canStores, canProducts } = useDashboardInsights(range, scope)
   const { can } = usePermissions()
 
   if (!canCities && !canCouriers && !canRhythm && !canStores) return null
@@ -114,6 +122,38 @@ export function InsightsSection({
               </Suspense>
             )}
           </div>
+        )}
+
+        {canProducts && (
+          <Suspense fallback={<StoreRankingFallback />}>
+            <StoreRanking
+              title='Best products'
+              description='Order trend of the top five, and your products ranked by orders'
+              icon={<PackageSearch />}
+              emptyText='No product orders in this period.'
+              // The card is built around stores; a product fits the same shape.
+              stores={
+                data.products?.map((p) => ({
+                  client_id: p.id,
+                  name: p.name,
+                  short_id: p.sku,
+                  logo: p.image,
+                  orders: p.orders,
+                  revenue: null,
+                  delivered: p.delivered,
+                  trend: p.trend,
+                })) ?? null
+              }
+              detail={(s) => {
+                const p = data.products?.find((x) => x.id === s.client_id)
+                return [p?.sku, p ? `${p.units.toLocaleString()} units` : null, `${share(s.delivered, s.orders)} delivered`]
+                  .filter(Boolean)
+                  .join(' · ')
+              }}
+              loading={loading}
+              range={range}
+            />
+          </Suspense>
         )}
 
         {canStores && (

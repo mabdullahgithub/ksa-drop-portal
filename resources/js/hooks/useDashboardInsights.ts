@@ -35,6 +35,20 @@ export interface StoreInsight {
   trend: number[]
 }
 
+/** Client portal: one of the client's products, ranked by orders that include it. */
+export interface ProductInsight {
+  /** Rank-based id, stable within one response. */
+  id: number
+  client_product_id: number | null
+  name: string
+  sku: string | null
+  image: string | null
+  orders: number
+  units: number
+  delivered: number
+  trend: number[]
+}
+
 /** Orders per hour of the day (0–23) and per weekday (Sunday first), Riyadh time. */
 export interface OrderRhythm {
   hours: number[]
@@ -46,9 +60,11 @@ export interface DashboardInsights {
   couriers: CourierInsight[] | null
   rhythm: OrderRhythm | null
   stores: StoreInsight[] | null
+  /** Client portal only. */
+  products: ProductInsight[] | null
 }
 
-const EMPTY: DashboardInsights = { cities: null, couriers: null, rhythm: null, stores: null }
+const EMPTY: DashboardInsights = { cities: null, couriers: null, rhythm: null, stores: null, products: null }
 
 /**
  * `portal` reads the client portal's endpoint: the signed-in client's own
@@ -85,6 +101,7 @@ export function useDashboardInsights(range: InsightRange, scope: 'admin' | 'port
           couriers: json.couriers ?? null,
           rhythm: json.rhythm ?? null,
           stores: json.stores ?? null,
+          products: json.products ?? null,
         })
         setLoading(false)
       })
@@ -97,5 +114,5 @@ export function useDashboardInsights(range: InsightRange, scope: 'admin' | 'port
     return () => controller.abort()
   }, [range, enabled, endpoint])
 
-  return { data, loading, canCities, canCouriers, canRhythm, canStores }
+  return { data, loading, canCities, canCouriers, canRhythm, canStores, canProducts: portal }
 }

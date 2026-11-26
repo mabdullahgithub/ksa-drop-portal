@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Concerns\ResolvesPortalClient;
 use App\Http\Controllers\Controller;
+use App\Models\ClientProduct;
+use App\Models\ClientProductImage;
 use App\Models\Order;
 use App\Models\Shipment;
 use App\Services\CityDirectory;
@@ -24,7 +26,8 @@ use Illuminate\Support\Facades\DB;
  *
  * The client portal reuses the same charts through portal(), pinned to the
  * signed-in client's own orders: no store ranking (it is one store) and no
- * courier ranking (couriers are not shown to clients).
+ * courier ranking (couriers are not shown to clients), but a product ranking
+ * in the store ranking's place.
  */
 class DashboardInsightsController extends Controller
 {
@@ -33,12 +36,21 @@ class DashboardInsightsController extends Controller
     /** Set by portal(): every query is limited to this client's orders. */
     private ?int $clientId = null;
 
+    /**
+     * The client's catalogue by lower-cased SKU, so an order line that was
+     * never linked to its product still finds it (and its name and image).
+     *
+     * @var array<string, array{id: int, name: string}>
+     */
+    private array $catalogue = [];
+
     /** Period choices in days; 0 is "all time". */
     private const RANGES = [7, 30, 90, 0];
 
     // Every city, near enough: the regional split needs them all, and a row is tiny.
     private const TOP_CITIES = 300;
     private const TOP_STORES = 6;
+    private const TOP_PRODUCTS = 6;
 
     public function __invoke(Request $request, CityDirectory $cities): JsonResponse
     {
@@ -57,7 +69,7 @@ class DashboardInsightsController extends Controller
     }
 
     /**
-     * Client portal: cities and rhythm for the signed-in client's
+     * Client portal: cities, rhythm and best products for the signed-in client's
      * own orders. Money is the client's own, so revenue is always included.
      */
     public function portal(Request $request, CityDirectory $cities): JsonResponse
@@ -74,6 +86,7 @@ class DashboardInsightsController extends Controller
             'couriers' => null,
             'rhythm' => $this->rhythm($from),
             'stores' => null,
+            'products' => $this->products($from, $days),
         ]);
     }
 
@@ -258,6 +271,136 @@ class DashboardInsightsController extends Controller
     }
 
     /**
+     * The client's products ranked by how many orders include them, each with
+     * its order trend. Line items are folded into one product by the catalogue
+     * product they are linked to (or whose SKU they carry), else by SKU, else
+     * by name.
+     */
+    private function products(?Carbon $from, int $days): array
+    {
+        $this->catalogue = ClientProduct::query()
+            ->where('client_id', $this->clientId)
+            ->whereNotNull('sku')
+            ->get(['id', 'name', 'sku'])
+            ->mapWithKeys(fn ($p) => [mb_strtolower(trim($p->sku)) => ['id' => $p->id, 'name' => $p->name]])
+            ->all();
+        $names = array_column($this->catalogue, 'name', 'id');
+
+        $rows = $this->orders($from)
+            ->join('order_items', 'order_items.order_id', '=', 'orders.id')
+            ->leftJoin('client_products', 'client_products.id', '=', 'order_items.client_product_id')
+            ->toBase()
+            ->selectRaw(
+                'order_items.client_product_id, order_items.lineitem_sku, order_items.lineitem_name, client_products.name as product_name,
+                 count(distinct orders.id) as order_count, coalesce(sum(order_items.lineitem_quantity), 0) as units,
+                 count(distinct case when exists (select 1 from shipments where shipments.order_id = orders.id and shipments.status = ?) then orders.id end) as delivered',
+                [ShipmentStatus::DELIVERED->value]
+            )
+            ->groupBy('order_items.client_product_id', 'order_items.lineitem_sku', 'order_items.lineitem_name', 'client_products.name')
+            ->get();
+
+        $groups = [];
+        foreach ($rows as $row) {
+            $key = $this->productKey($row);
+            $productId = str_starts_with($key, 'p:') ? (int) substr($key, 2) : null;
+            $group = &$groups[$key];
+            $group['client_product_id'] ??= $productId;
+            // The catalogue name first: it is what the client calls the product.
+            $group['name'] ??= $row->product_name ?: ($names[$productId] ?? null) ?: ($row->lineitem_name ?: $row->lineitem_sku);
+            $group['sku'] ??= $row->lineitem_sku;
+            $group['orders'] = ($group['orders'] ?? 0) + (int) $row->order_count;
+            $group['units'] = ($group['units'] ?? 0) + (int) $row->units;
+            $group['delivered'] = ($group['delivered'] ?? 0) + (int) $row->delivered;
+            unset($group);
+        }
+
+        uasort($groups, fn ($a, $b) => [$b['orders'], $b['units']] <=> [$a['orders'], $a['units']]);
+        $top = array_slice($groups, 0, self::TOP_PRODUCTS, true);
+
+        $trends = $this->productTrends(array_keys($top), $days);
+        $images = ClientProductImage::query()
+            ->whereIn('client_product_id', array_filter(array_column($top, 'client_product_id')))
+            ->orderBy('position')
+            ->get()
+            ->unique('client_product_id')
+            ->mapWithKeys(fn ($image) => [$image->client_product_id => $image->url]);
+
+        $list = [];
+        $rank = 0;
+        foreach ($top as $key => $group) {
+            $list[] = [
+                // A stable number for the chart; products have no shared id space.
+                'id' => ++$rank,
+                'client_product_id' => $group['client_product_id'],
+                'name' => $group['name'] ?: 'Unnamed product',
+                'sku' => $group['sku'],
+                'image' => $group['client_product_id'] ? ($images[$group['client_product_id']] ?? null) : null,
+                'orders' => $group['orders'],
+                'units' => $group['units'],
+                'delivered' => $group['delivered'],
+                'trend' => $trends[$key] ?? [],
+            ];
+        }
+
+        return $list;
+    }
+
+    private function productKey(object $row): string
+    {
+        $sku = mb_strtolower(trim((string) $row->lineitem_sku));
+
+        return match (true) {
+            (bool) $row->client_product_id => 'p:' . $row->client_product_id,
+            isset($this->catalogue[$sku]) => 'p:' . $this->catalogue[$sku]['id'],
+            $sku !== '' => 's:' . $sku,
+            default => 'n:' . mb_strtolower(trim((string) $row->lineitem_name)),
+        };
+    }
+
+    /**
+     * Orders per bucket for each product key, cut the same way as the store
+     * trends.
+     *
+     * @param  list<string>  $keys
+     * @return array<string, list<int>>
+     */
+    private function productTrends(array $keys, int $days): array
+    {
+        if ($keys === []) {
+            return [];
+        }
+
+        [$buckets, $unit, $start] = $this->trendBuckets($days);
+
+        $rows = Order::query()
+            ->where('orders.client_id', $this->clientId)
+            ->where('orders.created_at', '>=', $start->copy()->utc())
+            ->join('order_items', 'order_items.order_id', '=', 'orders.id')
+            ->toBase()
+            ->selectRaw(
+                'order_items.client_product_id, order_items.lineitem_sku, order_items.lineitem_name, '
+                . $this->localDate('orders.created_at') . ' as day, count(distinct orders.id) as order_count'
+            )
+            ->groupBy('order_items.client_product_id', 'order_items.lineitem_sku', 'order_items.lineitem_name', 'day')
+            ->get();
+
+        $series = array_fill_keys($keys, array_fill(0, $buckets, 0));
+
+        foreach ($rows as $row) {
+            $key = $this->productKey($row);
+            if (! isset($series[$key])) {
+                continue;
+            }
+            $index = $this->bucketIndex(Carbon::parse($row->day, $start->timezone), $start, $unit);
+            if ($index >= 0 && $index < $buckets) {
+                $series[$key][$index] += (int) $row->order_count;
+            }
+        }
+
+        return $series;
+    }
+
+    /**
      * Orders per bucket for each client: days for a week or a month, weeks for
      * a quarter, months (the last twelve) for all time.
      *
@@ -270,17 +413,7 @@ class DashboardInsightsController extends Controller
             return [];
         }
 
-        [$buckets, $unit] = match (true) {
-            $days === 0 => [12, 'month'],
-            $days > 31 => [(int) ceil($days / 7), 'week'],
-            default => [$days, 'day'],
-        };
-
-        $start = match ($unit) {
-            'month' => $this->today()->startOfMonth()->subMonths($buckets - 1),
-            'week' => $this->today()->subDays($buckets * 7 - 1),
-            default => $this->today()->subDays($buckets - 1),
-        };
+        [$buckets, $unit, $start] = $this->trendBuckets($days);
 
         $rows = Order::query()
             ->whereIn('client_id', $clientIds)
@@ -293,12 +426,7 @@ class DashboardInsightsController extends Controller
         $series = array_fill_keys($clientIds, array_fill(0, $buckets, 0));
 
         foreach ($rows as $row) {
-            $day = Carbon::parse($row->day, $start->timezone);
-            $index = match ($unit) {
-                'month' => ($day->year - $start->year) * 12 + $day->month - $start->month,
-                'week' => intdiv((int) $start->diffInDays($day), 7),
-                default => (int) $start->diffInDays($day),
-            };
+            $index = $this->bucketIndex(Carbon::parse($row->day, $start->timezone), $start, $unit);
 
             if ($index >= 0 && $index < $buckets) {
                 $series[$row->client_id][$index] += (int) $row->order_count;
@@ -306,6 +434,38 @@ class DashboardInsightsController extends Controller
         }
 
         return $series;
+    }
+
+    /**
+     * How a trend is cut: days for a week or a month, weeks for a quarter,
+     * months (the last twelve) for all time.
+     *
+     * @return array{0: int, 1: string, 2: Carbon}
+     */
+    private function trendBuckets(int $days): array
+    {
+        [$buckets, $unit] = match (true) {
+            $days === 0 => [12, 'month'],
+            $days > 31 => [(int) ceil($days / 7), 'week'],
+            default => [$days, 'day'],
+        };
+
+        $start = match ($unit) {
+            'month' => $this->today()->startOfMonth()->subMonths($buckets - 1),
+            'week' => $this->today()->subDays($buckets * 7 - 1),
+            default => $this->today()->subDays($buckets - 1),
+        };
+
+        return [$buckets, $unit, $start];
+    }
+
+    private function bucketIndex(Carbon $day, Carbon $start, string $unit): int
+    {
+        return match ($unit) {
+            'month' => ($day->year - $start->year) * 12 + $day->month - $start->month,
+            'week' => intdiv((int) $start->diffInDays($day), 7),
+            default => (int) $start->diffInDays($day),
+        };
     }
 
     private function today(): Carbon
