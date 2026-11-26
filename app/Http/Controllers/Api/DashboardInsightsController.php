@@ -286,17 +286,19 @@ class DashboardInsightsController extends Controller
             ->all();
         $names = array_column($this->catalogue, 'name', 'id');
 
+        // One row per order line, folded in PHP: a product that sits on two
+        // lines of the same order (spelt differently, or linked on one line
+        // and matched by SKU on the other) must still count that order once.
         $rows = $this->orders($from)
             ->join('order_items', 'order_items.order_id', '=', 'orders.id')
             ->leftJoin('client_products', 'client_products.id', '=', 'order_items.client_product_id')
             ->toBase()
             ->selectRaw(
-                'order_items.client_product_id, order_items.lineitem_sku, order_items.lineitem_name, client_products.name as product_name,
-                 count(distinct orders.id) as order_count, coalesce(sum(order_items.lineitem_quantity), 0) as units,
-                 count(distinct case when exists (select 1 from shipments where shipments.order_id = orders.id and shipments.status = ?) then orders.id end) as delivered',
+                'orders.id as order_id, order_items.client_product_id, order_items.lineitem_sku, order_items.lineitem_name,
+                 client_products.name as product_name, order_items.lineitem_quantity as quantity,
+                 case when exists (select 1 from shipments where shipments.order_id = orders.id and shipments.status = ?) then 1 else 0 end as is_delivered',
                 [ShipmentStatus::DELIVERED->value]
             )
-            ->groupBy('order_items.client_product_id', 'order_items.lineitem_sku', 'order_items.lineitem_name', 'client_products.name')
             ->get();
 
         $groups = [];
@@ -308,11 +310,20 @@ class DashboardInsightsController extends Controller
             // The catalogue name first: it is what the client calls the product.
             $group['name'] ??= $row->product_name ?: ($names[$productId] ?? null) ?: ($row->lineitem_name ?: $row->lineitem_sku);
             $group['sku'] ??= $row->lineitem_sku;
-            $group['orders'] = ($group['orders'] ?? 0) + (int) $row->order_count;
-            $group['units'] = ($group['units'] ?? 0) + (int) $row->units;
-            $group['delivered'] = ($group['delivered'] ?? 0) + (int) $row->delivered;
+            $group['units'] = ($group['units'] ?? 0) + max(0, (int) $row->quantity);
+            $group['order_ids'][$row->order_id] = true;
+            if ($row->is_delivered) {
+                $group['delivered_ids'][$row->order_id] = true;
+            }
             unset($group);
         }
+
+        foreach ($groups as &$group) {
+            $group['orders'] = count($group['order_ids']);
+            $group['delivered'] = count($group['delivered_ids'] ?? []);
+            unset($group['order_ids'], $group['delivered_ids']);
+        }
+        unset($group);
 
         uasort($groups, fn ($a, $b) => [$b['orders'], $b['units']] <=> [$a['orders'], $a['units']]);
         $top = array_slice($groups, 0, self::TOP_PRODUCTS, true);
@@ -378,22 +389,24 @@ class DashboardInsightsController extends Controller
             ->join('order_items', 'order_items.order_id', '=', 'orders.id')
             ->toBase()
             ->selectRaw(
-                'order_items.client_product_id, order_items.lineitem_sku, order_items.lineitem_name, '
-                . $this->localDate('orders.created_at') . ' as day, count(distinct orders.id) as order_count'
+                'orders.id as order_id, order_items.client_product_id, order_items.lineitem_sku, order_items.lineitem_name, '
+                . $this->localDate('orders.created_at') . ' as day'
             )
-            ->groupBy('order_items.client_product_id', 'order_items.lineitem_sku', 'order_items.lineitem_name', 'day')
             ->get();
 
         $series = array_fill_keys($keys, array_fill(0, $buckets, 0));
+        $seen = [];
 
         foreach ($rows as $row) {
             $key = $this->productKey($row);
-            if (! isset($series[$key])) {
+            // Each order once per product, however many lines it has for it.
+            if (! isset($series[$key]) || isset($seen[$key][$row->order_id])) {
                 continue;
             }
+            $seen[$key][$row->order_id] = true;
             $index = $this->bucketIndex(Carbon::parse($row->day, $start->timezone), $start, $unit);
             if ($index >= 0 && $index < $buckets) {
-                $series[$key][$index] += (int) $row->order_count;
+                $series[$key][$index]++;
             }
         }
 

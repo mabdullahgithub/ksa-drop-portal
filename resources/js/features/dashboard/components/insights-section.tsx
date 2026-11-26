@@ -128,7 +128,7 @@ export function InsightsSection({
           <Suspense fallback={<StoreRankingFallback />}>
             <StoreRanking
               title='Best products'
-              description='Order trend of the top five, and your products ranked by orders'
+              description='Ranked by the orders that include each product. An order with several products counts once for each.'
               icon={<PackageSearch />}
               emptyText='No product orders in this period.'
               // The card is built around stores; a product fits the same shape.
@@ -146,7 +146,7 @@ export function InsightsSection({
               }
               detail={(s) => {
                 const p = data.products?.find((x) => x.id === s.client_id)
-                return [p?.sku, p ? `${p.units.toLocaleString()} units` : null, `${share(s.delivered, s.orders)} delivered`]
+                return [p ? `${p.units.toLocaleString()} ${p.units === 1 ? 'unit' : 'units'}` : null, p?.sku, `${share(s.delivered, s.orders)} delivered`]
                   .filter(Boolean)
                   .join(' · ')
               }}
