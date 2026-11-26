@@ -36,6 +36,15 @@ const TONES = {
   rose: { fill: 'bg-rose-600', badge: 'bg-rose-800' },
   fuchsia: { fill: 'bg-fuchsia-700', badge: 'bg-fuchsia-900' },
   sky: { fill: 'bg-sky-700', badge: 'bg-sky-900' },
+  // Extra fills for status rows (client portal shipment tiles). White text
+  // clears AA on each: slate-600 7.6, indigo-600 6.3, red-700 6.5,
+  // amber-700 5.0, yellow-800 6.2, zinc-600 7.7.
+  slate: { fill: 'bg-slate-600', badge: 'bg-slate-800' },
+  indigo: { fill: 'bg-indigo-600', badge: 'bg-indigo-800' },
+  red: { fill: 'bg-red-700', badge: 'bg-red-900' },
+  amber: { fill: 'bg-amber-700', badge: 'bg-amber-900' },
+  yellow: { fill: 'bg-yellow-800', badge: 'bg-yellow-950' },
+  zinc: { fill: 'bg-zinc-600', badge: 'bg-zinc-800' },
 } as const
 
 export type StatCardTone = keyof typeof TONES
@@ -82,6 +91,10 @@ type StatCardProps = {
   /** Small trailing qualifier, e.g. `/ 1.2K`. */
   sub?: string
   tone: StatCardTone
+  /** Turns the card into a button. Ignored when `href` is set. */
+  onClick?: () => void
+  /** Highlights the card, e.g. as the filter currently applied. */
+  active?: boolean
   /** Distinguishes one dashboard band from the next. Defaults to `blobs`. */
   texture?: StatCardTexture
   hint?: string
@@ -96,11 +109,14 @@ export function StatCard({
   pre,
   sub,
   tone,
+  onClick,
+  active,
   texture = 'blobs',
   hint,
   href,
 }: StatCardProps) {
   const { fill, badge } = TONES[tone]
+  const interactive = !!(href || onClick)
   const pattern = TEXTURES[texture]
 
   const surface = (
@@ -108,7 +124,8 @@ export function StatCard({
       className={cn(
         'relative overflow-hidden rounded-xl px-3 pb-2.5 pt-3.5 transition-shadow',
         fill,
-        href && 'group-hover:shadow-lg'
+        interactive && 'group-hover:shadow-lg',
+        active && 'ring-2 ring-white/80 ring-offset-2 ring-offset-background'
       )}
     >
       {/* Decoration — purely atmospheric, hidden from assistive tech. */}
@@ -149,11 +166,20 @@ export function StatCard({
   // Outer wrapper stays unclipped so the badge can overhang; the inner surface
   // clips the decorative blobs.
   const card = (
-    <div className={cn('relative pt-2.5 pe-2', href && 'group')}>
+    <div className={cn('relative pt-2.5 pe-2', interactive && 'group')}>
       {href ? (
         <Link href={href} aria-label={label}>
           {surface}
         </Link>
+      ) : onClick ? (
+        <button
+          type='button'
+          onClick={onClick}
+          aria-pressed={active}
+          className='block w-full cursor-pointer rounded-xl text-start focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
+        >
+          {surface}
+        </button>
       ) : (
         surface
       )}

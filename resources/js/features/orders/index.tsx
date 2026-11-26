@@ -109,6 +109,7 @@ export function Orders() {
           <ShipmentStatusCards
             statistics={stats}
             loading={statsLoading}
+            activeStatus={filters.shipment_status?.length === 1 ? filters.shipment_status[0] : null}
             onStatusClick={(status) => {
               updateFilters({ shipment_status: [status], has_shipment: true, page: 1 })
             }}
