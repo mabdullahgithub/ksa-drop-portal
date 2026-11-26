@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { toast } from 'sonner'
-import { Search as SearchIcon, CheckCircle, Clock, Plus, Lock, Pencil, Trash2, ArrowUpDown, ArrowUp, ArrowDown, PackageX, ImageOff, X, ChevronLeft, ChevronRight, Hourglass } from 'lucide-react'
+import { Search as SearchIcon, CheckCircle, Clock, Plus, Lock, ArrowUpDown, ArrowUp, ArrowDown, PackageX, ImageOff, X, ChevronLeft, ChevronRight, Hourglass } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -20,13 +20,6 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
-import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -36,7 +29,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { DotsHorizontalIcon } from '@radix-ui/react-icons'
 import { Header } from '@/components/layout/header'
 import { NotificationsDropdown } from '@/components/layout/notifications-dropdown'
 import { Main } from '@/components/layout/main'
@@ -48,8 +40,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { usePortalInventory, usePortalInventoryMutations, usePortalInventoryRequests } from '@/hooks/usePortal'
 import { PortalProductFormDialog } from './portal-product-form-dialog'
 import { PortalRequestsTab } from './portal-requests-tab'
+import { PortalProductViewDialog } from './portal-product-view-dialog'
 import type { PortalInventoryProduct } from '@/types/client'
 import { EmptyState } from '@/components/empty-state'
+import { Pagination } from '@/components/data-table'
 
 type PortalProduct = PortalInventoryProduct
 
@@ -79,6 +73,7 @@ export function PortalInventory() {
   const [formOpen, setFormOpen] = useState(false)
   const [editingProduct, setEditingProduct] = useState<PortalProduct | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<PortalProduct | null>(null)
+  const [viewProduct, setViewProduct] = useState<PortalProduct | null>(null)
   const [galleryProduct, setGalleryProduct] = useState<PortalProduct | null>(null)
   const [galleryIndex, setGalleryIndex] = useState(0)
 
@@ -248,7 +243,7 @@ export function PortalInventory() {
                       Added<SortIcon field='created_at' />
                     </button>
                   </TableHead>
-                  <TableHead className='w-10' />
+                  <TableHead className='text-right'>Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -285,7 +280,6 @@ export function PortalInventory() {
                   </TableRow>
                 ) : (
                   (products as PortalProduct[]).map((product) => {
-                    const isVerified = product.verification_status === 'verified'
                     // What this product has waiting on the team's approval.
                     const stockRequest = product.pending_requests?.find((request) => request.type === 'stock')
                     const stockChange = stockRequest
@@ -317,7 +311,15 @@ export function PortalInventory() {
                             {product.product_code}
                           </code>
                         </TableCell>
-                        <TableCell className='font-medium'>{product.name}</TableCell>
+                        <TableCell className='font-medium'>
+                          <button
+                            type='button'
+                            onClick={() => setViewProduct(product)}
+                            className='text-left hover:text-primary hover:underline'
+                          >
+                            {product.name}
+                          </button>
+                        </TableCell>
                         <TableCell className='text-sm text-muted-foreground'>
                           {product.sku || '—'}
                         </TableCell>
@@ -380,38 +382,27 @@ export function PortalInventory() {
                           {new Date(product.created_at).toLocaleDateString()}
                         </TableCell>
                         <TableCell>
-                          {/* A verified product is edited too: the change
-                              is sent for approval. Only removing one is not
-                              the client's to do. */}
-                          <DropdownMenu modal={false}>
-                            <DropdownMenuTrigger asChild>
-                              <Button
-                                variant='ghost'
-                                className='flex h-8 w-8 p-0 data-[state=open]:bg-muted'
-                                disabled={mutating}
-                              >
-                                <DotsHorizontalIcon className='h-4 w-4' />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align='end' className='w-40'>
-                              <DropdownMenuItem onClick={() => openEdit(product)}>
-                                <Pencil className='mr-2 h-4 w-4' />
-                                Edit
-                              </DropdownMenuItem>
-                              {!isVerified && (
-                                <>
-                                  <DropdownMenuSeparator />
-                                  <DropdownMenuItem
-                                    className='text-destructive'
-                                    onClick={() => setDeleteTarget(product)}
-                                  >
-                                    <Trash2 className='mr-2 h-4 w-4' />
-                                    Delete
-                                  </DropdownMenuItem>
-                                </>
-                              )}
-                            </DropdownMenuContent>
-                          </DropdownMenu>
+                          <div className='flex items-center justify-end gap-2'>
+                            <Button
+                              variant='outline'
+                              size='sm'
+                              className='h-7 px-2.5 text-xs font-normal'
+                              onClick={() => setViewProduct(product)}
+                            >
+                              View
+                            </Button>
+                            {/* A verified product is edited too: the change
+                                is sent for approval. */}
+                            <Button
+                              variant='outline'
+                              size='sm'
+                              className='h-7 px-2.5 text-xs font-normal'
+                              onClick={() => openEdit(product)}
+                              disabled={mutating}
+                            >
+                              Edit
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     )
@@ -421,15 +412,25 @@ export function PortalInventory() {
             </Table>
           </div>
 
-          {meta && meta.total > 0 && (
-            <div className='text-sm text-muted-foreground'>
-              Showing {meta.from} to {meta.to} of {meta.total} products
-            </div>
+          {meta && (
+            <Pagination
+              meta={meta}
+              onPageChange={(page) => updateFilters({ page })}
+              onPageSizeChange={(per_page) => updateFilters({ per_page, page: 1 })}
+              disabled={loading}
+            />
           )}
         </div>
           </TabsContent>
         </Tabs>
       </Main>
+
+      <PortalProductViewDialog
+        product={viewProduct}
+        onOpenChange={(open) => { if (!open) setViewProduct(null) }}
+        onEdit={openEdit}
+        onDelete={setDeleteTarget}
+      />
 
       <PortalProductFormDialog
         product={editingProduct}

@@ -21,8 +21,11 @@ class PortalInventoryRequestController extends Controller
 {
     use ResolvesPortalClient;
 
-    /** Requests per page. */
+    /** Requests per page unless the client picks another of the shared page sizes. */
     private const PER_PAGE = 20;
+
+    /** The page sizes the shared pagination control offers. */
+    private const PAGE_SIZES = [10, 20, 30, 50, 100];
 
     public function index(Request $request): JsonResponse
     {
@@ -31,6 +34,7 @@ class PortalInventoryRequestController extends Controller
         $validated = $request->validate([
             'status' => ['nullable', Rule::in([...InventoryRequest::STATUSES, 'all'])],
             'page' => 'nullable|integer|min:1',
+            'per_page' => ['nullable', 'integer', Rule::in(self::PAGE_SIZES)],
         ]);
 
         $status = $validated['status'] ?? 'all';
@@ -39,7 +43,7 @@ class PortalInventoryRequestController extends Controller
             ->with(InventoryRequestPresenter::relations())
             ->when($status !== 'all', fn ($query) => $query->where('status', $status))
             ->latest('id')
-            ->paginate(self::PER_PAGE)
+            ->paginate((int) ($validated['per_page'] ?? self::PER_PAGE))
             ->through(fn (InventoryRequest $inventoryRequest) => InventoryRequestPresenter::request($inventoryRequest, forTeam: false));
 
         return response()->json($requests->toArray() + [

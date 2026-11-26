@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { format, parseISO } from 'date-fns'
 import { toast } from 'sonner'
-import { ArrowRight, Ban, CheckCircle, ChevronLeft, ChevronRight, Clock, XCircle } from 'lucide-react'
+import { ArrowRight, Ban, CheckCircle, Clock, XCircle } from 'lucide-react'
+import { Pagination } from '@/components/data-table'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -101,7 +102,7 @@ type Props = {
  * what the team decided.
  */
 export function PortalRequestsTab({ queue, onChanged }: Props) {
-  const { requests, meta, loading, status, setStatus, setPage, refresh, cancel } = queue
+  const { requests, meta, loading, status, setStatus, setPage, setPerPage, refresh, cancel } = queue
   const [cancelTarget, setCancelTarget] = useState<InventoryRequest | null>(null)
   const [cancelling, setCancelling] = useState(false)
 
@@ -221,18 +222,13 @@ export function PortalRequestsTab({ queue, onChanged }: Props) {
         </Table>
       </div>
 
-      {meta && meta.last_page > 1 && (
-        <div className='flex items-center justify-end gap-2 text-sm text-muted-foreground'>
-          <Button variant='outline' size='icon' className='h-8 w-8' disabled={meta.current_page <= 1} onClick={() => setPage(meta.current_page - 1)} aria-label='Previous page'>
-            <ChevronLeft className='h-4 w-4' />
-          </Button>
-          <span>
-            Page {meta.current_page} of {meta.last_page}
-          </span>
-          <Button variant='outline' size='icon' className='h-8 w-8' disabled={meta.current_page >= meta.last_page} onClick={() => setPage(meta.current_page + 1)} aria-label='Next page'>
-            <ChevronRight className='h-4 w-4' />
-          </Button>
-        </div>
+      {meta && (
+        <Pagination
+          meta={meta}
+          onPageChange={setPage}
+          onPageSizeChange={setPerPage}
+          disabled={loading}
+        />
       )}
 
       <ConfirmDialog

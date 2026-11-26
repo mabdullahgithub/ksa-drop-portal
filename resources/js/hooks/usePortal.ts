@@ -392,26 +392,41 @@ export function usePortalInventoryRequests(enabled: boolean) {
   const [pending, setPending] = useState(0)
   const [status, setStatus] = useState('all')
   const [page, setPage] = useState(1)
-  const [meta, setMeta] = useState<{ current_page: number; last_page: number; total: number } | null>(null)
+  const [perPage, setPerPage] = useState(20)
+  const [meta, setMeta] = useState<{
+    current_page: number
+    last_page: number
+    per_page: number
+    total: number
+    from: number | null
+    to: number | null
+  } | null>(null)
   const [loading, setLoading] = useState(false)
 
   const load = useCallback(async () => {
     if (!enabled) return
     setLoading(true)
     try {
-      const params = new URLSearchParams({ status, page: String(page) })
+      const params = new URLSearchParams({ status, page: String(page), per_page: String(perPage) })
       const response = await fetch(`/portal/api/inventory/requests?${params}`, { headers: { Accept: 'application/json' } })
       if (!response.ok) throw new Error('Failed')
       const data = await response.json()
       setRequests(data.data)
       setPending(data.pending)
-      setMeta({ current_page: data.current_page, last_page: data.last_page, total: data.total })
+      setMeta({
+        current_page: data.current_page,
+        last_page: data.last_page,
+        per_page: data.per_page,
+        total: data.total,
+        from: data.from,
+        to: data.to,
+      })
     } catch (error) {
       console.error('Error fetching inventory requests:', error)
     } finally {
       setLoading(false)
     }
-  }, [enabled, status, page])
+  }, [enabled, status, page, perPage])
 
   useEffect(() => { load() }, [load])
 
@@ -443,6 +458,7 @@ export function usePortalInventoryRequests(enabled: boolean) {
     status,
     setStatus: (value: string) => { setStatus(value); setPage(1) },
     setPage,
+    setPerPage: (value: number) => { setPerPage(value); setPage(1) },
     refresh: load,
     cancel,
   }
