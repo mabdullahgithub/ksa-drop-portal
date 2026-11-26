@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\ClientController;
 use App\Http\Controllers\Api\ClientPaymentController;
 use App\Http\Controllers\Api\ConnectorSettingsController;
 use App\Http\Controllers\Api\DashboardInsightsController;
+use App\Http\Controllers\Api\TourController;
 use App\Http\Controllers\Api\ImileWebhookController;
 use App\Http\Controllers\Api\InventoryRequestController;
 use App\Http\Controllers\Api\LogesTechsController;
@@ -439,6 +440,12 @@ Route::middleware(['auth', 'verified', 'client.access'])->group(function () {
     Route::post('/api/notifications/{id}/read', [NotificationController::class, 'markAsRead'])->name('api.notifications.read');
     Route::post('/api/notifications/read-all', [NotificationController::class, 'markAllAsRead'])->name('api.notifications.read-all');
     Route::delete('/api/notifications/{id}', [NotificationController::class, 'destroy'])->name('api.notifications.destroy');
+
+    // Product tours: remember on the account that a tour was taken.
+    Route::post('/api/tours/{tour}/seen', [TourController::class, 'seen'])
+        ->where('tour', '[A-Za-z0-9_.:-]{1,64}')
+        ->middleware('throttle:30,1')
+        ->name('api.tours.seen');
 });
 
 // Shopify OAuth callback — must live at the redirect_uri path (not under /portal).

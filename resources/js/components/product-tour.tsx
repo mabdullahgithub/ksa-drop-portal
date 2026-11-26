@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { usePage } from '@inertiajs/react'
 import { Button } from '@/components/ui/button'
 
 /**
@@ -163,12 +164,20 @@ export function ProductTour({ steps, open, onClose }: Props) {
 }
 
 /**
- * Whether a tour has been seen, remembered per user and per tour version, so
- * bumping the version shows it again after the page changes.
+ * Whether the signed-in person has taken a tour, per tour version, so bumping
+ * the version shows it again after the page changes.
+ *
+ * Saved on the account (`users.tours_seen`), so it auto-shows once per
+ * person, not once per browser. Local storage is a fast first answer and the
+ * fallback when the save fails.
  */
-export function useTourSeen(key: string) {
-  const storageKey = `tour_seen:${key}`
-  const [seen, setSeen] = useState(() => {
+export function useTourSeen(tour: string) {
+  const { auth } = usePage().props as { auth?: { user?: { id?: number; tours_seen?: string[] | null } } }
+  const user = auth?.user
+  const storageKey = `tour_seen:${tour}:${user?.id ?? 'guest'}`
+  const onAccount = !!user?.tours_seen?.includes(tour)
+
+  const [seenHere, setSeenHere] = useState(() => {
     if (typeof window === 'undefined') return true
     try {
       return localStorage.getItem(storageKey) === '1'
@@ -176,15 +185,31 @@ export function useTourSeen(key: string) {
       return true
     }
   })
+  const seen = onAccount || seenHere
+
+  // Taken in this browser before the account kept track: record it there too.
+  useEffect(() => {
+    if (user && seenHere && !onAccount) save(tour)
+  }, [user, seenHere, onAccount, tour])
 
   const markSeen = useCallback(() => {
     try {
       localStorage.setItem(storageKey, '1')
     } catch {
-      // Storage unavailable: the tour simply shows again next time.
+      // Storage unavailable: the account still remembers.
     }
-    setSeen(true)
-  }, [storageKey])
+    setSeenHere(true)
+    if (user && !onAccount) save(tour)
+  }, [storageKey, user, onAccount, tour])
 
   return { seen, markSeen }
+}
+
+/** Fire and forget: a failed save only means the tour may show once more. */
+function save(tour: string) {
+  const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') ?? ''
+  fetch(`/api/tours/${encodeURIComponent(tour)}/seen`, {
+    method: 'POST',
+    headers: { Accept: 'application/json', 'X-CSRF-TOKEN': token },
+  }).catch(() => {})
 }

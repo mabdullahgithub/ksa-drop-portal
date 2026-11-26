@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useState } from 'react'
-import { usePage } from '@inertiajs/react'
 import { toast } from 'sonner'
 import { Search as SearchIcon, CheckCircle, Clock, Plus, Lock, ArrowUpDown, ArrowUp, ArrowDown, PackageX, ImageOff, X, ChevronLeft, ChevronRight, Hourglass, LayoutGrid, List, Compass } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
@@ -135,8 +134,7 @@ export function PortalInventory() {
   }
 
   // A first visit after this page changed walks the client through it.
-  const { auth } = usePage().props as { auth?: { user?: { id?: number } } }
-  const tour = useTourSeen(`${TOUR_VERSION}:${auth?.user?.id ?? 'guest'}`)
+  const tour = useTourSeen(TOUR_VERSION)
   const [tourOpen, setTourOpen] = useState(false)
   const closeTour = useCallback(() => {
     setTourOpen(false)
