@@ -161,6 +161,7 @@ export const sidebarData: SidebarData = {
           icon: Truck,
           role: 'client',
           newTab: true,
+          pinned: true,
         },
         {
           title: 'My Inventory',

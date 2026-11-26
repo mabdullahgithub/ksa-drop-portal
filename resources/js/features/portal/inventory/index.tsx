@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
+import { usePage } from '@inertiajs/react'
 import { toast } from 'sonner'
-import { Search as SearchIcon, CheckCircle, Clock, Plus, Lock, ArrowUpDown, ArrowUp, ArrowDown, PackageX, ImageOff, X, ChevronLeft, ChevronRight, Hourglass, LayoutGrid, List } from 'lucide-react'
+import { Search as SearchIcon, CheckCircle, Clock, Plus, Lock, ArrowUpDown, ArrowUp, ArrowDown, PackageX, ImageOff, X, ChevronLeft, ChevronRight, Hourglass, LayoutGrid, List, Compass } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -45,8 +46,47 @@ import { PortalInventoryCardView } from './portal-inventory-card-view'
 import type { PortalInventoryProduct } from '@/types/client'
 import { EmptyState } from '@/components/empty-state'
 import { Pagination } from '@/components/data-table'
+import { ProductTour, useTourSeen, type TourStep } from '@/components/product-tour'
 
 type PortalProduct = PortalInventoryProduct
+
+/** Bump the version when the page changes enough to show the tour again. */
+const TOUR_VERSION = 'portal-inventory-v1'
+
+const VIEW_MODE_KEY = 'portal_inventory_view_mode'
+
+const TOUR_STEPS: TourStep[] = [
+  {
+    target: 'view-toggle',
+    title: 'List or card view',
+    body: 'Switch between a detailed list and a picture grid of your products, whichever suits you.',
+  },
+  {
+    target: 'view-button',
+    title: 'View a product',
+    body: 'Open the full details of a product: all its images, stock, price, status and anything waiting for approval.',
+  },
+  {
+    target: 'edit-button',
+    title: 'Edit a product',
+    body: 'Update your product. Changes to the stock of a verified product are sent to our team for approval first.',
+  },
+  {
+    target: 'pagination',
+    title: 'Move through your products',
+    body: 'Choose how many products to show per page and jump to any page.',
+  },
+  {
+    target: 'requests-tab',
+    title: 'Track your requests',
+    body: 'See every change you asked for on verified products and what our team decided. You can cancel one that is still waiting.',
+  },
+  {
+    target: 'tour-button',
+    title: 'Need a refresher?',
+    body: 'Take this tour again any time from here.',
+  },
+]
 
 type SortField = 'product_code' | 'quantity' | 'created_at'
 type SortOrder = 'asc' | 'desc'
@@ -77,7 +117,42 @@ export function PortalInventory() {
   const [viewProduct, setViewProduct] = useState<PortalProduct | null>(null)
   const [galleryProduct, setGalleryProduct] = useState<PortalProduct | null>(null)
   const [galleryIndex, setGalleryIndex] = useState(0)
-  const [viewMode, setViewMode] = useState<'table' | 'card'>('table')
+  // The list/card choice survives a refresh.
+  const [viewMode, setViewModeState] = useState<'table' | 'card'>(() => {
+    try {
+      return localStorage.getItem(VIEW_MODE_KEY) === 'card' ? 'card' : 'table'
+    } catch {
+      return 'table'
+    }
+  })
+  const setViewMode = (mode: 'table' | 'card') => {
+    setViewModeState(mode)
+    try {
+      localStorage.setItem(VIEW_MODE_KEY, mode)
+    } catch {
+      // Storage unavailable: the choice lasts until the page is left.
+    }
+  }
+
+  // A first visit after this page changed walks the client through it.
+  const { auth } = usePage().props as { auth?: { user?: { id?: number } } }
+  const tour = useTourSeen(`${TOUR_VERSION}:${auth?.user?.id ?? 'guest'}`)
+  const [tourOpen, setTourOpen] = useState(false)
+  const closeTour = useCallback(() => {
+    setTourOpen(false)
+    tour.markSeen()
+  }, [tour.markSeen])
+  const startTour = () => {
+    setTab('products')
+    setTourOpen(true)
+  }
+
+  useEffect(() => {
+    if (tour.seen || loading || tab !== 'products') return
+    // Let the list settle so every step has something to point at.
+    const timer = window.setTimeout(() => setTourOpen(true), 600)
+    return () => window.clearTimeout(timer)
+  }, [tour.seen, loading, tab])
 
   const openGallery = (product: PortalProduct) => {
     if (product.images.length === 0) return
@@ -144,7 +219,7 @@ export function PortalInventory() {
       description='Add your first product to request warehouse intake.'
       action={
         <Button variant='outline' size='sm' onClick={openAdd}>
-          <Plus className='mr-2 h-4 w-4' />
+          <Plus className='h-4 w-4' />
           Add Product
         </Button>
       }
@@ -166,16 +241,22 @@ export function PortalInventory() {
             <h1 className='text-2xl font-bold tracking-tight'>My Inventory</h1>
             <p className='text-muted-foreground'>Manage your products and track verification status</p>
           </div>
-          <Button onClick={openAdd}>
-            <Plus className='mr-2 h-4 w-4' />
-            Add Product
-          </Button>
+          <div className='flex items-center gap-2'>
+            <Button variant='outline' onClick={startTour} data-tour='tour-button'>
+              <Compass className='h-4 w-4' />
+              Take a tour
+            </Button>
+            <Button onClick={openAdd}>
+              <Plus className='h-4 w-4' />
+              Add Product
+            </Button>
+          </div>
         </div>
 
         <Tabs value={tab} onValueChange={setTab} className='gap-4'>
           <TabsList className='w-fit'>
             <TabsTrigger value='products'>Products</TabsTrigger>
-            <TabsTrigger value='requests' className='gap-1.5'>
+            <TabsTrigger value='requests' className='gap-1.5' data-tour='requests-tab'>
               Requests
               {requestQueue.pending > 0 && (
                 <Badge variant='secondary' className='px-1.5 text-[10px]'>
@@ -238,7 +319,7 @@ export function PortalInventory() {
             </Select>
 
             {/* View mode toggle */}
-            <div className='ml-auto flex shrink-0 items-center overflow-hidden rounded-md border border-muted/70'>
+            <div data-tour='view-toggle' className='ml-auto flex shrink-0 items-center overflow-hidden rounded-md border border-muted/70'>
               <Button
                 variant={viewMode === 'table' ? 'secondary' : 'ghost'}
                 size='sm'
@@ -315,7 +396,7 @@ export function PortalInventory() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  (products as PortalProduct[]).map((product) => {
+                  (products as PortalProduct[]).map((product, index) => {
                     // What this product has waiting on the team's approval.
                     const stockRequest = product.pending_requests?.find((request) => request.type === 'stock')
                     const stockChange = stockRequest
@@ -424,6 +505,7 @@ export function PortalInventory() {
                               size='sm'
                               className='h-7 px-2.5 text-xs font-normal'
                               onClick={() => setViewProduct(product)}
+                              data-tour={index === 0 ? 'view-button' : undefined}
                             >
                               View
                             </Button>
@@ -435,6 +517,7 @@ export function PortalInventory() {
                               className='h-7 px-2.5 text-xs font-normal'
                               onClick={() => openEdit(product)}
                               disabled={mutating}
+                              data-tour={index === 0 ? 'edit-button' : undefined}
                             >
                               Edit
                             </Button>
@@ -450,17 +533,21 @@ export function PortalInventory() {
           )}
 
           {meta && (
-            <Pagination
-              meta={meta}
-              onPageChange={(page) => updateFilters({ page })}
-              onPageSizeChange={(per_page) => updateFilters({ per_page, page: 1 })}
-              disabled={loading}
-            />
+            <div data-tour='pagination'>
+              <Pagination
+                meta={meta}
+                onPageChange={(page) => updateFilters({ page })}
+                onPageSizeChange={(per_page) => updateFilters({ per_page, page: 1 })}
+                disabled={loading}
+              />
+            </div>
           )}
         </div>
           </TabsContent>
         </Tabs>
       </Main>
+
+      <ProductTour steps={TOUR_STEPS} open={tourOpen} onClose={closeTour} />
 
       <PortalProductViewDialog
         product={viewProduct}

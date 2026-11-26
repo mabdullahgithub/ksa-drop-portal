@@ -66,7 +66,7 @@ export function PortalInventoryCardView({ products, loading, empty, disabled, on
 
   return (
     <div className='grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5'>
-      {products.map((product) => {
+      {products.map((product, index) => {
         const stockRequest = product.pending_requests?.find((request) => request.type === 'stock')
         const stockChange = stockRequest
           ? (stockRequest.requested_quantity ?? 0) - (stockRequest.stock_at_request ?? 0)
@@ -132,6 +132,7 @@ export function PortalInventoryCardView({ products, loading, empty, disabled, on
                   size='sm'
                   className='h-7 flex-1 px-2.5 text-xs font-normal'
                   onClick={() => onView(product)}
+                  data-tour={index === 0 ? 'view-button' : undefined}
                 >
                   View
                 </Button>
@@ -141,6 +142,7 @@ export function PortalInventoryCardView({ products, loading, empty, disabled, on
                   className='h-7 flex-1 px-2.5 text-xs font-normal'
                   onClick={() => onEdit(product)}
                   disabled={disabled}
+                  data-tour={index === 0 ? 'edit-button' : undefined}
                 >
                   Edit
                 </Button>
