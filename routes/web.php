@@ -466,6 +466,7 @@ Route::prefix('portal')->middleware(['auth', 'verified', 'role:client', 'client.
 
     // Portal API
     Route::get('/api/dashboard', [PortalController::class, 'dashboard'])->name('portal.api.dashboard');
+    Route::get('/api/dashboard/insights', [DashboardInsightsController::class, 'portal'])->name('portal.api.dashboard.insights');
     Route::get('/api/orders', [PortalController::class, 'orders'])->name('portal.api.orders');
     Route::post('/api/orders/import', [PortalController::class, 'importOrders'])->name('portal.api.orders.import');
     Route::post('/api/orders', [PortalController::class, 'storeOrder'])->name('portal.api.orders.store');

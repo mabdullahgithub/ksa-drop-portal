@@ -1,4 +1,6 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react'
+import axios from 'axios'
+import { toast } from 'sonner'
 import { Download, Upload, CheckCircle2, AlertCircle, FileSpreadsheet, X, Package, DollarSign, Clock, TruckIcon, Copy, XCircle, ShoppingBag, PlusCircle, MessageSquare, HelpCircle, ChevronsUpDown, Check, Plus, Trash2 } from 'lucide-react'
 import {
   flexRender,
@@ -1197,6 +1199,27 @@ export function PortalOrders() {
     setSelectedOrder(order)
     setDetailsDialogOpen(true)
   }
+
+  // `/portal/orders?order=1042` opens that order's details straight away —
+  // the dashboard's Recent orders links land here. Once only, so closing the
+  // dialog does not reopen it while the param is still in the URL.
+  const deepLinkHandled = useRef(false)
+  useEffect(() => {
+    if (deepLinkHandled.current) return
+    const orderNumber = new URLSearchParams(window.location.search).get('order')
+    if (!orderNumber) return
+    deepLinkHandled.current = true
+
+    axios
+      .get('/portal/api/orders', { params: { search: orderNumber, per_page: 5 } })
+      .then((res) => {
+        // `search` is a LIKE across several columns: match the exact number.
+        const match = (res.data?.data ?? []).find((o: any) => String(o.order_number) === orderNumber)
+        if (match) handleViewOrder(match)
+        else toast.error(`Order ${orderNumber} not found`)
+      })
+      .catch(() => toast.error(`Could not open order ${orderNumber}`))
+  }, [])
 
   const { orders, meta, loading, filters, updateFilters, refresh } = usePortalOrders({
     per_page: DEFAULT_PAGE_SIZE,

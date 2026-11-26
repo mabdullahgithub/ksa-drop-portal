@@ -50,12 +50,19 @@ export interface DashboardInsights {
 
 const EMPTY: DashboardInsights = { cities: null, couriers: null, rhythm: null, stores: null }
 
-export function useDashboardInsights(range: InsightRange) {
+/**
+ * `portal` reads the client portal's endpoint: the signed-in client's own
+ * orders: city heatmap and order rhythm only (no courier or store ranking),
+ * no staff permissions involved.
+ */
+export function useDashboardInsights(range: InsightRange, scope: 'admin' | 'portal' = 'admin') {
   const { can } = usePermissions()
-  const canCities = can('view dashboard city heatmap')
-  const canCouriers = can('view dashboard courier ranking')
-  const canRhythm = can('view dashboard order rhythm')
-  const canStores = can('view dashboard store ranking')
+  const portal = scope === 'portal'
+  const canCities = portal || can('view dashboard city heatmap')
+  const canCouriers = !portal && can('view dashboard courier ranking')
+  const canRhythm = portal || can('view dashboard order rhythm')
+  const canStores = !portal && can('view dashboard store ranking')
+  const endpoint = portal ? '/portal/api/dashboard/insights' : '/api/orders/dashboard-insights'
   const enabled = canCities || canCouriers || canRhythm || canStores
 
   const [data, setData] = useState<DashboardInsights>(EMPTY)
@@ -67,7 +74,7 @@ export function useDashboardInsights(range: InsightRange) {
     const controller = new AbortController()
     setLoading(true)
 
-    fetch(`/api/orders/dashboard-insights?range=${range}`, {
+    fetch(`${endpoint}?range=${range}`, {
       headers: { Accept: 'application/json' },
       signal: controller.signal,
     })
@@ -88,7 +95,7 @@ export function useDashboardInsights(range: InsightRange) {
       })
 
     return () => controller.abort()
-  }, [range, enabled])
+  }, [range, enabled, endpoint])
 
   return { data, loading, canCities, canCouriers, canRhythm, canStores }
 }

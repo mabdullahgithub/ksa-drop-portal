@@ -31,9 +31,19 @@ const RANGES: Array<{ value: InsightRange; label: string }> = [
  * stores — over one shared period. Each chart is its own permission; the section is absent when
  * the person holds none of them.
  */
-export function InsightsSection() {
+export function InsightsSection({
+  scope = 'admin',
+  rhythmSide,
+}: {
+  scope?: 'admin' | 'portal'
+  /**
+   * Portal only: a panel to the left of the rhythm card, at 1 : 3 of the
+   * row's width.
+   */
+  rhythmSide?: React.ReactNode
+}) {
   const [range, setRange] = useState<InsightRange>(0)
-  const { data, loading, canCities, canCouriers, canRhythm, canStores } = useDashboardInsights(range)
+  const { data, loading, canCities, canCouriers, canRhythm, canStores } = useDashboardInsights(range, scope)
   const { can } = usePermissions()
 
   if (!canCities && !canCouriers && !canRhythm && !canStores) return null
@@ -45,7 +55,11 @@ export function InsightsSection() {
       <div className='mb-3 flex flex-wrap items-end justify-between gap-3'>
         <div>
           <h2 className='text-sm font-semibold tracking-tight'>Insights</h2>
-          <p className='text-xs text-muted-foreground'>Where orders go, who delivers them and which stores sell most</p>
+          <p className='text-xs text-muted-foreground'>
+            {scope === 'portal'
+              ? 'Where your orders go and when your customers order'
+              : 'Where orders go, who delivers them and which stores sell most'}
+          </p>
         </div>
 
         <div role='radiogroup' aria-label='Period' className='inline-flex rounded-lg border bg-muted/60 p-0.5'>
@@ -76,7 +90,18 @@ export function InsightsSection() {
           </Suspense>
         )}
 
-        {(canCouriers || canRhythm) && (
+        {scope === 'portal' && canRhythm && (
+          <div className={cn('grid gap-4', rhythmSide && 'lg:grid-cols-4')}>
+            {rhythmSide && <div className='min-w-0'>{rhythmSide}</div>}
+            <div className={cn('min-w-0', rhythmSide && 'lg:col-span-3')}>
+              <Suspense fallback={<OrderRhythmFallback />}>
+                <OrderRhythm rhythm={data.rhythm} loading={loading} />
+              </Suspense>
+            </div>
+          </div>
+        )}
+
+        {scope === 'admin' && (canCouriers || canRhythm) && (
           <div className={cn('grid gap-4', canCouriers && canRhythm && 'xl:grid-cols-2')}>
             {canCouriers && (
               <Suspense fallback={<CourierRankingFallback />}>

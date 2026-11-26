@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Http\Concerns\ResolvesPortalClient;
 use App\Http\Controllers\Controller;
 use App\Models\Order;
 use App\Models\Shipment;
@@ -20,9 +21,18 @@ use Illuminate\Support\Facades\DB;
  *
  * Every query goes through the Order / Shipment models, so the client-access
  * scope applies: a person limited to two clients sees only their orders here.
+ *
+ * The client portal reuses the same charts through portal(), pinned to the
+ * signed-in client's own orders: no store ranking (it is one store) and no
+ * courier ranking (couriers are not shown to clients).
  */
 class DashboardInsightsController extends Controller
 {
+    use ResolvesPortalClient;
+
+    /** Set by portal(): every query is limited to this client's orders. */
+    private ?int $clientId = null;
+
     /** Period choices in days; 0 is "all time". */
     private const RANGES = [7, 30, 90, 0];
 
@@ -32,11 +42,7 @@ class DashboardInsightsController extends Controller
 
     public function __invoke(Request $request, CityDirectory $cities): JsonResponse
     {
-        $request->validate(['range' => ['nullable', 'integer', 'in:' . implode(',', self::RANGES)]]);
-
-        $days = (int) $request->input('range', 0);
-        // Days are business days (Riyadh), whatever the server clock says.
-        $from = $days > 0 ? $this->today()->subDays($days - 1)->utc() : null;
+        [$days, $from] = $this->period($request);
 
         $user = $request->user();
         $revenue = $user->can('view dashboard revenue');
@@ -48,6 +54,37 @@ class DashboardInsightsController extends Controller
             'rhythm' => $user->can('view dashboard order rhythm') ? $this->rhythm($from) : null,
             'stores' => $user->can('view dashboard store ranking') ? $this->stores($from, $days, $revenue) : null,
         ]);
+    }
+
+    /**
+     * Client portal: cities and rhythm for the signed-in client's
+     * own orders. Money is the client's own, so revenue is always included.
+     */
+    public function portal(Request $request, CityDirectory $cities): JsonResponse
+    {
+        $client = $this->resolveClient();
+        abort_unless($client, 403);
+
+        [$days, $from] = $this->period($request);
+        $this->clientId = $client->id;
+
+        return response()->json([
+            'range' => $days,
+            'cities' => $this->cities($cities, $from, true),
+            'couriers' => null,
+            'rhythm' => $this->rhythm($from),
+            'stores' => null,
+        ]);
+    }
+
+    /** @return array{0: int, 1: ?Carbon} */
+    private function period(Request $request): array
+    {
+        $request->validate(['range' => ['nullable', 'integer', 'in:' . implode(',', self::RANGES)]]);
+
+        $days = (int) $request->input('range', 0);
+        // Days are business days (Riyadh), whatever the server clock says.
+        return [$days, $days > 0 ? $this->today()->subDays($days - 1)->utc() : null];
     }
 
     /**
@@ -292,7 +329,9 @@ class DashboardInsightsController extends Controller
 
     private function orders(?Carbon $from)
     {
-        return Order::query()->when($from, fn ($q) => $q->where('orders.created_at', '>=', $from));
+        return Order::query()
+            ->when($from, fn ($q) => $q->where('orders.created_at', '>=', $from))
+            ->when($this->clientId, fn ($q) => $q->where('orders.client_id', $this->clientId));
     }
 
     /** SQL for the hours from one datetime column to another, on MySQL and SQLite alike. */
