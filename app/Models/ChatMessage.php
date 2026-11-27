@@ -38,15 +38,20 @@ class ChatMessage extends Model
         'internal',
         'body',
         'shared_items',
+        'origin',
         'meta',
         'client_uuid',
         'edited_at',
     ];
 
+    /** Sensitive (IP, location): never serialised along with the message. */
+    protected $hidden = ['origin'];
+
     protected $casts = [
         'internal' => 'boolean',
         'meta' => 'array',
         'shared_items' => 'array',
+        'origin' => 'array',
         'edited_at' => 'datetime',
     ];
 

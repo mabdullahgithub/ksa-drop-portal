@@ -87,6 +87,7 @@ class ChatMessenger
                     'internal' => $kind === ChatMessage::NOTE,
                     'body' => $body,
                     'shared_items' => $items,
+                    'origin' => $input['origin'] ?? null,
                     'client_uuid' => $input['client_uuid'] ?? null,
                 ]);
                 ChatAttachmentStore::attach($message, $rows);

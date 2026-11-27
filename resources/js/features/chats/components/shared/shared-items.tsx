@@ -140,7 +140,6 @@ export function SharedItemCards({
                 <button
                   type='button'
                   onClick={() => void copy(id)}
-                  title={`Copy ${id}`}
                   className='flex items-center justify-center gap-1.5 py-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground'
                 >
                   <Copy className='size-3' /> Copy ID

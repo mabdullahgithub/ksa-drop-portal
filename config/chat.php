@@ -23,6 +23,13 @@ return [
         'images' => ['image/jpeg', 'image/png', 'image/webp', 'image/gif'],
     ],
 
+    // IP location for message details: DB-IP's free databases, kept on this
+    // server and refreshed by chat:update-geoip.
+    'geoip' => [
+        'directory' => env('CHAT_GEOIP_PATH', storage_path('app/geoip')),
+        'url' => 'https://download.db-ip.com/free/dbip-{database}-lite-{month}.mmdb.gz',
+    ],
+
     // Orders and inventory products a client can attach to one message.
     'max_shared_items' => 5,
 

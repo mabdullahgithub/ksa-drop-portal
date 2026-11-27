@@ -24,5 +24,10 @@ php artisan storage:link
 php artisan optimize:clear
 php artisan optimize
 
+# IP location databases for live chat's message details, fetched in the
+# background so a slow download never delays the start. Skipped while the
+# copies on disk are recent.
+php artisan chat:update-geoip --if-stale &
+
 echo "Starting web server, queue worker and scheduler ..."
 exec supervisord -c /app/deploy/supervisord.conf

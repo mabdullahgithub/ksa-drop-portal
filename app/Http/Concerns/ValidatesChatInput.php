@@ -5,6 +5,7 @@ namespace App\Http\Concerns;
 use App\Models\ChatConversation;
 use App\Models\ChatMessage;
 use App\Services\Chat\ChatAttachmentStore;
+use App\Services\Chat\ChatOrigin;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
@@ -13,6 +14,12 @@ use Illuminate\Validation\Rule;
  */
 trait ValidatesChatInput
 {
+    /** Where this request came from, kept with the message it sends. */
+    private function origin(Request $request): array
+    {
+        return app(ChatOrigin::class)->capture($request);
+    }
+
     /** The orders and products a client attached; ownership is checked by ChatSharedItems. */
     private function sharedItemRules(bool $allowed): array
     {
@@ -45,6 +52,7 @@ trait ValidatesChatInput
             ...ChatAttachmentStore::rules(),
             ...ChatAttachmentStore::voiceRules(),
             ...$this->sharedItemRules($allowItems),
+            'client_info' => ['nullable', 'string', 'max:2000'],
         ]);
         $this->refuseTooManyItems($validated);
 
@@ -57,6 +65,7 @@ trait ValidatesChatInput
             'voice_duration' => isset($validated['voice_duration']) ? (int) $validated['voice_duration'] : null,
             'orders' => $validated['orders'] ?? [],
             'products' => $validated['products'] ?? [],
+            'origin' => $this->origin($request),
         ];
     }
 
@@ -73,9 +82,10 @@ trait ValidatesChatInput
             ...ChatAttachmentStore::rules(),
             // A client's new chat may carry orders and products; the team's may not.
             ...$this->sharedItemRules(! $byTeam),
+            'client_info' => ['nullable', 'string', 'max:2000'],
         ]);
         $this->refuseTooManyItems($validated);
 
-        return $validated + ['files' => $request->file('files', [])];
+        return $validated + ['files' => $request->file('files', []), 'origin' => $this->origin($request)];
     }
 }

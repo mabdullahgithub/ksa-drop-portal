@@ -1,5 +1,6 @@
 import axios from 'axios'
 import { compressImage } from '@/lib/compress-image'
+import { clientInfo } from './client-info'
 import type { ChatConversation, ChatFilterCounts, ChatMessage, ChatOrderOption, ChatPage, ChatSharedItem, ChatSide, VoiceClip } from './types'
 
 /**
@@ -52,6 +53,7 @@ export async function toForm(input: { files?: File[]; clientUuid?: string } & ob
     form.append(key, String(value))
   }
   if (input.clientUuid) form.append('client_uuid', input.clientUuid)
+  form.append('client_info', await clientInfo())
 
   const voice = (input as { voice?: VoiceClip }).voice
   if (voice) {

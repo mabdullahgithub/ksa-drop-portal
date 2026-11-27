@@ -328,6 +328,19 @@ class ChatController extends Controller
         return response()->json(['data' => $this->orderLookup($validated['client_id'], $validated['q'] ?? '')]);
     }
 
+    /**
+     * Where one message was sent from (`view chat message details`). The only
+     * place this leaves the server; the portal has no such endpoint.
+     */
+    public function messageDetails(Request $request, ChatConversation $conversation, int $message): JsonResponse
+    {
+        $this->authorizeSee($request->user(), $conversation);
+
+        $found = $conversation->messages()->findOrFail($message);
+
+        return response()->json(['origin' => $found->origin])->header('Cache-Control', 'no-store, private');
+    }
+
     /** This chat's client's orders, to attach to a message. */
     public function shareOrders(Request $request, ChatConversation $conversation): JsonResponse
     {

@@ -1,9 +1,11 @@
-import { Fragment, useEffect, useLayoutEffect, useRef } from 'react'
+import { Fragment, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { format, isToday, isYesterday } from 'date-fns'
 import { AlertCircle, CheckCheck, Clock, Loader2, Lock, MessageSquareDashed, RotateCw, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
+import { usePermissions } from '@/hooks/use-permissions'
 import { Attachments, EventLine, MessageText } from './chat-bits'
+import { MessageDetails, type MenuPoint } from './message-details'
 import { SharedItemCards } from './shared-items'
 import type { ChatMessage, ChatSide } from '../../types'
 
@@ -47,6 +49,7 @@ export function MessageThread({
   emptyText = 'No messages yet',
   meId,
   clientId,
+  reference,
 }: {
   messages: ChatMessage[]
   side: ChatSide
@@ -64,6 +67,8 @@ export function MessageThread({
   meId: number
   /** The team's side: whose chat this is, for links on shared products. */
   clientId?: number
+  /** The chat's CH- number, for a message's details. */
+  reference?: string
 }) {
   const scroller = useRef<HTMLDivElement>(null)
   const stickToBottom = useRef(true)
@@ -158,6 +163,8 @@ export function MessageThread({
                     last={endsRun(message, messages[index + 1])}
                     own={message.sender?.id === meId}
                     clientId={clientId}
+                    readUpTo={readUpTo}
+                    reference={reference}
                     seen={message.id === seenId}
                     onRetry={onRetry}
                     onDiscard={onDiscard}
@@ -183,13 +190,6 @@ export function MessageThread({
   )
 }
 
-/** A role as people say it: "superadmin" → "Superadmin", "call_agent" → "Call agent". */
-function roleLabel(role: string | null | undefined) {
-  if (!role) return null
-  const text = role.replace(/[_-]+/g, ' ')
-  return text.charAt(0).toUpperCase() + text.slice(1)
-}
-
 function Bubble({
   message,
   side,
@@ -199,10 +199,14 @@ function Bubble({
   own,
   seen,
   clientId,
+  readUpTo,
+  reference,
   onRetry,
   onDiscard,
 }: {
   clientId?: number
+  readUpTo: number
+  reference?: string
   message: ChatMessage
   side: ChatSide
   mine: boolean
@@ -216,7 +220,6 @@ function Bubble({
   const note = message.kind === 'note'
   const onBrand = mine && !note
   const time = message.created_at ? format(new Date(message.created_at), 'h:mm a') : ''
-  const role = side === 'team' && message.sender_type === 'staff' ? roleLabel(message.sender?.role) : null
 
   // A name only where it tells you something, and once per run: a colleague
   // on the team's screen, the support agent on the client's. Never your own,
@@ -224,10 +227,30 @@ function Bubble({
   const writer = !own && message.sender_type === 'staff' ? (message.sender?.name ?? null) : null
   const label = note ? (writer ? `Internal note · ${writer}` : 'Internal note') : writer
 
-  // Everything else about a message is there on hover.
-  const details = [message.sender?.name, role, message.created_at ? format(new Date(message.created_at), 'd MMM yyyy, h:mm a') : null]
-    .filter(Boolean)
-    .join(' · ')
+  // Everything else about a message is behind a right-click; nothing on hover.
+  const [menuAt, setMenuAt] = useState<MenuPoint | null>(null)
+  // The team's only, and only with the permission. A client's right-click is
+  // the browser's own.
+  const { can } = usePermissions()
+  const canInspect = side === 'team' && can('view chat message details')
+  const openDetails = (event: React.MouseEvent) => {
+    if (!canInspect) return
+    // The browser's own menu stays for a link (open in a new tab) and for
+    // selected text (copy it).
+    if ((event.target as HTMLElement).closest('a') || window.getSelection()?.toString()) return
+    event.preventDefault()
+    setMenuAt({ x: event.clientX, y: event.clientY })
+  }
+  const menu = menuAt && (
+    <MessageDetails
+      at={menuAt}
+      message={message}
+      own={own}
+      readUpTo={readUpTo}
+      reference={reference}
+      onClose={() => setMenuAt(null)}
+    />
+  )
   const showSeen = mine && !note && seen
   const showMeta = last || showSeen || !!message.pending
 
@@ -270,7 +293,7 @@ function Bubble({
   const cards = hasItems && (
     <div className={cn('flex flex-col gap-1', note ? 'items-center' : mine ? 'items-end' : 'items-start', first ? 'mt-3' : 'mt-1.5')}>
       <div
-        title={details}
+        onContextMenu={openDetails}
         className={cn(
           'flex w-full max-w-full',
           note ? 'justify-center' : mine ? 'justify-end' : 'justify-start',
@@ -291,7 +314,13 @@ function Bubble({
   )
 
   // Only items: nothing left for a bubble.
-  if (hasItems && !hasBubble) return <>{cards}</>
+  if (hasItems && !hasBubble)
+    return (
+      <>
+        {cards}
+        {menu}
+      </>
+    )
 
   return (
     <>
@@ -313,7 +342,7 @@ function Bubble({
         )}
 
         <div
-          title={details}
+          onContextMenu={openDetails}
           className={cn(
             'flex flex-col gap-1.5 px-2.5 py-1.5',
             note
@@ -332,6 +361,7 @@ function Bubble({
         {meta}
       </div>
     </div>
+    {menu}
     </>
   )
 }

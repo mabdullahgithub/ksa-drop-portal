@@ -128,3 +128,7 @@ Schedule::command('report:daily')
 // Live chat: file conversations resolved a week ago (config
 // chat.auto_close_days) as closed.
 Schedule::command('chats:auto-close')->dailyAt('03:45')->withoutOverlapping();
+
+// Live chat: the IP location databases behind a message's details. DB-IP
+// publishes monthly; checked daily so a new server gets them soon too.
+Schedule::command('chat:update-geoip --if-stale')->dailyAt('04:30')->withoutOverlapping();

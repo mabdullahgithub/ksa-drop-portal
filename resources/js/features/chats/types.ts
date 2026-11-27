@@ -103,6 +103,24 @@ export interface ChatMessage {
   retryVoice?: VoiceClip
 }
 
+/** Where a message was sent from; only the team can ask for it. */
+export interface ChatMessageOrigin {
+  ip: string | null
+  user_agent: string | null
+  device: string | null
+  location: {
+    city?: string
+    region?: string
+    country?: string
+    country_code?: string
+    latitude?: number
+    longitude?: number
+  } | null
+  network: { isp?: string; asn?: string } | null
+  /** What the sender's browser said about itself. */
+  reported?: Record<string, string>
+}
+
 /** An order or inventory product attached to a message. */
 export interface ChatSharedItem {
   type: 'order' | 'product'

@@ -207,6 +207,7 @@ Route::middleware(['auth', 'verified', 'role:!client', 'client.access'])->group(
 
         Route::whereNumber('conversation')->group(function () {
             Route::get('/{conversation}', [ChatController::class, 'show'])->middleware('permission:view chats')->name('api.chats.show');
+            Route::get('/{conversation}/messages/{message}/details', [ChatController::class, 'messageDetails'])->middleware(['permission:view chat message details', 'throttle:120,1,chat-details'])->whereNumber('message')->name('api.chats.messages.details');
             // What can be attached: the permission to view it (replying is checked on send).
             Route::get('/{conversation}/share/orders', [ChatController::class, 'shareOrders'])->middleware('permission:view orders')->name('api.chats.share.orders');
             Route::get('/{conversation}/share/products', [ChatController::class, 'shareProducts'])->middleware('permission:view client products')->name('api.chats.share.products');

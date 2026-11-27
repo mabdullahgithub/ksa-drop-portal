@@ -72,6 +72,7 @@ class ChatWorkflow
                 'files' => $input['files'] ?? [],
                 'orders' => $input['orders'] ?? [],
                 'products' => $input['products'] ?? [],
+                'origin' => $input['origin'] ?? null,
             ], opening: true);
 
             return $conversation->fresh();

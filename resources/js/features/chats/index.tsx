@@ -364,6 +364,7 @@ export function Chats() {
                     messages={thread.messages}
                     side='team'
                     meId={me.id}
+                    reference={detail.conversation.reference}
                     clientId={detail.conversation.client?.id}
                     loading={thread.loading}
                     hasMore={thread.hasMore}

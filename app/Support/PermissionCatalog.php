@@ -206,7 +206,8 @@ final class PermissionCatalog
             'groups' => [
                 'Page' => [
                     'view chats' => ['Open the live chat inbox', 'Every chat of the clients you may see.', null],
-                    'view chat stats' => ['Chat numbers', 'Open, unassigned, first response and resolved today.'],
+                    'view chat stats' => ['Chat numbers', 'Open, waiting on us, resolved today and the average reply time.'],
+                    'view chat message details' => ['Message details', 'Right-click a message to see who sent it and from where: IP, location, network, browser and device.'],
                 ],
                 'Actions' => [
                     'reply chats' => ['Reply to clients', 'Send messages to the client.'],
