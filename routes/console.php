@@ -101,7 +101,7 @@ Schedule::command('shopify:cleanup-sync-failures')->dailyAt('03:30');
 // Stands down where an always-on worker already owns the connection (the VPS
 // container): a second worker there would run Shopify webhooks for the same
 // order side by side instead of one after another.
-Schedule::command('queue:work database --stop-when-empty --max-time=55 --tries=3')
+Schedule::command('queue:work database --queue=default,chat --stop-when-empty --max-time=55 --tries=3')
     ->everyMinute()
     ->when(fn () => ! config('queue.always_on'))
     ->withoutOverlapping(2);

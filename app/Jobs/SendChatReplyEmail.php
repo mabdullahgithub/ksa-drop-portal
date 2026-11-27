@@ -17,6 +17,10 @@ use Illuminate\Support\Facades\Mail;
  * Email the client about a reply, a few minutes after it was sent, and only
  * if they still have not read it. A burst of replies sends one email: each
  * job steps aside for a newer reply, whose own job sends.
+ *
+ * Always on the `database` connection: the VPS's default is `sync`, which
+ * ignores the delay and would email at once, while the agent waits. Its own
+ * `chat` queue, so a slow mail server never holds up the Shopify jobs.
  */
 class SendChatReplyEmail implements ShouldQueue
 {
@@ -24,7 +28,12 @@ class SendChatReplyEmail implements ShouldQueue
 
     public int $tries = 2;
 
-    public function __construct(public int $messageId) {}
+    public int $timeout = 60;
+
+    public function __construct(public int $messageId)
+    {
+        $this->onConnection('database')->onQueue('chat');
+    }
 
     public function handle(EmailService $email): void
     {
