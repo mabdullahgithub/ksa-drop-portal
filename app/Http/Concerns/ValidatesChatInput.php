@@ -15,9 +15,9 @@ use Illuminate\Validation\Rule;
 trait ValidatesChatInput
 {
     /** Where this request came from, kept with the message it sends. */
-    private function origin(Request $request): array
+    private function origin(Request $request): ?array
     {
-        return app(ChatOrigin::class)->capture($request);
+        return config('chat.record_origin') ? app(ChatOrigin::class)->capture($request) : null;
     }
 
     /** The orders and products a client attached; ownership is checked by ChatSharedItems. */
@@ -63,6 +63,7 @@ trait ValidatesChatInput
             'files' => $request->file('files', []),
             'voice' => $request->file('voice'),
             'voice_duration' => isset($validated['voice_duration']) ? (int) $validated['voice_duration'] : null,
+            'voice_waveform' => $validated['voice_waveform'] ?? null,
             'orders' => $validated['orders'] ?? [],
             'products' => $validated['products'] ?? [],
             'origin' => $this->origin($request),

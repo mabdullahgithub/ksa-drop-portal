@@ -24,6 +24,12 @@ class UpdateChatGeoIp extends Command
 
     public function handle(): int
     {
+        if (! config('chat.record_origin')) {
+            $this->info('Message origins are switched off (CHAT_RECORD_ORIGIN): nothing to download.');
+
+            return self::SUCCESS;
+        }
+
         File::ensureDirectoryExists(config('chat.geoip.directory'));
         $failed = false;
 

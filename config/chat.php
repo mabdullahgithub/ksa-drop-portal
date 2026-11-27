@@ -23,6 +23,10 @@ return [
         'images' => ['image/jpeg', 'image/png', 'image/webp', 'image/gif'],
     ],
 
+    // Keep with each message where it was sent from (IP, location, network,
+    // browser). CHAT_RECORD_ORIGIN=false stops it and the database downloads.
+    'record_origin' => (bool) env('CHAT_RECORD_ORIGIN', true),
+
     // IP location for message details: DB-IP's free databases, kept on this
     // server and refreshed by chat:update-geoip.
     'geoip' => [

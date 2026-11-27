@@ -59,7 +59,7 @@ class ChatMessenger
 
         $rows = ChatAttachmentStore::put($conversation, $input['files'] ?? []);
         if (! empty($input['voice'])) {
-            $rows[] = ChatAttachmentStore::putVoice($conversation, $input['voice'], (int) $input['voice_duration']);
+            $rows[] = ChatAttachmentStore::putVoice($conversation, $input['voice'], (int) $input['voice_duration'], $input['voice_waveform'] ?? null);
         }
 
         try {
@@ -91,6 +91,11 @@ class ChatMessenger
                     'client_uuid' => $input['client_uuid'] ?? null,
                 ]);
                 ChatAttachmentStore::attach($message, $rows);
+
+                // A team reply ends the client's wait: note how long it was.
+                if ($kind === ChatMessage::MESSAGE && $senderType === ChatMessage::FROM_STAFF && $held->waiting_since) {
+                    $message->forceFill(['response_seconds' => (int) $held->waiting_since->diffInSeconds($message->created_at)])->save();
+                }
 
                 $after = $kind === ChatMessage::MESSAGE
                     ? $this->advance($held, $by, $senderType)
@@ -143,6 +148,8 @@ class ChatMessenger
         if ($senderType === ChatMessage::FROM_CLIENT) {
             $returned = false;
             $held->last_client_message_at = $now;
+            // Writing again while waiting does not restart the wait.
+            $held->waiting_since ??= $now;
 
             if ($held->status === ChatConversation::PENDING) {
                 $this->workflow->applyStatus($held, ChatConversation::OPEN, $by);
@@ -157,6 +164,7 @@ class ChatMessenger
             && ($held->last_staff_message_at === null || $held->last_staff_message_at->lt($held->last_client_message_at));
 
         $held->last_staff_message_at = $now;
+        $held->waiting_since = null;
 
         if ($held->opened_by === ChatConversation::BY_CLIENT && $held->first_response_at === null) {
             $held->first_response_at = $now;

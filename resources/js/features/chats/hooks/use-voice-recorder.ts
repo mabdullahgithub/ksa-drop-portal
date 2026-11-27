@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { MAX_VOICE_SECONDS } from '../constants'
+import { waveformOf } from '../waveform'
 import type { VoiceClip } from '../types'
 
 /**
@@ -139,7 +140,7 @@ export function useVoiceRecorder() {
 
     const chunks: Blob[] = []
     next.ondataavailable = (event) => event.data.size > 0 && chunks.push(event.data)
-    next.onstop = () => {
+    next.onstop = async () => {
       const length = Date.now() - startedAt.current
       if (mine !== session.current) return
       release()
@@ -147,24 +148,30 @@ export function useVoiceRecorder() {
       const type = (next.mimeType || mimeType || 'audio/webm').split(';')[0]
       const blob = new Blob(chunks, { type })
       const done = waiting.current
-      waiting.current = null
 
       if (length < 800 || blob.size === 0) {
         setSeconds(0)
         setState('idle')
         toast.info('That recording was too short.')
+        waiting.current = null
         done?.(null)
         return
       }
 
       const extension = type.includes('mp4') ? 'm4a' : type.includes('ogg') ? 'ogg' : 'webm'
+      const waveform = await waveformOf(blob)
+      // Deleted while the waveform was being read.
+      if (mine !== session.current) return
+
       const result: VoiceClip = {
+        waveform,
         file: new File([blob], `voice-message.${extension}`, { type }),
         seconds: Math.min(MAX_VOICE_SECONDS, Math.max(1, Math.round(length / 1000))),
         url: URL.createObjectURL(blob),
       }
       setClip(result)
       setState('review')
+      waiting.current = null
       done?.(result)
     }
 

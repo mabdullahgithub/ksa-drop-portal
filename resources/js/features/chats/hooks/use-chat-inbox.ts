@@ -86,9 +86,14 @@ export function useChatInbox<C = undefined>({ side, load, key, echo, live, pollM
     }
   }, [nextCursor, loadingMore])
 
+  // The list is already updated from the event itself; this only settles the
+  // filters and counts, so one request covers everything in the next 5 s.
   const reconcile = useCallback(() => {
-    if (reconcileTimer.current) clearTimeout(reconcileTimer.current)
-    reconcileTimer.current = setTimeout(() => void refresh(true), 1500)
+    if (reconcileTimer.current) return
+    reconcileTimer.current = setTimeout(() => {
+      reconcileTimer.current = null
+      void refresh(true)
+    }, 5000)
   }, [refresh])
 
   /** Put a conversation's newest state in the list, at the top when it moved. */
@@ -120,20 +125,14 @@ export function useChatInbox<C = undefined>({ side, load, key, echo, live, pollM
       reconcile()
     }
     const onRead = (event: { conversation_id: number }) => markRead(event.conversation_id)
-    const onRemoved = (event: { conversation_id: number }) => {
-      setItems((current) => current.filter((c) => c.id !== event.conversation_id))
-      reconcile()
-    }
 
     channel.listen('.inbox.updated', onUpdated)
     channel.listen('.inbox.read', onRead)
-    channel.listen('.inbox.removed', onRemoved)
 
     // The channel is shared with the sidebar number: stop listening, never leave.
     return () => {
       channel.stopListening('.inbox.updated', onUpdated)
       channel.stopListening('.inbox.read', onRead)
-      channel.stopListening('.inbox.removed', onRemoved)
     }
   }, [echo, userId, side, upsert, markRead, reconcile])
 

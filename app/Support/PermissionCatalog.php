@@ -215,7 +215,6 @@ final class PermissionCatalog
                     'start chats' => ['Start a chat', 'Open a new conversation with a client.', 'reply chats'],
                     'change chat status' => ['Change status', 'Put on hold, resolve, close or reopen.'],
                     'edit chat details' => ['Edit details', 'Subject, category, priority and linked order.'],
-                    'delete chats' => ['Delete chats', 'Remove a conversation.'],
                 ],
             ],
         ],
@@ -640,6 +639,7 @@ final class PermissionCatalog
         'manage-email-settings',
         'restore recycle bin', 'purge recycle bin',
         'view dashboard tag cards', 'view dashboard shipment status', 'view dashboard courier scorecard',
+        'delete chats',
     ];
 
     /** Connector key => the permission that opens and saves its settings. */

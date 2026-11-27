@@ -93,13 +93,6 @@ class ChatBroadcaster
         ]);
     }
 
-    public function deleted(ChatConversation $conversation, array $userIds): void
-    {
-        $channels = array_map(fn (int $id) => new PrivateChannel("chat.user.{$id}"), $userIds);
-
-        $this->send($channels, 'inbox.removed', ['conversation_id' => $conversation->id]);
-    }
-
     /**
      * The inbox of every agent who may see the conversation (with the team
      * payload) and of the client (with theirs).

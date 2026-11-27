@@ -76,6 +76,8 @@ export interface ChatAttachment {
   is_voice: boolean
   /** Seconds, for a voice message. */
   duration: number | null
+  /** Bar heights from 0 to 100, for a voice message. */
+  waveform?: number[] | null
   width: number | null
   height: number | null
   url: string
@@ -150,6 +152,7 @@ export interface ChatItemSources {
 export interface VoiceClip {
   file: File
   seconds: number
+  waveform: number[] | null
   /** For listening to it before and while it is sent. */
   url: string
 }
@@ -185,7 +188,6 @@ export interface ChatTeamDetail {
     note: boolean
     status: boolean
     edit: boolean
-    delete: boolean
     share_orders: boolean
     share_products: boolean
   }

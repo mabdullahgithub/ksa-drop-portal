@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import axios from 'axios'
 import { toast } from 'sonner'
-import { ArrowLeft, ChevronDown, Flag, Link2, MoreVertical, PanelRightClose, PanelRightOpen, Tag, Trash2 } from 'lucide-react'
+import { ArrowLeft, ChevronDown, Flag, Link2, MoreVertical, PanelRightClose, PanelRightOpen, Tag } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import {
@@ -11,22 +11,11 @@ import {
   DropdownMenuLabel,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
-  DropdownMenuSeparator,
   DropdownMenuSub,
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { errorMessage, teamChats } from '../api'
 import { CATEGORY_LABELS, PRIORITY_META, STATUS_META, TEAM_MOVES } from '../constants'
@@ -42,21 +31,18 @@ export function ConversationHeader({
   detail,
   onBack,
   onChanged,
-  onDeleted,
   contextOpen,
   onToggleContext,
 }: {
   detail: ChatTeamDetail
   onBack: () => void
   onChanged: (conversation: ChatConversation) => void
-  onDeleted: () => void
   contextOpen: boolean
   onToggleContext: () => void
 }) {
   const c = detail.conversation
   const can = detail.permissions
   const [busy, setBusy] = useState(false)
-  const [confirmDelete, setConfirmDelete] = useState(false)
   const [linkOpen, setLinkOpen] = useState(false)
 
   const run = async (request: () => Promise<{ data: { conversation: ChatConversation } }>, done?: string) => {
@@ -76,8 +62,6 @@ export function ConversationHeader({
     run(() => axios.patch(`/api/chats/${c.id}/status`, { status }), `Marked ${STATUS_META[status].label.toLowerCase()}`)
   const update = (patch: Partial<{ priority: ChatPriority; category: ChatCategory; order_id: number | null }>) =>
     run(() => axios.patch(`/api/chats/${c.id}`, patch))
-
-  const hasMenu = can.edit || can.delete
 
   return (
     <div className='flex items-center gap-2 border-b px-3 py-2.5'>
@@ -153,7 +137,7 @@ export function ConversationHeader({
         {contextOpen ? <PanelRightClose className='size-4' /> : <PanelRightOpen className='size-4' />}
       </Button>
 
-      {hasMenu && (
+      {can.edit && (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button size='icon' variant='ghost' className='size-8 shrink-0' aria-label='More actions'>
@@ -161,35 +145,23 @@ export function ConversationHeader({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align='end' className='w-52'>
-            {can.edit && (
-              <>
-                <DropdownMenuSub>
-                  <DropdownMenuSubTrigger className='gap-2'>
-                    <Tag className='size-4 text-muted-foreground' /> Category
-                  </DropdownMenuSubTrigger>
-                  <DropdownMenuSubContent>
-                    <DropdownMenuRadioGroup value={c.category} onValueChange={(v) => update({ category: v as ChatCategory })}>
-                      {(Object.keys(CATEGORY_LABELS) as ChatCategory[]).map((k) => (
-                        <DropdownMenuRadioItem key={k} value={k}>
-                          {CATEGORY_LABELS[k]}
-                        </DropdownMenuRadioItem>
-                      ))}
-                    </DropdownMenuRadioGroup>
-                  </DropdownMenuSubContent>
-                </DropdownMenuSub>
-                <DropdownMenuItem onSelect={() => setLinkOpen(true)}>
-                  <Link2 className='size-4' /> {c.order ? 'Change linked order' : 'Link an order'}
-                </DropdownMenuItem>
-              </>
-            )}
-            {can.delete && (
-              <>
-                {can.edit && <DropdownMenuSeparator />}
-                <DropdownMenuItem className='text-destructive focus:text-destructive' onSelect={() => setConfirmDelete(true)}>
-                  <Trash2 className='size-4' /> Delete chat
-                </DropdownMenuItem>
-              </>
-            )}
+            <DropdownMenuSub>
+              <DropdownMenuSubTrigger className='gap-2'>
+                <Tag className='size-4 text-muted-foreground' /> Category
+              </DropdownMenuSubTrigger>
+              <DropdownMenuSubContent>
+                <DropdownMenuRadioGroup value={c.category} onValueChange={(v) => update({ category: v as ChatCategory })}>
+                  {(Object.keys(CATEGORY_LABELS) as ChatCategory[]).map((k) => (
+                    <DropdownMenuRadioItem key={k} value={k}>
+                      {CATEGORY_LABELS[k]}
+                    </DropdownMenuRadioItem>
+                  ))}
+                </DropdownMenuRadioGroup>
+              </DropdownMenuSubContent>
+            </DropdownMenuSub>
+            <DropdownMenuItem onSelect={() => setLinkOpen(true)}>
+              <Link2 className='size-4' /> {c.order ? 'Change linked order' : 'Link an order'}
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       )}
@@ -204,34 +176,6 @@ export function ConversationHeader({
           setLinkOpen(false)
         }}
       />
-
-      <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete this chat?</AlertDialogTitle>
-            <AlertDialogDescription>
-              {c.reference} with {c.client?.company_name} disappears from the inbox and from the client&apos;s Support page.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              className='bg-destructive text-white hover:bg-destructive/90'
-              onClick={async () => {
-                try {
-                  await axios.delete(`/api/chats/${c.id}`)
-                  toast.success('Chat deleted')
-                  onDeleted()
-                } catch (error) {
-                  toast.error(errorMessage(error, 'Could not delete the chat'))
-                }
-              }}
-            >
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   )
 }

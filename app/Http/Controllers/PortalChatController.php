@@ -70,6 +70,12 @@ class PortalChatController extends Controller
         ]);
     }
 
+    /** Just the sidebar number. */
+    public function unread(): JsonResponse
+    {
+        return response()->json(['unread' => ChatUnread::clientTotal($this->client())]);
+    }
+
     public function show(ChatConversation $conversation): JsonResponse
     {
         $this->own($conversation);

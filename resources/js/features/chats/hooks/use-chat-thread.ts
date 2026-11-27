@@ -71,7 +71,8 @@ export function useChatThread({ api, conversationId, echo, live, pollMs, me, ini
     [messages]
   )
   const lastIdRef = useRef(0)
-  lastIdRef.current = lastConfirmedId()
+  const newestId = lastConfirmedId()
+  lastIdRef.current = newestId
 
   // First page.
   useEffect(() => {
@@ -135,11 +136,21 @@ export function useChatThread({ api, conversationId, echo, live, pollMs, me, ini
       return
     }
     wasLive.current = false
-    const timer = setInterval(() => {
-      if (document.visibilityState === 'visible') void catchUp()
-    }, pollMs)
-    return () => clearInterval(timer)
-  }, [conversationId, live, pollMs, catchUp])
+
+    // A quiet chat is asked about less and less often (up to four times the
+    // interval); a new message restarts this effect at the quick pace.
+    let wait = pollMs
+    let timer: ReturnType<typeof setTimeout>
+    const tick = async () => {
+      if (document.visibilityState === 'visible') {
+        await catchUp()
+        wait = Math.min(pollMs * 4, Math.round(wait * 1.5))
+      }
+      timer = setTimeout(tick, wait)
+    }
+    timer = setTimeout(tick, wait)
+    return () => clearTimeout(timer)
+  }, [conversationId, live, pollMs, catchUp, newestId])
 
   // Live: messages and reads on this side's channel, typing in the shared room.
   useEffect(() => {
@@ -270,6 +281,7 @@ export function useChatThread({ api, conversationId, echo, live, pollMs, me, ini
                   is_image: false,
                   is_voice: true,
                   duration: input.voice.seconds,
+                  waveform: input.voice.waveform,
                   width: null,
                   height: null,
                   url: input.voice.url,

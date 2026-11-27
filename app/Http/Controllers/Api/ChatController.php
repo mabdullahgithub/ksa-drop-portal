@@ -21,7 +21,6 @@ use App\Services\Chat\ChatWorkflow;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Carbon;
 use Illuminate\Validation\Rule;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
@@ -139,7 +138,6 @@ class ChatController extends Controller
                 'note' => $request->user()->can('add chat notes'),
                 'status' => $request->user()->can('change chat status'),
                 'edit' => $request->user()->can('edit chat details'),
-                'delete' => $request->user()->can('delete chats'),
                 'share_orders' => $request->user()->can('view orders'),
                 'share_products' => $request->user()->can('view client products') && (bool) $client?->is_fulfilment,
             ],
@@ -224,77 +222,43 @@ class ChatController extends Controller
         return $this->respond($this->workflow->updateDetails($conversation, $request->user(), $input));
     }
 
-    public function destroy(Request $request, ChatConversation $conversation): JsonResponse
+    /** Just the sidebar number, so keeping it current never re-runs a whole page. */
+    public function unread(Request $request): JsonResponse
     {
-        $this->authorizeSee($request->user(), $conversation);
-
-        $this->workflow->delete($conversation->load('client'));
-
-        return response()->json(['message' => 'Chat deleted']);
+        return response()->json(['unread' => ChatUnread::staffTotal($request->user())]);
     }
 
     /** The numbers above the inbox. */
     public function stats(Request $request): JsonResponse
     {
-        // The request's client scope keeps these to clients this person may see.
-        $base = fn () => ChatConversation::query();
-
-        return response()->json([
-            'open' => $base()->active()->count(),
-            'waiting_on_us' => $base()->where('status', ChatConversation::OPEN)->count(),
-            'resolved_today' => $base()->where('resolved_at', '>=', now()->startOfDay())->count(),
-            'avg_response_minutes' => $this->averageResponseMinutes($base()->select('id'), now()->subDays(7)),
-        ]);
+        return response()->json($this->countStats());
     }
 
-    /**
-     * How long clients waited for an answer, on average, over the replies the
-     * team sent since $since. A wait starts at the client's first unanswered
-     * message (more messages while waiting don't restart it) and ends at the
-     * team's next reply. Notes and status lines are not replies.
-     */
-    private function averageResponseMinutes(Builder $conversations, Carbon $since): ?int
+    /** @return array{open: int, waiting_on_us: int, resolved_today: int, avg_response_minutes: ?int} */
+    private function countStats(): array
     {
-        $answered = ChatMessage::query()
-            ->whereIn('conversation_id', $conversations)
-            ->where('kind', ChatMessage::MESSAGE)
-            ->where('sender_type', ChatMessage::FROM_STAFF)
-            ->where('created_at', '>=', $since)
-            ->select('conversation_id');
+        // One pass over the conversations. The request's client scope keeps it
+        // to clients this person may see.
+        $active = "'" . implode("','", ChatConversation::ACTIVE) . "'";
+        $counts = ChatConversation::query()->toBase()
+            ->selectRaw("sum(case when status in ({$active}) then 1 else 0 end) as open_count")
+            ->selectRaw('sum(case when status = ? then 1 else 0 end) as waiting_count', [ChatConversation::OPEN])
+            ->selectRaw('sum(case when resolved_at >= ? then 1 else 0 end) as resolved_count', [now()->startOfDay()])
+            ->first();
 
-        // The whole thread of those chats: a wait can have begun before $since.
-        $messages = ChatMessage::query()
-            ->whereIn('conversation_id', $answered)
-            ->where('kind', ChatMessage::MESSAGE)
-            ->orderBy('conversation_id')
-            ->orderBy('id')
-            ->select(['id', 'conversation_id', 'sender_type', 'created_at'])
-            ->cursor();
+        // Each reply noted how long the client had waited (ChatMessenger).
+        $average = ChatMessage::query()
+            ->where('created_at', '>=', now()->subDays(7))
+            ->whereNotNull('response_seconds')
+            ->whereIn('conversation_id', ChatConversation::query()->select('id'))
+            ->avg('response_seconds');
 
-        $total = $replies = 0;
-        $conversation = $waitingSince = null;
-
-        foreach ($messages as $message) {
-            if ($message->conversation_id !== $conversation) {
-                $conversation = $message->conversation_id;
-                $waitingSince = null;
-            }
-
-            if ($message->sender_type === ChatMessage::FROM_CLIENT) {
-                $waitingSince ??= $message->created_at;
-
-                continue;
-            }
-
-            if ($waitingSince !== null && $message->created_at >= $since) {
-                $total += $waitingSince->diffInSeconds($message->created_at);
-                $replies++;
-            }
-
-            $waitingSince = null;
-        }
-
-        return $replies === 0 ? null : (int) round($total / $replies / 60);
+        return [
+            'open' => (int) $counts->open_count,
+            'waiting_on_us' => (int) $counts->waiting_count,
+            'resolved_today' => (int) $counts->resolved_count,
+            'avg_response_minutes' => $average === null ? null : (int) round($average / 60),
+        ];
     }
 
     /** Clients for the "new chat" picker: the ones this person may see. */

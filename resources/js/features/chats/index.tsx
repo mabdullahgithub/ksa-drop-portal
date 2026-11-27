@@ -164,7 +164,12 @@ export function Chats() {
       firstLoad.current = false
       return
     }
-    if (selectedId && !live && lastMessageId && lastMessageId > 0) void loadDetail(selectedId, true)
+    // Only for what can change the header: a status line, or someone else's
+    // message. Your own reply is not worth a second request.
+    const newest = thread.messages[thread.messages.length - 1]
+    if (selectedId && !live && lastMessageId && lastMessageId > 0 && newest?.sender?.id !== me.id) {
+      void loadDetail(selectedId, true)
+    }
   }, [lastMessageId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadStats = useCallback(() => {
@@ -178,8 +183,6 @@ export function Chats() {
     return () => clearInterval(timer)
   }, [loadStats])
 
-  // The list moved: so did the numbers.
-  useEffect(() => loadStats(), [inbox.items]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const outside = useOpenChatInList({
     items: inbox.items,
@@ -194,6 +197,12 @@ export function Chats() {
       rememberInUrl(null)
     },
   })
+
+  // The open chat was resolved, held or reopened: the tiles follow at once.
+  const openStatus = detail?.conversation.status
+  useEffect(() => {
+    if (openStatus === 'resolved' || openStatus === 'on_hold' || openStatus === 'open') loadStats()
+  }, [openStatus, loadStats])
 
   const open = (id: number) => {
     setSelectedId(id)
@@ -348,13 +357,6 @@ export function Chats() {
                   detail={detail}
                   onBack={close}
                   onChanged={applyConversation}
-                  onDeleted={() => {
-                    setSelectedId(null)
-                    setDetail(null)
-                    setMobileThread(false)
-                    rememberInUrl(null)
-                    void inbox.refresh(true)
-                  }}
                   contextOpen={contextOpen}
                   onToggleContext={() => setContextOpen((v) => !v)}
                 />

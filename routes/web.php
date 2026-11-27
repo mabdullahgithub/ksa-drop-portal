@@ -200,6 +200,7 @@ Route::middleware(['auth', 'verified', 'role:!client', 'client.access'])->group(
     Route::prefix('api/chats')->group(function () {
         Route::get('/', [ChatController::class, 'index'])->middleware('permission:view chats')->name('api.chats.index');
         Route::post('/', [ChatController::class, 'store'])->middleware(['permission:start chats', 'throttle:20,1,chat-start'])->name('api.chats.store');
+        Route::get('/unread', [ChatController::class, 'unread'])->middleware('permission:view chats')->name('api.chats.unread');
         Route::get('/stats', [ChatController::class, 'stats'])->middleware('permission:view chat stats')->name('api.chats.stats');
         Route::get('/lookup/clients', [ChatController::class, 'clients'])->middleware('permission:start chats')->name('api.chats.lookup.clients');
         Route::get('/lookup/orders', [ChatController::class, 'orders'])->middleware('permission:start chats|edit chat details')->name('api.chats.lookup.orders');
@@ -216,7 +217,6 @@ Route::middleware(['auth', 'verified', 'role:!client', 'client.access'])->group(
             Route::post('/{conversation}/read', [ChatController::class, 'read'])->middleware(['permission:view chats', 'throttle:120,1,chat-read'])->name('api.chats.read');
             Route::patch('/{conversation}/status', [ChatController::class, 'status'])->middleware('permission:change chat status')->name('api.chats.status');
             Route::patch('/{conversation}', [ChatController::class, 'update'])->middleware('permission:edit chat details')->name('api.chats.update');
-            Route::delete('/{conversation}', [ChatController::class, 'destroy'])->middleware('permission:delete chats')->name('api.chats.destroy');
         });
     });
 
@@ -509,6 +509,7 @@ Route::prefix('portal')->middleware(['auth', 'verified', 'role:client', 'client.
     Route::prefix('api/chats')->group(function () {
         Route::get('/', [PortalChatController::class, 'index'])->name('portal.api.chats.index');
         Route::post('/', [PortalChatController::class, 'store'])->middleware('throttle:10,60,chat-new')->name('portal.api.chats.store');
+        Route::get('/unread', [PortalChatController::class, 'unread'])->name('portal.api.chats.unread');
         Route::get('/orders', [PortalChatController::class, 'orders'])->name('portal.api.chats.orders');
         Route::get('/products', [PortalChatController::class, 'products'])->name('portal.api.chats.products');
         Route::get('/attachments/{attachment}', [PortalChatController::class, 'attachment'])->whereNumber('attachment')->name('portal.api.chats.attachments.show');

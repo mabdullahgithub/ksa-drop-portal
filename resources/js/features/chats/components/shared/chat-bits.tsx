@@ -86,7 +86,7 @@ export function Attachments({ files, onDark }: { files: ChatAttachment[]; onDark
   return (
     <div className='flex flex-col gap-1.5'>
       {voices.map((voice) => (
-        <VoicePlayer key={voice.id} src={voice.url} duration={voice.duration ?? 0} onDark={onDark} />
+        <VoicePlayer key={voice.id} src={voice.url} duration={voice.duration ?? 0} waveform={voice.waveform} onDark={onDark} />
       ))}
       {images.length > 0 && (
         <div className={cn('grid max-w-52 gap-1', images.length > 1 ? 'grid-cols-2' : 'grid-cols-1')}>

@@ -211,7 +211,7 @@ export function Composer({
               </Button>
             </>
           ) : (
-            voice.clip && <VoicePlayer src={voice.clip.url} duration={voice.clip.seconds} className='flex-1 py-0.5 sm:w-72' />
+            voice.clip && <VoicePlayer src={voice.clip.url} duration={voice.clip.seconds} waveform={voice.clip.waveform} className='flex-1 py-0.5 sm:w-72' />
           )}
           <Button
             type='button'

@@ -59,6 +59,7 @@ export async function toForm(input: { files?: File[]; clientUuid?: string } & ob
   if (voice) {
     form.append('voice', voice.file, voice.file.name)
     form.append('voice_duration', String(voice.seconds))
+    if (voice.waveform) form.append('voice_waveform', JSON.stringify(voice.waveform))
   }
 
   // Only ids go up; the server looks each one up among the client's own.

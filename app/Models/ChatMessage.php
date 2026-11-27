@@ -39,6 +39,7 @@ class ChatMessage extends Model
         'body',
         'shared_items',
         'origin',
+        'response_seconds',
         'meta',
         'client_uuid',
         'edited_at',

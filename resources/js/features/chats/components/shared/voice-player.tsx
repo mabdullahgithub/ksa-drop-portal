@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import { Download, Pause, Play } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { useWaveform } from '../../hooks/use-waveform'
 
 /** Only one voice message plays at a time. */
 let playing: HTMLAudioElement | null = null
 
 const SPEEDS = [1, 1.5, 2]
+
+/** For a recording that came without its shape. */
+const FLAT = Array<number>(32).fill(0.2)
 
 export function clock(seconds: number) {
   const whole = Math.max(0, Math.floor(seconds))
@@ -21,11 +23,14 @@ export function clock(seconds: number) {
 export function VoicePlayer({
   src,
   duration,
+  waveform,
   onDark,
   className,
 }: {
   src: string
   duration: number
+  /** Bar heights from 0 to 100, sent with the message. */
+  waveform?: number[] | null
   /** On the brand-coloured bubble of a sent message. */
   onDark?: boolean
   className?: string
@@ -35,7 +40,7 @@ export function VoicePlayer({
   const [time, setTime] = useState(0)
   const [speed, setSpeed] = useState(1)
   const [failed, setFailed] = useState(false)
-  const bars = useWaveform(src)
+  const bars = waveform?.length ? waveform.map((level) => level / 100) : FLAT
   const total = duration || 1
   const progress = Math.min(1, time / total)
   const started = isPlaying || time > 0

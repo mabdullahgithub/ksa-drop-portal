@@ -118,6 +118,7 @@ class ChatPresenter
             'is_image' => $attachment->isImage(),
             'is_voice' => (bool) $attachment->is_voice,
             'duration' => $attachment->duration_seconds,
+            'waveform' => $attachment->waveform,
             'width' => $attachment->width,
             'height' => $attachment->height,
             'url' => route($forTeam ? 'api.chats.attachments.show' : 'portal.api.chats.attachments.show', $attachment, absolute: false),

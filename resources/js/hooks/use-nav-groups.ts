@@ -4,6 +4,7 @@ import { Lock } from 'lucide-react'
 import { sidebarData } from '@/components/layout/data/sidebar-data'
 import type { NavGroup as NavGroupType } from '@/components/layout/types'
 import { useUnreadNotifications } from '@/hooks/use-unread-notifications'
+import { useChatUnread } from '@/features/chats/hooks/use-chat-unread-sync'
 
 const portalFeatureUrlMap: Record<string, string> = {
   orders: '/portal/orders',
@@ -23,8 +24,8 @@ const LOCKED_GROUP_TITLE = 'Under Development'
  * Shared by the sidebar and the command menu so both stay in sync.
  */
 export function useNavGroups(): NavGroupType[] {
-  const { auth, pendingRequestsCount, locks, chat } = usePage().props as any
-  const chatUnread = Number(chat?.unread) || 0
+  const { auth, pendingRequestsCount, locks } = usePage().props as any
+  const chatUnread = useChatUnread((state) => state.count)
   const { unreadCount } = useUnreadNotifications()
   const portalFeatures: string[] | null = auth?.portal_features
   const isImpersonating: boolean = !!auth?.impersonating

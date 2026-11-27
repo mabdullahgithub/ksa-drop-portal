@@ -201,16 +201,6 @@ class ChatWorkflow
         return $closed;
     }
 
-    public function delete(ChatConversation $conversation): void
-    {
-        $audience = ChatVisibility::audience($conversation)->pluck('id')->all();
-        $clientUserId = $conversation->client?->user_id;
-
-        $conversation->delete();
-
-        $this->broadcaster->deleted($conversation, array_values(array_filter([...$audience, $clientUserId])));
-    }
-
     /** One line in the timeline. */
     public function recordEvent(ChatConversation $conversation, ?User $by, string $senderType, array $meta, bool $internal): ChatMessage
     {

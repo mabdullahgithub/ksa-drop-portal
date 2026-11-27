@@ -40,6 +40,7 @@ class ChatAttachmentStore
                 'mimetypes:' . implode(',', array_keys(config('chat.voice.types'))),
             ],
             'voice_duration' => ['required_with:voice', 'integer', 'min:1', 'max:' . config('chat.voice.max_seconds')],
+            'voice_waveform' => ['nullable', 'string', 'max:400'],
         ];
     }
 
@@ -49,7 +50,7 @@ class ChatAttachmentStore
      *
      * @return array<string, mixed> the row to create
      */
-    public static function putVoice(ChatConversation $conversation, UploadedFile $file, int $seconds): array
+    public static function putVoice(ChatConversation $conversation, UploadedFile $file, int $seconds, ?string $waveform = null): array
     {
         $disk = config('chat.attachments.disk');
         [$mime, $extension] = config('chat.voice.types')[(string) $file->getMimeType()] ?? ['audio/mp4', 'm4a'];
@@ -63,7 +64,20 @@ class ChatAttachmentStore
             'size' => (int) $file->getSize(),
             'is_voice' => true,
             'duration_seconds' => $seconds,
+            'waveform' => self::bars($waveform),
         ];
+    }
+
+    /** The recorder's bar heights: up to 32 whole numbers from 0 to 100, or nothing. */
+    private static function bars(?string $json): ?array
+    {
+        $bars = $json === null ? null : json_decode($json, true);
+
+        if (! is_array($bars) || $bars === [] || count($bars) > 32 || array_filter($bars, fn ($bar) => ! is_int($bar))) {
+            return null;
+        }
+
+        return array_values(array_map(fn (int $bar) => max(0, min(100, $bar)), $bars));
     }
 
     /**

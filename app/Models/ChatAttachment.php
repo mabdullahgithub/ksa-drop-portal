@@ -21,6 +21,7 @@ class ChatAttachment extends Model
         'size',
         'is_voice',
         'duration_seconds',
+        'waveform',
         'width',
         'height',
     ];
@@ -29,6 +30,7 @@ class ChatAttachment extends Model
         'size' => 'integer',
         'is_voice' => 'boolean',
         'duration_seconds' => 'integer',
+        'waveform' => 'array',
         'width' => 'integer',
         'height' => 'integer',
     ];
