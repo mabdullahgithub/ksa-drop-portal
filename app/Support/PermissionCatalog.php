@@ -200,6 +200,25 @@ final class PermissionCatalog
             ],
         ],
 
+        'chats' => [
+            'label' => 'Live chat',
+            'description' => 'Support conversations with clients from their portal.',
+            'groups' => [
+                'Page' => [
+                    'view chats' => ['Open the live chat inbox', 'Every chat of the clients you may see.', null],
+                    'view chat stats' => ['Chat numbers', 'Open, unassigned, first response and resolved today.'],
+                ],
+                'Actions' => [
+                    'reply chats' => ['Reply to clients', 'Send messages to the client.'],
+                    'add chat notes' => ['Internal notes', 'Write notes only the team can see.'],
+                    'start chats' => ['Start a chat', 'Open a new conversation with a client.', 'reply chats'],
+                    'change chat status' => ['Change status', 'Put on hold, resolve, close or reopen.'],
+                    'edit chat details' => ['Edit details', 'Subject, category, priority and linked order.'],
+                    'delete chats' => ['Delete chats', 'Remove a conversation.'],
+                ],
+            ],
+        ],
+
         'riders' => [
             'label' => 'Riders',
             'description' => 'KSA Express riders and inventory managers.',

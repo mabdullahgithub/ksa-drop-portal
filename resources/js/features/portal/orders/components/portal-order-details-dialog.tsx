@@ -1,6 +1,7 @@
 import { NoStockNotice, NoStockTag } from '@/components/no-stock-badge'
 import { format } from 'date-fns'
-import { Package, DollarSign, MapPin, Phone, Calendar, Tag, Truck, Copy, ExternalLink, FileText, Eye, Download, Receipt } from 'lucide-react'
+import { Package, DollarSign, MapPin, Phone, Calendar, Tag, Truck, Copy, ExternalLink, FileText, Eye, Download, Receipt, LifeBuoy } from 'lucide-react'
+import { Link } from '@inertiajs/react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -47,8 +48,17 @@ export function PortalOrderDetailsDialog({ order, open, onOpenChange }: Props) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className='max-w-3xl max-h-[90vh] overflow-y-auto'>
-        <DialogHeader>
+        <DialogHeader className='flex-row flex-wrap items-center justify-between gap-2 space-y-0 pe-8'>
           <DialogTitle className='text-2xl'>Order {o.order_number}</DialogTitle>
+          {/* A problem with this order goes straight to Support, with the order already linked. */}
+          <Button variant='outline' size='sm' asChild>
+            <Link
+              href={`/portal/support?new=1&order_id=${o.id}&order_number=${encodeURIComponent(o.order_number)}`}
+              onClick={() => onOpenChange(false)}
+            >
+              <LifeBuoy className='size-4' /> Report an issue
+            </Link>
+          </Button>
         </DialogHeader>
 
         {loading && !fullOrder ? (

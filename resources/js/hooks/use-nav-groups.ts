@@ -23,7 +23,8 @@ const LOCKED_GROUP_TITLE = 'Under Development'
  * Shared by the sidebar and the command menu so both stay in sync.
  */
 export function useNavGroups(): NavGroupType[] {
-  const { auth, pendingRequestsCount, locks } = usePage().props as any
+  const { auth, pendingRequestsCount, locks, chat } = usePage().props as any
+  const chatUnread = Number(chat?.unread) || 0
   const { unreadCount } = useUnreadNotifications()
   const portalFeatures: string[] | null = auth?.portal_features
   const isImpersonating: boolean = !!auth?.impersonating
@@ -49,6 +50,10 @@ export function useNavGroups(): NavGroupType[] {
     const badges: Record<string, number> = {
       '/requests': Number(pendingRequestsCount) || 0,
       '/notifications': unreadCount,
+      // Live chat: conversations with something unread (theirs or nobody's
+      // for the team, with a reply for a client).
+      '/chats': chatUnread,
+      '/portal/support': chatUnread,
     }
     const badged: NavGroupType[] = Object.values(badges).some((count) => count > 0)
       ? sidebarData.navGroups.map((group) => ({
@@ -90,5 +95,5 @@ export function useNavGroups(): NavGroupType[] {
       if (group.title !== 'My Portal') return group
       return { ...group, items: filterPortalItems(group.items, portalFeatures) }
     })
-  }, [portalFeatures, isImpersonating, isDropshipper, pendingRequestsCount, unreadCount, locks])
+  }, [portalFeatures, isImpersonating, isDropshipper, pendingRequestsCount, unreadCount, locks, chatUnread])
 }

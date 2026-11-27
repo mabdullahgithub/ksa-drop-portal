@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\ChatController;
 use App\Http\Controllers\Api\ClientController;
 use App\Http\Controllers\Api\ClientPaymentController;
 use App\Http\Controllers\Api\ConnectorSettingsController;
@@ -24,6 +25,7 @@ use App\Http\Controllers\Api\ShipmentAnalyticsController;
 use App\Http\Controllers\ClientPageController;
 use App\Http\Controllers\Api\ProductController;
 use App\Http\Controllers\ImpersonateController;
+use App\Http\Controllers\PortalChatController;
 use App\Http\Controllers\PortalController;
 use App\Http\Controllers\PortalInventoryRequestController;
 use App\Http\Controllers\EmailSettingsController;
@@ -189,7 +191,28 @@ Route::middleware(['auth', 'verified', 'role:!client', 'client.access'])->group(
     Route::get('/api/invoices/{invoice}/download', [InvoiceController::class, 'download'])->middleware('permission:download waybills')->name('api.invoices.download');
     Route::delete('/api/invoices/{invoice}', [InvoiceController::class, 'destroy'])->middleware('permission:delete waybills')->name('api.invoices.destroy');
 
-    Route::get('/chats', fn () => Inertia::render('Chats'))->name('chats');
+    // Live chat: support conversations with clients. Each button is its own
+    // permission; ChatController also checks every conversation against
+    // ChatVisibility (client access).
+    Route::get('/chats', fn () => Inertia::render('Chats'))->middleware('permission:view chats')->name('chats');
+    Route::prefix('api/chats')->group(function () {
+        Route::get('/', [ChatController::class, 'index'])->middleware('permission:view chats')->name('api.chats.index');
+        Route::post('/', [ChatController::class, 'store'])->middleware(['permission:start chats', 'throttle:20,1'])->name('api.chats.store');
+        Route::get('/stats', [ChatController::class, 'stats'])->middleware('permission:view chat stats')->name('api.chats.stats');
+        Route::get('/lookup/clients', [ChatController::class, 'clients'])->middleware('permission:start chats')->name('api.chats.lookup.clients');
+        Route::get('/lookup/orders', [ChatController::class, 'orders'])->middleware('permission:start chats|edit chat details')->name('api.chats.lookup.orders');
+        Route::get('/attachments/{attachment}', [ChatController::class, 'attachment'])->middleware('permission:view chats')->whereNumber('attachment')->name('api.chats.attachments.show');
+
+        Route::whereNumber('conversation')->group(function () {
+            Route::get('/{conversation}', [ChatController::class, 'show'])->middleware('permission:view chats')->name('api.chats.show');
+            Route::get('/{conversation}/messages', [ChatController::class, 'messages'])->middleware('permission:view chats')->name('api.chats.messages');
+            Route::post('/{conversation}/messages', [ChatController::class, 'reply'])->middleware(['permission:reply chats|add chat notes', 'throttle:30,1'])->name('api.chats.reply');
+            Route::post('/{conversation}/read', [ChatController::class, 'read'])->middleware(['permission:view chats', 'throttle:120,1'])->name('api.chats.read');
+            Route::patch('/{conversation}/status', [ChatController::class, 'status'])->middleware('permission:change chat status')->name('api.chats.status');
+            Route::patch('/{conversation}', [ChatController::class, 'update'])->middleware('permission:edit chat details')->name('api.chats.update');
+            Route::delete('/{conversation}', [ChatController::class, 'destroy'])->middleware('permission:delete chats')->name('api.chats.destroy');
+        });
+    });
 
     // Orders API
     Route::prefix('api/orders')->group(function () {
@@ -470,10 +493,29 @@ Route::prefix('portal')->middleware(['auth', 'verified', 'role:client', 'client.
     Route::get('/connectors', fn () => Inertia::render('Portal/Connectors'))->name('portal.connectors');
     Route::get('/settings', fn () => Inertia::render('Portal/Settings/CompanyProfile'))->name('portal.settings');
     Route::get('/settings/security', [SettingsController::class, 'portalSecurity'])->name('portal.settings.security');
+    Route::get('/support', fn () => Inertia::render('Portal/Support'))->name('portal.support');
 
     // Portal API
     Route::get('/api/dashboard', [PortalController::class, 'dashboard'])->name('portal.api.dashboard');
     Route::get('/api/dashboard/insights', [DashboardInsightsController::class, 'portal'])->name('portal.api.dashboard.insights');
+
+    // Support chat: the client's own conversations only (PortalChatController).
+    Route::prefix('api/chats')->group(function () {
+        Route::get('/', [PortalChatController::class, 'index'])->name('portal.api.chats.index');
+        Route::post('/', [PortalChatController::class, 'store'])->middleware('throttle:10,60')->name('portal.api.chats.store');
+        Route::get('/orders', [PortalChatController::class, 'orders'])->name('portal.api.chats.orders');
+        Route::get('/attachments/{attachment}', [PortalChatController::class, 'attachment'])->whereNumber('attachment')->name('portal.api.chats.attachments.show');
+
+        Route::whereNumber('conversation')->group(function () {
+            Route::get('/{conversation}', [PortalChatController::class, 'show'])->name('portal.api.chats.show');
+            Route::get('/{conversation}/messages', [PortalChatController::class, 'messages'])->name('portal.api.chats.messages');
+            Route::post('/{conversation}/messages', [PortalChatController::class, 'reply'])->middleware('throttle:30,1')->name('portal.api.chats.reply');
+            Route::post('/{conversation}/read', [PortalChatController::class, 'read'])->middleware('throttle:120,1')->name('portal.api.chats.read');
+            Route::post('/{conversation}/resolve', [PortalChatController::class, 'resolve'])->name('portal.api.chats.resolve');
+            Route::post('/{conversation}/reopen', [PortalChatController::class, 'reopen'])->name('portal.api.chats.reopen');
+        });
+    });
+
     Route::get('/api/orders', [PortalController::class, 'orders'])->name('portal.api.orders');
     Route::post('/api/orders/import', [PortalController::class, 'importOrders'])->name('portal.api.orders.import');
     Route::post('/api/orders', [PortalController::class, 'storeOrder'])->name('portal.api.orders.store');

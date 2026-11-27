@@ -21,6 +21,8 @@ import {
   Truck,
   Plug,
   MessageCircle,
+  MessagesSquare,
+  LifeBuoy,
   Trash2,
   Bike,
   ClipboardCheck,
@@ -73,6 +75,12 @@ export const sidebarData: SidebarData = {
           icon: MessageCircle,
           permission: 'view whatsapp',
           lock: 'whatsapp',
+        },
+        {
+          title: 'Live Chat',
+          url: '/chats',
+          icon: MessagesSquare,
+          permission: 'view chats',
         },
         {
           title: 'Track Shipment',
@@ -191,6 +199,12 @@ export const sidebarData: SidebarData = {
           title: 'Finance',
           url: '/portal/finance',
           icon: Wallet,
+          role: 'client',
+        },
+        {
+          title: 'Support',
+          url: '/portal/support',
+          icon: LifeBuoy,
           role: 'client',
         },
         {

@@ -13,6 +13,7 @@ import { ImpersonateBanner } from '@/components/layout/impersonate-banner'
 import { StockAlertCards } from '@/components/layout/stock-alert-cards'
 import { SkipToMain } from '@/components/skip-to-main'
 import { usePermissions } from '@/hooks/use-permissions'
+import { useChatUnreadSync } from '@/features/chats/hooks/use-chat-unread-sync'
 import { Toaster } from '@/components/ui/sonner'
 import type { PageProps } from '@/types'
 
@@ -30,6 +31,7 @@ function LayoutInner({ children }: AuthenticatedLayoutProps) {
   const { hasRole } = usePermissions()
   const isImpersonating = !!auth.impersonating
   const defaultOpen = getCookie('sidebar_state') !== 'false'
+  useChatUnreadSync()
 
   return (
     <div

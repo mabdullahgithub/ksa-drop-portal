@@ -71,4 +71,10 @@ export type PageProps<
         session: string;
         products: StockAlertProduct[];
     } | null;
+    /** Live chat: the sidebar number and whether a websocket server is set up. */
+    chat?: {
+        unread: number;
+        realtime: boolean;
+        poll: { thread_ms: number; inbox_ms: number };
+    } | null;
 };

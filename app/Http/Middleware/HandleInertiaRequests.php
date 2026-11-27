@@ -4,6 +4,8 @@ namespace App\Http\Middleware;
 
 use App\Http\Concerns\ResolvesNotifiableUser;
 use App\Models\Client;
+use App\Services\Chat\ChatBroadcaster;
+use App\Services\Chat\ChatUnread;
 use App\Services\Inventory\RequestQueues;
 use App\Services\Inventory\StockAlerts;
 use App\Support\PermissionCatalog;
@@ -139,6 +141,18 @@ class HandleInertiaRequests extends Middleware
             'pendingRequestsCount' => fn () => $user && ! $client && ! $user->hasRole('client') && $user->can('view requests')
                 ? Cache::remember("requests:pending_count:user:{$user->id}", now()->addSeconds(20), fn () => RequestQueues::total($user))
                 : 0,
+            // Live chat: the number beside "Live chat" / "Support" in the
+            // sidebar, and whether a websocket server is set up (without one
+            // the chat screens poll). Counted live, never cached.
+            'chat' => fn () => $user ? [
+                'unread' => match (true) {
+                    $client !== null => ChatUnread::clientTotal($client),
+                    $user->hasRole('client') => 0,
+                    default => ChatUnread::staffTotal($user),
+                },
+                'realtime' => ChatBroadcaster::enabled(),
+                'poll' => config('chat.poll'),
+            ] : null,
             // The stock warning cards: a fulfilment client's products down to
             // their last few units, or out. See StockAlerts.
             'stockAlerts' => fn () => $user ? $this->stockAlerts($request, $client) : null,

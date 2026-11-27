@@ -134,6 +134,7 @@ class User extends Authenticatable
             'view requests' => 'requests',
             'view orders' => 'orders',
             'view whatsapp' => 'whatsapp',
+            'view chats' => 'chats',
             'view riders' => 'riders',
             'view apps' => 'apps',
             'view tags' => 'tags',

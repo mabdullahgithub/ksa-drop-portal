@@ -100,6 +100,8 @@ type StatCardProps = {
   hint?: string
   /** Turns the whole card into a link to the page the number came from. */
   href?: string
+  /** `mini` is the same card scaled down, to sit in a page's title row. */
+  size?: 'default' | 'mini'
 }
 
 export function StatCard({
@@ -114,7 +116,9 @@ export function StatCard({
   texture = 'blobs',
   hint,
   href,
+  size = 'default',
 }: StatCardProps) {
+  const mini = size === 'mini'
   const { fill, badge } = TONES[tone]
   const interactive = !!(href || onClick)
   const pattern = TEXTURES[texture]
@@ -122,7 +126,8 @@ export function StatCard({
   const surface = (
     <div
       className={cn(
-        'relative overflow-hidden rounded-xl px-3 pb-2.5 pt-3.5 transition-shadow',
+        'relative overflow-hidden transition-shadow',
+        mini ? 'rounded-lg px-2.5 py-2 text-center' : 'rounded-xl px-3 pb-2.5 pt-3.5',
         fill,
         interactive && 'group-hover:shadow-lg',
         active && 'ring-2 ring-white/80 ring-offset-2 ring-offset-background'
@@ -149,16 +154,21 @@ export function StatCard({
         </>
       )}
       {/* Kept across every texture so the family still reads as one set. */}
-      <span aria-hidden className='pointer-events-none absolute -top-6 start-4 h-12 w-12 rounded-full bg-white/10' />
+      <span
+        aria-hidden
+        className={cn('pointer-events-none absolute start-4 rounded-full bg-white/10', mini ? '-top-4 h-8 w-8' : '-top-6 h-12 w-12')}
+      />
 
       <div className='relative'>
         {/* Proportional figures: a standalone value, not a column to align. */}
-        <div className='text-xl font-bold leading-none tracking-tight text-white'>
+        <div className={cn('font-bold leading-none tracking-tight text-white', mini ? 'text-2xl tabular-nums' : 'text-xl')}>
           {pre && <span className='me-1 text-[11px] font-medium text-white/70'>{pre}</span>}
           {typeof value === 'number' ? compactNumber(value) : value}
           {sub && <span className='ms-1 text-[11px] font-medium text-white/70'>{sub}</span>}
         </div>
-        <p className='mt-1.5 truncate text-[11px] font-medium leading-snug text-white/85'>{label}</p>
+        <p className={cn('truncate font-medium leading-snug text-white/85', mini ? 'mt-1 text-[10px]' : 'mt-1.5 text-[11px]')}>
+          {label}
+        </p>
       </div>
     </div>
   )
@@ -166,7 +176,7 @@ export function StatCard({
   // Outer wrapper stays unclipped so the badge can overhang; the inner surface
   // clips the decorative blobs.
   const card = (
-    <div className={cn('relative pt-2.5 pe-2', interactive && 'group')}>
+    <div className={cn('relative', mini ? 'pt-1.5 pe-1.5' : 'pt-2.5 pe-2', interactive && 'group')}>
       {href ? (
         <Link href={href} aria-label={label}>
           {surface}
@@ -193,10 +203,11 @@ export function StatCard({
         left a visible seam where the ring outlined each piece separately.
         Logical corner (`rounded-es`) so the point still faces the card in RTL.
       */}
-      <span className='pointer-events-none absolute end-3 top-0 z-10'>
+      <span className={cn('pointer-events-none absolute top-0 z-10', mini ? 'end-2' : 'end-3')}>
         <span
           className={cn(
-            'grid h-7 w-7 place-items-center rounded-full rounded-es-none text-white shadow-md ring-1 ring-background',
+            'grid place-items-center rounded-full rounded-es-none text-white shadow-md ring-1 ring-background',
+            mini ? 'h-5 w-5' : 'h-7 w-7',
             badge
           )}
         >

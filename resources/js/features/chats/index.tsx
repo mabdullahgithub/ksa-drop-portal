@@ -1,352 +1,382 @@
-import { useState } from 'react'
-import { Fragment } from 'react/jsx-runtime'
-import { format } from 'date-fns'
-import {
-  ArrowLeft,
-  MoreVertical,
-  Edit,
-  Paperclip,
-  Phone,
-  ImagePlus,
-  Plus,
-  Search as SearchIcon,
-  Send,
-  Video,
-  MessagesSquare,
-} from 'lucide-react'
-import { cn, getDisplayNameInitials } from '@/lib/utils'
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import axios from 'axios'
+import { usePage } from '@inertiajs/react'
+import { toast } from 'sonner'
+import { Loader2, RotateCcw, Search as SearchIcon, SquarePen, Wifi, WifiOff } from 'lucide-react'
+import { cn } from '@/lib/utils'
+import { getEcho, useEchoConnection } from '@/lib/echo'
 import { Button } from '@/components/ui/button'
-import { ScrollArea } from '@/components/ui/scroll-area'
-import { Separator } from '@/components/ui/separator'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { EmptyState } from '@/components/empty-state'
 import { Header } from '@/components/layout/header'
-import { NotificationsDropdown } from '@/components/layout/notifications-dropdown'
 import { Main } from '@/components/layout/main'
+import { NotificationsDropdown } from '@/components/layout/notifications-dropdown'
 import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
 import { SearchBeam } from '@/components/search-beam'
 import { ThemeSwitch } from '@/components/theme-switch'
+import { usePermissions } from '@/hooks/use-permissions'
+import type { PageProps } from '@/types'
+import { errorMessage, teamChatApi, teamChats } from './api'
+import { ClientContextPanel } from './components/client-context-panel'
+import { ConversationHeader } from './components/conversation-header'
+import { InboxStats } from './components/inbox-stats'
 import { NewChat } from './components/new-chat'
-import { type ChatUser, type Convo } from './data/chat-types'
-// Fake Data
-import { conversations } from './data/convo.json'
+import { Composer } from './components/shared/composer'
+import { ConversationList } from './components/shared/conversation-list'
+import { MessageThread } from './components/shared/message-thread'
+import { useChatInbox } from './hooks/use-chat-inbox'
+import { useChatThread } from './hooks/use-chat-thread'
+import type { ChatConversation, ChatStats, ChatTeamDetail } from './types'
 
+const STATUS_FILTERS = [
+  { value: 'active', label: 'Active' },
+  { value: 'open', label: 'Open' },
+  { value: 'pending', label: 'Waiting on client' },
+  { value: 'on_hold', label: 'On hold' },
+  { value: 'resolved', label: 'Resolved' },
+  { value: 'closed', label: 'Closed' },
+  { value: 'any', label: 'All statuses' },
+]
+
+/** The chat a notification linked to (?chat=ID). */
+function chatFromUrl(): number | null {
+  if (typeof window === 'undefined') return null
+  const id = Number(new URLSearchParams(window.location.search).get('chat'))
+  return Number.isFinite(id) && id > 0 ? id : null
+}
+
+function rememberInUrl(id: number | null) {
+  const url = new URL(window.location.href)
+  if (id) url.searchParams.set('chat', String(id))
+  else url.searchParams.delete('chat')
+  window.history.replaceState(window.history.state, '', url)
+}
+
+/**
+ * The team's live chat inbox: the template's chat layout (list | thread)
+ * with a client panel on wide screens, statuses, internal notes and live
+ * updates.
+ */
 export function Chats() {
+  const { auth, chat } = usePage<PageProps>().props
+  const { can } = usePermissions()
+  const me = useMemo(() => ({ id: auth.user.id, name: auth.user.name, avatar_url: null }), [auth.user.id, auth.user.name])
+  const realtime = !!chat?.realtime
+  const echo = getEcho(realtime)
+  const connection = useEchoConnection(realtime)
+  const live = connection === 'connected'
+  const poll = chat?.poll ?? { thread_ms: 5000, inbox_ms: 20000 }
+
+  const [status, setStatus] = useState('active')
   const [search, setSearch] = useState('')
-  const [selectedUser, setSelectedUser] = useState<ChatUser | null>(null)
-  const [mobileSelectedUser, setMobileSelectedUser] = useState<ChatUser | null>(
-    null
-  )
-  const [createConversationDialogOpened, setCreateConversationDialog] =
-    useState(false)
+  const [q, setQ] = useState('')
+  const [selectedId, setSelectedId] = useState<number | null>(chatFromUrl)
+  const [detail, setDetail] = useState<ChatTeamDetail | null>(null)
+  const [loadingDetail, setLoadingDetail] = useState(false)
+  const [mobileThread, setMobileThread] = useState(!!selectedId)
+  const [contextOpen, setContextOpen] = useState(false)
+  const [newChat, setNewChat] = useState(false)
+  const [stats, setStats] = useState<ChatStats | null>(null)
 
-  // Filtered data based on the search query
-  const filteredChatList = conversations.filter(({ fullName }) =>
-    fullName.toLowerCase().includes(search.trim().toLowerCase())
-  )
+  useEffect(() => {
+    const timer = setTimeout(() => setQ(search.trim()), 300)
+    return () => clearTimeout(timer)
+  }, [search])
 
-  const currentMessage = selectedUser?.messages.reduce(
-    (acc: Record<string, Convo[]>, obj) => {
-      const key = format(obj.timestamp, 'd MMM, yyyy')
+  const load = useCallback((cursor?: string) => teamChats.list({ status, q: q || undefined, cursor }), [status, q])
 
-      // Create an array for the category if it doesn't exist
-      if (!acc[key]) {
-        acc[key] = []
-      }
+  const inbox = useChatInbox({
+    side: 'team',
+    load,
+    key: `${status}|${q}`,
+    echo,
+    live,
+    pollMs: poll.inbox_ms,
+    userId: me.id,
+    openId: selectedId,
+  })
 
-      // Push the current object to the array
-      acc[key].push(obj)
-
-      return acc
+  const applyConversation = useCallback(
+    (conversation: ChatConversation) => {
+      setDetail((current) =>
+        current && current.conversation.id === conversation.id
+          ? { ...current, conversation: { ...current.conversation, ...conversation } }
+          : current
+      )
+      inbox.upsert(conversation)
     },
-    {}
+    [inbox.upsert] // eslint-disable-line react-hooks/exhaustive-deps
   )
 
-  const users = conversations.map(({ messages, ...user }) => user)
+  const thread = useChatThread({
+    api: teamChatApi,
+    conversationId: selectedId,
+    echo,
+    live,
+    pollMs: poll.thread_ms,
+    me,
+    initialReadUpTo: detail?.client_read_up_to ?? 0,
+    onConversation: applyConversation,
+  })
+
+  const loadDetail = useCallback(async (id: number, quiet = false) => {
+    if (!quiet) setLoadingDetail(true)
+    try {
+      const { data } = await axios.get<ChatTeamDetail>(`/api/chats/${id}`)
+      setDetail(data)
+    } catch (error) {
+      if (!quiet) {
+        toast.error(errorMessage(error, 'That chat is not available'))
+        setSelectedId(null)
+        rememberInUrl(null)
+      }
+    } finally {
+      if (!quiet) setLoadingDetail(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    setDetail(null)
+    if (selectedId) void loadDetail(selectedId)
+  }, [selectedId, loadDetail])
+
+  // A status change can follow a message: keep the header right
+  // when polling (live, conversation.updated does it).
+  const lastMessageId = thread.messages[thread.messages.length - 1]?.id
+  const firstLoad = useRef(true)
+  useEffect(() => {
+    if (firstLoad.current) {
+      firstLoad.current = false
+      return
+    }
+    if (selectedId && !live && lastMessageId && lastMessageId > 0) void loadDetail(selectedId, true)
+  }, [lastMessageId]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const loadStats = useCallback(() => {
+    if (!can('view chat stats')) return
+    axios.get<ChatStats>('/api/chats/stats').then(({ data }) => setStats(data)).catch(() => {})
+  }, [can])
+
+  useEffect(() => {
+    loadStats()
+    const timer = setInterval(() => document.visibilityState === 'visible' && loadStats(), 60_000)
+    return () => clearInterval(timer)
+  }, [loadStats])
+
+  // The list moved: so did the numbers.
+  useEffect(() => loadStats(), [inbox.items]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const open = (id: number) => {
+    setSelectedId(id)
+    setMobileThread(true)
+    inbox.markRead(id)
+    rememberInUrl(id)
+  }
+
+  const close = () => {
+    setMobileThread(false)
+  }
+
+  const conversation = detail?.conversation
+  const closed = conversation?.status === 'closed'
 
   return (
     <>
-      {/* ===== Top Heading ===== */}
-      <Header>
+      <Header fixed>
         <Search className='me-auto' />
         <ThemeSwitch />
         <NotificationsDropdown />
         <ProfileDropdown />
       </Header>
 
-      <Main fixed>
-        <section className='flex h-full gap-6'>
-          {/* Left Side */}
-          <div className='flex w-full flex-col gap-2 sm:w-56 lg:w-72 2xl:w-80'>
-            <div className='sticky top-0 z-10 -mx-4 bg-background px-4 pb-3 shadow-md sm:static sm:z-auto sm:mx-0 sm:p-0 sm:shadow-none'>
-              <div className='flex items-center justify-between py-2'>
-                <div className='flex gap-2'>
-                  <h1 className='text-2xl font-bold'>Inbox</h1>
-                  <MessagesSquare size={20} />
-                </div>
-
-                <Button
-                  size='icon'
-                  variant='ghost'
-                  onClick={() => setCreateConversationDialog(true)}
-                  className='rounded-lg'
-                >
-                  <Edit size={24} className='stroke-muted-foreground' />
-                </Button>
-              </div>
-
-              <SearchBeam>
-                <label
+      <Main fixed fluid className='flex flex-col gap-3'>
+        <div className='flex flex-wrap items-center gap-2 @6xl/content:grid @6xl/content:grid-cols-[1fr_auto_1fr]'>
+          <div className='flex items-center gap-2'>
+            <h1 className='text-lg font-semibold tracking-tight'>Live Chat</h1>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span
                   className={cn(
-                    'focus-within:ring-1 focus-within:ring-ring focus-within:outline-hidden',
-                    'flex h-10 w-full items-center space-x-0 rounded-md border border-border ps-2'
+                    'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium',
+                    live ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400' : 'bg-muted text-muted-foreground'
                   )}
                 >
-                  <SearchIcon size={15} className='me-2 stroke-slate-500' />
-                  <span className='sr-only'>Search</span>
+                  {live ? <Wifi className='size-3' /> : <WifiOff className='size-3' />}
+                  {live ? 'Live' : connection === 'connecting' ? 'Connecting' : 'Refreshing'}
+                </span>
+              </TooltipTrigger>
+              <TooltipContent>
+                {live ? 'New messages appear instantly.' : 'No live connection: the inbox checks for new messages every few seconds.'}
+              </TooltipContent>
+            </Tooltip>
+          </div>
+          <div className='order-last flex w-full justify-center @6xl/content:order-none @6xl/content:w-auto'>
+            {can('view chat stats') && <InboxStats stats={stats} />}
+          </div>
+          <div className='ms-auto flex items-center gap-2 @6xl/content:ms-0 @6xl/content:justify-self-end'>
+            {can('start chats') && (
+              <Button size='sm' onClick={() => setNewChat(true)}>
+                <SquarePen className='size-4' /> New chat
+              </Button>
+            )}
+            <Select value={status} onValueChange={setStatus}>
+              <SelectTrigger size='sm' className='h-8 w-44 text-xs' aria-label='Filter by status'>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent align='end'>
+                {STATUS_FILTERS.map((f) => (
+                  <SelectItem key={f.value} value={f.value}>
+                    {f.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        <section className='flex min-h-0 flex-1 overflow-hidden rounded-lg border bg-background'>
+          {/* ── Inbox ───────────────────────────────────────────── */}
+          <div className={cn('min-h-0 w-full min-w-0 flex-col border-e md:flex md:w-72 md:shrink-0 lg:w-80', mobileThread ? 'hidden' : 'flex')}>
+            <div className='border-b p-2.5'>
+              <SearchBeam>
+                <label className='flex h-9 w-full items-center rounded-md border border-input ps-2.5 focus-within:ring-1 focus-within:ring-ring'>
+                  <SearchIcon className='me-2 size-4 shrink-0 text-muted-foreground' />
+                  <span className='sr-only'>Search chats</span>
                   <input
                     type='text'
-                    className='w-full flex-1 bg-inherit text-sm focus-visible:outline-hidden'
-                    placeholder='Search chat...'
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
+                    placeholder='Client, subject, CH- or order no.'
+                    className='w-full flex-1 bg-transparent pe-2.5 text-sm outline-none placeholder:text-muted-foreground'
                   />
                 </label>
               </SearchBeam>
             </div>
 
-            <ScrollArea className='-mx-3 h-full overflow-scroll overscroll-contain p-3'>
-              {filteredChatList.map((chatUsr) => {
-                const { id, profile, username, messages, fullName } = chatUsr
-                const lastConvo = messages[0]
-                const lastMsg =
-                  lastConvo.sender === 'You'
-                    ? `You: ${lastConvo.message}`
-                    : lastConvo.message
-                return (
-                  <Fragment key={id}>
-                    <button
-                      type='button'
-                      className={cn(
-                        'group hover:bg-accent hover:text-accent-foreground',
-                        `flex w-full rounded-md px-2 py-2 text-start text-sm`,
-                        selectedUser?.id === id && 'sm:bg-muted'
-                      )}
-                      onClick={() => {
-                        setSelectedUser(chatUsr)
-                        setMobileSelectedUser(chatUsr)
-                      }}
-                    >
-                      <div className='flex gap-2'>
-                        <Avatar>
-                          <AvatarImage src={profile} alt={username} />
-                          <AvatarFallback>
-                            {getDisplayNameInitials(fullName)}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div>
-                          <span className='col-start-2 row-span-2 font-medium'>
-                            {fullName}
-                          </span>
-                          <span className='col-start-2 row-span-2 row-start-2 line-clamp-2 text-ellipsis text-muted-foreground group-hover:text-accent-foreground/90'>
-                            {lastMsg}
-                          </span>
-                        </div>
-                      </div>
-                    </button>
-                    <Separator className='my-1' />
-                  </Fragment>
-                )
-              })}
-            </ScrollArea>
+            <ConversationList
+              side='team'
+              items={inbox.items}
+              selectedId={selectedId}
+              onSelect={(c) => open(c.id)}
+              loading={inbox.loading}
+              hasMore={!!inbox.nextCursor}
+              loadingMore={inbox.loadingMore}
+              onMore={inbox.more}
+              empty={
+                <p className='text-center text-sm text-muted-foreground'>
+                  {q ? 'No chats match your search.' : 'No chats here.'}
+                </p>
+              }
+            />
           </div>
 
-          {/* Right Side */}
-          {selectedUser ? (
-            <div
-              className={cn(
-                'absolute inset-0 start-full z-50 hidden w-full flex-1 flex-col border bg-background shadow-xs sm:static sm:z-auto sm:flex sm:rounded-md',
-                mobileSelectedUser && 'inset-s-0 flex'
-              )}
-            >
-              {/* Top Part */}
-              <div className='mb-1 flex flex-none justify-between bg-card p-4 shadow-lg sm:rounded-t-md'>
-                {/* Left */}
-                <div className='flex gap-3'>
-                  <Button
-                    size='icon'
-                    variant='ghost'
-                    className='-ms-2 h-full sm:hidden'
-                    onClick={() => setMobileSelectedUser(null)}
-                  >
-                    <ArrowLeft className='rtl:rotate-180' />
-                  </Button>
-                  <div className='flex items-center gap-2 lg:gap-4'>
-                    <Avatar className='size-9 lg:size-11'>
-                      <AvatarImage
-                        src={selectedUser.profile}
-                        alt={selectedUser.username}
-                      />
-                      <AvatarFallback>
-                        {getDisplayNameInitials(selectedUser.fullName)}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div>
-                      <span className='col-start-2 row-span-2 text-sm font-medium lg:text-base'>
-                        {selectedUser.fullName}
-                      </span>
-                      <span className='col-start-2 row-span-2 row-start-2 line-clamp-1 block max-w-32 text-xs text-nowrap text-ellipsis text-muted-foreground lg:max-w-none lg:text-sm'>
-                        {selectedUser.title}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Right */}
-                <div className='-me-1 flex items-center gap-1 lg:gap-2'>
-                  <Button
-                    size='icon'
-                    variant='ghost'
-                    className='hidden size-8 rounded-full sm:inline-flex lg:size-10'
-                  >
-                    <Video size={22} className='stroke-muted-foreground' />
-                  </Button>
-                  <Button
-                    size='icon'
-                    variant='ghost'
-                    className='hidden size-8 rounded-full sm:inline-flex lg:size-10'
-                  >
-                    <Phone size={22} className='stroke-muted-foreground' />
-                  </Button>
-                  <Button
-                    size='icon'
-                    variant='ghost'
-                    className='h-10 rounded-md sm:h-8 sm:w-4 lg:h-10 lg:w-6'
-                  >
-                    <MoreVertical className='stroke-muted-foreground sm:size-5' />
-                  </Button>
-                </div>
-              </div>
-
-              {/* Conversation */}
-              <div className='flex flex-1 flex-col gap-2 rounded-md px-4 pt-0 pb-4'>
-                <div className='flex size-full flex-1'>
-                  <div className='chat-text-container relative -me-4 flex flex-1 flex-col overflow-y-hidden'>
-                    <div className='chat-flex flex h-40 w-full grow flex-col-reverse justify-start gap-4 overflow-y-auto overscroll-contain py-2 pe-4 pb-4'>
-                      {currentMessage &&
-                        Object.keys(currentMessage).map((key) => (
-                          <Fragment key={key}>
-                            {currentMessage[key].map((msg, index) => (
-                              <div
-                                key={`${msg.sender}-${msg.timestamp}-${index}`}
-                                className={cn(
-                                  'chat-box max-w-72 px-3 py-2 wrap-break-word shadow-lg',
-                                  msg.sender === 'You'
-                                    ? 'self-end rounded-[16px_16px_0_16px] bg-primary/90 text-primary-foreground/75'
-                                    : 'self-start rounded-[16px_16px_16px_0] bg-muted'
-                                )}
-                              >
-                                {msg.message}{' '}
-                                <span
-                                  className={cn(
-                                    'mt-1 block text-xs font-light text-foreground/75 italic',
-                                    msg.sender === 'You' &&
-                                      'text-end text-primary-foreground/85'
-                                  )}
-                                >
-                                  {format(msg.timestamp, 'h:mm a')}
-                                </span>
-                              </div>
-                            ))}
-                            <div className='text-center text-xs'>{key}</div>
-                          </Fragment>
-                        ))}
-                    </div>
-                  </div>
-                </div>
-                <form className='flex w-full flex-none gap-2'>
-                  <div className='flex flex-1 items-center gap-2 rounded-md border border-input bg-card px-2 py-1 focus-within:ring-1 focus-within:ring-ring focus-within:outline-hidden lg:gap-4'>
-                    <div className='space-x-1'>
-                      <Button
-                        size='icon'
-                        type='button'
-                        variant='ghost'
-                        className='h-8 rounded-md'
-                      >
-                        <Plus size={20} className='stroke-muted-foreground' />
-                      </Button>
-                      <Button
-                        size='icon'
-                        type='button'
-                        variant='ghost'
-                        className='hidden h-8 rounded-md lg:inline-flex'
-                      >
-                        <ImagePlus
-                          size={20}
-                          className='stroke-muted-foreground'
-                        />
-                      </Button>
-                      <Button
-                        size='icon'
-                        type='button'
-                        variant='ghost'
-                        className='hidden h-8 rounded-md lg:inline-flex'
-                      >
-                        <Paperclip
-                          size={20}
-                          className='stroke-muted-foreground'
-                        />
-                      </Button>
-                    </div>
-                    <label className='flex-1'>
-                      <span className='sr-only'>Chat Text Box</span>
-                      <input
-                        type='text'
-                        placeholder='Type your messages...'
-                        className='h-8 w-full bg-inherit focus-visible:outline-hidden'
-                      />
-                    </label>
-                    <Button
-                      variant='ghost'
-                      size='icon'
-                      className='hidden sm:inline-flex'
-                    >
-                      <Send size={20} />
+          {/* ── Thread ──────────────────────────────────────────── */}
+          <div className={cn('min-w-0 flex-1 flex-col md:flex', mobileThread ? 'flex' : 'hidden')}>
+            {!selectedId ? (
+              <EmptyState
+                bot='blob'
+                size='lg'
+                className='h-full p-8'
+                title='Pick a conversation'
+                description='Chats clients start from their portal land here. Reply, add notes for the team, assign and resolve them.'
+                action={
+                  can('start chats') ? (
+                    <Button size='sm' variant='outline' onClick={() => setNewChat(true)}>
+                      <SquarePen className='size-4' /> Start a chat
                     </Button>
-                  </div>
-                  <Button className='h-full sm:hidden'>
-                    <Send size={18} /> Send
-                  </Button>
-                </form>
+                  ) : undefined
+                }
+              />
+            ) : loadingDetail || !detail ? (
+              <div className='flex flex-1 items-center justify-center'>
+                <Loader2 className='size-5 animate-spin text-muted-foreground' />
               </div>
-            </div>
-          ) : (
-            <div
-              className={cn(
-                'absolute inset-0 start-full z-50 hidden w-full flex-1 flex-col justify-center rounded-md border bg-card shadow-xs sm:static sm:z-auto sm:flex'
-              )}
-            >
-              <div className='flex flex-col items-center space-y-6'>
-                <div className='flex size-16 items-center justify-center rounded-full border-2 border-border'>
-                  <MessagesSquare className='size-8' />
+            ) : (
+              <>
+                <ConversationHeader
+                  detail={detail}
+                  onBack={close}
+                  onChanged={applyConversation}
+                  onDeleted={() => {
+                    setSelectedId(null)
+                    setDetail(null)
+                    setMobileThread(false)
+                    rememberInUrl(null)
+                    void inbox.refresh(true)
+                  }}
+                  contextOpen={contextOpen}
+                  onToggleContext={() => setContextOpen((v) => !v)}
+                />
+
+                <div className='flex min-h-0 flex-1 bg-muted/20'>
+                  <MessageThread
+                    messages={thread.messages}
+                    side='team'
+                    meId={me.id}
+                    loading={thread.loading}
+                    hasMore={thread.hasMore}
+                    loadingOlder={thread.loadingOlder}
+                    onLoadOlder={thread.loadOlder}
+                    readUpTo={thread.readUpTo}
+                    typing={thread.typing}
+                    onRetry={thread.retry}
+                    onDiscard={thread.discard}
+                  />
                 </div>
-                <div className='space-y-2 text-center'>
-                  <h1 className='text-xl font-semibold'>Your messages</h1>
-                  <p className='text-sm text-muted-foreground'>
-                    Send a message to start a chat.
-                  </p>
-                </div>
-                <Button onClick={() => setCreateConversationDialog(true)}>
-                  Send message
-                </Button>
-              </div>
-            </div>
+
+                <Composer
+                  autoFocusKey={detail.conversation.id}
+                  canReply={detail.permissions.reply}
+                  canNote={detail.permissions.note}
+                  onTyping={thread.whisperTyping}
+                  onSend={thread.send}
+                  placeholder={`Reply to ${detail.conversation.client?.company_name ?? 'the client'}…`}
+                  disabledReason={
+                    closed ? (
+                      <div className='flex flex-wrap items-center gap-2'>
+                        <span>This chat is closed. Reopen it to reply.</span>
+                        {detail.permissions.status && (
+                          <Button
+                            size='sm'
+                            variant='outline'
+                            className='h-7 gap-1'
+                            onClick={async () => {
+                              try {
+                                const { data } = await axios.patch(`/api/chats/${detail.conversation.id}/status`, { status: 'open' })
+                                applyConversation(data.conversation)
+                              } catch (error) {
+                                toast.error(errorMessage(error, 'Could not reopen the chat'))
+                              }
+                            }}
+                          >
+                            <RotateCcw className='size-3.5' /> Reopen
+                          </Button>
+                        )}
+                      </div>
+                    ) : undefined
+                  }
+                />
+              </>
+            )}
+          </div>
+
+          {/* ── Client panel (xl and up) ────────────────────────── */}
+          {detail && contextOpen && (
+            <aside className='hidden w-80 shrink-0 border-s xl:block'>
+              <ClientContextPanel detail={detail} onOpen={open} />
+            </aside>
           )}
         </section>
+
         <NewChat
-          users={users}
-          onOpenChange={setCreateConversationDialog}
-          open={createConversationDialogOpened}
+          open={newChat}
+          onOpenChange={setNewChat}
+          onCreated={(conversation) => {
+            inbox.upsert(conversation)
+            open(conversation.id)
+          }}
         />
       </Main>
     </>

@@ -1,6 +1,6 @@
 # Custom Caddyfile for the VPS (Coolify builds with Railpack, which uses this file
 # from the project root in place of its own default). It is Railpack's default
-# Caddyfile with only two deliberate differences, marked "CHANGED" below. Shared
+# Caddyfile with only a few deliberate differences, marked "CHANGED" below. Shared
 # hosting never reads this file.
 {
 	admin off
@@ -36,6 +36,14 @@
 	# responses and everything else keep their normal no-cache behaviour.
 	@hashed_assets path /build/assets/*
 	header @hashed_assets Cache-Control "public, max-age=31536000, immutable"
+
+	# CHANGED: live chat: the browser's websocket to Reverb (deploy/supervisord.conf),
+	# which only listens on loopback. Same domain and TLS as the portal, so no
+	# extra port or domain in Coolify.
+	@reverb path /app/*
+	handle @reverb {
+		reverse_proxy 127.0.0.1:8080
+	}
 
 	file_server {
 		hide .git
