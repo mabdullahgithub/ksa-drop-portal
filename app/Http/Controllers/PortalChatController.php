@@ -13,12 +13,13 @@ use App\Services\Chat\ChatAttachmentStore;
 use App\Services\Chat\ChatBroadcaster;
 use App\Services\Chat\ChatMessenger;
 use App\Services\Chat\ChatPresenter;
+use App\Services\Chat\ChatSharedItems;
 use App\Services\Chat\ChatUnread;
 use App\Services\Chat\ChatWorkflow;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
-use Symfony\Component\HttpFoundation\StreamedResponse;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 /**
  * The client's Support page: their conversations with the team.
@@ -77,6 +78,8 @@ class PortalChatController extends Controller
             'conversation' => ChatPresenter::conversation($conversation->load(ChatPresenter::relations(false)), false),
             'team_read_up_to' => ChatUnread::teamReadUpTo($conversation),
             'read_only' => $this->impersonating(),
+            // Whether the composer offers the Inventory tab.
+            'can_share_inventory' => ChatSharedItems::hasInventory($this->client()),
         ]);
     }
 
@@ -106,7 +109,12 @@ class PortalChatController extends Controller
         $this->own($conversation);
         $this->refuseWhileImpersonating();
 
-        $message = $this->messenger->send($conversation->load('client'), $request->user(), ChatMessage::FROM_CLIENT, $this->validateMessage($request));
+        $message = $this->messenger->send(
+            $conversation->load('client'),
+            $request->user(),
+            ChatMessage::FROM_CLIENT,
+            $this->validateMessage($request, allowItems: true),
+        );
 
         return response()->json(['message' => ChatPresenter::message($message->load(['sender', 'attachments']), false)], 201);
     }
@@ -132,14 +140,17 @@ class PortalChatController extends Controller
         return response()->json(['up_to' => $upTo]);
     }
 
+    /** The one status a client sets. It locks the chat: there is no way back for them. */
     public function resolve(Request $request, ChatConversation $conversation): JsonResponse
     {
-        return $this->move($request, $conversation, ChatConversation::RESOLVED);
-    }
+        $this->own($conversation);
+        $this->refuseWhileImpersonating();
 
-    public function reopen(Request $request, ChatConversation $conversation): JsonResponse
-    {
-        return $this->move($request, $conversation, ChatConversation::OPEN);
+        $conversation = $this->workflow->changeStatus($conversation, $request->user(), ChatConversation::RESOLVED, asClient: true);
+
+        return response()->json([
+            'conversation' => ChatPresenter::conversation($conversation->unsetRelations()->load(ChatPresenter::relations(false)), false),
+        ]);
     }
 
     /** The client's own orders, to link one to a new conversation. */
@@ -152,7 +163,18 @@ class PortalChatController extends Controller
         return response()->json(['data' => ChatController::orderLookup($client->id, $term)]);
     }
 
-    public function attachment(ChatAttachment $attachment): StreamedResponse
+    /** The client's own inventory products, to attach to a message. */
+    public function products(Request $request): JsonResponse
+    {
+        $client = $this->client();
+        abort_unless(ChatSharedItems::hasInventory($client), 403);
+
+        $term = (string) ($request->validate(['q' => ['nullable', 'string', 'max:100']])['q'] ?? '');
+
+        return response()->json(['data' => ChatSharedItems::productOptions($client, $term)]);
+    }
+
+    public function attachment(ChatAttachment $attachment): BinaryFileResponse
     {
         $client = $this->client();
         $message = ChatMessage::find($attachment->message_id);
@@ -160,18 +182,6 @@ class PortalChatController extends Controller
         abort_unless($message && ! $message->internal && $attachment->conversation?->client_id === $client->id, 404);
 
         return ChatAttachmentStore::response($attachment);
-    }
-
-    private function move(Request $request, ChatConversation $conversation, string $to): JsonResponse
-    {
-        $this->own($conversation);
-        $this->refuseWhileImpersonating();
-
-        $conversation = $this->workflow->changeStatus($conversation, $request->user(), $to, asClient: true);
-
-        return response()->json([
-            'conversation' => ChatPresenter::conversation($conversation->unsetRelations()->load(ChatPresenter::relations(false)), false),
-        ]);
     }
 
     private function client(): Client

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type Echo from 'laravel-echo'
 import { errorMessage, uuid, type ChatApi } from '../api'
-import type { ChatConversation, ChatMessage, ChatPerson } from '../types'
+import type { ChatConversation, ChatMessage, ChatPerson, ChatSharedItem, VoiceClip } from '../types'
 import { toast } from 'sonner'
 
 interface Options {
@@ -206,7 +206,7 @@ export function useChatThread({ api, conversationId, echo, live, pollMs, me, ini
   }, [echo, conversationId, me.name, api.side])
 
   const deliver = useCallback(
-    async (draft: ChatMessage, files: File[]) => {
+    async (draft: ChatMessage, files: File[], voice?: VoiceClip) => {
       const id = draft.conversation_id
       try {
         const message = await api.send(id, {
@@ -214,12 +214,17 @@ export function useChatThread({ api, conversationId, echo, live, pollMs, me, ini
           kind: draft.kind === 'note' ? 'note' : 'message',
           clientUuid: draft.client_uuid!,
           files,
+          voice,
+          // The bubble holds what was attached, so a retry sends it again.
+          items: draft.items,
         })
         merge([message])
         return true
       } catch (error) {
         setMessages((current) =>
-          current.map((m) => (m.client_uuid === draft.client_uuid && m.pending ? { ...m, pending: 'failed', retryFiles: files } : m))
+          current.map((m) =>
+            m.client_uuid === draft.client_uuid && m.pending ? { ...m, pending: 'failed', retryFiles: files, retryVoice: voice } : m
+          )
         )
         toast.error(errorMessage(error, 'Your message was not sent'))
         return false
@@ -229,7 +234,7 @@ export function useChatThread({ api, conversationId, echo, live, pollMs, me, ini
   )
 
   const send = useCallback(
-    (input: { body: string; kind: 'message' | 'note'; files: File[] }) => {
+    (input: { body: string; kind: 'message' | 'note'; files: File[]; voice?: VoiceClip; items?: ChatSharedItem[] }) => {
       if (!conversationId) return Promise.resolve(false)
       const draft: ChatMessage = {
         id: -Date.now(),
@@ -241,22 +246,43 @@ export function useChatThread({ api, conversationId, echo, live, pollMs, me, ini
         body: input.body || null,
         meta: null,
         client_uuid: uuid(),
-        attachments: input.files.map((file, index) => ({
-          id: -index - 1,
-          name: file.name,
-          mime: file.type,
-          size: file.size,
-          is_image: file.type.startsWith('image/'),
-          width: null,
-          height: null,
-          url: file.type.startsWith('image/') ? URL.createObjectURL(file) : '',
-        })),
+        items: input.items ?? [],
+        attachments: [
+          ...input.files.map((file, index) => ({
+            id: -index - 1,
+            name: file.name,
+            mime: file.type,
+            size: file.size,
+            is_image: file.type.startsWith('image/'),
+            is_voice: false,
+            duration: null,
+            width: null,
+            height: null,
+            url: file.type.startsWith('image/') ? URL.createObjectURL(file) : '',
+          })),
+          ...(input.voice
+            ? [
+                {
+                  id: -input.files.length - 1,
+                  name: input.voice.file.name,
+                  mime: input.voice.file.type,
+                  size: input.voice.file.size,
+                  is_image: false,
+                  is_voice: true,
+                  duration: input.voice.seconds,
+                  width: null,
+                  height: null,
+                  url: input.voice.url,
+                },
+              ]
+            : []),
+        ],
         created_at: new Date().toISOString(),
         edited_at: null,
         pending: 'sending',
       }
       setMessages((current) => [...current, draft])
-      return deliver(draft, input.files)
+      return deliver(draft, input.files, input.voice)
     },
     [api.side, conversationId, deliver, me]
   )
@@ -266,7 +292,7 @@ export function useChatThread({ api, conversationId, echo, live, pollMs, me, ini
       const draft = messages.find((m) => m.client_uuid === clientUuid && m.pending === 'failed')
       if (!draft) return
       setMessages((current) => current.map((m) => (m === draft ? { ...m, pending: 'sending' } : m)))
-      void deliver(draft, draft.retryFiles ?? [])
+      void deliver(draft, draft.retryFiles ?? [], draft.retryVoice)
     },
     [messages, deliver]
   )

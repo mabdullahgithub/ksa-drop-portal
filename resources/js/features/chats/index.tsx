@@ -19,6 +19,7 @@ import { ThemeSwitch } from '@/components/theme-switch'
 import { usePermissions } from '@/hooks/use-permissions'
 import type { PageProps } from '@/types'
 import { errorMessage, teamChatApi, teamChats } from './api'
+import { PRIORITY_META } from './constants'
 import { ClientContextPanel } from './components/client-context-panel'
 import { ConversationHeader } from './components/conversation-header'
 import { InboxStats } from './components/inbox-stats'
@@ -28,7 +29,8 @@ import { ConversationList } from './components/shared/conversation-list'
 import { MessageThread } from './components/shared/message-thread'
 import { useChatInbox } from './hooks/use-chat-inbox'
 import { useChatThread } from './hooks/use-chat-thread'
-import type { ChatConversation, ChatStats, ChatTeamDetail } from './types'
+import { useOpenChatInList } from './hooks/use-open-chat-in-list'
+import type { ChatConversation, ChatFilterCounts, ChatPriority, ChatStats, ChatTeamDetail } from './types'
 
 const STATUS_FILTERS = [
   { value: 'active', label: 'Active' },
@@ -39,6 +41,12 @@ const STATUS_FILTERS = [
   { value: 'closed', label: 'Closed' },
   { value: 'any', label: 'All statuses' },
 ]
+
+/** How many chats an option would show. */
+function FilterCount({ value }: { value: number | undefined }) {
+  if (value === undefined) return null
+  return <span className='ms-1 rounded bg-muted px-1 text-[10px] leading-4 text-muted-foreground tabular-nums'>{value}</span>
+}
 
 /** The chat a notification linked to (?chat=ID). */
 function chatFromUrl(): number | null {
@@ -70,6 +78,7 @@ export function Chats() {
   const poll = chat?.poll ?? { thread_ms: 5000, inbox_ms: 20000 }
 
   const [status, setStatus] = useState('active')
+  const [priority, setPriority] = useState('any')
   const [search, setSearch] = useState('')
   const [q, setQ] = useState('')
   const [selectedId, setSelectedId] = useState<number | null>(chatFromUrl)
@@ -85,12 +94,16 @@ export function Chats() {
     return () => clearTimeout(timer)
   }, [search])
 
-  const load = useCallback((cursor?: string) => teamChats.list({ status, q: q || undefined, cursor }), [status, q])
+  const load = useCallback(
+    (cursor?: string) =>
+      teamChats.list({ status, priority: priority === 'any' ? undefined : priority, q: q || undefined, cursor }),
+    [status, priority, q]
+  )
 
-  const inbox = useChatInbox({
+  const inbox = useChatInbox<ChatFilterCounts>({
     side: 'team',
     load,
-    key: `${status}|${q}`,
+    key: `${status}|${priority}|${q}`,
     echo,
     live,
     pollMs: poll.inbox_ms,
@@ -168,6 +181,20 @@ export function Chats() {
   // The list moved: so did the numbers.
   useEffect(() => loadStats(), [inbox.items]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  const outside = useOpenChatInList({
+    items: inbox.items,
+    loading: inbox.loading,
+    loadedKey: inbox.loadedKey,
+    selectedId,
+    open: detail?.conversation,
+    onFilteredOut: () => {
+      setSelectedId(null)
+      setDetail(null)
+      setMobileThread(false)
+      rememberInUrl(null)
+    },
+  })
+
   const open = (id: number) => {
     setSelectedId(id)
     setMobileThread(true)
@@ -180,7 +207,8 @@ export function Chats() {
   }
 
   const conversation = detail?.conversation
-  const closed = conversation?.status === 'closed'
+  // Resolved or closed: nobody writes in it (ChatConversation::isLocked).
+  const locked = conversation?.status === 'resolved' || conversation?.status === 'closed'
 
   return (
     <>
@@ -221,18 +249,6 @@ export function Chats() {
                 <SquarePen className='size-4' /> New chat
               </Button>
             )}
-            <Select value={status} onValueChange={setStatus}>
-              <SelectTrigger size='sm' className='h-8 w-44 text-xs' aria-label='Filter by status'>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent align='end'>
-                {STATUS_FILTERS.map((f) => (
-                  <SelectItem key={f.value} value={f.value}>
-                    {f.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
           </div>
         </div>
 
@@ -253,11 +269,44 @@ export function Chats() {
                   />
                 </label>
               </SearchBeam>
+              <div className='mt-2 grid grid-cols-2 gap-1.5'>
+                <Select value={status} onValueChange={setStatus}>
+                  <SelectTrigger size='sm' className='h-8 w-full min-w-0 text-xs' aria-label='Filter by status'>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent align='start'>
+                    {STATUS_FILTERS.map((f) => (
+                      <SelectItem key={f.value} value={f.value}>
+                        {f.label}
+                        <FilterCount value={inbox.counts?.status[f.value]} />
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select value={priority} onValueChange={setPriority}>
+                  <SelectTrigger size='sm' className='h-8 w-full min-w-0 text-xs' aria-label='Filter by priority'>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent align='start'>
+                    <SelectItem value='any'>
+                      All priorities
+                      <FilterCount value={inbox.counts?.priority.any} />
+                    </SelectItem>
+                    {(Object.keys(PRIORITY_META) as ChatPriority[]).map((key) => (
+                      <SelectItem key={key} value={key}>
+                        {PRIORITY_META[key].label}
+                        <FilterCount value={inbox.counts?.priority[key]} />
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
             <ConversationList
               side='team'
               items={inbox.items}
+              outside={outside}
               selectedId={selectedId}
               onSelect={(c) => open(c.id)}
               loading={inbox.loading}
@@ -266,7 +315,7 @@ export function Chats() {
               onMore={inbox.more}
               empty={
                 <p className='text-center text-sm text-muted-foreground'>
-                  {q ? 'No chats match your search.' : 'No chats here.'}
+                  {q ? 'No chats match your search.' : priority !== 'any' ? 'No chats with this priority.' : 'No chats here.'}
                 </p>
               }
             />
@@ -334,9 +383,12 @@ export function Chats() {
                   onSend={thread.send}
                   placeholder={`Reply to ${detail.conversation.client?.company_name ?? 'the client'}…`}
                   disabledReason={
-                    closed ? (
+                    locked ? (
                       <div className='flex flex-wrap items-center gap-2'>
-                        <span>This chat is closed. Reopen it to reply.</span>
+                        <span>
+                          This chat is {detail.conversation.status} and locked.
+                          {detail.permissions.status && ' Reopen it to reply.'}
+                        </span>
                         {detail.permissions.status && (
                           <Button
                             size='sm'
@@ -365,7 +417,7 @@ export function Chats() {
           {/* ── Client panel (xl and up) ────────────────────────── */}
           {detail && contextOpen && (
             <aside className='hidden w-80 shrink-0 border-s xl:block'>
-              <ClientContextPanel detail={detail} onOpen={open} />
+              <ClientContextPanel detail={detail} messages={thread.messages} onOpen={open} />
             </aside>
           )}
         </section>

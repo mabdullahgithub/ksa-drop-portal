@@ -8,7 +8,7 @@
     </p>
 
     @component('emails.components.alert', ['type' => 'info'])
-        <p style="margin: 0; color: #374151; white-space: pre-line;">{{ \Illuminate\Support\Str::limit((string) $reply->body, 600) ?: 'Sent you a file.' }}</p>
+        <p style="margin: 0; color: #374151; white-space: pre-line;">{{ \Illuminate\Support\Str::limit((string) $reply->body, 600) ?: ($reply->attachments->contains('is_voice', true) ? 'Sent you a voice message.' : ($reply->shared_items ? 'Shared an order or product with you.' : 'Sent you a file.')) }}</p>
     @endcomponent
 
     @component('emails.components.button', ['url' => $url])

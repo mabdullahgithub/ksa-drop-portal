@@ -31,6 +31,10 @@ function LayoutInner({ children }: AuthenticatedLayoutProps) {
   const { hasRole } = usePermissions()
   const isImpersonating = !!auth.impersonating
   const defaultOpen = getCookie('sidebar_state') !== 'false'
+  // The chat screens fill the window: nothing floats over the conversation.
+  const path = usePage().url.split('?')[0]
+  const onTeamChat = path === '/chats'
+  const onClientChat = path === '/portal/support'
   useChatUnreadSync()
 
   return (
@@ -51,8 +55,8 @@ function LayoutInner({ children }: AuthenticatedLayoutProps) {
         >
           {children}
         </SidebarInset>
-        <StockAlertCards />
-        {hasRole('client') && <GuideVideoWidget />}
+        {!onTeamChat && <StockAlertCards />}
+        {hasRole('client') && !onClientChat && <GuideVideoWidget />}
       </SidebarProvider>
     </div>
   )

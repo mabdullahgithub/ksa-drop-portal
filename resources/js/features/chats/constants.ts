@@ -61,6 +61,10 @@ export const PRIORITY_META: Record<ChatPriority, { label: string; className: str
 }
 
 export const MAX_FILES = 5
+/** config/chat.php: chat.max_shared_items */
+export const MAX_SHARED_ITEMS = 5
+/** config/chat.php: chat.voice.max_seconds */
+export const MAX_VOICE_SECONDS = 180
 export const MAX_FILE_MB = 10
 export const ACCEPT_FILES = '.jpg,.jpeg,.png,.webp,.gif,.pdf,.csv,.txt,.xlsx,.xls,.docx,.doc'
 export const MAX_BODY = 5000

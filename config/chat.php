@@ -6,8 +6,8 @@
  */
 return [
 
-    // A resolved conversation the client has not answered is closed after this
-    // many days (chats:auto-close, daily).
+    // A resolved conversation is marked closed after this many days
+    // (chats:auto-close, daily).
     'auto_close_days' => (int) env('CHAT_AUTO_CLOSE_DAYS', 7),
 
     // Longest message body, in characters.
@@ -21,6 +21,26 @@ return [
         // Never svg or html: both can carry script.
         'mimes' => ['jpg', 'jpeg', 'png', 'webp', 'gif', 'pdf', 'csv', 'txt', 'xlsx', 'xls', 'docx', 'doc'],
         'images' => ['image/jpeg', 'image/png', 'image/webp', 'image/gif'],
+    ],
+
+    // Orders and inventory products a client can attach to one message.
+    'max_shared_items' => 5,
+
+    // Voice messages, recorded in the browser by either side.
+    'voice' => [
+        'max_seconds' => 180,
+        'max_kb' => 10240,
+        // What a recording is detected as => [served as, file extension].
+        // Audio-only recordings are often detected as the video container.
+        'types' => [
+            'audio/mp4' => ['audio/mp4', 'm4a'],
+            'video/mp4' => ['audio/mp4', 'm4a'],
+            'audio/x-m4a' => ['audio/mp4', 'm4a'],
+            'audio/webm' => ['audio/webm', 'webm'],
+            'video/webm' => ['audio/webm', 'webm'],
+            'audio/ogg' => ['audio/ogg', 'ogg'],
+            'application/ogg' => ['audio/ogg', 'ogg'],
+        ],
     ],
 
     // The email to a client about a reply waits this long, and is only sent if

@@ -43,6 +43,8 @@ export interface ChatConversation {
     kind: 'message' | 'note'
     sender_type: 'client' | 'staff' | 'system'
     attachment_only: boolean
+    voice: boolean
+    shared: ChatSharedItem['type'] | null
     created_at: string | null
   } | null
   unread_count: number
@@ -71,6 +73,9 @@ export interface ChatAttachment {
   mime: string
   size: number
   is_image: boolean
+  is_voice: boolean
+  /** Seconds, for a voice message. */
+  duration: number | null
   width: number | null
   height: number | null
   url: string
@@ -86,6 +91,8 @@ export interface ChatMessage {
   body: string | null
   meta: Record<string, any> | null
   client_uuid: string | null
+  /** Orders and products the client attached, as they were then. */
+  items: ChatSharedItem[]
   attachments: ChatAttachment[]
   created_at: string | null
   edited_at: string | null
@@ -93,6 +100,40 @@ export interface ChatMessage {
   pending?: 'sending' | 'failed'
   /** Browser-only: files of a failed send, kept for the retry. */
   retryFiles?: File[]
+  retryVoice?: VoiceClip
+}
+
+/** An order or inventory product attached to a message. */
+export interface ChatSharedItem {
+  type: 'order' | 'product'
+  id: number
+  /** The order number, or the product's name. */
+  title: string
+  // An order:
+  status?: string | null
+  total?: string | number | null
+  currency?: string | null
+  date?: string | null
+  // A product:
+  code?: string | null
+  sku?: string | null
+  quantity?: number
+  out_of_stock?: boolean
+  image_url?: string | null
+}
+
+/** Where the picker looks. No `products`: the account has no inventory. */
+export interface ChatItemSources {
+  orders: (q: string) => Promise<ChatSharedItem[]>
+  products?: (q: string) => Promise<ChatSharedItem[]>
+}
+
+/** A recording that has not been sent yet. */
+export interface VoiceClip {
+  file: File
+  seconds: number
+  /** For listening to it before and while it is sent. */
+  url: string
 }
 
 export interface ChatTeamDetail {
@@ -110,6 +151,9 @@ export interface ChatTeamDetail {
       email: string | null
       city: string | null
     } | null
+    opened_by_name: string | null
+    /** Recent changes and internal notes, newest first. */
+    activity: ChatMessage[]
     other_conversations: Array<{
       id: number
       reference: string
@@ -130,6 +174,7 @@ export interface ChatTeamDetail {
 export interface ChatClientDetail {
   conversation: ChatConversation
   team_read_up_to: number
+  can_share_inventory: boolean
   read_only: boolean
 }
 
@@ -137,6 +182,12 @@ export interface ChatPage<T> {
   data: T[]
   next_cursor?: string | null
   has_more?: boolean
+}
+
+/** The number beside each option of the inbox dropdowns. */
+export interface ChatFilterCounts {
+  status: Record<string, number>
+  priority: Record<string, number>
 }
 
 export interface ChatStats {

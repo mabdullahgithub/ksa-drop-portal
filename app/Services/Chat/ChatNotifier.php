@@ -16,8 +16,8 @@ use Illuminate\Support\Facades\DB;
  * Messages themselves already show up live in the inbox and on the sidebar
  * number, so the bell only rings when a conversation needs someone:
  *  - a client opens one: every agent who may see it;
- *  - a client writes again on one that was waiting on them or resolved:
- *    every agent who may see it;
+ *  - a client writes again on one that was waiting on them: every agent who
+ *    may see it;
  *  - the team replies, starts a chat, or resolves one: the client.
  *
  * A notification that fails never undoes what it was about, and nothing is
@@ -70,7 +70,7 @@ class ChatNotifier
     {
         $this->later(fn () => $conversation->client?->user?->notify(new ChatNotification(
             'Chat resolved',
-            "\"{$conversation->subject}\" was marked resolved. Reply any time to reopen it.",
+            "\"{$conversation->subject}\" was marked resolved. Start a new chat if you still need help.",
             $this->clientUrl($conversation),
         )));
     }

@@ -14,6 +14,7 @@ import { cn } from '@/lib/utils'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { CATEGORY_LABELS, PRIORITY_META, STATUS_META } from '../../constants'
 import type { ChatAttachment, ChatMessage, ChatSide, ChatStatus } from '../../types'
+import { VoicePlayer } from './voice-player'
 
 export function StatusBadge({ status, side, className }: { status: ChatStatus; side: ChatSide; className?: string }) {
   const meta = STATUS_META[status]
@@ -48,9 +49,6 @@ export function describeEvent(message: ChatMessage, side: ChatSide): { text: str
     case 'status': {
       const to = meta.to as ChatStatus
       if (meta.auto) return { text: 'Closed automatically after a week with no reply', icon: XCircle }
-      if (meta.reason === 'client_replied') {
-        return { text: side === 'team' ? 'Reopened: the client replied' : 'Chat reopened', icon: RotateCcw }
-      }
       const who = message.sender_type === 'client' ? (side === 'client' ? 'You' : 'The client') : (by ?? 'Support')
       const icon = to === 'resolved' ? CheckCircle2 : to === 'closed' ? XCircle : to === 'on_hold' ? PauseCircle : RotateCcw
       if (to === 'open' && (meta.from === 'resolved' || meta.from === 'closed')) return { text: `${who} reopened the chat`, icon }
@@ -81,11 +79,15 @@ export function formatBytes(bytes: number): string {
 /** Images as thumbnails that open full size; other files as a download tile. */
 export function Attachments({ files, onDark }: { files: ChatAttachment[]; onDark?: boolean }) {
   const [preview, setPreview] = useState<ChatAttachment | null>(null)
+  const voices = files.filter((f) => f.is_voice)
   const images = files.filter((f) => f.is_image)
-  const others = files.filter((f) => !f.is_image)
+  const others = files.filter((f) => !f.is_image && !f.is_voice)
 
   return (
     <div className='flex flex-col gap-1.5'>
+      {voices.map((voice) => (
+        <VoicePlayer key={voice.id} src={voice.url} duration={voice.duration ?? 0} onDark={onDark} />
+      ))}
       {images.length > 0 && (
         <div className={cn('grid max-w-52 gap-1', images.length > 1 ? 'grid-cols-2' : 'grid-cols-1')}>
           {images.map((image) => (
@@ -150,7 +152,7 @@ const URL_PATTERN = /(https?:\/\/[^\s<]+[^\s<.,;:!?)\]'"])/g
 export function MessageText({ text, onDark }: { text: string; onDark?: boolean }) {
   const parts = text.split(URL_PATTERN)
   return (
-    <p className='text-[13px] leading-snug break-words whitespace-pre-wrap'>
+    <p className='text-sm leading-snug break-words whitespace-pre-wrap'>
       {parts.map((part, index) =>
         index % 2 === 1 ? (
           <a

@@ -9,7 +9,7 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rules\File;
-use Symfony\Component\HttpFoundation\StreamedResponse;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 /**
  * Chat files: kept on the private disk under chat/{conversation}/, named by a
@@ -26,6 +26,43 @@ class ChatAttachmentStore
             'files.*' => [
                 File::types(config('chat.attachments.mimes'))->max(config('chat.attachments.max_kb')),
             ],
+        ];
+    }
+
+    /** Validation for a recorded voice message: the `voice` field and its length. */
+    public static function voiceRules(): array
+    {
+        return [
+            'voice' => [
+                'nullable',
+                'file',
+                'max:' . config('chat.voice.max_kb'),
+                'mimetypes:' . implode(',', array_keys(config('chat.voice.types'))),
+            ],
+            'voice_duration' => ['required_with:voice', 'integer', 'min:1', 'max:' . config('chat.voice.max_seconds')],
+        ];
+    }
+
+    /**
+     * Store a voice message. It is only ever served as audio, whatever
+     * container the browser recorded into.
+     *
+     * @return array<string, mixed> the row to create
+     */
+    public static function putVoice(ChatConversation $conversation, UploadedFile $file, int $seconds): array
+    {
+        $disk = config('chat.attachments.disk');
+        [$mime, $extension] = config('chat.voice.types')[(string) $file->getMimeType()] ?? ['audio/mp4', 'm4a'];
+
+        return [
+            'conversation_id' => $conversation->id,
+            'disk' => $disk,
+            'path' => $file->storeAs("chat/{$conversation->id}", Str::uuid() . '.' . $extension, $disk),
+            'original_name' => "voice-message.{$extension}",
+            'mime' => $mime,
+            'size' => (int) $file->getSize(),
+            'is_voice' => true,
+            'duration_seconds' => $seconds,
         ];
     }
 
@@ -81,19 +118,30 @@ class ChatAttachmentStore
     }
 
     /**
-     * Stream one file. Images display inline; anything else downloads, so a
-     * file can never be opened as a page on our domain.
+     * Send one file. Images display and voice messages play inline; anything
+     * else downloads, so a file can never be opened as a page on our domain.
+     *
+     * A BinaryFileResponse, because it answers range requests: Safari will
+     * not play audio without them. Private, never a shared cache.
      */
-    public static function response(ChatAttachment $attachment): StreamedResponse
+    public static function response(ChatAttachment $attachment): BinaryFileResponse
     {
         $disk = Storage::disk($attachment->disk);
 
         abort_unless($disk->exists($attachment->path), 404);
 
-        return $disk->response($attachment->path, $attachment->original_name, [
+        $response = new BinaryFileResponse($disk->path($attachment->path), 200, [
             'Content-Type' => $attachment->mime,
-            'Cache-Control' => 'private, max-age=86400',
             'X-Content-Type-Options' => 'nosniff',
-        ], $attachment->isImage() ? 'inline' : 'attachment');
+        ], public: false);
+
+        $response->headers->set('Cache-Control', 'private, max-age=86400');
+        $response->setContentDisposition(
+            $attachment->isImage() || $attachment->is_voice ? 'inline' : 'attachment',
+            str_replace(['/', '\\'], '-', $attachment->original_name),
+            preg_replace('/[^A-Za-z0-9._-]/', '_', Str::ascii($attachment->original_name)) ?: 'file',
+        );
+
+        return $response;
     }
 }

@@ -11,10 +11,12 @@ use Illuminate\Support\Facades\DB;
  * Sending a message or an internal note, and what that does to the
  * conversation:
  *
- *  - the client writes: a chat waiting on them, or resolved, is open again;
+ *  - the client writes: a chat waiting on them is open again;
  *  - the team writes: an open chat now waits on the client, and the first
  *    reply sets the first response time;
  *  - a note changes nothing but the timeline.
+ *
+ * Nothing is sent to a resolved or closed chat; see ChatConversation::isLocked().
  *
  * Every message keeps who sent it: the account, and its name and role as
  * they were then. A retried send (same client_uuid) is stored once and
@@ -29,7 +31,7 @@ class ChatMessenger
     ) {}
 
     /**
-     * @param  array{kind?: string, body?: ?string, client_uuid?: ?string, files?: array}  $input
+     * @param  array{kind?: string, body?: ?string, client_uuid?: ?string, files?: array, voice?: ?\Illuminate\Http\UploadedFile, voice_duration?: ?int}  $input
      */
     public function send(ChatConversation $conversation, User $by, string $senderType, array $input, bool $opening = false): ChatMessage
     {
@@ -41,21 +43,33 @@ class ChatMessenger
             abort(403);
         }
 
-        if ($conversation->isClosed()) {
+        if ($conversation->isLocked()) {
             abort(422, $senderType === ChatMessage::FROM_CLIENT
-                ? 'This chat is closed. Start a new chat and we will pick it up.'
-                : 'This chat is closed. Reopen it to reply.');
+                ? "This chat is {$conversation->status}. Start a new chat and we will pick it up."
+                : "This chat is {$conversation->status}. Reopen it to reply.");
         }
 
+        // Checked before any file is written.
+        $items = ChatSharedItems::snapshot(
+            $conversation->client,
+            $input['orders'] ?? [],
+            $input['products'] ?? [],
+            byTeam: $senderType === ChatMessage::FROM_STAFF,
+        );
+
         $rows = ChatAttachmentStore::put($conversation, $input['files'] ?? []);
+        if (! empty($input['voice'])) {
+            $rows[] = ChatAttachmentStore::putVoice($conversation, $input['voice'], (int) $input['voice_duration']);
+        }
 
         try {
-            [$message, $after] = DB::transaction(function () use ($conversation, $by, $senderType, $kind, $body, $input, $rows) {
+            [$message, $after] = DB::transaction(function () use ($conversation, $by, $senderType, $kind, $body, $items, $input, $rows) {
                 $held = ChatConversation::acrossClients()->whereKey($conversation->id)->lockForUpdate()->firstOrFail();
                 $held->setRelation('client', $conversation->client);
 
-                if ($held->isClosed()) {
-                    abort(422, 'This chat is closed.');
+                // Checked again on the locked row: it may have been resolved meanwhile.
+                if ($held->isLocked()) {
+                    abort(422, "This chat is {$held->status}.");
                 }
 
                 if (! empty($input['client_uuid'])) {
@@ -72,6 +86,7 @@ class ChatMessenger
                     'kind' => $kind,
                     'internal' => $kind === ChatMessage::NOTE,
                     'body' => $body,
+                    'shared_items' => $items,
                     'client_uuid' => $input['client_uuid'] ?? null,
                 ]);
                 ChatAttachmentStore::attach($message, $rows);
@@ -128,16 +143,9 @@ class ChatMessenger
             $returned = false;
             $held->last_client_message_at = $now;
 
-            if (in_array($held->status, [ChatConversation::PENDING, ChatConversation::RESOLVED], true)) {
-                $from = $held->status;
+            if ($held->status === ChatConversation::PENDING) {
                 $this->workflow->applyStatus($held, ChatConversation::OPEN, $by);
                 $changed = $returned = true;
-
-                if ($from === ChatConversation::RESOLVED) {
-                    $events[] = $this->workflow->recordEvent($held, $by, ChatMessage::FROM_CLIENT, [
-                        'event' => 'status', 'from' => $from, 'to' => ChatConversation::OPEN, 'reason' => 'client_replied',
-                    ], internal: false);
-                }
             }
 
             return ['events' => $events, 'changed' => $changed, 'returned' => $returned];

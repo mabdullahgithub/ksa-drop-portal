@@ -1,6 +1,6 @@
 import axios from 'axios'
 import { compressImage } from '@/lib/compress-image'
-import type { ChatConversation, ChatMessage, ChatOrderOption, ChatPage, ChatSide } from './types'
+import type { ChatConversation, ChatFilterCounts, ChatMessage, ChatOrderOption, ChatPage, ChatSharedItem, ChatSide, VoiceClip } from './types'
 
 /**
  * The endpoints the shared chat pieces call. The team and the portal have
@@ -19,6 +19,8 @@ export interface SendInput {
   kind?: 'message' | 'note'
   clientUuid: string
   files: File[]
+  voice?: VoiceClip
+  items?: ChatSharedItem[]
 }
 
 function api(root: string, side: ChatSide): ChatApi {
@@ -46,10 +48,21 @@ export async function toForm(input: { files?: File[]; clientUuid?: string } & ob
   const form = new FormData()
 
   for (const [key, value] of Object.entries(input as Record<string, unknown>)) {
-    if (value === undefined || value === null || value === '' || key === 'files' || key === 'clientUuid') continue
+    if (value === undefined || value === null || value === '' || ['files', 'clientUuid', 'voice', 'items'].includes(key)) continue
     form.append(key, String(value))
   }
   if (input.clientUuid) form.append('client_uuid', input.clientUuid)
+
+  const voice = (input as { voice?: VoiceClip }).voice
+  if (voice) {
+    form.append('voice', voice.file, voice.file.name)
+    form.append('voice_duration', String(voice.seconds))
+  }
+
+  // Only ids go up; the server looks each one up among the client's own.
+  for (const item of (input as { items?: ChatSharedItem[] }).items ?? []) {
+    form.append(item.type === 'order' ? 'orders[]' : 'products[]', String(item.id))
+  }
 
   for (const file of input.files ?? []) {
     form.append('files[]', await shrink(file), file.name)
@@ -83,6 +96,7 @@ export const teamChats = {
   async list(params: Record<string, string | undefined>): Promise<{
     data: ChatConversation[]
     next_cursor: string | null
+    counts?: ChatFilterCounts
   }> {
     const { data } = await axios.get('/api/chats', { params })
     return data
@@ -108,6 +122,26 @@ export const portalChats = {
   },
   async orders(q: string): Promise<ChatOrderOption[]> {
     const { data } = await axios.get('/portal/api/chats/orders', { params: { q } })
+    return data.data
+  },
+}
+
+/** The signed-in client's own orders and products, for the attach picker. */
+export const portalItemSources = {
+  async orders(q: string): Promise<ChatSharedItem[]> {
+    const rows = await portalChats.orders(q)
+    return rows.map((order) => ({
+      type: 'order' as const,
+      id: order.id,
+      title: order.order_number,
+      status: order.status,
+      total: order.total,
+      currency: order.currency,
+      date: order.created_at,
+    }))
+  },
+  async products(q: string): Promise<ChatSharedItem[]> {
+    const { data } = await axios.get('/portal/api/chats/products', { params: { q } })
     return data.data
   },
 }

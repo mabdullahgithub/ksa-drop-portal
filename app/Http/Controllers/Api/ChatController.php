@@ -14,6 +14,7 @@ use App\Services\Chat\ChatAttachmentStore;
 use App\Services\Chat\ChatBroadcaster;
 use App\Services\Chat\ChatMessenger;
 use App\Services\Chat\ChatPresenter;
+use App\Services\Chat\ChatSharedItems;
 use App\Services\Chat\ChatUnread;
 use App\Services\Chat\ChatVisibility;
 use App\Services\Chat\ChatWorkflow;
@@ -22,7 +23,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Validation\Rule;
-use Symfony\Component\HttpFoundation\StreamedResponse;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 /**
  * The team's live chat inbox. Each route is gated on its own permission
@@ -37,6 +38,8 @@ class ChatController extends Controller
     private const PER_PAGE = 30;
 
     private const MESSAGES_PER_PAGE = 50;
+
+    private const ACTIVITY_LIMIT = 15;
 
     public function __construct(
         private ChatWorkflow $workflow,
@@ -59,13 +62,18 @@ class ChatController extends Controller
 
         $status = $validated['status'] ?? 'active';
 
-        $query = ChatConversation::query()
-            ->with(ChatPresenter::relations(true))
-            ->tap(fn (Builder $q) => $this->filterStatus($q, $status))
-            ->when($validated['priority'] ?? null, fn ($q, $priority) => $q->where('priority', $priority))
+        // Everything but the two dropdowns, which the counts need on their own.
+        $base = fn (): Builder => ChatConversation::query()
             ->when($validated['category'] ?? null, fn ($q, $category) => $q->where('category', $category))
             ->when($validated['client_id'] ?? null, fn ($q, $client) => $q->where('client_id', $client))
             ->when(trim($validated['q'] ?? ''), fn ($q, $term) => $this->search($q, $term));
+
+        $priority = $validated['priority'] ?? null;
+
+        $query = $base()
+            ->with(ChatPresenter::relations(true))
+            ->tap(fn (Builder $q) => $this->filterStatus($q, $status))
+            ->when($priority, fn ($q) => $q->where('priority', $priority));
 
         ChatUnread::withCounts($query, $user->id, true);
 
@@ -74,6 +82,8 @@ class ChatController extends Controller
         return response()->json([
             'data' => collect($page->items())->map(fn (ChatConversation $c) => ChatPresenter::conversation($c, true))->values(),
             'next_cursor' => $page->nextCursor()?->encode(),
+            // With the first page only; "load more" doesn't change them.
+            'counts' => isset($validated['cursor']) ? null : $this->filterCounts($base, $status, $priority),
         ]);
     }
 
@@ -90,6 +100,15 @@ class ChatController extends Controller
             'conversation' => ChatPresenter::conversation($conversation, true),
             'client_read_up_to' => ChatUnread::clientReadUpTo($conversation),
             'context' => [
+                'opened_by_name' => $conversation->creator?->name,
+                // What happened lately: changes and notes, for the panel's log.
+                'activity' => $conversation->messages()
+                    ->whereIn('kind', [ChatMessage::EVENT, ChatMessage::NOTE])
+                    ->with(['sender', 'attachments'])
+                    ->latest('id')
+                    ->limit(self::ACTIVITY_LIMIT)
+                    ->get()
+                    ->map(fn (ChatMessage $m) => ChatPresenter::message($m, true)),
                 'client' => $client ? [
                     'id' => $client->id,
                     'company_name' => $client->company_name,
@@ -121,6 +140,8 @@ class ChatController extends Controller
                 'status' => $request->user()->can('change chat status'),
                 'edit' => $request->user()->can('edit chat details'),
                 'delete' => $request->user()->can('delete chats'),
+                'share_orders' => $request->user()->can('view orders'),
+                'share_products' => $request->user()->can('view client products') && (bool) $client?->is_fulfilment,
             ],
         ]);
     }
@@ -154,8 +175,11 @@ class ChatController extends Controller
         $user = $request->user();
         $this->authorizeSee($user, $conversation);
 
-        $input = $this->validateMessage($request, allowNotes: true);
+        $input = $this->validateMessage($request, allowNotes: true, allowItems: true);
         abort_unless($user->can($input['kind'] === ChatMessage::NOTE ? 'add chat notes' : 'reply chats'), 403);
+        // Sharing a record needs the right to see it.
+        abort_if($input['orders'] !== [] && ! $user->can('view orders'), 403, "You don't have permission to share orders.");
+        abort_if($input['products'] !== [] && ! $user->can('view client products'), 403, "You don't have permission to share inventory.");
 
         $message = $this->messenger->send($conversation->load('client'), $user, ChatMessage::FROM_STAFF, $input);
 
@@ -304,7 +328,28 @@ class ChatController extends Controller
         return response()->json(['data' => $this->orderLookup($validated['client_id'], $validated['q'] ?? '')]);
     }
 
-    public function attachment(Request $request, ChatAttachment $attachment): StreamedResponse
+    /** This chat's client's orders, to attach to a message. */
+    public function shareOrders(Request $request, ChatConversation $conversation): JsonResponse
+    {
+        $this->authorizeSee($request->user(), $conversation);
+
+        return response()->json(['data' => ChatSharedItems::orderOptions($conversation->client, $this->term($request))]);
+    }
+
+    /** This chat's client's inventory, to attach to a message. */
+    public function shareProducts(Request $request, ChatConversation $conversation): JsonResponse
+    {
+        $this->authorizeSee($request->user(), $conversation);
+
+        return response()->json(['data' => ChatSharedItems::productOptions($conversation->client, $this->term($request))]);
+    }
+
+    private function term(Request $request): string
+    {
+        return (string) ($request->validate(['q' => ['nullable', 'string', 'max:100']])['q'] ?? '');
+    }
+
+    public function attachment(Request $request, ChatAttachment $attachment): BinaryFileResponse
     {
         $conversation = ChatConversation::find($attachment->conversation_id);
         abort_unless($conversation && ChatVisibility::canSee($request->user(), $conversation), 404);
@@ -381,6 +426,38 @@ class ChatController extends Controller
             'active' => $query->active(),
             default => $query->where('status', $status),
         };
+    }
+
+    /**
+     * The number beside each option of the status and priority dropdowns:
+     * what the list would hold if that option were picked, so each dropdown
+     * counts within the other one's choice (and the search).
+     *
+     * @param  \Closure(): Builder  $base
+     * @return array{status: array<string, int>, priority: array<string, int>}
+     */
+    private function filterCounts(\Closure $base, string $status, ?string $priority): array
+    {
+        $grouped = fn (Builder $query, string $column) => $query
+            ->toBase()
+            ->selectRaw("{$column}, count(*) as total")
+            ->groupBy($column)
+            ->pluck('total', $column)
+            ->map(fn ($total) => (int) $total);
+
+        $byStatus = $grouped($base()->when($priority, fn ($q) => $q->where('priority', $priority)), 'status');
+        $byPriority = $grouped($base()->tap(fn (Builder $q) => $this->filterStatus($q, $status)), 'priority');
+
+        $statuses = collect(ChatConversation::STATUSES)->mapWithKeys(fn ($s) => [$s => $byStatus->get($s, 0)]);
+        $priorities = collect(ChatConversation::PRIORITIES)->mapWithKeys(fn ($p) => [$p => $byPriority->get($p, 0)]);
+
+        return [
+            'status' => $statuses->all() + [
+                'active' => $statuses->only(ChatConversation::ACTIVE)->sum(),
+                'any' => $statuses->sum(),
+            ],
+            'priority' => $priorities->all() + ['any' => $priorities->sum()],
+        ];
     }
 
     private function search(Builder $query, string $term): void

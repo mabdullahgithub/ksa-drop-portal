@@ -191,13 +191,15 @@ Route::middleware(['auth', 'verified', 'role:!client', 'client.access'])->group(
     Route::get('/api/invoices/{invoice}/download', [InvoiceController::class, 'download'])->middleware('permission:download waybills')->name('api.invoices.download');
     Route::delete('/api/invoices/{invoice}', [InvoiceController::class, 'destroy'])->middleware('permission:delete waybills')->name('api.invoices.destroy');
 
+    // Each chat throttle is named (the third part). Unnamed ones share a single
+    // count per user, so reading would use up the allowance for sending.
     // Live chat: support conversations with clients. Each button is its own
     // permission; ChatController also checks every conversation against
     // ChatVisibility (client access).
     Route::get('/chats', fn () => Inertia::render('Chats'))->middleware('permission:view chats')->name('chats');
     Route::prefix('api/chats')->group(function () {
         Route::get('/', [ChatController::class, 'index'])->middleware('permission:view chats')->name('api.chats.index');
-        Route::post('/', [ChatController::class, 'store'])->middleware(['permission:start chats', 'throttle:20,1'])->name('api.chats.store');
+        Route::post('/', [ChatController::class, 'store'])->middleware(['permission:start chats', 'throttle:20,1,chat-start'])->name('api.chats.store');
         Route::get('/stats', [ChatController::class, 'stats'])->middleware('permission:view chat stats')->name('api.chats.stats');
         Route::get('/lookup/clients', [ChatController::class, 'clients'])->middleware('permission:start chats')->name('api.chats.lookup.clients');
         Route::get('/lookup/orders', [ChatController::class, 'orders'])->middleware('permission:start chats|edit chat details')->name('api.chats.lookup.orders');
@@ -205,9 +207,12 @@ Route::middleware(['auth', 'verified', 'role:!client', 'client.access'])->group(
 
         Route::whereNumber('conversation')->group(function () {
             Route::get('/{conversation}', [ChatController::class, 'show'])->middleware('permission:view chats')->name('api.chats.show');
+            // What can be attached: the permission to view it (replying is checked on send).
+            Route::get('/{conversation}/share/orders', [ChatController::class, 'shareOrders'])->middleware('permission:view orders')->name('api.chats.share.orders');
+            Route::get('/{conversation}/share/products', [ChatController::class, 'shareProducts'])->middleware('permission:view client products')->name('api.chats.share.products');
             Route::get('/{conversation}/messages', [ChatController::class, 'messages'])->middleware('permission:view chats')->name('api.chats.messages');
-            Route::post('/{conversation}/messages', [ChatController::class, 'reply'])->middleware(['permission:reply chats|add chat notes', 'throttle:30,1'])->name('api.chats.reply');
-            Route::post('/{conversation}/read', [ChatController::class, 'read'])->middleware(['permission:view chats', 'throttle:120,1'])->name('api.chats.read');
+            Route::post('/{conversation}/messages', [ChatController::class, 'reply'])->middleware(['permission:reply chats|add chat notes', 'throttle:30,1,chat-send'])->name('api.chats.reply');
+            Route::post('/{conversation}/read', [ChatController::class, 'read'])->middleware(['permission:view chats', 'throttle:120,1,chat-read'])->name('api.chats.read');
             Route::patch('/{conversation}/status', [ChatController::class, 'status'])->middleware('permission:change chat status')->name('api.chats.status');
             Route::patch('/{conversation}', [ChatController::class, 'update'])->middleware('permission:edit chat details')->name('api.chats.update');
             Route::delete('/{conversation}', [ChatController::class, 'destroy'])->middleware('permission:delete chats')->name('api.chats.destroy');
@@ -502,17 +507,17 @@ Route::prefix('portal')->middleware(['auth', 'verified', 'role:client', 'client.
     // Support chat: the client's own conversations only (PortalChatController).
     Route::prefix('api/chats')->group(function () {
         Route::get('/', [PortalChatController::class, 'index'])->name('portal.api.chats.index');
-        Route::post('/', [PortalChatController::class, 'store'])->middleware('throttle:10,60')->name('portal.api.chats.store');
+        Route::post('/', [PortalChatController::class, 'store'])->middleware('throttle:10,60,chat-new')->name('portal.api.chats.store');
         Route::get('/orders', [PortalChatController::class, 'orders'])->name('portal.api.chats.orders');
+        Route::get('/products', [PortalChatController::class, 'products'])->name('portal.api.chats.products');
         Route::get('/attachments/{attachment}', [PortalChatController::class, 'attachment'])->whereNumber('attachment')->name('portal.api.chats.attachments.show');
 
         Route::whereNumber('conversation')->group(function () {
             Route::get('/{conversation}', [PortalChatController::class, 'show'])->name('portal.api.chats.show');
             Route::get('/{conversation}/messages', [PortalChatController::class, 'messages'])->name('portal.api.chats.messages');
-            Route::post('/{conversation}/messages', [PortalChatController::class, 'reply'])->middleware('throttle:30,1')->name('portal.api.chats.reply');
-            Route::post('/{conversation}/read', [PortalChatController::class, 'read'])->middleware('throttle:120,1')->name('portal.api.chats.read');
+            Route::post('/{conversation}/messages', [PortalChatController::class, 'reply'])->middleware('throttle:30,1,chat-send')->name('portal.api.chats.reply');
+            Route::post('/{conversation}/read', [PortalChatController::class, 'read'])->middleware('throttle:120,1,chat-read')->name('portal.api.chats.read');
             Route::post('/{conversation}/resolve', [PortalChatController::class, 'resolve'])->name('portal.api.chats.resolve');
-            Route::post('/{conversation}/reopen', [PortalChatController::class, 'reopen'])->name('portal.api.chats.reopen');
         });
     });
 

@@ -4,6 +4,7 @@ import { AlertCircle, CheckCheck, Clock, Loader2, Lock, MessageSquareDashed, Rot
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Attachments, EventLine, MessageText } from './chat-bits'
+import { SharedItemCards } from './shared-items'
 import type { ChatMessage, ChatSide } from '../../types'
 
 function dayLabel(value: string) {
@@ -248,12 +249,13 @@ function Bubble({
             note
               ? 'rounded-lg border border-dashed border-amber-300/70 bg-amber-50/60 text-amber-950 dark:border-amber-700/50 dark:bg-amber-950/20 dark:text-amber-100'
               : mine
-                ? 'rounded-2xl rounded-br-sm bg-primary text-primary-foreground'
+                ? 'rounded-2xl rounded-br-sm bg-[#f26722] text-white'
                 : 'rounded-2xl rounded-bl-sm bg-muted text-foreground',
             message.pending === 'sending' && 'opacity-60',
             message.pending === 'failed' && 'ring-1 ring-destructive/60'
           )}
         >
+          {message.items?.length > 0 && <SharedItemCards items={message.items} side={side} onDark={onBrand} />}
           {message.attachments.length > 0 && <Attachments files={message.attachments} onDark={onBrand} />}
           {message.body && <MessageText text={message.body} onDark={onBrand} />}
         </div>

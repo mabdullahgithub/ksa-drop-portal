@@ -28,12 +28,11 @@ class ChatWorkflow
         ChatConversation::CLOSED => [ChatConversation::OPEN],
     ];
 
-    /** Status => where the client may move it: resolve it, or reopen a resolved one. */
+    /** Status => where the client may move it: they can only resolve, and that is final for them. */
     public const CLIENT_MOVES = [
         ChatConversation::OPEN => [ChatConversation::RESOLVED],
         ChatConversation::PENDING => [ChatConversation::RESOLVED],
         ChatConversation::ON_HOLD => [ChatConversation::RESOLVED],
-        ChatConversation::RESOLVED => [ChatConversation::OPEN],
     ];
 
     /** Status changes the client is shown in their timeline. */
@@ -71,6 +70,8 @@ class ChatWorkflow
                 'body' => $input['body'] ?? null,
                 'client_uuid' => $input['client_uuid'] ?? null,
                 'files' => $input['files'] ?? [],
+                'orders' => $input['orders'] ?? [],
+                'products' => $input['products'] ?? [],
             ], opening: true);
 
             return $conversation->fresh();
@@ -163,8 +164,8 @@ class ChatWorkflow
     }
 
     /**
-     * Close conversations resolved long enough ago that the client is not
-     * coming back. A client reply before then reopens instead.
+     * Close conversations that were resolved long enough ago. They are
+     * already locked; this files them as closed.
      */
     public function autoClose(): int
     {

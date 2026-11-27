@@ -42,20 +42,31 @@ export function useChatInbox<C = undefined>({ side, load, key, echo, live, pollM
   loadRef.current = load
   const openRef = useRef(openId)
   openRef.current = openId
+  const keyRef = useRef(key)
+  keyRef.current = key
+  const request = useRef(0)
+  /** The `key` the list on screen was loaded for. */
+  const [loadedKey, setLoadedKey] = useState<string | null>(null)
   const reconcileTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const refresh = useCallback(async (quiet = false) => {
     if (!quiet) setLoading(true)
+    const mine = ++request.current
+    const forKey = keyRef.current
     try {
       const page = await loadRef.current()
-      // Keep what the list knows the server does not send back on a broadcast.
+      // An answer for older filters must not overwrite a newer one.
+      if (mine !== request.current) return
       setItems(page.data)
       setNextCursor(page.next_cursor)
       if (page.counts) setCounts(page.counts)
+      setLoadedKey(forKey)
+      setLoading(false)
     } catch {
-      if (!quiet) setItems([])
-    } finally {
-      if (!quiet) setLoading(false)
+      if (mine === request.current && !quiet) {
+        setItems([])
+        setLoading(false)
+      }
     }
   }, [])
 
@@ -139,5 +150,5 @@ export function useChatInbox<C = undefined>({ side, load, key, echo, live, pollM
     if (reconcileTimer.current) clearTimeout(reconcileTimer.current)
   }, [])
 
-  return { items, counts, loading, nextCursor, loadingMore, more, refresh, upsert, markRead }
+  return { items, counts, loading, loadedKey, nextCursor, loadingMore, more, refresh, upsert, markRead }
 }

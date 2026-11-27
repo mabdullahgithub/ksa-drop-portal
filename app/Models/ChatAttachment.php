@@ -19,12 +19,16 @@ class ChatAttachment extends Model
         'original_name',
         'mime',
         'size',
+        'is_voice',
+        'duration_seconds',
         'width',
         'height',
     ];
 
     protected $casts = [
         'size' => 'integer',
+        'is_voice' => 'boolean',
+        'duration_seconds' => 'integer',
         'width' => 'integer',
         'height' => 'integer',
     ];

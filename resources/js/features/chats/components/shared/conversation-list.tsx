@@ -28,6 +28,7 @@ export function ConversationList({
   loadingMore,
   onMore,
   empty,
+  outside,
 }: {
   side: ChatSide
   items: ChatConversation[]
@@ -38,6 +39,8 @@ export function ConversationList({
   loadingMore: boolean
   onMore: () => void
   empty: React.ReactNode
+  /** The open chat when the current filters don't include it. */
+  outside?: ChatConversation | null
 }) {
   if (loading) {
     return (
@@ -52,10 +55,17 @@ export function ConversationList({
     )
   }
 
-  if (items.length === 0) return <div className='flex flex-1 items-center justify-center p-4'>{empty}</div>
+  if (items.length === 0 && !outside) return <div className='flex flex-1 items-center justify-center p-4'>{empty}</div>
 
   return (
-    <div className='min-h-0 flex-1 overflow-y-auto p-1.5'>
+    <div className='flex min-h-0 flex-1 flex-col overflow-y-auto p-1.5'>
+      {outside && (
+        <div className='mb-1.5 border-b pb-1.5'>
+          <p className='px-3 pb-1 text-[10px] text-muted-foreground'>Open now · not in this filter</p>
+          <Row side={side} conversation={outside} selected={outside.id === selectedId} onSelect={onSelect} />
+        </div>
+      )}
+      {items.length === 0 && <div className='flex flex-1 items-center justify-center p-4'>{empty}</div>}
       <ul className='space-y-px'>
         {items.map((conversation) => (
           <li key={conversation.id}>
@@ -89,7 +99,17 @@ function Row({
   const last = c.last_message
   const ours = last?.sender_type === (side === 'team' ? 'staff' : 'client')
   const prefix = last?.kind === 'note' ? 'Note: ' : ours ? 'You: ' : ''
-  const preview = last ? (last.attachment_only ? 'Attachment' : last.body) : ''
+  const preview = !last
+    ? ''
+    : last.voice
+      ? 'Voice message'
+      : last.shared
+        ? last.shared === 'order'
+          ? 'Shared an order'
+          : 'Shared a product'
+        : last.attachment_only
+          ? 'Attachment'
+          : last.body
   const urgent = side === 'team' && (c.priority === 'urgent' || c.priority === 'high')
 
   return (

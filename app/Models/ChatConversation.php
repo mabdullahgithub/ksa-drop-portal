@@ -138,13 +138,13 @@ class ChatConversation extends Model
         return $query->whereIn('status', self::ACTIVE);
     }
 
-    public function isClosed(): bool
+    /**
+     * Resolved or closed: nobody can write in it. The client starts a new
+     * chat; the team can reopen it (`change chat status`) if it was resolved
+     * by mistake.
+     */
+    public function isLocked(): bool
     {
-        return $this->status === self::CLOSED;
-    }
-
-    public function isResolved(): bool
-    {
-        return $this->status === self::RESOLVED;
+        return in_array($this->status, [self::RESOLVED, self::CLOSED], true);
     }
 }

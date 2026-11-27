@@ -125,7 +125,6 @@ Schedule::command('report:daily')
     ->dailyAt('01:00')
     ->withoutOverlapping(10);
 
-// Live chat: close conversations that were resolved a week ago (config
-// chat.auto_close_days) and that the client never answered. A client reply
-// before then reopens the chat instead.
+// Live chat: file conversations resolved a week ago (config
+// chat.auto_close_days) as closed.
 Schedule::command('chats:auto-close')->dailyAt('03:45')->withoutOverlapping();

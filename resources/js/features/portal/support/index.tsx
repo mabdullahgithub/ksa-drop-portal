@@ -2,10 +2,20 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import axios from 'axios'
 import { usePage } from '@inertiajs/react'
 import { toast } from 'sonner'
-import { ArrowLeft, CheckCircle2, Eye, Loader2, Plus, RotateCcw } from 'lucide-react'
+import { ArrowLeft, CheckCircle2, Eye, Loader2, Plus } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { getEcho, useEchoConnection } from '@/lib/echo'
 import { Button } from '@/components/ui/button'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { EmptyState } from '@/components/empty-state'
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
@@ -14,7 +24,7 @@ import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
 import type { PageProps } from '@/types'
-import { errorMessage, portalChatApi, portalChats } from '@/features/chats/api'
+import { errorMessage, portalChatApi, portalChats, portalItemSources } from '@/features/chats/api'
 import { CATEGORY_LABELS } from '@/features/chats/constants'
 import { StatusBadge } from '@/features/chats/components/shared/chat-bits'
 import { Composer } from '@/features/chats/components/shared/composer'
@@ -22,6 +32,7 @@ import { ConversationList } from '@/features/chats/components/shared/conversatio
 import { MessageThread } from '@/features/chats/components/shared/message-thread'
 import { useChatInbox } from '@/features/chats/hooks/use-chat-inbox'
 import { useChatThread } from '@/features/chats/hooks/use-chat-thread'
+import { useOpenChatInList } from '@/features/chats/hooks/use-open-chat-in-list'
 import type { ChatCategory, ChatClientDetail, ChatConversation } from '@/features/chats/types'
 import { NewSupportChat, type SupportDraft } from './new-support-chat'
 
@@ -60,7 +71,8 @@ function rememberInUrl(id: number | null) {
 /**
  * The client's Support page: their conversations with the KSA Drop team, in
  * the same layout as the team's inbox. They open chats, reply, attach
- * files, and mark a chat resolved (or reopen it).
+ * files, and mark a chat resolved. A resolved or closed chat is locked:
+ * they start a new one.
  */
 export function PortalSupport() {
   const { auth, chat } = usePage<PageProps>().props
@@ -81,6 +93,7 @@ export function PortalSupport() {
   const [draft, setDraft] = useState<SupportDraft | null>(initial.draft)
   const [newOpen, setNewOpen] = useState(!!initial.draft && !impersonating)
   const [busy, setBusy] = useState(false)
+  const [confirmResolve, setConfirmResolve] = useState(false)
 
   const load = useCallback((cursor?: string) => portalChats.list({ status: filter, cursor }), [filter])
 
@@ -143,6 +156,20 @@ export function PortalSupport() {
     if (selectedId && !live && lastId && lastId > 0 && detail) void loadDetail(selectedId, true)
   }, [lastId]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  const outside = useOpenChatInList({
+    items: inbox.items,
+    loading: inbox.loading,
+    loadedKey: inbox.loadedKey,
+    selectedId,
+    open: detail?.conversation,
+    onFilteredOut: () => {
+      setSelectedId(null)
+      setDetail(null)
+      setMobileThread(false)
+      rememberInUrl(null)
+    },
+  })
+
   const open = (id: number) => {
     setSelectedId(id)
     setMobileThread(true)
@@ -150,13 +177,13 @@ export function PortalSupport() {
     rememberInUrl(id)
   }
 
-  const move = async (action: 'resolve' | 'reopen') => {
+  const resolve = async () => {
     if (!detail) return
     setBusy(true)
     try {
-      const { data } = await axios.post(`/portal/api/chats/${detail.conversation.id}/${action}`)
+      const { data } = await axios.post(`/portal/api/chats/${detail.conversation.id}/resolve`)
       applyConversation(data.conversation)
-      toast.success(action === 'resolve' ? 'Marked as resolved. Thanks!' : 'Chat reopened')
+      toast.success('Marked as resolved. Thanks!')
     } catch (error) {
       toast.error(errorMessage(error, 'That did not work'))
     } finally {
@@ -165,7 +192,13 @@ export function PortalSupport() {
   }
 
   const c = detail?.conversation
+  const hasInventory = !!detail?.can_share_inventory
+  const itemSources = useMemo(
+    () => ({ orders: portalItemSources.orders, products: hasInventory ? portalItemSources.products : undefined }),
+    [hasInventory]
+  )
   const active = c && ['open', 'pending', 'on_hold'].includes(c.status)
+  const locked = c && !active
 
   const startNew = (preset: SupportDraft | null = null) => {
     setDraft(preset)
@@ -225,6 +258,7 @@ export function PortalSupport() {
             <ConversationList
               side='client'
               items={inbox.items}
+              outside={outside}
               selectedId={selectedId}
               onSelect={(conversation) => open(conversation.id)}
               loading={inbox.loading}
@@ -286,25 +320,12 @@ export function PortalSupport() {
                     </div>
                   </div>
                   {!detail.read_only && active && (
-                    <Button size='sm' variant='outline' className='h-8 gap-1' onClick={() => move('resolve')} disabled={busy}>
+                    <Button size='sm' variant='outline' className='h-8 gap-1' onClick={() => setConfirmResolve(true)} disabled={busy}>
                       <CheckCircle2 className='size-3.5' />
                       <span className='hidden sm:inline'>Mark as resolved</span>
                     </Button>
                   )}
-                  {!detail.read_only && c.status === 'resolved' && (
-                    <Button size='sm' variant='outline' className='h-8 gap-1' onClick={() => move('reopen')} disabled={busy}>
-                      <RotateCcw className='size-3.5' />
-                      <span className='hidden sm:inline'>Reopen</span>
-                    </Button>
-                  )}
                 </div>
-
-                {c.status === 'resolved' && (
-                  <div className='flex items-center gap-2 border-b bg-emerald-50 px-4 py-2 text-xs text-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-200'>
-                    <CheckCircle2 className='size-4 shrink-0' />
-                    This chat is resolved. Still need help? Just reply and it reopens.
-                  </div>
-                )}
 
                 <div className='flex min-h-0 flex-1 bg-muted/20'>
                   <MessageThread
@@ -324,15 +345,16 @@ export function PortalSupport() {
 
                 <Composer
                   autoFocusKey={c.id}
+                  itemSources={itemSources}
                   onSend={thread.send}
                   onTyping={thread.whisperTyping}
                   placeholder='Write a message…'
                   disabledReason={
                     detail.read_only ? (
                       'Viewing as the client: replies are sent from the Live Chat inbox.'
-                    ) : c.status === 'closed' ? (
+                    ) : locked ? (
                       <div className='flex flex-wrap items-center gap-2'>
-                        <span>This chat is closed.</span>
+                        <span>This chat is {c.status} and locked. Still need help?</span>
                         <Button
                           size='sm'
                           variant='outline'
@@ -350,6 +372,21 @@ export function PortalSupport() {
           </div>
         </section>
 
+        <AlertDialog open={confirmResolve} onOpenChange={setConfirmResolve}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Mark this chat as resolved?</AlertDialogTitle>
+              <AlertDialogDescription>
+                The chat will be locked and you won&apos;t be able to reply to it. If you need more help, you can start a new chat.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={() => void resolve()}>Mark as resolved</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
         <NewSupportChat
           open={newOpen}
           onOpenChange={(value) => {
@@ -358,6 +395,7 @@ export function PortalSupport() {
           }}
           draft={draft}
           onCreated={(conversation) => {
+            // A new chat is "active"; switching tabs here keeps it in view.
             if (filter !== 'active' && filter !== 'any') setFilter('active')
             inbox.upsert(conversation)
             open(conversation.id)

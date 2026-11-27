@@ -37,6 +37,7 @@ class ChatMessage extends Model
         'kind',
         'internal',
         'body',
+        'shared_items',
         'meta',
         'client_uuid',
         'edited_at',
@@ -45,6 +46,7 @@ class ChatMessage extends Model
     protected $casts = [
         'internal' => 'boolean',
         'meta' => 'array',
+        'shared_items' => 'array',
         'edited_at' => 'datetime',
     ];
 

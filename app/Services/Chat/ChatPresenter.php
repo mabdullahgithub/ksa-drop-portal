@@ -26,7 +26,7 @@ class ChatPresenter
         return [
             'client:id,company_name,short_id,logo,status,client_types,user_id',
             'order:id,order_number,fulfillment_status,total,currency,client_id,created_at',
-            $forTeam ? 'latestTeamMessage' : 'latestClientMessage',
+            $forTeam ? 'latestTeamMessage.attachments' : 'latestClientMessage.attachments',
         ];
     }
 
@@ -54,6 +54,9 @@ class ChatPresenter
                 'sender_type' => $latest->sender_type,
                 // Only a file was sent: the list says "Attachment".
                 'attachment_only' => blank($latest->body),
+                'voice' => blank($latest->body) && $latest->attachments->contains('is_voice', true),
+                // Only orders or products were sent: the list names them.
+                'shared' => blank($latest->body) ? ($latest->shared_items[0]['type'] ?? null) : null,
                 'created_at' => $latest->created_at?->toIso8601String(),
             ] : null,
             'unread_count' => (int) ($conversation->unread_count ?? 0),
@@ -94,6 +97,7 @@ class ChatPresenter
             'sender' => self::sender($message, $forTeam),
             'body' => $message->body,
             'meta' => $forTeam ? $message->meta : self::clientMeta($message->meta),
+            'items' => ChatSharedItems::present($message->shared_items),
             'client_uuid' => $message->client_uuid,
             'attachments' => $message->attachments
                 ->map(fn (ChatAttachment $attachment) => self::attachment($attachment, $forTeam))
@@ -112,6 +116,8 @@ class ChatPresenter
             'mime' => $attachment->mime,
             'size' => $attachment->size,
             'is_image' => $attachment->isImage(),
+            'is_voice' => (bool) $attachment->is_voice,
+            'duration' => $attachment->duration_seconds,
             'width' => $attachment->width,
             'height' => $attachment->height,
             'url' => route($forTeam ? 'api.chats.attachments.show' : 'portal.api.chats.attachments.show', $attachment, absolute: false),
@@ -151,7 +157,7 @@ class ChatPresenter
             return null;
         }
 
-        return array_intersect_key($meta, array_flip(['event', 'from', 'to', 'name', 'auto', 'reason']));
+        return array_intersect_key($meta, array_flip(['event', 'from', 'to', 'name', 'auto']));
     }
 
     /** A name and a face; the id only for the team. */

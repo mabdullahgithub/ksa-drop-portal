@@ -13,7 +13,7 @@ export function InboxStats({ stats }: { stats: ChatStats | null }) {
     { label: 'Resolved today', value: stats?.resolved_today, icon: CheckCircle2, tone: 'emerald' },
     {
       // How long clients waited for a reply, on average, over the last 7 days.
-      label: 'Avg response · 7d',
+      label: 'Avg reply · 7d',
       value: stats ? (stats.avg_response_minutes === null ? '—' : formatMinutes(stats.avg_response_minutes)) : undefined,
       icon: Timer,
       tone: 'violet',
@@ -23,8 +23,8 @@ export function InboxStats({ stats }: { stats: ChatStats | null }) {
   return (
     <div className='grid w-full grid-cols-2 gap-1 sm:flex sm:w-auto sm:justify-center'>
       {tiles.map(({ label, value, icon: Icon, tone }) => (
-        <div key={label} className='sm:w-28'>
-          <StatCard size='mini' texture='dots' tone={tone} label={label} value={value ?? '·'} icon={<Icon className='h-2.5 w-2.5' />} />
+        <div key={label} className='sm:w-24'>
+          <StatCard size='mini' texture='dots' tone={tone} label={label} value={value ?? '·'} icon={<Icon className='h-3.5 w-3.5' />} />
         </div>
       ))}
     </div>

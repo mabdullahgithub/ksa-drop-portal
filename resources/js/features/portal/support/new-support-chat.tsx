@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { usePage } from '@inertiajs/react'
 import { toast } from 'sonner'
 import {
   CircleHelp,
@@ -19,11 +20,14 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { errorMessage, portalChats, uuid } from '@/features/chats/api'
+import { errorMessage, portalChats, portalItemSources, uuid } from '@/features/chats/api'
+import { ItemPicker } from '@/features/chats/components/shared/item-picker'
+import { ItemChip } from '@/features/chats/components/shared/shared-items'
+import type { PageProps } from '@/types'
 import { ACCEPT_FILES, CATEGORY_LABELS, MAX_BODY, MAX_FILE_MB, MAX_FILES } from '@/features/chats/constants'
 import { formatBytes } from '@/features/chats/components/shared/chat-bits'
 import { OrderPicker, type PickedOrder } from '@/features/chats/components/shared/order-picker'
-import type { ChatCategory, ChatConversation } from '@/features/chats/types'
+import type { ChatCategory, ChatConversation, ChatSharedItem } from '@/features/chats/types'
 
 const CATEGORY_ICONS: Record<ChatCategory, React.ElementType> = {
   order_issue: Package,
@@ -58,6 +62,15 @@ export function NewSupportChat({
   const [order, setOrder] = useState<PickedOrder | null>(null)
   const [body, setBody] = useState('')
   const [files, setFiles] = useState<File[]>([])
+  const [items, setItems] = useState<ChatSharedItem[]>([])
+  const [picking, setPicking] = useState(false)
+  // The same rule as the server's: fulfilment clients with My Inventory on.
+  const { auth } = usePage<PageProps>().props
+  const hasInventory = !!auth.client?.is_fulfilment && !!auth.portal_features?.includes('inventory')
+  const itemSources = useMemo(
+    () => ({ orders: portalItemSources.orders, products: hasInventory ? portalItemSources.products : undefined }),
+    [hasInventory]
+  )
   const [saving, setSaving] = useState(false)
   const fileInput = useRef<HTMLInputElement>(null)
 
@@ -68,9 +81,10 @@ export function NewSupportChat({
     setSubject(draft?.subject ?? (draft?.order ? `Issue with order ${draft.order.order_number}` : ''))
     setBody('')
     setFiles([])
+    setItems([])
   }, [open, draft])
 
-  const ready = subject.trim() && (body.trim() || files.length > 0)
+  const ready = subject.trim() && (body.trim() || files.length > 0 || items.length > 0)
 
   const addFiles = (list: FileList | null) => {
     if (!list) return
@@ -89,6 +103,8 @@ export function NewSupportChat({
         order_id: order?.id,
         body: body.trim(),
         files,
+        // Ids only; sent as orders[] and products[].
+        items,
         clientUuid: uuid(),
       })
       toast.success('Your message was sent. We will reply here shortly.')
@@ -162,11 +178,28 @@ export function NewSupportChat({
                 </span>
               ))}
             </div>
-            {files.length < MAX_FILES && (
-              <Button type='button' variant='outline' size='sm' className='w-fit' onClick={() => fileInput.current?.click()}>
-                <Paperclip className='size-4' /> Attach photos or files
-              </Button>
+            {items.length > 0 && (
+              <div className='flex flex-wrap gap-2'>
+                {items.map((item) => (
+                  <ItemChip
+                    key={`${item.type}-${item.id}`}
+                    item={item}
+                    onRemove={() => setItems((current) => current.filter((x) => !(x.type === item.type && x.id === item.id)))}
+                  />
+                ))}
+              </div>
             )}
+            <div className='flex flex-wrap gap-2'>
+              {files.length < MAX_FILES && (
+                <Button type='button' variant='outline' size='sm' onClick={() => fileInput.current?.click()}>
+                  <Paperclip className='size-4' /> Attach photos or files
+                </Button>
+              )}
+              <Button type='button' variant='outline' size='sm' onClick={() => setPicking(true)}>
+                <Package className='size-4' /> {hasInventory ? 'Attach orders or inventory' : 'Attach orders'}
+              </Button>
+            </div>
+            <ItemPicker open={picking} onOpenChange={setPicking} sources={itemSources} selected={items} onAttach={setItems} />
             <input ref={fileInput} type='file' multiple accept={ACCEPT_FILES} className='hidden' onChange={(e) => { addFiles(e.target.files); e.target.value = '' }} />
           </div>
         </div>
