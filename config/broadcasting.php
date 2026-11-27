@@ -15,10 +15,12 @@ return [
     |
     */
 
-    // `reverb` without its keys would stop the whole app booting (the channel
-    // routes build the broadcaster), so a half-configured server falls back
-    // to `null`: live chat then polls instead.
-    'default' => env('BROADCAST_CONNECTION') === 'reverb' && ! env('REVERB_APP_KEY')
+    // `reverb` without all three credentials would stop the whole app booting
+    // (the channel routes build the broadcaster), so it falls back to `null`:
+    // live chat then polls instead. That includes the VPS image build, which is
+    // given only the browser's key; the config is cached again when the
+    // container starts, with the secret.
+    'default' => env('BROADCAST_CONNECTION') === 'reverb' && ! (env('REVERB_APP_KEY') && env('REVERB_APP_SECRET') && env('REVERB_APP_ID'))
         ? 'null'
         : env('BROADCAST_CONNECTION', 'null'),
 
