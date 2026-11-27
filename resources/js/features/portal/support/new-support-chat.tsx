@@ -21,12 +21,12 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { errorMessage, portalChats, portalItemSources, uuid } from '@/features/chats/api'
+import { ItemButtons } from '@/features/chats/components/shared/item-buttons'
 import { ItemPicker } from '@/features/chats/components/shared/item-picker'
 import { ItemChip } from '@/features/chats/components/shared/shared-items'
 import type { PageProps } from '@/types'
 import { ACCEPT_FILES, CATEGORY_LABELS, MAX_BODY, MAX_FILE_MB, MAX_FILES } from '@/features/chats/constants'
 import { formatBytes } from '@/features/chats/components/shared/chat-bits'
-import { OrderPicker, type PickedOrder } from '@/features/chats/components/shared/order-picker'
 import type { ChatCategory, ChatConversation, ChatSharedItem } from '@/features/chats/types'
 
 const CATEGORY_ICONS: Record<ChatCategory, React.ElementType> = {
@@ -41,11 +41,11 @@ const CATEGORY_ICONS: Record<ChatCategory, React.ElementType> = {
 
 export interface SupportDraft {
   category?: ChatCategory
-  order?: PickedOrder | null
+  order?: { id: number; order_number: string } | null
   subject?: string
 }
 
-/** The client starts a conversation: what it is about, an order if it is about one, and the message. */
+/** The client starts a conversation: what it is about, the message, and any orders or products with it. */
 export function NewSupportChat({
   open,
   onOpenChange,
@@ -59,11 +59,10 @@ export function NewSupportChat({
 }) {
   const [category, setCategory] = useState<ChatCategory>('general')
   const [subject, setSubject] = useState('')
-  const [order, setOrder] = useState<PickedOrder | null>(null)
   const [body, setBody] = useState('')
   const [files, setFiles] = useState<File[]>([])
   const [items, setItems] = useState<ChatSharedItem[]>([])
-  const [picking, setPicking] = useState(false)
+  const [picking, setPicking] = useState<ChatSharedItem['type'] | null>(null)
   // The same rule as the server's: fulfilment clients with My Inventory on.
   const { auth } = usePage<PageProps>().props
   const hasInventory = !!auth.client?.is_fulfilment && !!auth.portal_features?.includes('inventory')
@@ -77,11 +76,11 @@ export function NewSupportChat({
   useEffect(() => {
     if (!open) return
     setCategory(draft?.category ?? 'general')
-    setOrder(draft?.order ?? null)
     setSubject(draft?.subject ?? (draft?.order ? `Issue with order ${draft.order.order_number}` : ''))
     setBody('')
     setFiles([])
-    setItems([])
+    // Opened from an order ("Report an issue"): it starts out attached.
+    setItems(draft?.order ? [{ type: 'order', id: draft.order.id, title: draft.order.order_number }] : [])
   }, [open, draft])
 
   const ready = subject.trim() && (body.trim() || files.length > 0 || items.length > 0)
@@ -100,7 +99,8 @@ export function NewSupportChat({
       const conversation = await portalChats.start({
         subject: subject.trim(),
         category,
-        order_id: order?.id,
+        // The first order attached is the one the chat is linked to.
+        order_id: items.find((item) => item.type === 'order')?.id,
         body: body.trim(),
         files,
         // Ids only; sent as orders[] and products[].
@@ -151,11 +151,6 @@ export function NewSupportChat({
           </div>
 
           <div className='grid gap-1.5'>
-            <Label>Order</Label>
-            <OrderPicker value={order} onChange={setOrder} search={(q) => portalChats.orders(q)} placeholder='Is it about an order? (optional)' />
-          </div>
-
-          <div className='grid gap-1.5'>
             <Label htmlFor='support-subject'>Subject</Label>
             <Input id='support-subject' value={subject} maxLength={160} onChange={(e) => setSubject(e.target.value)} placeholder='A short summary' />
           </div>
@@ -195,11 +190,9 @@ export function NewSupportChat({
                   <Paperclip className='size-4' /> Attach photos or files
                 </Button>
               )}
-              <Button type='button' variant='outline' size='sm' onClick={() => setPicking(true)}>
-                <Package className='size-4' /> {hasInventory ? 'Attach orders or inventory' : 'Attach orders'}
-              </Button>
+              <ItemButtons sources={itemSources} onPick={setPicking} />
             </div>
-            <ItemPicker open={picking} onOpenChange={setPicking} sources={itemSources} selected={items} onAttach={setItems} />
+            <ItemPicker kind={picking} onClose={() => setPicking(null)} sources={itemSources} selected={items} onAttach={setItems} />
             <input ref={fileInput} type='file' multiple accept={ACCEPT_FILES} className='hidden' onChange={(e) => { addFiles(e.target.files); e.target.value = '' }} />
           </div>
         </div>

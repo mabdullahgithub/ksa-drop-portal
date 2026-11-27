@@ -9,6 +9,25 @@ import type { VoiceClip } from '../types'
  */
 const TYPES = ['audio/mp4;codecs=mp4a.40.2', 'audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/mp4']
 
+/**
+ * AAC needs far more than Opus to sound clean: at 32 kbps it is harsh and
+ * crackly. At 80 kbps a full three minutes is still under 2 MB, PHP's default
+ * upload limit.
+ */
+const AAC_BITRATE = 80_000
+const OPUS_BITRATE = 48_000
+
+/**
+ * A voice message, not a call: nothing is playing to cancel an echo of, and
+ * that processing is what makes recordings sound hollow or broken.
+ */
+const MICROPHONE: MediaTrackConstraints = {
+  channelCount: 1,
+  echoCancellation: false,
+  noiseSuppression: true,
+  autoGainControl: true,
+}
+
 type RecorderState = 'idle' | 'starting' | 'recording' | 'review'
 
 /**
@@ -83,7 +102,7 @@ export function useVoiceRecorder() {
 
     let media: MediaStream
     try {
-      media = await navigator.mediaDevices.getUserMedia({ audio: true })
+      media = await navigator.mediaDevices.getUserMedia({ audio: MICROPHONE })
     } catch (error) {
       if (mine !== session.current) return
       setState('idle')
@@ -107,7 +126,10 @@ export function useVoiceRecorder() {
     const mimeType = TYPES.find((type) => MediaRecorder.isTypeSupported(type))
     let next: MediaRecorder
     try {
-      next = new MediaRecorder(media, { ...(mimeType ? { mimeType } : {}), audioBitsPerSecond: 32000 })
+      next = new MediaRecorder(media, {
+        ...(mimeType ? { mimeType } : {}),
+        audioBitsPerSecond: mimeType?.includes('mp4') ? AAC_BITRATE : OPUS_BITRATE,
+      })
     } catch {
       media.getTracks().forEach((track) => track.stop())
       setState('idle')

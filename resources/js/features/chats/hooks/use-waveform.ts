@@ -9,31 +9,28 @@ const PLACEHOLDER = Array<number>(BARS).fill(0.2)
 const cache = new Map<string, Promise<number[] | null>>()
 
 async function read(src: string): Promise<number[] | null> {
-  const Context = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
-  if (!Context) return null
+  // Offline: it decodes without opening the sound device, so reading one
+  // message's shape can't make another that is playing crackle.
+  if (typeof OfflineAudioContext === 'undefined') return null
 
   const response = await fetch(src, { credentials: 'same-origin' })
   if (!response.ok) return null
 
-  const context = new Context()
-  try {
-    const audio = await context.decodeAudioData(await response.arrayBuffer())
-    const samples = audio.getChannelData(0)
-    const size = Math.max(1, Math.floor(samples.length / BARS))
+  const context = new OfflineAudioContext(1, 1, 44100)
+  const audio = await context.decodeAudioData(await response.arrayBuffer())
+  const samples = audio.getChannelData(0)
+  const size = Math.max(1, Math.floor(samples.length / BARS))
 
-    // The loudness (RMS) of each slice, scaled so the loudest bar is full height.
-    const levels = Array.from({ length: BARS }, (_, bar) => {
-      const end = Math.min(samples.length, (bar + 1) * size)
-      let sum = 0
-      for (let i = bar * size; i < end; i += 8) sum += samples[i] * samples[i]
-      return Math.sqrt(sum / Math.max(1, Math.ceil((end - bar * size) / 8)))
-    })
-    const loudest = Math.max(...levels)
+  // The loudness (RMS) of each slice, scaled so the loudest bar is full height.
+  const levels = Array.from({ length: BARS }, (_, bar) => {
+    const end = Math.min(samples.length, (bar + 1) * size)
+    let sum = 0
+    for (let i = bar * size; i < end; i += 8) sum += samples[i] * samples[i]
+    return Math.sqrt(sum / Math.max(1, Math.ceil((end - bar * size) / 8)))
+  })
+  const loudest = Math.max(...levels)
 
-    return loudest > 0 ? levels.map((level) => level / loudest) : null
-  } finally {
-    void context.close()
-  }
+  return loudest > 0 ? levels.map((level) => level / loudest) : null
 }
 
 /** The shape of a voice recording, as bar heights from 0 to 1. */

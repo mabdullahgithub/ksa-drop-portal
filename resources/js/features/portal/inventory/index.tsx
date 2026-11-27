@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import axios from 'axios'
 import { toast } from 'sonner'
 import { Search as SearchIcon, CheckCircle, Clock, Plus, Lock, ArrowUpDown, ArrowUp, ArrowDown, PackageX, ImageOff, X, ChevronLeft, ChevronRight, Hourglass, LayoutGrid, List, Compass } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
@@ -114,6 +115,26 @@ export function PortalInventory() {
   const [editingProduct, setEditingProduct] = useState<PortalProduct | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<PortalProduct | null>(null)
   const [viewProduct, setViewProduct] = useState<PortalProduct | null>(null)
+
+  // `/portal/inventory?product=CODE` opens that product, from a card in the
+  // Support chat. Once only, so closing it does not reopen it.
+  const productLinkHandled = useRef(false)
+  useEffect(() => {
+    if (productLinkHandled.current) return
+    const code = new URLSearchParams(window.location.search).get('product')
+    if (!code) return
+    productLinkHandled.current = true
+
+    axios
+      .get('/portal/api/inventory', { params: { search: code, per_page: 20 } })
+      .then(({ data }) => {
+        // `search` is a LIKE across several columns: match the exact code.
+        const match = (data?.data ?? []).find((p: PortalProduct) => p.product_code === code)
+        if (match) setViewProduct(match)
+        else toast.error(`Product ${code} not found`)
+      })
+      .catch(() => toast.error(`Could not open product ${code}`))
+  }, [])
   const [galleryProduct, setGalleryProduct] = useState<PortalProduct | null>(null)
   const [galleryIndex, setGalleryIndex] = useState(0)
   // The list/card choice survives a refresh.

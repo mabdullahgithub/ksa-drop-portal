@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
-import { FileText, ImagePlus, Loader2, Lock, Mic, Package, Paperclip, Send, Square, Trash2, X } from 'lucide-react'
+import { FileText, ImagePlus, Loader2, Lock, Mic, Paperclip, Send, Square, Trash2, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { ACCEPT_FILES, MAX_BODY, MAX_FILE_MB, MAX_FILES, MAX_VOICE_SECONDS } from '../../constants'
 import { useVoiceRecorder } from '../../hooks/use-voice-recorder'
 import type { ChatItemSources, ChatSharedItem, VoiceClip } from '../../types'
 import { formatBytes } from './chat-bits'
+import { ItemButtons } from './item-buttons'
 import { ItemPicker } from './item-picker'
 import { ItemChip } from './shared-items'
 import { clock, VoicePlayer } from './voice-player'
@@ -47,7 +48,7 @@ export function Composer({
   const [body, setBody] = useState('')
   const [files, setFiles] = useState<File[]>([])
   const [items, setItems] = useState<ChatSharedItem[]>([])
-  const [picking, setPicking] = useState(false)
+  const [picking, setPicking] = useState<ChatSharedItem['type'] | null>(null)
   const [mode, setMode] = useState<ComposerMode>(canReply ? 'message' : 'note')
   const [dragging, setDragging] = useState(false)
   const textarea = useRef<HTMLTextAreaElement>(null)
@@ -148,8 +149,10 @@ export function Composer({
         </div>
       )}
 
-      {canNote && (
-        <div className='mb-1.5 flex items-center gap-1 text-[11px]'>
+      {(canNote || (itemSources && (itemSources.orders || itemSources.products))) && (
+        <div className='mb-1.5 flex flex-wrap items-center gap-x-3 gap-y-1.5'>
+          {canNote && (
+        <div className='flex items-center gap-1 text-[11px]'>
           {canReply && (
             <button
               type='button'
@@ -170,6 +173,9 @@ export function Composer({
             <Lock className='size-2.5' /> Internal note
           </button>
           {note && <span className='ms-1 text-amber-700 dark:text-amber-300'>Only the team sees notes</span>}
+        </div>
+          )}
+          {itemSources && <ItemButtons sources={itemSources} onPick={setPicking} className='ms-auto' />}
         </div>
       )}
 
@@ -233,20 +239,6 @@ export function Composer({
           <ImagePlus className='size-4 text-muted-foreground' />
         </Button>
 
-        {itemSources && (
-          <Button
-            type='button'
-            size='icon'
-            variant='ghost'
-            className='size-8 shrink-0'
-            onClick={() => setPicking(true)}
-            aria-label={itemSources.products ? 'Attach orders or inventory' : 'Attach orders'}
-            title={itemSources.products ? 'Attach orders or inventory' : 'Attach orders'}
-          >
-            <Package className='size-4 text-muted-foreground' />
-          </Button>
-        )}
-
         <label className='min-w-0 flex-1'>
           <span className='sr-only'>{note ? 'Internal note' : 'Message'}</span>
           <textarea
@@ -309,7 +301,7 @@ export function Composer({
       </div>
 
       {itemSources && (
-        <ItemPicker open={picking} onOpenChange={setPicking} sources={itemSources} selected={items} onAttach={setItems} />
+        <ItemPicker kind={picking} onClose={() => setPicking(null)} sources={itemSources} selected={items} onAttach={setItems} />
       )}
 
       <input ref={fileInput} type='file' multiple accept={ACCEPT_FILES} className='hidden' onChange={(e) => { add(e.target.files); e.target.value = '' }} />

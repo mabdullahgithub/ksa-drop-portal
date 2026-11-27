@@ -13,8 +13,10 @@ type BaseNavItem = {
   permission?: string | string[]
   role?: string | string[]
   newTab?: boolean
-  // Stuck to the bottom of the sidebar in the brand orange, out of its section.
+  // Stuck to the bottom of the sidebar, out of its section.
   pinned?: boolean
+  // A pinned link's colour; the brand orange unless said otherwise.
+  tone?: 'brand' | 'blue'
   // The screen sits behind the PIN: it moves to the locked section while it does.
   lock?: LockedScreen
 }

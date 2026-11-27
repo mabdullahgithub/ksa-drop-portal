@@ -77,12 +77,6 @@ export const sidebarData: SidebarData = {
           lock: 'whatsapp',
         },
         {
-          title: 'Live Chat',
-          url: '/chats',
-          icon: MessagesSquare,
-          permission: 'view chats',
-        },
-        {
           title: 'Track Shipment',
           url: '/track',
           icon: Truck,
@@ -114,6 +108,12 @@ export const sidebarData: SidebarData = {
           icon: ClipboardCheck,
           permission: 'view requests',
           lock: 'requests',
+        },
+        {
+          title: 'Live Chat',
+          url: '/chats',
+          icon: MessagesSquare,
+          permission: 'view chats',
         },
         {
           title: 'Recycle Bin',
@@ -206,6 +206,9 @@ export const sidebarData: SidebarData = {
           url: '/portal/support',
           icon: LifeBuoy,
           role: 'client',
+          // Stuck to the bottom of the sidebar, animated, below Track Order.
+          pinned: true,
+          tone: 'blue',
         },
         {
           title: 'Notifications',

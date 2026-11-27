@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import type { ClientProduct, PaginatedClientProducts } from '@/types/client'
 
-export function useClientProducts(clientId: number | null) {
+export function useClientProducts(clientId: number | null, search = '') {
   const [products, setProducts] = useState<PaginatedClientProducts | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(false)
@@ -11,7 +11,8 @@ export function useClientProducts(clientId: number | null) {
     setLoading(true)
     setError(false)
     try {
-      const response = await fetch(`/api/clients/${clientId}/products?per_page=100`)
+      const query = search ? `&search=${encodeURIComponent(search)}` : ''
+      const response = await fetch(`/api/clients/${clientId}/products?per_page=100${query}`)
       if (!response.ok) throw new Error('Failed to fetch')
       const data = await response.json()
       setProducts(data)
@@ -20,7 +21,7 @@ export function useClientProducts(clientId: number | null) {
     } finally {
       setLoading(false)
     }
-  }, [clientId])
+  }, [clientId, search])
 
   useEffect(() => {
     fetchProducts()

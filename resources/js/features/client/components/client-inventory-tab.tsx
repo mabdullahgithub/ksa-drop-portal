@@ -53,7 +53,11 @@ export function ClientInventoryTab({ client }: ClientInventoryTabProps) {
   // The badge on a product with a change waiting links to the Requests page
   // for those who can open it.
   const canOpenRequests = can('view requests')
-  const { products, loading, error, refresh } = useClientProducts(client.id)
+  // `?product=CODE` (a card in Live Chat) shows that product on its own.
+  const [focus, setFocus] = useState(() => new URLSearchParams(window.location.search).get('product') ?? '')
+  const { products: loaded, loading, error, refresh } = useClientProducts(client.id, focus)
+  // The search matches several columns: keep the exact code.
+  const products = focus ? loaded.filter((p) => p.product_code === focus) : loaded
   const { loading: mutating, reviewProduct, deleteProduct } = useClientProductMutations()
 
   const [formOpen, setFormOpen] = useState(false)
@@ -128,6 +132,18 @@ export function ClientInventoryTab({ client }: ClientInventoryTabProps) {
           </Button>
         )}
       </div>
+
+      {focus && (
+        <div className='flex flex-wrap items-center justify-between gap-2 rounded-md border border-[#f26722]/40 bg-[#f26722]/5 px-3 py-2 text-sm'>
+          <span>
+            Showing product <code className='font-semibold'>{focus}</code>
+            {!loading && products.length === 0 && ' (not found, it may have been removed)'}
+          </span>
+          <Button variant='outline' size='sm' className='h-7' onClick={() => setFocus('')}>
+            Show all products
+          </Button>
+        </div>
+      )}
 
       <div className='rounded-md border'>
         <Table>

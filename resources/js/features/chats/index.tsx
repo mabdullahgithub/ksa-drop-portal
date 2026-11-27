@@ -18,7 +18,7 @@ import { SearchBeam } from '@/components/search-beam'
 import { ThemeSwitch } from '@/components/theme-switch'
 import { usePermissions } from '@/hooks/use-permissions'
 import type { PageProps } from '@/types'
-import { errorMessage, teamChatApi, teamChats } from './api'
+import { errorMessage, teamChatApi, teamChats, teamItemSources } from './api'
 import { PRIORITY_META } from './constants'
 import { ClientContextPanel } from './components/client-context-panel'
 import { ConversationHeader } from './components/conversation-header'
@@ -364,6 +364,7 @@ export function Chats() {
                     messages={thread.messages}
                     side='team'
                     meId={me.id}
+                    clientId={detail.conversation.client?.id}
                     loading={thread.loading}
                     hasMore={thread.hasMore}
                     loadingOlder={thread.loadingOlder}
@@ -377,6 +378,10 @@ export function Chats() {
 
                 <Composer
                   autoFocusKey={detail.conversation.id}
+                  itemSources={teamItemSources(detail.conversation.id, {
+                    orders: detail.permissions.share_orders,
+                    products: detail.permissions.share_products,
+                  })}
                   canReply={detail.permissions.reply}
                   canNote={detail.permissions.note}
                   onTyping={thread.whisperTyping}

@@ -1,6 +1,6 @@
 import { type ReactNode, useEffect, useState } from 'react'
 import { Link, usePage } from '@inertiajs/react'
-import { ChevronRight, ExternalLink } from 'lucide-react'
+import { ChevronRight, ExternalLink, MessageCircle } from 'lucide-react'
 import {
   Collapsible,
   CollapsibleContent,
@@ -18,6 +18,7 @@ import {
   SidebarMenuSubItem,
   useSidebar,
 } from '@/components/ui/sidebar'
+import { cn } from '@/lib/utils'
 import { Badge } from '../ui/badge'
 import {
   DropdownMenu,
@@ -116,10 +117,34 @@ export function NavGroup({ title, icon: Icon, items, collapsible = false }: NavG
   )
 }
 
-const PINNED_CLASS =
-  'h-9 bg-[#f26722] font-medium text-white hover:bg-[#f26722]/90 hover:text-white active:bg-[#f26722]/90 active:text-white'
+/**
+ * Each pinned link has its own colour, so two stacked ones are told apart at a
+ * glance: the button, its bubble and the pulse behind the bubble. Blue is the
+ * stat cards' blue, on which white text stays legible.
+ */
+const PINNED_TONES = {
+  brand: {
+    button:
+      'bg-[#f26722] hover:bg-[#f26722]/90 active:bg-[#f26722]/90 data-[active=true]:bg-[#f26722]',
+    bubble: 'bg-orange-900',
+    pulse: 'bg-[#f26722]',
+  },
+  blue: {
+    button: 'bg-blue-600 hover:bg-blue-700 active:bg-blue-700 data-[active=true]:bg-blue-600',
+    bubble: 'bg-blue-800',
+    pulse: 'bg-blue-600',
+  },
+} as const
 
-/** The links stuck to the bottom of the sidebar, in the brand orange. */
+type PinnedTone = keyof typeof PINNED_TONES
+
+const pinnedClass = (tone: PinnedTone = 'brand') =>
+  cn(
+    'h-9 font-medium text-white hover:text-white active:text-white data-[active=true]:text-white',
+    PINNED_TONES[tone].button
+  )
+
+/** The links stuck to the bottom of the sidebar, each in its own colour. */
 export function NavPinned({ items }: { items: NavItem[] }) {
   const { url: href } = usePage()
   const { can, hasRole } = usePermissions()
@@ -136,7 +161,8 @@ export function NavPinned({ items }: { items: NavItem[] }) {
   return (
     // Room above for the bubble that overhangs the link; the icon rail has none.
     <SidebarFooter className='pt-4 group-data-[collapsible=icon]:pt-2'>
-      <SidebarMenu>
+      {/* With two or more, room between them for the next one's bubble. */}
+      <SidebarMenu className='gap-3.5 group-data-[collapsible=icon]:gap-1'>
         {visibleItems.map((item) => (
           <SidebarMenuLink key={item.url} item={item} href={href} />
         ))}
@@ -150,20 +176,21 @@ function NavBadge({ children }: { children: ReactNode }) {
 }
 
 /**
- * The opens-in-a-new-tab mark on a pinned link: the bubble badge off the
+ * The bubble on a pinned link (opens in a new tab, unless given other
+ * contents): the bubble badge off the
  * dashboard's coloured cards (see StatCard), overhanging the top-end corner.
  * It hops now and then over a soft pulse so the eye lands on it; neither
  * moves for someone who asked for reduced motion.
  */
-function NavOpenBubble() {
+function NavOpenBubble({ children, tone = 'brand' }: { children?: ReactNode; tone?: PinnedTone }) {
   return (
     <span className='pointer-events-none absolute -top-2.5 end-3 z-10 group-data-[collapsible=icon]:hidden'>
       <span
         aria-hidden
-        className='absolute inset-0 animate-ping rounded-full bg-[#f26722] opacity-60 motion-reduce:hidden'
+        className={cn('absolute inset-0 animate-ping rounded-full opacity-60 motion-reduce:hidden', PINNED_TONES[tone].pulse)}
       />
-      <span className='relative grid size-6 animate-[nav-open-hop_2.4s_ease-in-out_infinite] place-items-center rounded-full rounded-es-none bg-orange-900 text-white shadow-md ring-1 ring-sidebar motion-reduce:animate-none'>
-        <ExternalLink className='size-3' aria-label='Opens in a new tab' />
+      <span className={cn('relative grid size-6 animate-[nav-open-hop_2.4s_ease-in-out_infinite] place-items-center rounded-full rounded-es-none text-white shadow-md ring-1 ring-sidebar motion-reduce:animate-none', PINNED_TONES[tone].bubble)}>
+        {children ?? <ExternalLink className='size-3' aria-label='Opens in a new tab' />}
       </span>
     </span>
   )
@@ -171,7 +198,7 @@ function NavOpenBubble() {
 
 function SidebarMenuLink({ item, href }: { item: NavLink; href: string }) {
   const { setOpenMobile } = useSidebar()
-  const className = item.pinned ? PINNED_CLASS : undefined
+  const className = item.pinned ? pinnedClass(item.tone) : undefined
 
   if (item.newTab) {
     return (
@@ -186,7 +213,7 @@ function SidebarMenuLink({ item, href }: { item: NavLink; href: string }) {
             )}
           </a>
         </SidebarMenuButton>
-        {item.pinned && <NavOpenBubble />}
+        {item.pinned && <NavOpenBubble tone={item.tone} />}
       </SidebarMenuItem>
     )
   }
@@ -202,9 +229,22 @@ function SidebarMenuLink({ item, href }: { item: NavLink; href: string }) {
         <Link href={item.url} onClick={() => setOpenMobile(false)}>
           {item.icon && <item.icon />}
           <span>{item.title}</span>
-          {item.badge && <NavBadge>{item.badge}</NavBadge>}
+          {item.badge && !item.pinned && <NavBadge>{item.badge}</NavBadge>}
         </Link>
       </SidebarMenuButton>
+      {/* A pinned page of our own: a chat bubble, with the unread number when there is one. */}
+      {item.pinned && (
+        <NavOpenBubble tone={item.tone}>
+          {item.badge ? (
+            <span className='text-[10px] leading-none font-bold'>
+              {item.badge}
+              <span className='sr-only'> unread</span>
+            </span>
+          ) : (
+            <MessageCircle className='size-3' aria-hidden />
+          )}
+        </NavOpenBubble>
+      )}
     </SidebarMenuItem>
   )
 }

@@ -8,8 +8,6 @@ import { MAX_SHARED_ITEMS } from '../../constants'
 import type { ChatItemSources, ChatSharedItem } from '../../types'
 import { ItemThumb, itemSummary } from './shared-items'
 
-type Tab = 'order' | 'product'
-
 const same = (a: ChatSharedItem, b: ChatSharedItem) => a.type === b.type && a.id === b.id
 
 /**
@@ -17,34 +15,39 @@ const same = (a: ChatSharedItem, b: ChatSharedItem) => a.type === b.type && a.id
  * offered only to accounts that have it.
  */
 export function ItemPicker({
-  open,
-  onOpenChange,
+  kind,
+  onClose,
   sources,
   selected,
   onAttach,
 }: {
-  open: boolean
-  onOpenChange: (open: boolean) => void
+  /** Which list is open; null when closed. */
+  kind: ChatSharedItem['type'] | null
+  onClose: () => void
   sources: ChatItemSources
+  /** Everything attached so far, of both kinds. */
   selected: ChatSharedItem[]
   onAttach: (items: ChatSharedItem[]) => void
 }) {
-  const [tab, setTab] = useState<Tab>('order')
+  // Kept while the dialog closes, so its words don't change on the way out.
+  const [tab, setTab] = useState<ChatSharedItem['type']>(kind ?? 'order')
   const [q, setQ] = useState('')
   const [options, setOptions] = useState<ChatSharedItem[]>([])
   const [loading, setLoading] = useState(false)
   const [failed, setFailed] = useState(false)
   const [picked, setPicked] = useState<ChatSharedItem[]>(selected)
+  const open = kind !== null
   const search = tab === 'product' ? sources.products : sources.orders
 
   useEffect(() => {
-    if (!open) return
+    if (!kind) return
+    setTab(kind)
     setPicked(selected)
     setQ('')
-    setTab('order')
+    setOptions([])
     // Only when it opens: what is ticked is this dialog's own until "Attach".
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open])
+  }, [kind])
 
   useEffect(() => {
     if (!open || !search) return
@@ -65,7 +68,9 @@ export function ItemPicker({
       cancelled = true
       clearTimeout(timer)
     }
-  }, [open, q, search])
+    // The search function is remade on each render; the tab says which it is.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, tab, q])
 
   const full = picked.length >= MAX_SHARED_ITEMS
   const toggle = (item: ChatSharedItem) =>
@@ -78,41 +83,14 @@ export function ItemPicker({
     )
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={(value) => !value && onClose()}>
       <DialogContent className='gap-3 sm:max-w-md'>
         <DialogHeader>
-          <DialogTitle>Attach {sources.products ? 'orders or inventory' : 'orders'}</DialogTitle>
-          <DialogDescription>Choose what your message is about. Up to {MAX_SHARED_ITEMS} at a time.</DialogDescription>
+          <DialogTitle>{tab === 'order' ? 'Attach orders' : 'Attach inventory'}</DialogTitle>
+          <DialogDescription>
+            Choose what the message is about. Up to {MAX_SHARED_ITEMS} orders and products in one message.
+          </DialogDescription>
         </DialogHeader>
-
-        {sources.products && (
-          <div className='grid grid-cols-2 gap-1 rounded-lg bg-muted p-1' role='tablist'>
-            {(
-              [
-                ['order', 'Orders'],
-                ['product', 'Inventory'],
-              ] as const
-            ).map(([value, label]) => (
-              <button
-                key={value}
-                type='button'
-                role='tab'
-                aria-selected={tab === value}
-                onClick={() => {
-                  setTab(value)
-                  setOptions([])
-                  setQ('')
-                }}
-                className={cn(
-                  'rounded-md py-1 text-xs font-medium transition-colors',
-                  tab === value ? 'bg-background shadow-xs' : 'text-muted-foreground hover:text-foreground'
-                )}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        )}
 
         <div className='relative'>
           <Search className='absolute start-2.5 top-2.5 size-4 text-muted-foreground' />
@@ -175,7 +153,7 @@ export function ItemPicker({
             {picked.length} of {MAX_SHARED_ITEMS} selected
           </span>
           <div className='flex gap-2'>
-            <Button type='button' variant='outline' size='sm' onClick={() => onOpenChange(false)}>
+            <Button type='button' variant='outline' size='sm' onClick={onClose}>
               Cancel
             </Button>
             <Button
@@ -183,7 +161,7 @@ export function ItemPicker({
               size='sm'
               onClick={() => {
                 onAttach(picked)
-                onOpenChange(false)
+                onClose()
               }}
             >
               Attach

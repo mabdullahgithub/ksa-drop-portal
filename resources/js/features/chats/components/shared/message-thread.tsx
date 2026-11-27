@@ -46,6 +46,7 @@ export function MessageThread({
   onDiscard,
   emptyText = 'No messages yet',
   meId,
+  clientId,
 }: {
   messages: ChatMessage[]
   side: ChatSide
@@ -61,6 +62,8 @@ export function MessageThread({
   emptyText?: string
   /** The signed-in person: their own messages carry no name. */
   meId: number
+  /** The team's side: whose chat this is, for links on shared products. */
+  clientId?: number
 }) {
   const scroller = useRef<HTMLDivElement>(null)
   const stickToBottom = useRef(true)
@@ -154,6 +157,7 @@ export function MessageThread({
                     first={!sameWriter(previousMessage, message)}
                     last={endsRun(message, messages[index + 1])}
                     own={message.sender?.id === meId}
+                    clientId={clientId}
                     seen={message.id === seenId}
                     onRetry={onRetry}
                     onDiscard={onDiscard}
@@ -194,9 +198,11 @@ function Bubble({
   last,
   own,
   seen,
+  clientId,
   onRetry,
   onDiscard,
 }: {
+  clientId?: number
   message: ChatMessage
   side: ChatSide
   mine: boolean
@@ -225,7 +231,71 @@ function Bubble({
   const showSeen = mine && !note && seen
   const showMeta = last || showSeen || !!message.pending
 
+  const hasItems = message.items?.length > 0
+  const hasBubble = !!message.body || message.attachments.length > 0
+  const who = own ? 'You' : (message.sender?.name ?? (message.sender_type === 'client' ? 'The client' : 'Support'))
+
+  const meta = showMeta && (
+    <div className='mt-0.5 flex items-center gap-1 px-1 text-[10px] text-muted-foreground'>
+          {message.pending === 'failed' ? (
+            <>
+              <AlertCircle className='size-3 text-destructive' />
+              <span className='text-destructive'>Not sent</span>
+              <button type='button' onClick={() => onRetry(message.client_uuid!)} className='inline-flex items-center gap-0.5 font-medium hover:underline'>
+                <RotateCw className='size-3' /> Retry
+              </button>
+              <button type='button' onClick={() => onDiscard(message.client_uuid!)} className='inline-flex items-center gap-0.5 hover:underline'>
+                <X className='size-3' /> Discard
+              </button>
+            </>
+          ) : message.pending === 'sending' ? (
+            <>
+              <Clock className='size-3' /> Sending…
+            </>
+          ) : (
+            <>
+              <span>{time}</span>
+              {showSeen && (
+                <span className='inline-flex items-center gap-0.5'>
+                  <CheckCheck className='size-3' /> Seen
+                </span>
+              )}
+            </>
+          )}
+    </div>
+  )
+
+  // Shared orders and products take the same side as the sender's bubbles:
+  // sent on the right, received on the left. A note's stay in the middle.
+  const cards = hasItems && (
+    <div className={cn('flex flex-col gap-1', note ? 'items-center' : mine ? 'items-end' : 'items-start', first ? 'mt-3' : 'mt-1.5')}>
+      <div
+        title={details}
+        className={cn(
+          'flex w-full max-w-full',
+          note ? 'justify-center' : mine ? 'justify-end' : 'justify-start',
+          message.pending === 'sending' && 'opacity-60'
+        )}
+      >
+        <SharedItemCards
+          items={message.items}
+          side={side}
+          clientId={clientId}
+          // The reader's side against the other side; notes are their own thing.
+          tone={note ? 'note' : mine ? 'sent' : 'received'}
+          sender={who}
+        />
+      </div>
+      {!hasBubble && meta}
+    </div>
+  )
+
+  // Only items: nothing left for a bubble.
+  if (hasItems && !hasBubble) return <>{cards}</>
+
   return (
+    <>
+    {cards}
     <div
       className={cn(
         'flex min-w-0 flex-col',
@@ -255,41 +325,13 @@ function Bubble({
             message.pending === 'failed' && 'ring-1 ring-destructive/60'
           )}
         >
-          {message.items?.length > 0 && <SharedItemCards items={message.items} side={side} onDark={onBrand} />}
           {message.attachments.length > 0 && <Attachments files={message.attachments} onDark={onBrand} />}
           {message.body && <MessageText text={message.body} onDark={onBrand} />}
         </div>
 
-        {showMeta && (
-        <div className='mt-0.5 flex items-center gap-1 px-1 text-[10px] text-muted-foreground'>
-          {message.pending === 'failed' ? (
-            <>
-              <AlertCircle className='size-3 text-destructive' />
-              <span className='text-destructive'>Not sent</span>
-              <button type='button' onClick={() => onRetry(message.client_uuid!)} className='inline-flex items-center gap-0.5 font-medium hover:underline'>
-                <RotateCw className='size-3' /> Retry
-              </button>
-              <button type='button' onClick={() => onDiscard(message.client_uuid!)} className='inline-flex items-center gap-0.5 hover:underline'>
-                <X className='size-3' /> Discard
-              </button>
-            </>
-          ) : message.pending === 'sending' ? (
-            <>
-              <Clock className='size-3' /> Sending…
-            </>
-          ) : (
-            <>
-              <span>{time}</span>
-              {showSeen && (
-                <span className='inline-flex items-center gap-0.5'>
-                  <CheckCheck className='size-3' /> Seen
-                </span>
-              )}
-            </>
-          )}
-        </div>
-        )}
+        {meta}
       </div>
     </div>
+    </>
   )
 }

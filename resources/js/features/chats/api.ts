@@ -146,6 +146,19 @@ export const portalItemSources = {
   },
 }
 
+/** The orders and inventory of one chat's client, for an agent to attach. */
+export function teamItemSources(conversationId: number, allowed: { orders: boolean; products: boolean }) {
+  const search = (kind: 'orders' | 'products') => async (q: string): Promise<ChatSharedItem[]> => {
+    const { data } = await axios.get(`/api/chats/${conversationId}/share/${kind}`, { params: { q } })
+    return data.data
+  }
+
+  return {
+    orders: allowed.orders ? search('orders') : undefined,
+    products: allowed.products ? search('products') : undefined,
+  }
+}
+
 export function uuid(): string {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) return crypto.randomUUID()
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {

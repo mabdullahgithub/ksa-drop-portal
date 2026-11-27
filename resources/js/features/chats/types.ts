@@ -122,9 +122,9 @@ export interface ChatSharedItem {
   image_url?: string | null
 }
 
-/** Where the picker looks. No `products`: the account has no inventory. */
+/** Where the picker looks. A kind left out is one this person can't attach. */
 export interface ChatItemSources {
-  orders: (q: string) => Promise<ChatSharedItem[]>
+  orders?: (q: string) => Promise<ChatSharedItem[]>
   products?: (q: string) => Promise<ChatSharedItem[]>
 }
 
@@ -168,6 +168,8 @@ export interface ChatTeamDetail {
     status: boolean
     edit: boolean
     delete: boolean
+    share_orders: boolean
+    share_products: boolean
   }
 }
 
